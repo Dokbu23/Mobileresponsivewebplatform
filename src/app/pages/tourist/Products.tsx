@@ -1,77 +1,33 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ShoppingCart, ChevronDown, ChevronUp, Package, LogIn } from 'lucide-react';
 import { useApp, Product } from '../../context/AppContext';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
-
-const mockProducts: Product[] = [
-  {
-    id: 'p1',
-    name: 'Handwoven Baskets',
-    description: 'Traditional baskets handcrafted by local artisans using natural materials. Perfect for home decoration or practical use.',
-    price: 450,
-    stock: 15,
-    image: 'https://images.unsplash.com/photo-1586109019133-90ed8c0b74a5?w=400',
-    category: 'Handicrafts',
-  },
-  {
-    id: 'p2',
-    name: 'Organic Honey',
-    description: 'Pure, raw honey harvested from local bee farms. Rich in natural nutrients and perfect for health-conscious consumers.',
-    price: 250,
-    stock: 30,
-    image: 'https://images.unsplash.com/photo-1587049352846-4a222e784e38?w=400',
-    category: 'Food',
-  },
-  {
-    id: 'p3',
-    name: 'Coconut Products',
-    description: 'Assorted coconut-based products including virgin coconut oil, dried coconut, and coconut sugar.',
-    price: 180,
-    stock: 25,
-    image: 'https://images.unsplash.com/photo-1615485500704-8e990f9900f7?w=400',
-    category: 'Food',
-  },
-  {
-    id: 'p4',
-    name: 'Woven Bags',
-    description: 'Eco-friendly bags woven from sustainable materials. Stylish and durable for everyday use.',
-    price: 350,
-    stock: 12,
-    image: 'https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=400',
-    category: 'Handicrafts',
-  },
-  {
-    id: 'p5',
-    name: 'Traditional Clothing',
-    description: 'Authentic local garments featuring traditional patterns and designs.',
-    price: 800,
-    stock: 8,
-    image: 'https://images.unsplash.com/photo-1617127365659-c47fa864d8bc?w=400',
-    category: 'Clothing',
-  },
-  {
-    id: 'p6',
-    name: 'Dried Fish',
-    description: 'Locally caught and dried fish, a traditional delicacy and protein source.',
-    price: 220,
-    stock: 20,
-    image: 'https://images.unsplash.com/photo-1580476262798-bddd9f4b7369?w=400',
-    category: 'Food',
-  },
-];
 
 export function Products() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const { addToCart, userType } = useApp();
   const navigate = useNavigate();
+  const [items, setItems] = useState<Product[]>([]);
 
-  const categories = ['All', ...Array.from(new Set(mockProducts.map(p => p.category)))];
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await (await fetch('http://localhost:8000/api/products')).json();
+        const mapped = data.map((d: any) => ({ ...d, id: String(d.id) }));
+        setItems(mapped);
+      } catch (e) {
+        setItems([]);
+      }
+    })();
+  }, []);
+
+  const categories = ['All', ...Array.from(new Set(items.map(p => p.category).filter(Boolean))) as string[]];
 
   const filteredProducts = selectedCategory === 'All'
-    ? mockProducts
-    : mockProducts.filter(p => p.category === selectedCategory);
+    ? items
+    : items.filter(p => p.category === selectedCategory);
 
   const handleAddToCart = (product: Product) => {
     if (!userType) {

@@ -1,72 +1,45 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MapPin, ChevronDown, ChevronUp, Navigation } from 'lucide-react';
+import { getJSON } from '../../lib/api';
 
-const mockAttractions = [
-  {
-    id: 'att1',
-    name: 'Puting Buhangin Beach',
-    description: 'A pristine white sand beach with crystal-clear waters, perfect for swimming and snorkeling.',
-    fullDescription: 'Located along the coastline, Puting Buhangin Beach is one of Mansalay\'s most beautiful natural attractions. The beach features powdery white sand and turquoise waters teeming with marine life. Visitors can enjoy swimming, snorkeling, beach volleyball, and stunning sunset views. Local vendors offer fresh seafood and refreshments.',
-    image: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400',
-    location: 'Coastal Area, Mansalay',
-    category: 'Beach',
-  },
-  {
-    id: 'att2',
-    name: 'Mount Mansalay',
-    description: 'A majestic mountain offering challenging trails and breathtaking panoramic views.',
-    fullDescription: 'Mount Mansalay stands as the highest peak in the region, offering adventurous hikers a rewarding challenge. The trail passes through diverse ecosystems, from lowland forests to mossy woodlands. The summit provides a 360-degree view of the surrounding islands and coastline. Best visited during dry season.',
-    image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400',
-    location: 'Mountain Range, Mansalay',
-    category: 'Mountain',
-  },
-  {
-    id: 'att3',
-    name: 'Mansalay Falls',
-    description: 'A cascading waterfall surrounded by lush tropical forest, ideal for nature lovers.',
-    fullDescription: 'Hidden within a verdant forest, Mansalay Falls features a multi-tiered cascade flowing into a natural pool. The area is perfect for swimming and picnicking. The trail to the falls offers opportunities to spot local wildlife and endemic plant species. Guides are available for hire at the entrance.',
-    image: 'https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?w=400',
-    location: 'Forest Reserve, Mansalay',
-    category: 'Waterfall',
-  },
-  {
-    id: 'att4',
-    name: 'Old Town Heritage Center',
-    description: 'Historic district showcasing Spanish colonial architecture and local culture.',
-    fullDescription: 'The Old Town Heritage Center preserves centuries of Mansalay history through well-maintained colonial buildings, museums, and cultural exhibits. Visitors can explore the old church, traditional houses, and handicraft workshops. Regular cultural performances showcase local music and dance traditions.',
-    image: 'https://images.unsplash.com/photo-1555400038-63f5ba517a47?w=400',
-    location: 'Town Center, Mansalay',
-    category: 'Cultural',
-  },
-  {
-    id: 'att5',
-    name: 'Coral Garden Marine Sanctuary',
-    description: 'Protected marine area with vibrant coral reefs and diverse aquatic life.',
-    fullDescription: 'This marine sanctuary is a haven for snorkelers and divers, featuring colorful coral formations and abundant marine biodiversity. The protected waters are home to tropical fish, sea turtles, and various coral species. Eco-tours and diving lessons are available through certified operators.',
-    image: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400',
-    location: 'Marine Protected Area, Mansalay',
-    category: 'Marine',
-  },
-  {
-    id: 'att6',
-    name: 'Riverside Bamboo Forest',
-    description: 'Serene bamboo grove along the river, perfect for peaceful walks and meditation.',
-    fullDescription: 'A tranquil escape featuring towering bamboo groves along the riverbank. Wooden walkways wind through the forest, creating a peaceful atmosphere ideal for reflection and photography. The area includes rest pavilions and is particularly beautiful during golden hour.',
-    image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400',
-    location: 'Riverside, Mansalay',
-    category: 'Nature',
-  },
-];
+interface AttractionType {
+  id: string;
+  name: string;
+  description?: string;
+  fullDescription?: string;
+  image?: string;
+  location?: string;
+  category?: string;
+}
 
 export function Attractions() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [items, setItems] = useState<AttractionType[]>([]);
 
-  const categories = ['All', ...Array.from(new Set(mockAttractions.map(a => a.category)))];
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await getJSON('/api/attractions');
+        // normalize backend keys to match UI expectations
+        const mapped = data.map((d: any) => ({
+          ...d,
+          id: String(d.id),
+          fullDescription: d.full_description ?? d.fullDescription,
+          description: d.description,
+        }));
+        setItems(mapped);
+      } catch (e) {
+        setItems([]);
+      }
+    })();
+  }, []);
+
+  const categories = ['All', ...Array.from(new Set(items.map(a => a.category).filter(Boolean))) as string[]];
 
   const filteredAttractions = selectedCategory === 'All'
-    ? mockAttractions
-    : mockAttractions.filter(a => a.category === selectedCategory);
+    ? items
+    : items.filter(a => a.category === selectedCategory);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">

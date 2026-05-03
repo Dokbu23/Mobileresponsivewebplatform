@@ -1,56 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Hotel, MapPin, Star, ChevronDown, ChevronUp, Calendar, CreditCard, Building2, LogIn } from 'lucide-react';
 import { useApp, Accommodation } from '../../context/AppContext';
 import { toast } from 'sonner';
-
-const mockAccommodations: Accommodation[] = [
-  {
-    id: 'a1',
-    name: 'Seaside Beach Resort',
-    description: 'Beachfront resort with stunning ocean views, infinity pool, and world-class amenities. Perfect for families and couples.',
-    pricePerNight: 3500,
-    image: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=400',
-    availability: {
-      '2026-04-30': 'available',
-      '2026-05-01': 'available',
-      '2026-05-02': 'booked',
-      '2026-05-03': 'available',
-      '2026-05-04': 'available',
-      '2026-05-05': 'full',
-    },
-  },
-  {
-    id: 'a2',
-    name: 'Mountain View Lodge',
-    description: 'Cozy mountain retreat surrounded by lush forests. Ideal for nature lovers and hikers.',
-    pricePerNight: 2500,
-    image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400',
-    availability: {
-      '2026-04-30': 'available',
-      '2026-05-01': 'available',
-      '2026-05-02': 'available',
-      '2026-05-03': 'booked',
-      '2026-05-04': 'available',
-      '2026-05-05': 'available',
-    },
-  },
-  {
-    id: 'a3',
-    name: 'Downtown Boutique Hotel',
-    description: 'Modern boutique hotel in the heart of town with easy access to restaurants and shops.',
-    pricePerNight: 2000,
-    image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400',
-    availability: {
-      '2026-04-30': 'available',
-      '2026-05-01': 'available',
-      '2026-05-02': 'available',
-      '2026-05-03': 'available',
-      '2026-05-04': 'full',
-      '2026-05-05': 'available',
-    },
-  },
-];
+import { getJSON } from '../../lib/api';
 
 export function Accommodations() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -60,6 +13,24 @@ export function Accommodations() {
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'otc'>('online');
   const { addBooking, userType } = useApp();
   const navigate = useNavigate();
+  const [items, setItems] = useState<Accommodation[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await getJSON('/api/accommodations');
+        const mapped = data.map((d: any) => ({
+          ...d,
+          id: String(d.id),
+          pricePerNight: d.price_per_night ?? d.pricePerNight,
+          availability: d.availability ?? d.availability,
+        }));
+        setItems(mapped);
+      } catch (e) {
+        setItems([]);
+      }
+    })();
+  }, []);
 
   const handleOpenBooking = (accommodationId: string) => {
     if (!userType) {
@@ -146,7 +117,7 @@ export function Accommodations() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {mockAccommodations.map(accommodation => {
+        {items.map(accommodation => {
           const isExpanded = expandedId === accommodation.id;
           const isBooking = bookingModal === accommodation.id;
 
