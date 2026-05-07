@@ -1,32 +1,45 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { MapPin, User, Mail } from 'lucide-react';
+import { MapPin, User, Mail, Lock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
+import { postJSON } from '../../lib/api';
+import { showErrorAlert, showLoginSuccess } from '../../lib/sweetAlert';
 
 export function TouristLogin() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const { setUserType } = useApp();
+  const [password, setPassword] = useState('');
+  const { setUserType, setCurrentUser } = useApp();
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name || !email) {
+    if (!name || !email || !password) {
       toast.error('Please fill in all fields');
       return;
     }
 
-    setUserType('tourist');
-    toast.success(`Welcome, ${name}!`);
-    navigate('/');
+    try {
+      const response = await postJSON('/login', {
+        email,
+        password,
+        role: 'tourist',
+      }, false);
+      setUserType('tourist');
+      setCurrentUser(response.user);
+      await showLoginSuccess(name, 'Tourist');
+      navigate('/dashboard');
+    } catch {
+      await showErrorAlert('Login failed', 'Invalid credentials.');
+    }
   };
 
-  const handleGuestContinue = () => {
+  const handleGuestContinue = async () => {
     setUserType('tourist');
-    toast.success('Welcome, Guest!');
-    navigate('/');
+    await showLoginSuccess('Guest', 'Tourist');
+    navigate('/dashboard');
   };
 
   return (
@@ -67,6 +80,21 @@ export function TouristLogin() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
                 placeholder="Enter your email"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm mb-2">Password</label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                placeholder="Enter your password"
+                required
               />
             </div>
           </div>

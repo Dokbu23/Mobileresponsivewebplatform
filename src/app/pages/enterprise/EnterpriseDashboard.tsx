@@ -1,80 +1,139 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Store, Package, DollarSign, ShoppingCart, TrendingUp, Star, AlertTriangle } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Link } from 'react-router';
-
-const salesTrends = [
-  { date: 'Apr 23', sales: 12 },
-  { date: 'Apr 24', sales: 18 },
-  { date: 'Apr 25', sales: 15 },
-  { date: 'Apr 26', sales: 22 },
-  { date: 'Apr 27', sales: 20 },
-  { date: 'Apr 28', sales: 25 },
-  { date: 'Apr 29', sales: 28 },
-];
-
-const monthlyRevenue = [
-  { month: 'Jan', revenue: 22000 },
-  { month: 'Feb', revenue: 25500 },
-  { month: 'Mar', revenue: 28000 },
-  { month: 'Apr', revenue: 28500 },
-];
-
-const topSellingProducts = [
-  { name: 'Handwoven Baskets', sold: 45, revenue: 20250 },
-  { name: 'Organic Honey', sold: 38, revenue: 9500 },
-  { name: 'Woven Bags', sold: 32, revenue: 11200 },
-  { name: 'Traditional Clothing', sold: 28, revenue: 22400 },
-  { name: 'Coconut Products', sold: 25, revenue: 4500 },
-];
-
-const categoryPerformance = [
-  { category: 'Handicrafts', sales: 95 },
-  { category: 'Food', sales: 68 },
-  { category: 'Clothing', sales: 42 },
-  { category: 'Souvenirs', sales: 35 },
-];
-
-const lowStockItems = [
-  { name: 'Woven Bags', stock: 12, status: 'low' },
-  { name: 'Traditional Clothing', stock: 8, status: 'critical' },
-  { name: 'Handwoven Baskets', stock: 15, status: 'low' },
-];
+import { getJSON, getPublicJSON } from '../../lib/api';
+import { useApp } from '../../context/AppContext';
 
 export function EnterpriseDashboard() {
+  const { currentUser } = useApp();
+  const [products, setProducts] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const productsResponse = await getPublicJSON('/products');
+        const rawProducts = Array.isArray(productsResponse) ? productsResponse : [];
+        const filteredProducts = currentUser?.id
+          ? rawProducts.filter((product: any) => Number(product.user_id ?? product.userId) === currentUser.id)
+          : rawProducts;
+        setProducts(filteredProducts);
+      } catch {
+        setProducts([]);
+      }
+
+      try {
+        const ordersResponse = await getJSON('/orders/my');
+        setOrders(Array.isArray(ordersResponse) ? ordersResponse : []);
+      } catch {
+        setOrders([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [currentUser?.id]);
+
+  const soldByName = useMemo(() => {
+    const sales = new Map<string, { sold: number; revenue: number }>();
+
+    orders.forEach(order => {
+      order.items.forEach((item: any) => {
+        const name = item.name ?? 'Product';
+        const quantity = Number(item.quantity ?? 1);
+        const price = Number(item.price ?? 0);
+        const current = sales.get(name) ?? { sold: 0, revenue: 0 };
+        sales.set(name, {
+          sold: current.sold + quantity,
+          revenue: current.revenue + quantity * price,
+        });
+      });
+    });
+
+    return sales;
+  }, [orders]);
+
+  const salesTrends = Array.from(
+    orders.reduce((grouped, order) => {
+      const dateKey = new Date(order.created_at ?? new Date().toISOString()).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+      grouped.set(dateKey, (grouped.get(dateKey) ?? 0) + Number(order.total || 0));
+      return grouped;
+    }, new Map<string, number>()).entries()
+  ).slice(-7).map(([date, sales]) => ({ date, sales }));
+
+  const monthlyRevenue = Array.from(
+    orders.reduce((grouped, order) => {
+      const monthKey = new Date(order.created_at ?? new Date().toISOString()).toLocaleDateString('en-US', { month: 'short' });
+      grouped.set(monthKey, (grouped.get(monthKey) ?? 0) + Number(order.total || 0));
+      return grouped;
+    }, new Map<string, number>()).entries()
+  ).slice(-4).map(([month, revenue]) => ({ month, revenue }));
+
+  const topSellingProducts = Array.from(soldByName.entries())
+    .map(([name, metrics]) => ({ name, sold: metrics.sold, revenue: metrics.revenue }))
+    .sort((left, right) => right.sold - left.sold)
+    .slice(0, 5);
+
+  const categoryPerformance = Object.values(
+    products.reduce((grouped, product) => {
+      const category = product.category ?? 'Uncategorized';
+      const current = grouped[category] ?? 0;
+      return {
+        ...grouped,
+        [category]: current + 1,
+      };
+    }, {} as Record<string, number>)
+  ).map((sales, index) => ({
+    category: Object.keys(products.reduce((grouped, product) => {
+      grouped[product.category ?? 'Uncategorized'] = true;
+      return grouped;
+    }, {} as Record<string, boolean>))[index] ?? 'Category',
+    sales,
+  }));
+
+  const lowStockItems = products
+    .filter(product => Number(product.stock ?? 0) < 15)
+    .slice(0, 3)
+    .map(product => ({
+      name: product.name,
+      stock: Number(product.stock ?? 0),
+      status: Number(product.stock ?? 0) < 10 ? 'critical' : 'low',
+    }));
+
   const stats = [
     {
       icon: ShoppingCart,
       label: 'Total Sales',
-      value: '240',
-      change: '+22%',
-      trend: 'up',
+      value: String(orders.length),
+      change: 'Live',
       color: 'bg-blue-50',
       iconColor: 'text-blue-600',
     },
     {
       icon: DollarSign,
-      label: 'Revenue (Month)',
-      value: '₱28,500',
-      change: '+18%',
-      trend: 'up',
+      label: 'Revenue (Live)',
+      value: `₱${orders.reduce((sum, order) => sum + Number(order.total || 0), 0).toLocaleString()}`,
+      change: 'Live',
       color: 'bg-green-50',
       iconColor: 'text-green-600',
     },
     {
       icon: Package,
       label: 'Products Listed',
-      value: '18',
-      change: '+3',
-      trend: 'up',
+      value: String(products.length),
+      change: 'Live',
       color: 'bg-purple-50',
       iconColor: 'text-purple-600',
     },
     {
       icon: TrendingUp,
       label: 'Avg. Order Value',
-      value: '₱425',
-      change: '+8%',
-      trend: 'up',
+      value: orders.length ? `₱${Math.round(orders.reduce((sum, order) => sum + Number(order.total || 0), 0) / orders.length).toLocaleString()}` : '₱0',
+      change: 'Live',
       color: 'bg-pink-50',
       iconColor: 'text-pink-600',
     },
@@ -90,6 +149,16 @@ export function EnterpriseDashboard() {
         return 'text-green-600';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="bg-white border-2 border-primary/20 rounded-lg p-12 text-center">
+          <p className="text-muted-foreground">Loading enterprise analytics...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">

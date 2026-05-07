@@ -1,0 +1,121 @@
+/* SweetAlert2 Custom Styles */
+
+/* Reduce popup size */
+.swal2-popup {
+  width: 400px !important;
+  max-width: 90vw !important;
+  padding: 1.5rem !important;
+  font-size: 0.95rem !important;
+}
+
+/* Reduce icon size */
+.swal2-icon {
+  width: 60px !important;
+  height: 60px !important;
+  margin: 1rem auto 1rem !important;
+}
+
+.swal2-icon .swal2-icon-content {
+  font-size: 2.5rem !important;
+}
+
+/* Reduce title size */
+.swal2-title {
+  font-size: 1.5rem !important;
+  margin: 0 0 0.5rem !important;
+  padding: 0 !important;
+}
+
+/* Reduce text size */
+.swal2-html-container {
+  font-size: 0.9rem !important;
+  margin: 0.5rem 0 1rem !important;
+}
+
+/* Reduce button size */
+.swal2-actions {
+  margin: 1rem 0 0 !important;
+  gap: 0.5rem !important;
+}
+
+.swal2-styled {
+  font-size: 0.9rem !important;
+  padding: 0.5rem 1.5rem !important;
+  min-width: 100px !important;
+}
+
+.swal-success-popup {
+  border-radius: 12px !important;
+  font-family: inherit !important;
+}
+
+.swal-login-popup {
+  border-radius: 12px !important;
+  font-family: inherit !important;
+}
+
+.swal-registration-popup {
+  border-radius: 12px !important;
+  font-family: inherit !important;
+}
+
+.swal-transaction-popup {
+  border-radius: 12px !important;
+  font-family: inherit !important;
+}
+
+.swal-product-popup {
+  border-radius: 12px !important;
+  font-family: inherit !important;
+}
+
+.swal-status-popup {
+  border-radius: 12px !important;
+  font-family: inherit !important;
+}
+
+.swal-error-popup {
+  border-radius: 12px !important;
+  font-family: inherit !important;
+}
+
+/* Custom button colors to match theme */
+.swal2-confirm {
+  background-color: #10b981 !important;
+  border: none !important;
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+}
+
+.swal2-cancel {
+  background-color: #6b7280 !important;
+  border: none !important;
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+}
+
+.swal2-deny {
+  background-color: #ef4444 !important;
+  border: none !important;
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+}
+
+/* Progress bar styling */
+.swal2-timer-progress-bar {
+  background-color: #10b981 !important;
+}
+
+/* Icon styling */
+.swal2-success .swal2-success-ring {
+  border-color: #10b981 !important;
+}
+
+.swal2-success .swal2-success-fix {
+  background-color: #10b981 !important;
+}
+
+.swal2-success .swal2-success-line-tip,
+.swal2-success .swal2-success-line-long {
+  background-color: #10b981 !important;
+}

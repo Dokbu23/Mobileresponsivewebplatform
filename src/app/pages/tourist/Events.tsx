@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Calendar, MapPin, Clock, ChevronDown, ChevronUp, Users } from 'lucide-react';
-import { getJSON } from '../../lib/api';
+import { getPublicJSON } from '../../lib/api';
 
 interface EventType {
   id: string;
@@ -23,7 +23,7 @@ export function Events() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await getJSON('/api/events');
+        const data = await getPublicJSON('/events');
         const mapped = data.map((d: any) => ({
           ...d,
           id: String(d.id),

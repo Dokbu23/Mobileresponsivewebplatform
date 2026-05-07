@@ -25,7 +25,18 @@ class AttractionController extends Controller
      */
     public function store(Request $request)
     {
-        //
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'location' => 'nullable|string|max:255',
+            'category' => 'nullable|string|max:255',
+            'image' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+            'full_description' => 'nullable|string',
+        ]);
+
+        $item = \App\Models\Attraction::create($data);
+
+        return response()->json($item, 201);
     }
 
     /**
@@ -49,7 +60,19 @@ class AttractionController extends Controller
      */
     public function update(Request $request, $id)
     {
-        //
+        $data = $request->validate([
+            'name' => 'sometimes|required|string|max:255',
+            'location' => 'sometimes|nullable|string|max:255',
+            'category' => 'sometimes|nullable|string|max:255',
+            'image' => 'sometimes|nullable|string|max:255',
+            'description' => 'sometimes|nullable|string',
+            'full_description' => 'sometimes|nullable|string',
+        ]);
+
+        $item = \App\Models\Attraction::findOrFail($id);
+        $item->update($data);
+
+        return response()->json($item);
     }
 
     /**
@@ -60,6 +83,9 @@ class AttractionController extends Controller
      */
     public function destroy($id)
     {
-        //
+        $item = \App\Models\Attraction::findOrFail($id);
+        $item->delete();
+
+        return response()->json(['message' => 'Attraction deleted']);
     }
 }

@@ -1,77 +1,118 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Hotel, Users, DollarSign, Calendar, TrendingUp, Star } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Link } from 'react-router';
-
-const bookingTrends = [
-  { date: 'Apr 23', bookings: 5 },
-  { date: 'Apr 24', bookings: 7 },
-  { date: 'Apr 25', bookings: 6 },
-  { date: 'Apr 26', bookings: 8 },
-  { date: 'Apr 27', bookings: 10 },
-  { date: 'Apr 28', bookings: 9 },
-  { date: 'Apr 29', bookings: 12 },
-];
-
-const monthlyRevenue = [
-  { month: 'Jan', revenue: 125000 },
-  { month: 'Feb', revenue: 145000 },
-  { month: 'Mar', revenue: 168000 },
-  { month: 'Apr', revenue: 157500 },
-];
-
-const roomTypeBookings = [
-  { type: 'Standard Room', bookings: 28 },
-  { type: 'Deluxe Room', bookings: 35 },
-  { type: 'Suite', bookings: 18 },
-  { type: 'Villa', bookings: 12 },
-];
-
-const topCustomers = [
-  { name: 'John Smith', bookings: 8, revenue: 28000 },
-  { name: 'Maria Garcia', bookings: 6, revenue: 21000 },
-  { name: 'Carlos Lopez', bookings: 5, revenue: 17500 },
-  { name: 'Anna Santos', bookings: 4, revenue: 14000 },
-];
+import { getJSON } from '../../lib/api';
 
 export function ResortDashboard() {
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [accommodations, setAccommodations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [bookingsResponse, accommodationsResponse] = await Promise.all([
+          getJSON('/api/bookings'),
+          getJSON('/api/accommodations'),
+        ]);
+
+        setBookings(Array.isArray(bookingsResponse) ? bookingsResponse : []);
+        setAccommodations(Array.isArray(accommodationsResponse) ? accommodationsResponse : []);
+      } catch {
+        setBookings([]);
+        setAccommodations([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const bookingTrends = Array.from(
+    bookings.reduce((grouped, booking) => {
+      const dateKey = new Date(booking.created_at ?? booking.check_in ?? new Date().toISOString()).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+      grouped.set(dateKey, (grouped.get(dateKey) ?? 0) + 1);
+      return grouped;
+    }, new Map<string, number>()).entries()
+  ).slice(-7).map(([date, bookingsCount]) => ({ date, bookings: bookingsCount }));
+
+  const monthlyRevenue = Array.from(
+    bookings.reduce((grouped, booking) => {
+      const monthKey = new Date(booking.created_at ?? booking.check_in ?? new Date().toISOString()).toLocaleDateString('en-US', {
+        month: 'short',
+      });
+      grouped.set(monthKey, (grouped.get(monthKey) ?? 0) + Number(booking.total || 0));
+      return grouped;
+    }, new Map<string, number>()).entries()
+  ).slice(-4).map(([month, revenue]) => ({ month, revenue }));
+
+  const roomTypeBookings = Array.from(
+    bookings.reduce((grouped, booking) => {
+      const type = booking.accommodation_snapshot?.name ?? 'Accommodation';
+      grouped.set(type, (grouped.get(type) ?? 0) + 1);
+      return grouped;
+    }, new Map<string, number>()).entries()
+  ).slice(0, 4).map(([type, bookingsCount]) => ({ type, bookings: bookingsCount }));
+
+  const topCustomers = Array.from(
+    bookings.reduce((grouped, booking) => {
+      const name = booking.accommodation_snapshot?.name ?? 'Accommodation';
+      const current = grouped.get(name) ?? { bookings: 0, revenue: 0 };
+      grouped.set(name, {
+        bookings: current.bookings + 1,
+        revenue: current.revenue + Number(booking.total || 0),
+      });
+      return grouped;
+    }, new Map<string, { bookings: number; revenue: number }>()).entries()
+  ).map(([name, metrics]) => ({ name, bookings: metrics.bookings, revenue: metrics.revenue })).slice(0, 4);
+
   const stats = [
     {
       icon: Calendar,
       label: 'Total Bookings',
-      value: '145',
-      change: '+15%',
-      trend: 'up',
+      value: String(bookings.length),
+      change: 'Live',
       color: 'bg-blue-50',
       iconColor: 'text-blue-600',
     },
     {
       icon: DollarSign,
-      label: 'Revenue (Month)',
-      value: '₱157,500',
-      change: '+8%',
-      trend: 'up',
+      label: 'Revenue (Live)',
+      value: `₱${bookings.reduce((sum, booking) => sum + Number(booking.total || 0), 0).toLocaleString()}`,
+      change: 'Live',
       color: 'bg-green-50',
       iconColor: 'text-green-600',
     },
     {
       icon: Users,
-      label: 'Total Guests',
-      value: '320',
-      change: '+12%',
-      trend: 'up',
+      label: 'Accommodations',
+      value: String(accommodations.length),
+      change: 'Live',
       color: 'bg-purple-50',
       iconColor: 'text-purple-600',
     },
     {
       icon: TrendingUp,
       label: 'Occupancy Rate',
-      value: '78%',
-      change: '+5%',
-      trend: 'up',
+      value: `${accommodations.length ? Math.min(100, Math.round((bookings.length / accommodations.length) * 100)) : 0}%`,
+      change: 'Live',
       color: 'bg-pink-50',
       iconColor: 'text-pink-600',
     },
   ];
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="bg-white border-2 border-primary/20 rounded-lg p-12 text-center">
+          <p className="text-muted-foreground">Loading resort analytics...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">

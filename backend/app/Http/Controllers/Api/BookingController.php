@@ -32,7 +32,17 @@ class BookingController extends Controller
             'check_out' => 'required|date',
             'payment_method' => 'nullable|string',
             'total' => 'required|numeric',
+            'user_role' => 'required|string',
+            'user_id' => 'nullable|integer',
         ]);
+
+        // Only tourists can book accommodations
+        // Enterprise and resort are business management accounts, not customers
+        if ($data['user_role'] !== 'tourist') {
+            return response()->json([
+                'error' => 'Only tourists can book accommodations. Enterprise and resort accounts are for business management only.'
+            ], 403);
+        }
 
         $booking = \App\Models\Booking::create([
             'accommodation_id' => $data['accommodation_id'],
@@ -67,7 +77,16 @@ class BookingController extends Controller
      */
     public function update(Request $request, $id)
     {
-        //
+        $data = $request->validate([
+            'status' => 'required|in:pending,confirmed,checked-in,completed',
+        ]);
+
+        $booking = \App\Models\Booking::findOrFail($id);
+        $booking->update([
+            'status' => $data['status'],
+        ]);
+
+        return response()->json($booking);
     }
 
     /**

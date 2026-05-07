@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router';
 import { CreditCard, Building2, CheckCircle, LogIn } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
+import { postJSON } from '../../lib/api';
+import { showTransactionSuccess } from '../../lib/sweetAlert';
 
 export function Checkout() {
-  const { cart, addOrder, clearCart, userType } = useApp();
+  const { cart, addOrder, clearCart, userType, currentUser } = useApp();
   const navigate = useNavigate();
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'otc'>('online');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -13,9 +15,10 @@ export function Checkout() {
     fullName: '',
     phone: '',
     address: '',
-    city: '',
-    province: '',
-    zipCode: '',
+    barangay: '',
+    city: 'Mansalay', // Locked to Mansalay
+    province: 'Oriental Mindoro', // Locked to Oriental Mindoro
+    zipCode: '5213', // Default zip code for Mansalay
     notes: '',
   });
 
@@ -46,33 +49,71 @@ export function Checkout() {
     );
   }
 
-  const handlePlaceOrder = () => {
+  if (userType !== 'tourist') {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+        <h2 className="mb-4">Browse Only</h2>
+        <p className="text-muted-foreground mb-8">
+          Business accounts can browse products but cannot place orders.
+        </p>
+        <button
+          onClick={() => navigate('/products')}
+          className="px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+        >
+          Back to Products
+        </button>
+      </div>
+    );
+  }
+
+  const handlePlaceOrder = async () => {
+    if (userType !== 'tourist') {
+      toast.error('Only tourists can place orders. Business accounts are for management only.');
+      return;
+    }
+
     if (cart.length === 0) {
       toast.error('Your cart is empty');
       return;
     }
 
     // Validate shipping information
-    if (!shippingInfo.fullName || !shippingInfo.phone || !shippingInfo.address || !shippingInfo.city) {
+    if (!shippingInfo.fullName || !shippingInfo.phone || !shippingInfo.address || !shippingInfo.barangay) {
       toast.error('Please fill in all required shipping information');
       return;
     }
 
     setIsProcessing(true);
 
-    setTimeout(() => {
+    try {
+      const order = await postJSON('/api/orders', {
+        items: cart,
+        total,
+        payment_method: paymentMethod,
+        user_role: userType,
+        user_id: currentUser?.id,
+      });
+
       addOrder({
         items: cart,
         total,
-        status: 'pending',
+        status: order.status ?? 'pending',
         paymentMethod,
       });
 
       clearCart();
+      const result = await showTransactionSuccess('order');
+      
+      if (result.isConfirmed) {
+        navigate('/status');
+      } else {
+        navigate('/products');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to place order');
+    } finally {
       setIsProcessing(false);
-      toast.success('Order placed successfully!');
-      navigate('/status');
-    }, 1500);
+    }
   };
 
   if (cart.length === 0) {
@@ -128,17 +169,54 @@ export function Checkout() {
                 value={shippingInfo.address}
                 onChange={(e) => setShippingInfo({ ...shippingInfo, address: e.target.value })}
                 className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                placeholder="Street, Barangay, House/Unit Number"
+                placeholder="Street, House/Unit Number"
               />
+            </div>
+            <div>
+              <label className="block text-sm mb-2">Barangay *</label>
+              <select
+                value={shippingInfo.barangay}
+                onChange={(e) => setShippingInfo({ ...shippingInfo, barangay: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                required
+              >
+                <option value="">Select Barangay</option>
+                <optgroup label="A - D">
+                  <option value="B. Del Mundo">B. Del Mundo</option>
+                  <option value="Balugo">Balugo</option>
+                  <option value="Bonbon">Bonbon</option>
+                  <option value="Budburan">Budburan</option>
+                  <option value="Cabalwa">Cabalwa</option>
+                  <option value="Don Pedro">Don Pedro</option>
+                </optgroup>
+                <optgroup label="M - P">
+                  <option value="Maliwanag">Maliwanag</option>
+                  <option value="Manaul">Manaul</option>
+                  <option value="Panaytayan">Panaytayan</option>
+                  <option value="Poblacion">Poblacion</option>
+                </optgroup>
+                <optgroup label="R - S">
+                  <option value="Roma">Roma</option>
+                  <option value="Santa Brigida (Sta. Brigida)">Santa Brigida (Sta. Brigida)</option>
+                  <option value="Santa Maria">Santa Maria</option>
+                  <option value="Santa Teresita">Santa Teresita</option>
+                </optgroup>
+                <optgroup label="V - W">
+                  <option value="Villa Celestial">Villa Celestial</option>
+                  <option value="Wasig">Wasig</option>
+                  <option value="Waygan">Waygan</option>
+                </optgroup>
+              </select>
             </div>
             <div>
               <label className="block text-sm mb-2">City/Municipality *</label>
               <input
                 type="text"
                 value={shippingInfo.city}
-                onChange={(e) => setShippingInfo({ ...shippingInfo, city: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
                 placeholder="Mansalay"
+                disabled
+                readOnly
               />
             </div>
             <div>
@@ -146,9 +224,10 @@ export function Checkout() {
               <input
                 type="text"
                 value={shippingInfo.province}
-                onChange={(e) => setShippingInfo({ ...shippingInfo, province: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
                 placeholder="Oriental Mindoro"
+                disabled
+                readOnly
               />
             </div>
             <div>
@@ -156,9 +235,10 @@ export function Checkout() {
               <input
                 type="text"
                 value={shippingInfo.zipCode}
-                onChange={(e) => setShippingInfo({ ...shippingInfo, zipCode: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                placeholder="5209"
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                placeholder="5213"
+                disabled
+                readOnly
               />
             </div>
             <div className="md:col-span-2">

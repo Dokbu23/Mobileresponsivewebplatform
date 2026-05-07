@@ -1,10 +1,35 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Package, Hotel, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
+import { getJSON, patchJSON } from '../../lib/api';
+import { showStatusUpdateSuccess, showSuccessAlert } from '../../lib/sweetAlert';
+
+interface ApiOrder {
+  id: number;
+  items: Array<{ name?: string; quantity?: number }>;
+  total: number;
+  status: 'pending' | 'confirmed' | 'shipped' | 'delivered';
+  payment_method: 'online' | 'otc' | null;
+  created_at: string;
+}
+
+interface ApiBooking {
+  id: number;
+  accommodation_snapshot: {
+    id?: number;
+    name?: string;
+    pricePerNight?: number;
+    price_per_night?: number;
+  };
+  check_in: string;
+  check_out: string;
+  total: number;
+  status: 'pending' | 'confirmed' | 'checked-in' | 'completed';
+  payment_method: 'online' | 'otc' | null;
+}
 
 interface Order {
   id: string;
-  customerName: string;
   items: string;
   total: number;
   status: 'pending' | 'confirmed' | 'shipped' | 'delivered';
@@ -15,7 +40,6 @@ interface Order {
 
 interface Booking {
   id: string;
-  customerName: string;
   accommodation: string;
   checkIn: string;
   checkOut: string;
@@ -25,58 +49,58 @@ interface Booking {
   type: 'accommodation';
 }
 
-const mockOrders: Order[] = [
-  {
-    id: 'ORD-001',
-    customerName: 'John Doe',
-    items: 'Handwoven Baskets (2), Organic Honey (1)',
-    total: 1150,
-    status: 'pending',
-    paymentMethod: 'online',
-    date: '2026-04-29',
-    type: 'product',
-  },
-  {
-    id: 'ORD-002',
-    customerName: 'Jane Smith',
-    items: 'Woven Bags (1), Traditional Clothing (1)',
-    total: 1150,
-    status: 'confirmed',
-    paymentMethod: 'otc',
-    date: '2026-04-28',
-    type: 'product',
-  },
-];
-
-const mockBookings: Booking[] = [
-  {
-    id: 'BKG-001',
-    customerName: 'Carlos Lopez',
-    accommodation: 'Seaside Beach Resort',
-    checkIn: '2026-05-01',
-    checkOut: '2026-05-05',
-    total: 14000,
-    status: 'pending',
-    paymentMethod: 'online',
-    type: 'accommodation',
-  },
-  {
-    id: 'BKG-002',
-    customerName: 'Maria Garcia',
-    accommodation: 'Mountain View Lodge',
-    checkIn: '2026-05-10',
-    checkOut: '2026-05-12',
-    total: 5000,
-    status: 'confirmed',
-    paymentMethod: 'otc',
-    type: 'accommodation',
-  },
-];
-
 export function ManageOrders() {
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
-  const [bookings, setBookings] = useState<Booking[]>(mockBookings);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [activeTab, setActiveTab] = useState<'orders' | 'bookings'>('orders');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [ordersResponse, bookingsResponse] = await Promise.all([
+          getJSON('/orders'),
+          getJSON('/bookings'),
+        ]);
+
+        setOrders(
+          Array.isArray(ordersResponse)
+            ? ordersResponse.map((order: ApiOrder) => ({
+                id: `ORD-${String(order.id).padStart(3, '0')}`,
+                items: Array.isArray(order.items)
+                  ? order.items.map(item => `${item.name ?? 'Item'}${item.quantity ? ` (${item.quantity})` : ''}`).join(', ')
+                  : 'Order items',
+                total: Number(order.total) || 0,
+                status: order.status,
+                paymentMethod: order.payment_method ?? 'online',
+                date: order.created_at,
+                type: 'product' as const,
+              }))
+            : []
+        );
+
+        setBookings(
+          Array.isArray(bookingsResponse)
+            ? bookingsResponse.map((booking: ApiBooking) => ({
+                id: `BKG-${String(booking.id).padStart(3, '0')}`,
+                accommodation: booking.accommodation_snapshot?.name ?? 'Accommodation',
+                checkIn: booking.check_in,
+                checkOut: booking.check_out,
+                total: Number(booking.total) || 0,
+                status: booking.status,
+                paymentMethod: booking.payment_method ?? 'online',
+                type: 'accommodation' as const,
+              }))
+            : []
+        );
+      } catch {
+        setOrders([]);
+        setBookings([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
   const orderStatusFlow: Record<Order['status'], Order['status'] | null> = {
     pending: 'confirmed',
@@ -92,34 +116,46 @@ export function ManageOrders() {
     completed: null,
   };
 
-  const handleUpdateOrderStatus = (orderId: string) => {
-    setOrders(prev =>
-      prev.map(order => {
-        if (order.id === orderId) {
-          const nextStatus = orderStatusFlow[order.status];
-          if (nextStatus) {
-            toast.success(`Order ${orderId} updated to ${nextStatus}`);
-            return { ...order, status: nextStatus };
-          }
-        }
-        return order;
-      })
-    );
+  const handleUpdateOrderStatus = async (orderId: string) => {
+    const currentOrder = orders.find(order => order.id === orderId);
+    if (!currentOrder) {
+      return;
+    }
+
+    const nextStatus = orderStatusFlow[currentOrder.status];
+    if (!nextStatus) {
+      return;
+    }
+
+    try {
+      const orderNumber = Number(orderId.replace('ORD-', ''));
+      await patchJSON(`/orders/${orderNumber}`, { status: nextStatus });
+      setOrders(prev => prev.map(order => (order.id === orderId ? { ...order, status: nextStatus } : order)));
+      await showStatusUpdateSuccess('order', orderId, nextStatus);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update order status');
+    }
   };
 
-  const handleUpdateBookingStatus = (bookingId: string) => {
-    setBookings(prev =>
-      prev.map(booking => {
-        if (booking.id === bookingId) {
-          const nextStatus = bookingStatusFlow[booking.status];
-          if (nextStatus) {
-            toast.success(`Booking ${bookingId} updated to ${nextStatus}`);
-            return { ...booking, status: nextStatus };
-          }
-        }
-        return booking;
-      })
-    );
+  const handleUpdateBookingStatus = async (bookingId: string) => {
+    const currentBooking = bookings.find(booking => booking.id === bookingId);
+    if (!currentBooking) {
+      return;
+    }
+
+    const nextStatus = bookingStatusFlow[currentBooking.status];
+    if (!nextStatus) {
+      return;
+    }
+
+    try {
+      const bookingNumber = Number(bookingId.replace('BKG-', ''));
+      await patchJSON(`/bookings/${bookingNumber}`, { status: nextStatus });
+      setBookings(prev => prev.map(booking => (booking.id === bookingId ? { ...booking, status: nextStatus } : booking)));
+      await showStatusUpdateSuccess('booking', bookingId, nextStatus);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update booking status');
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -148,6 +184,16 @@ export function ManageOrders() {
       return nextStatus ? `Mark as ${nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)}` : 'Completed';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="bg-white border-2 border-primary/20 rounded-lg p-12 text-center">
+          <p className="text-muted-foreground">Loading orders and bookings...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -210,9 +256,6 @@ export function ManageOrders() {
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground mb-1">
-                      <strong>Customer:</strong> {order.customerName}
-                    </p>
-                    <p className="text-sm text-muted-foreground mb-1">
                       <strong>Items:</strong> {order.items}
                     </p>
                     <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mt-2">
@@ -260,9 +303,6 @@ export function ManageOrders() {
                         {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                       </span>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-1">
-                      <strong>Customer:</strong> {booking.customerName}
-                    </p>
                     <p className="text-sm text-muted-foreground mb-1">
                       <strong>Accommodation:</strong> {booking.accommodation}
                     </p>

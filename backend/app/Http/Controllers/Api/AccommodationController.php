@@ -25,7 +25,17 @@ class AccommodationController extends Controller
      */
     public function store(Request $request)
     {
-        //
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'price_per_night' => 'required|numeric',
+            'image' => 'nullable|string',
+            'availability' => 'nullable|array',
+        ]);
+
+        $accommodation = \App\Models\Accommodation::create($data);
+
+        return response()->json($accommodation, 201);
     }
 
     /**
@@ -49,7 +59,18 @@ class AccommodationController extends Controller
      */
     public function update(Request $request, $id)
     {
-        //
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'price_per_night' => 'required|numeric',
+            'image' => 'nullable|string',
+            'availability' => 'nullable|array',
+        ]);
+
+        $accommodation = \App\Models\Accommodation::findOrFail($id);
+        $accommodation->update($data);
+
+        return response()->json($accommodation);
     }
 
     /**
@@ -60,6 +81,9 @@ class AccommodationController extends Controller
      */
     public function destroy($id)
     {
-        //
+        $accommodation = \App\Models\Accommodation::findOrFail($id);
+        $accommodation->delete();
+
+        return response()->json(['message' => 'Accommodation deleted']);
     }
 }

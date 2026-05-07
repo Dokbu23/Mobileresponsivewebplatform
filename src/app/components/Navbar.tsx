@@ -2,16 +2,38 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { ShoppingCart, Menu, X, MapPin, User, LogOut, Shield, Hotel, Store } from 'lucide-react';
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { showLogoutConfirm, showLogoutSuccess } from '../lib/sweetAlert';
+
+type RoleType = 'tourist' | 'admin' | 'resort' | 'enterprise';
+
+type RoleMenuItem = {
+  to: string;
+  label: string;
+};
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const { cart, userType, setUserType, setIsAdmin } = useApp();
+  const { cart, userType, setUserType, setIsAdmin, clearCart, setCurrentUser } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
 
+  const dashboardPath = (() => {
+    switch (userType) {
+      case 'admin':
+        return '/admin/dashboard';
+      case 'resort':
+        return '/resort/dashboard';
+      case 'enterprise':
+        return '/enterprise/dashboard';
+      case 'tourist':
+      default:
+        return '/';
+    }
+  })();
+
   const navLinks = [
-    { path: '/', label: 'Home' },
+    { path: dashboardPath, label: 'Dashboard' },
     { path: '/attractions', label: 'Attractions' },
     { path: '/events', label: 'Events' },
     { path: '/products', label: 'Products' },
@@ -20,11 +42,49 @@ export function Navbar() {
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  const handleLogout = () => {
+  const roleMenuItems: Record<RoleType, RoleMenuItem[]> = {
+    tourist: [
+      { to: '/', label: 'Dashboard' },
+      { to: '/status', label: 'My Orders & Bookings' },
+    ],
+    admin: [
+      { to: '/admin/dashboard', label: 'Dashboard' },
+      { to: '/admin/listings', label: 'Manage Listings' },
+      { to: '/admin/users', label: 'User Management' },
+      { to: '/admin/orders', label: 'Manage Orders' },
+    ],
+    resort: [
+      { to: '/resort/dashboard', label: 'Dashboard' },
+      { to: '/resort/profile', label: 'Manage Profile' },
+    ],
+    enterprise: [
+      { to: '/enterprise/dashboard', label: 'Dashboard' },
+      { to: '/enterprise/profile', label: 'Manage Products' },
+    ],
+  };
+
+  const activeRoleItems = userType ? roleMenuItems[userType as RoleType] : [];
+
+  const handleLogout = async () => {
+    const result = await showLogoutConfirm();
+    if (!result.isConfirmed) {
+      return;
+    }
+
     setUserType(null);
     setIsAdmin(false);
+    setCurrentUser(null);
+    clearCart();
+    window.localStorage.removeItem('discover-mansalay:userType');
+    window.localStorage.removeItem('discover-mansalay:isAdmin');
     setShowUserMenu(false);
+    await showLogoutSuccess();
     navigate('/select-role');
+  };
+
+  const closeMenus = () => {
+    setShowUserMenu(false);
+    setIsOpen(false);
   };
 
   const getRoleInfo = () => {
@@ -70,7 +130,8 @@ export function Navbar() {
               </Link>
             ))}
 
-            {userType ? (
+            {/* Show cart only for tourists */}
+            {userType === 'tourist' ? (
               <Link to="/cart" className="relative">
                 <ShoppingCart className="h-6 w-6 text-foreground hover:text-primary transition-colors" />
                 {cartCount > 0 && (
@@ -100,83 +161,16 @@ export function Navbar() {
                       {roleInfo.label}
                     </p>
                   </div>
-                  {userType === 'admin' && (
-                    <>
-                      <Link
-                        to="/admin/dashboard"
-                        onClick={() => setShowUserMenu(false)}
-                        className="block px-4 py-3 hover:bg-primary/5 transition-colors"
-                      >
-                        Dashboard
-                      </Link>
-                      <Link
-                        to="/admin/listings"
-                        onClick={() => setShowUserMenu(false)}
-                        className="block px-4 py-3 hover:bg-primary/5 transition-colors"
-                      >
-                        Manage Listings
-                      </Link>
-                      <Link
-                        to="/admin/orders"
-                        onClick={() => setShowUserMenu(false)}
-                        className="block px-4 py-3 hover:bg-primary/5 transition-colors"
-                      >
-                        Manage Orders
-                      </Link>
-                    </>
-                  )}
-                  {userType === 'resort' && (
-                    <>
-                      <Link
-                        to="/resort/dashboard"
-                        onClick={() => setShowUserMenu(false)}
-                        className="block px-4 py-3 hover:bg-primary/5 transition-colors"
-                      >
-                        Dashboard
-                      </Link>
-                      <Link
-                        to="/resort/profile"
-                        onClick={() => setShowUserMenu(false)}
-                        className="block px-4 py-3 hover:bg-primary/5 transition-colors"
-                      >
-                        Manage Profile
-                      </Link>
-                    </>
-                  )}
-                  {userType === 'enterprise' && (
-                    <>
-                      <Link
-                        to="/enterprise/dashboard"
-                        onClick={() => setShowUserMenu(false)}
-                        className="block px-4 py-3 hover:bg-primary/5 transition-colors"
-                      >
-                        Dashboard
-                      </Link>
-                      <Link
-                        to="/enterprise/profile"
-                        onClick={() => setShowUserMenu(false)}
-                        className="block px-4 py-3 hover:bg-primary/5 transition-colors"
-                      >
-                        Manage Products
-                      </Link>
-                    </>
-                  )}
-                  {userType === 'tourist' && (
+                  {activeRoleItems.map(item => (
                     <Link
-                      to="/status"
+                      key={item.to}
+                      to={item.to}
                       onClick={() => setShowUserMenu(false)}
                       className="block px-4 py-3 hover:bg-primary/5 transition-colors"
                     >
-                      My Orders & Bookings
+                      {item.label}
                     </Link>
-                  )}
-                  <Link
-                    to="/select-role"
-                    onClick={() => setShowUserMenu(false)}
-                    className="block px-4 py-3 hover:bg-primary/5 transition-colors border-t border-primary/20"
-                  >
-                    Switch Role
-                  </Link>
+                  ))}
                   <button
                     onClick={handleLogout}
                     className="w-full text-left px-4 py-3 hover:bg-primary/5 transition-colors flex items-center gap-2 text-destructive"
@@ -222,7 +216,8 @@ export function Navbar() {
                 {link.label}
               </Link>
             ))}
-            {userType && (
+            {/* Show cart only for tourists in mobile */}
+            {userType === 'tourist' && (
               <Link
                 to="/cart"
                 onClick={() => setIsOpen(false)}
@@ -231,83 +226,16 @@ export function Navbar() {
                 Cart ({cartCount})
               </Link>
             )}
-            {userType === 'tourist' && (
+            {activeRoleItems.map(item => (
               <Link
-                to="/status"
-                onClick={() => setIsOpen(false)}
+                key={item.to}
+                to={item.to}
+                onClick={closeMenus}
                 className="block px-4 py-2 rounded text-foreground hover:bg-primary/5"
               >
-                My Orders & Bookings
+                {item.label}
               </Link>
-            )}
-            {userType === 'admin' && (
-              <>
-                <Link
-                  to="/admin/dashboard"
-                  onClick={() => setIsOpen(false)}
-                  className="block px-4 py-2 rounded text-foreground hover:bg-primary/5"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  to="/admin/listings"
-                  onClick={() => setIsOpen(false)}
-                  className="block px-4 py-2 rounded text-foreground hover:bg-primary/5"
-                >
-                  Manage Listings
-                </Link>
-                <Link
-                  to="/admin/orders"
-                  onClick={() => setIsOpen(false)}
-                  className="block px-4 py-2 rounded text-foreground hover:bg-primary/5"
-                >
-                  Manage Orders
-                </Link>
-              </>
-            )}
-            {userType === 'resort' && (
-              <>
-                <Link
-                  to="/resort/dashboard"
-                  onClick={() => setIsOpen(false)}
-                  className="block px-4 py-2 rounded text-foreground hover:bg-primary/5"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  to="/resort/profile"
-                  onClick={() => setIsOpen(false)}
-                  className="block px-4 py-2 rounded text-foreground hover:bg-primary/5"
-                >
-                  Manage Profile
-                </Link>
-              </>
-            )}
-            {userType === 'enterprise' && (
-              <>
-                <Link
-                  to="/enterprise/dashboard"
-                  onClick={() => setIsOpen(false)}
-                  className="block px-4 py-2 rounded text-foreground hover:bg-primary/5"
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  to="/enterprise/profile"
-                  onClick={() => setIsOpen(false)}
-                  className="block px-4 py-2 rounded text-foreground hover:bg-primary/5"
-                >
-                  Manage Products
-                </Link>
-              </>
-            )}
-            <Link
-              to="/select-role"
-              onClick={() => setIsOpen(false)}
-              className="block px-4 py-2 bg-white border-2 border-primary text-primary rounded-lg text-center"
-            >
-              Switch Role
-            </Link>
+            ))}
             <button
               onClick={handleLogout}
               className="w-full px-4 py-2 bg-destructive text-white rounded-lg text-center flex items-center justify-center gap-2"

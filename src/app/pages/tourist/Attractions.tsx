@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MapPin, ChevronDown, ChevronUp, Navigation } from 'lucide-react';
-import { getJSON } from '../../lib/api';
+import { getPublicJSON } from '../../lib/api';
 
 interface AttractionType {
   id: string;
@@ -20,16 +20,23 @@ export function Attractions() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await getJSON('/api/attractions');
-        // normalize backend keys to match UI expectations
-        const mapped = data.map((d: any) => ({
-          ...d,
+        const data = await getPublicJSON('/attractions');
+        
+        // API returns an array directly
+        const raw = Array.isArray(data) ? data : [];
+        
+        const mapped = raw.map((d: any) => ({
           id: String(d.id),
-          fullDescription: d.full_description ?? d.fullDescription,
+          name: d.name,
           description: d.description,
+          fullDescription: d.full_description ?? d.fullDescription,
+          image: d.image,
+          location: d.location,
+          category: d.category,
         }));
         setItems(mapped);
-      } catch (e) {
+      } catch (e: any) {
+        console.error('Error fetching attractions:', e);
         setItems([]);
       }
     })();

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { Store, Upload } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
+import { showRegistrationSuccess } from '../../lib/sweetAlert';
 
 export function EnterpriseRegistration() {
   const navigate = useNavigate();
@@ -13,18 +14,22 @@ export function EnterpriseRegistration() {
     email: '',
     phone: '',
     address: '',
+    barangay: '',
+    city: 'Mansalay', // Locked to Mansalay
+    province: 'Oriental Mindoro', // Locked to Oriental Mindoro
     description: '',
     category: '',
     registrationNumber: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setUserType('enterprise');
-    toast.success('Registration submitted! Awaiting admin approval.');
-    setTimeout(() => {
+    const result = await showRegistrationSuccess('Enterprise');
+    
+    if (result.isConfirmed) {
       navigate('/enterprise/dashboard');
-    }, 1500);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -109,8 +114,69 @@ export function EnterpriseRegistration() {
                 value={formData.address}
                 onChange={handleChange}
                 className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                placeholder="Complete address"
+                placeholder="Street, House/Unit Number"
                 required
+              />
+            </div>
+            <div>
+              <label className="block text-sm mb-2">Barangay *</label>
+              <select
+                name="barangay"
+                value={formData.barangay}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                required
+              >
+                <option value="">Select Barangay</option>
+                <optgroup label="A - D">
+                  <option value="B. Del Mundo">B. Del Mundo</option>
+                  <option value="Balugo">Balugo</option>
+                  <option value="Bonbon">Bonbon</option>
+                  <option value="Budburan">Budburan</option>
+                  <option value="Cabalwa">Cabalwa</option>
+                  <option value="Don Pedro">Don Pedro</option>
+                </optgroup>
+                <optgroup label="M - P">
+                  <option value="Maliwanag">Maliwanag</option>
+                  <option value="Manaul">Manaul</option>
+                  <option value="Panaytayan">Panaytayan</option>
+                  <option value="Poblacion">Poblacion</option>
+                </optgroup>
+                <optgroup label="R - S">
+                  <option value="Roma">Roma</option>
+                  <option value="Santa Brigida (Sta. Brigida)">Santa Brigida (Sta. Brigida)</option>
+                  <option value="Santa Maria">Santa Maria</option>
+                  <option value="Santa Teresita">Santa Teresita</option>
+                </optgroup>
+                <optgroup label="V - W">
+                  <option value="Villa Celestial">Villa Celestial</option>
+                  <option value="Wasig">Wasig</option>
+                  <option value="Waygan">Waygan</option>
+                </optgroup>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm mb-2">City/Municipality *</label>
+              <input
+                type="text"
+                name="city"
+                value={formData.city}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                placeholder="Mansalay"
+                disabled
+                readOnly
+              />
+            </div>
+            <div>
+              <label className="block text-sm mb-2">Province</label>
+              <input
+                type="text"
+                name="province"
+                value={formData.province}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                placeholder="Oriental Mindoro"
+                disabled
+                readOnly
               />
             </div>
           </div>

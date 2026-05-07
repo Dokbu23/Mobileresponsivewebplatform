@@ -3,23 +3,34 @@ import { useNavigate, Link } from 'react-router';
 import { Store, Mail, Lock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
+import { postJSON, setAuthToken } from '../../lib/api';
+import { showErrorAlert, showLoginSuccess } from '../../lib/sweetAlert';
 
 export function EnterpriseLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { setUserType } = useApp();
+  const { setUserType, setCurrentUser } = useApp();
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Demo credentials
-    if (email === 'enterprise@example.com' && password === 'enterprise123') {
+    try {
+      const response = await postJSON('/login', {
+        email,
+        password,
+        role: 'enterprise',
+      }, false); // Don't require auth for login
+      
+      // Store the JWT token
+      setAuthToken(response.token);
+      
       setUserType('enterprise');
-      toast.success('Welcome back!');
+      setCurrentUser(response.user);
+      await showLoginSuccess(response.user.name, 'Enterprise');
       navigate('/enterprise/dashboard');
-    } else {
-      toast.error('Invalid credentials');
+    } catch {
+      await showErrorAlert('Login failed', 'Invalid credentials.');
     }
   };
 
@@ -75,7 +86,7 @@ export function EnterpriseLogin() {
           </button>
 
           <div className="text-center text-sm text-muted-foreground">
-            Demo credentials: enterprise@example.com / enterprise123
+            Demo credentials: enterprise@discovermansalay.test / password123
           </div>
 
           <div className="relative">

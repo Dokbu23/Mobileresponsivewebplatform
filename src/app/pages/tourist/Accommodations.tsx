@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router';
 import { Hotel, MapPin, Star, ChevronDown, ChevronUp, Calendar, CreditCard, Building2, LogIn } from 'lucide-react';
 import { useApp, Accommodation } from '../../context/AppContext';
 import { toast } from 'sonner';
-import { getJSON } from '../../lib/api';
+import { getPublicJSON, postJSON } from '../../lib/api';
+import { showTransactionSuccess } from '../../lib/sweetAlert';
 
 export function Accommodations() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -18,7 +19,7 @@ export function Accommodations() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await getJSON('/api/accommodations');
+        const data = await getPublicJSON('/accommodations');
         const mapped = data.map((d: any) => ({
           ...d,
           id: String(d.id),
@@ -38,10 +39,28 @@ export function Accommodations() {
       navigate('/select-role');
       return;
     }
+
+    // Only tourists can book accommodations (enterprise and resort are business accounts)
+    if (userType !== 'tourist') {
+      toast.error('Only tourists can book accommodations. Business accounts are for management only.');
+      return;
+    }
+
     setBookingModal(accommodationId);
   };
 
-  const handleBookNow = (accommodation: Accommodation) => {
+  const handleBookNow = async (accommodation: Accommodation) => {
+    if (!userType) {
+      toast.error('Please login to book accommodations');
+      navigate('/select-role');
+      return;
+    }
+
+    if (userType !== 'tourist') {
+      toast.error('Only tourists can book accommodations. Business accounts are for management only.');
+      return;
+    }
+
     if (!checkIn || !checkOut) {
       toast.error('Please select check-in and check-out dates');
       return;
@@ -58,20 +77,38 @@ export function Accommodations() {
 
     const total = accommodation.pricePerNight * nights;
 
-    addBooking({
-      accommodation,
-      checkIn,
-      checkOut,
-      status: 'pending',
-      paymentMethod,
-      total,
-    });
+    try {
+      const booking = await postJSON('/api/bookings', {
+        accommodation_id: Number(accommodation.id),
+        accommodation_snapshot: accommodation,
+        check_in: checkIn,
+        check_out: checkOut,
+        payment_method: paymentMethod,
+        total,
+        user_role: userType,
+        user_id: null, // Add user ID if you have user authentication
+      });
 
-    toast.success('Booking confirmed!');
-    setBookingModal(null);
-    setCheckIn('');
-    setCheckOut('');
-    navigate('/status');
+      addBooking({
+        accommodation,
+        checkIn,
+        checkOut,
+        status: booking.status ?? 'pending',
+        paymentMethod,
+        total,
+      });
+
+      const result = await showTransactionSuccess('booking');
+      setBookingModal(null);
+      setCheckIn('');
+      setCheckOut('');
+      
+      if (result.isConfirmed) {
+        navigate('/status');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to create booking');
+    }
   };
 
   const getAvailabilityColor = (status: string) => {
@@ -105,6 +142,20 @@ export function Accommodations() {
               <LogIn className="h-4 w-4" />
               Login Now
             </button>
+          </div>
+        </div>
+      )}
+
+      {userType && userType !== 'tourist' && (
+        <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-300 rounded-lg p-6 mb-6">
+          <div className="flex items-center gap-3">
+            <Hotel className="h-6 w-6 text-blue-600" />
+            <div>
+              <h3 className="mb-1 text-blue-900">Business Account - Browse Only</h3>
+              <p className="text-sm text-blue-700">
+                You are logged in as <strong>{userType}</strong>. This is a business management account. Only tourists can book accommodations.
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -200,12 +251,18 @@ export function Accommodations() {
                   </button>
                   <button
                     onClick={() => handleOpenBooking(accommodation.id)}
-                    className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-2"
+                    disabled={userType !== 'tourist' && userType !== null}
+                    className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                   >
                     {!userType ? (
                       <>
                         <LogIn className="h-4 w-4" />
                         Login to Book
+                      </>
+                    ) : userType !== 'tourist' ? (
+                      <>
+                        <Building2 className="h-4 w-4" />
+                        Business Account
                       </>
                     ) : (
                       <>

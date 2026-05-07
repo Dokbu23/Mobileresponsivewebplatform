@@ -1,73 +1,127 @@
+import { useEffect, useState } from 'react';
 import { Users, Eye, ShoppingCart, Hotel, TrendingUp, Package, ClipboardList } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Link } from 'react-router';
-
-const visitorData = [
-  { date: 'Apr 23', visitors: 120 },
-  { date: 'Apr 24', visitors: 145 },
-  { date: 'Apr 25', visitors: 180 },
-  { date: 'Apr 26', visitors: 165 },
-  { date: 'Apr 27', visitors: 210 },
-  { date: 'Apr 28', visitors: 195 },
-  { date: 'Apr 29', visitors: 230 },
-];
-
-const activityData = [
-  { category: 'Browsing', count: 850 },
-  { category: 'Bookings', count: 45 },
-  { category: 'Purchases', count: 120 },
-  { category: 'Registrations', count: 25 },
-];
-
-const topAttractions = [
-  { name: 'Puting Buhangin Beach', views: 456 },
-  { name: 'Mount Mansalay', views: 342 },
-  { name: 'Mansalay Falls', views: 298 },
-  { name: 'Coral Garden', views: 256 },
-];
-
-const topProducts = [
-  { name: 'Handwoven Baskets', sales: 45 },
-  { name: 'Organic Honey', sales: 38 },
-  { name: 'Woven Bags', sales: 32 },
-  { name: 'Traditional Clothing', sales: 28 },
-];
+import { getJSON, getPublicJSON } from '../../lib/api';
 
 export function AdminDashboard() {
+  const [attractions, setAttractions] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [attractionsResponse, productsResponse, ordersResponse, bookingsResponse] = await Promise.all([
+          getPublicJSON('/attractions'),
+          getPublicJSON('/products'),
+          getJSON('/orders'),
+          getJSON('/bookings'),
+        ]);
+
+        setAttractions(Array.isArray(attractionsResponse) ? attractionsResponse : []);
+        setProducts(Array.isArray(productsResponse) ? productsResponse : []);
+        setOrders(Array.isArray(ordersResponse) ? ordersResponse : []);
+        setBookings(Array.isArray(bookingsResponse) ? bookingsResponse : []);
+      } catch {
+        setAttractions([]);
+        setProducts([]);
+        setOrders([]);
+        setBookings([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
   const stats = [
     {
       icon: Users,
-      label: 'Total Visitors',
-      value: '1,245',
-      change: '+12%',
+      label: 'Attractions',
+      value: String(attractions.length),
+      change: 'Live',
       color: 'bg-blue-50',
       iconColor: 'text-blue-600',
     },
     {
       icon: Eye,
-      label: 'Page Views',
-      value: '8,450',
-      change: '+8%',
+      label: 'Products',
+      value: String(products.length),
+      change: 'Live',
       color: 'bg-green-50',
       iconColor: 'text-green-600',
     },
     {
       icon: Hotel,
       label: 'Bookings',
-      value: '145',
-      change: '+15%',
+      value: String(bookings.length),
+      change: 'Live',
       color: 'bg-purple-50',
       iconColor: 'text-purple-600',
     },
     {
       icon: ShoppingCart,
-      label: 'Purchases',
-      value: '320',
-      change: '+22%',
+      label: 'Orders',
+      value: String(orders.length),
+      change: 'Live',
       color: 'bg-pink-50',
       iconColor: 'text-pink-600',
     },
   ];
+
+  const visitorEntries = Array.from(
+    [...orders, ...bookings].reduce((grouped, item) => {
+      const dateKey = new Date(item.created_at ?? item.check_in ?? new Date().toISOString()).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+      grouped.set(dateKey, (grouped.get(dateKey) ?? 0) + 1);
+      return grouped;
+    }, new Map<string, number>()).entries()
+  ) as Array<[string, number]>;
+
+  const visitorData = visitorEntries.slice(-7).map(([date, count]) => ({ date, visitors: count }));
+
+  const activityData = [
+    { category: 'Attractions', count: attractions.length },
+    { category: 'Products', count: products.length },
+    { category: 'Orders', count: orders.length },
+    { category: 'Bookings', count: bookings.length },
+  ];
+
+  const topAttractions = attractions.slice(0, 4).map((attraction, index) => ({
+    name: attraction.name,
+    views: attractions.length - index, // Simulated views based on order
+  }));
+
+  // Calculate actual product sales from orders
+  const productSales = products.map(product => {
+    const sales = orders.filter((order: any) => order.product_id === product.id).length;
+    return {
+      ...product,
+      sales,
+    };
+  });
+
+  const topProducts = productSales
+    .sort((a, b) => b.sales - a.sales)
+    .slice(0, 4)
+    .map(product => ({
+      name: product.name,
+      sales: product.sales,
+    }));
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="bg-white border-2 border-primary/20 rounded-lg p-12 text-center">
+          <p className="text-muted-foreground">Loading admin analytics...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -169,25 +223,29 @@ export function AdminDashboard() {
         {/* Most Viewed Attractions */}
         <div className="bg-white border-2 border-primary/20 rounded-lg p-6">
           <h3 className="mb-4">Most Viewed Attractions</h3>
-          <div className="space-y-3">
-            {topAttractions.map((attraction, index) => (
-              <div key={attraction.name} className="flex items-center gap-4">
-                <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                  <span className="text-primary">{index + 1}</span>
+          {topAttractions.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">No attractions data available</p>
+          ) : (
+            <div className="space-y-3">
+              {topAttractions.map((attraction, index) => (
+                <div key={attraction.name} className="flex items-center gap-4">
+                  <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-primary">{index + 1}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate">{attraction.name}</p>
+                    <p className="text-sm text-muted-foreground">{attraction.views} views</p>
+                  </div>
+                  <div className="w-24 bg-primary/10 rounded-full h-2">
+                    <div
+                      className="bg-primary h-2 rounded-full"
+                      style={{ width: `${topAttractions[0].views > 0 ? (attraction.views / topAttractions[0].views) * 100 : 0}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="truncate">{attraction.name}</p>
-                  <p className="text-sm text-muted-foreground">{attraction.views} views</p>
-                </div>
-                <div className="w-24 bg-primary/10 rounded-full h-2">
-                  <div
-                    className="bg-primary h-2 rounded-full"
-                    style={{ width: `${(attraction.views / topAttractions[0].views) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Top Selling Products */}
@@ -196,25 +254,29 @@ export function AdminDashboard() {
             <Package className="h-5 w-5 text-primary" />
             Top Selling Products
           </h3>
-          <div className="space-y-3">
-            {topProducts.map((product, index) => (
-              <div key={product.name} className="flex items-center gap-4">
-                <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
-                  <span className="text-primary">{index + 1}</span>
+          {topProducts.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">No sales data available</p>
+          ) : (
+            <div className="space-y-3">
+              {topProducts.map((product, index) => (
+                <div key={product.name} className="flex items-center gap-4">
+                  <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-primary">{index + 1}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate">{product.name}</p>
+                    <p className="text-sm text-muted-foreground">{product.sales} sold</p>
+                  </div>
+                  <div className="w-24 bg-primary/10 rounded-full h-2">
+                    <div
+                      className="bg-primary h-2 rounded-full"
+                      style={{ width: `${topProducts[0].sales > 0 ? (product.sales / topProducts[0].sales) * 100 : 0}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="truncate">{product.name}</p>
-                  <p className="text-sm text-muted-foreground">{product.sales} sold</p>
-                </div>
-                <div className="w-24 bg-primary/10 rounded-full h-2">
-                  <div
-                    className="bg-primary h-2 rounded-full"
-                    style={{ width: `${(product.sales / topProducts[0].sales) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

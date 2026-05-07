@@ -3,23 +3,42 @@ import { useNavigate } from 'react-router';
 import { Lock, User } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
+import { postJSON, setAuthToken } from '../../lib/api';
+import { showErrorAlert, showLoginSuccess } from '../../lib/sweetAlert';
 
 export function AdminLogin() {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { setIsAdmin, setUserType } = useApp();
+  const { setIsAdmin, setUserType, setCurrentUser } = useApp();
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (username === 'admin' && password === 'admin123') {
+    try {
+      console.log('Logging in as admin...');
+      const response = await postJSON('/login', {
+        email,
+        password,
+        role: 'admin',
+      }, false);
+      
+      console.log('Login response:', response);
+      console.log('Token:', response.token);
+      
+      setAuthToken(response.token);
       setIsAdmin(true);
       setUserType('admin');
-      toast.success('Login successful!');
+      setCurrentUser(response.user);
+      
+      // Verify token was saved
+      console.log('Token saved:', localStorage.getItem('discover-mansalay:token'));
+      
+      await showLoginSuccess(response.user.name, 'Admin');
       navigate('/admin/dashboard');
-    } else {
-      toast.error('Invalid credentials');
+    } catch (error) {
+      console.error('Login error:', error);
+      await showErrorAlert('Login failed', 'Invalid credentials.');
     }
   };
 
@@ -38,15 +57,15 @@ export function AdminLogin() {
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
-            <label className="block text-sm mb-2">Username</label>
+            <label className="block text-sm mb-2">Email Address</label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
               <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                placeholder="Enter username"
+                placeholder="admin@mansalay.com"
                 required
               />
             </div>
@@ -75,7 +94,7 @@ export function AdminLogin() {
           </button>
 
           <div className="text-center text-sm text-muted-foreground">
-            Demo credentials: admin / admin123
+            Demo credentials: admin@mansalay.com / admin123
           </div>
         </form>
       </div>

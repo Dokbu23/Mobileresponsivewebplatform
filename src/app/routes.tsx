@@ -2,7 +2,7 @@ import { createBrowserRouter } from "react-router";
 import { RootLayout } from "./layouts/RootLayout";
 import { RoleSelection } from "./pages/RoleSelection";
 import { TouristLogin } from "./pages/tourist/TouristLogin";
-import { Home } from "./pages/tourist/Home";
+import { Dashboard } from "./pages/tourist/Dashboard";
 import { Attractions } from "./pages/tourist/Attractions";
 import { Events } from "./pages/tourist/Events";
 import { Products } from "./pages/tourist/Products";
@@ -13,6 +13,7 @@ import { OrderStatus } from "./pages/tourist/OrderStatus";
 import { AdminLogin } from "./pages/admin/AdminLogin";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { ManageListings } from "./pages/admin/ManageListings";
+import { ManageUsers } from "./pages/admin/ManageUsers";
 import { ManageOrders } from "./pages/admin/ManageOrders";
 import { ResortLogin } from "./pages/resort/ResortLogin";
 import { ResortRegistration } from "./pages/resort/ResortRegistration";
@@ -28,7 +29,8 @@ export const router = createBrowserRouter([
     path: "/",
     Component: RootLayout,
     children: [
-      { index: true, Component: Home },
+      { index: true, Component: Dashboard },
+      { path: "dashboard", Component: Dashboard },
       { path: "select-role", Component: RoleSelection },
       { path: "tourist/login", Component: TouristLogin },
       { path: "attractions", Component: Attractions },
@@ -41,6 +43,7 @@ export const router = createBrowserRouter([
       { path: "admin/login", Component: AdminLogin },
       { path: "admin/dashboard", Component: AdminDashboard },
       { path: "admin/listings", Component: ManageListings },
+      { path: "admin/users", Component: ManageUsers },
       { path: "admin/orders", Component: ManageOrders },
       { path: "resort/login", Component: ResortLogin },
       { path: "resort/register", Component: ResortRegistration },

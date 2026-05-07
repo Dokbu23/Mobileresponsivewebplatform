@@ -3,6 +3,8 @@ import { ShoppingCart, ChevronDown, ChevronUp, Package, LogIn } from 'lucide-rea
 import { useApp, Product } from '../../context/AppContext';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { showSuccessAlert } from '../../lib/sweetAlert';
+import { getPublicJSON } from '../../lib/api';
 
 export function Products() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -14,9 +16,21 @@ export function Products() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await (await fetch('http://localhost:8000/api/products')).json();
-        const mapped = data.map((d: any) => ({ ...d, id: String(d.id) }));
-        setItems(mapped);
+        const data = await getPublicJSON('/products');
+        const raw = Array.isArray(data) ? data : (data?.value ?? []);
+        setItems(
+          raw.map((p: any) => ({
+            id: String(p.id ?? p._id ?? p.slug ?? Math.random()),
+            name: p.name ?? p.title ?? 'Product',
+            description: p.description ?? p.short_description ?? '',
+            price: Number(p.price ?? p.amount ?? 0),
+            stock: Number(p.stock ?? p.inventory ?? 0),
+            image: p.image 
+              ? (p.image.startsWith('http') ? p.image : `http://localhost:8000${p.image}`)
+              : '/assets/default-product.jpg',
+            category: p.category ?? 'General',
+          }))
+        );
       } catch (e) {
         setItems([]);
       }
@@ -29,16 +43,22 @@ export function Products() {
     ? items
     : items.filter(p => p.category === selectedCategory);
 
-  const handleAddToCart = (product: Product) => {
+  const handleAddToCart = async (product: Product) => {
     if (!userType) {
       toast.error('Please login to add items to cart');
       navigate('/select-role');
       return;
     }
 
+    // Only tourists can order products (enterprise and resort are business accounts)
+    if (userType !== 'tourist') {
+      toast.error('Only tourists can order products. Business accounts are for management only.');
+      return;
+    }
+
     if (product.stock > 0) {
       addToCart(product);
-      toast.success(`${product.name} added to cart!`);
+      await showSuccessAlert('Added to Cart!', `${product.name} has been added to your cart.`);
     } else {
       toast.error('Product out of stock');
     }
@@ -52,7 +72,7 @@ export function Products() {
             <div>
               <h3 className="mb-1">👋 Browsing as Guest</h3>
               <p className="text-sm text-muted-foreground">
-                Login to add products to cart and place orders
+                Login as a tourist to add products to cart and place orders
               </p>
             </div>
             <button
@@ -62,6 +82,20 @@ export function Products() {
               <LogIn className="h-4 w-4" />
               Login Now
             </button>
+          </div>
+        </div>
+      )}
+
+      {userType && userType !== 'tourist' && (
+        <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-300 rounded-lg p-6 mb-6">
+          <div className="flex items-center gap-3">
+            <Package className="h-6 w-6 text-blue-600" />
+            <div>
+              <h3 className="mb-1 text-blue-900">Business Account - Browse Only</h3>
+              <p className="text-sm text-blue-700">
+                You are logged in as <strong>{userType}</strong>. This is a business management account. Only tourists can place orders.
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -153,13 +187,18 @@ export function Products() {
                   </button>
                   <button
                     onClick={() => handleAddToCart(product)}
-                    disabled={product.stock === 0}
+                    disabled={product.stock === 0 || (userType !== 'tourist' && userType !== null)}
                     className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                   >
                     {!userType ? (
                       <>
                         <LogIn className="h-4 w-4" />
                         Login to Buy
+                      </>
+                    ) : userType !== 'tourist' ? (
+                      <>
+                        <Package className="h-4 w-4" />
+                        Business Account
                       </>
                     ) : (
                       <>

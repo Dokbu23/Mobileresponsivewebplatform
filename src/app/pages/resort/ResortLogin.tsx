@@ -3,23 +3,30 @@ import { useNavigate, Link } from 'react-router';
 import { Hotel, Mail, Lock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
+import { postJSON } from '../../lib/api';
+import { showErrorAlert, showLoginSuccess } from '../../lib/sweetAlert';
 
 export function ResortLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { setUserType } = useApp();
+  const { setUserType, setCurrentUser } = useApp();
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Demo credentials
-    if (email === 'resort@example.com' && password === 'resort123') {
+    try {
+      const response = await postJSON('/login', {
+        email,
+        password,
+        role: 'resort',
+      }, false);
       setUserType('resort');
-      toast.success('Welcome back!');
+      setCurrentUser(response.user);
+      await showLoginSuccess(response.user.name, 'Resort');
       navigate('/resort/dashboard');
-    } else {
-      toast.error('Invalid credentials');
+    } catch {
+      await showErrorAlert('Login failed', 'Invalid credentials.');
     }
   };
 
@@ -75,7 +82,7 @@ export function ResortLogin() {
           </button>
 
           <div className="text-center text-sm text-muted-foreground">
-            Demo credentials: resort@example.com / resort123
+            Demo credentials: resort@discovermansalay.test / password123
           </div>
 
           <div className="relative">

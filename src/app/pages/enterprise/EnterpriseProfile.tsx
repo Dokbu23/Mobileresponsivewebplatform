@@ -1,144 +1,313 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Store, Plus, Edit, Trash2, Package, DollarSign, ShoppingCart, TrendingUp, BarChart3, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router';
+import { useApp } from '../../context/AppContext';
+import { getAuthToken, getJSON, getPublicJSON, postJSON, putJSON } from '../../lib/api';
+import { showProductSuccess, showStatusUpdateSuccess } from '../../lib/sweetAlert';
 
 interface Product {
   id: string;
   name: string;
+  description: string;
   price: number;
   stock: number;
   category: string;
-  sold: number;
+  image?: string;
+}
+
+interface OrderItem {
+  name?: string;
+  quantity?: number;
+}
+
+interface Order {
+  id: number;
+  items: OrderItem[];
+  total: number;
+  status: 'pending' | 'confirmed' | 'shipped' | 'delivered';
+  payment_method: 'online' | 'otc' | null;
+  created_at: string;
 }
 
 export function EnterpriseProfile() {
-  const [products, setProducts] = useState<Product[]>([
-    {
-      id: 'p1',
-      name: 'Handwoven Baskets',
-      price: 450,
-      stock: 15,
-      category: 'Handicrafts',
-      sold: 45,
-    },
-    {
-      id: 'p2',
-      name: 'Organic Honey',
-      price: 250,
-      stock: 30,
-      category: 'Food',
-      sold: 38,
-    },
-    {
-      id: 'p3',
-      name: 'Woven Bags',
-      price: 350,
-      stock: 12,
-      category: 'Handicrafts',
-      sold: 32,
-    },
-  ]);
-
+  const { currentUser } = useApp();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showAddProduct, setShowAddProduct] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [newProduct, setNewProduct] = useState({
     name: '',
+    description: '',
     price: 0,
     stock: 0,
     category: '',
   });
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-  const [orders, setOrders] = useState([
-    {
-      id: 'ORD-001',
-      product: 'Handwoven Baskets',
-      quantity: 2,
-      customer: 'John Doe',
-      status: 'pending' as const,
-      total: 900,
-      date: '2026-04-29',
-    },
-    {
-      id: 'ORD-002',
-      product: 'Organic Honey',
-      quantity: 3,
-      customer: 'Jane Smith',
-      status: 'confirmed' as const,
-      total: 750,
-      date: '2026-04-28',
-    },
-    {
-      id: 'ORD-003',
-      product: 'Woven Bags',
-      quantity: 1,
-      customer: 'Carlos Lopez',
-      status: 'shipped' as const,
-      total: 350,
-      date: '2026-04-27',
-    },
-  ]);
-
-  const orderStatusFlow = {
-    pending: 'confirmed' as const,
-    confirmed: 'shipped' as const,
-    shipped: 'delivered' as const,
+  const orderStatusFlow: Record<string, string | null> = {
+    pending: 'confirmed',
+    confirmed: 'shipped',
+    shipped: 'delivered',
     delivered: null,
   };
 
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const productsResponse = await getPublicJSON('/products');
+      const rawProducts = Array.isArray(productsResponse) ? productsResponse : [];
+      const filteredProducts = currentUser?.id
+        ? rawProducts.filter((product: any) => Number(product.user_id ?? product.userId) === currentUser.id)
+        : rawProducts;
+
+      setProducts(
+        filteredProducts.map((product: any) => ({
+          id: String(product.id),
+          name: product.name || '',
+          description: product.description || '',
+          price: Number(product.price) || 0,
+          stock: Number(product.stock) || 0,
+          category: product.category || '',
+          image: product.image
+            ? (product.image.startsWith('http') ? product.image : `http://localhost:8000${product.image}`)
+            : '',
+        }))
+      );
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      toast.error('Failed to load products');
+      setProducts([]);
+    }
+
+    try {
+      const ordersResponse = await getJSON('/orders/my');
+      setOrders(
+        Array.isArray(ordersResponse)
+          ? ordersResponse.map((order: any) => ({
+              id: order.id,
+              items: Array.isArray(order.items) ? order.items : [],
+              total: Number(order.total) || 0,
+              status: order.status || 'pending',
+              payment_method: order.payment_method || null,
+              created_at: order.created_at || new Date().toISOString(),
+            }))
+          : []
+      );
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const soldByProduct = useMemo(() => {
+    const sales = new Map<string, number>();
+    orders.forEach(order => {
+      order.items.forEach(item => {
+        const name = item.name || 'Product';
+        sales.set(name, (sales.get(name) ?? 0) + (item.quantity ?? 1));
+      });
+    });
+    return sales;
+  }, [orders]);
+
   const stats = [
-    { icon: Package, label: 'Total Products', value: products.length.toString(), color: 'bg-blue-50', iconColor: 'text-blue-600' },
-    { icon: DollarSign, label: 'Revenue (Month)', value: '₱28,500', color: 'bg-green-50', iconColor: 'text-green-600' },
-    { icon: ShoppingCart, label: 'Total Sales', value: '115', color: 'bg-purple-50', iconColor: 'text-purple-600' },
-    { icon: TrendingUp, label: 'Growth', value: '+22%', color: 'bg-pink-50', iconColor: 'text-pink-600' },
+    {
+      icon: Package,
+      label: 'Total Products',
+      value: products.length.toString(),
+      color: 'bg-blue-50',
+      iconColor: 'text-blue-600',
+    },
+    {
+      icon: DollarSign,
+      label: 'Revenue (Live)',
+      value: `₱${orders.reduce((sum, order) => sum + order.total, 0).toLocaleString()}`,
+      color: 'bg-green-50',
+      iconColor: 'text-green-600',
+    },
+    {
+      icon: ShoppingCart,
+      label: 'Total Sales',
+      value: orders
+        .reduce((sum, order) => sum + order.items.reduce((total, item) => total + (item.quantity || 0), 0), 0)
+        .toString(),
+      color: 'bg-purple-50',
+      iconColor: 'text-purple-600',
+    },
+    {
+      icon: TrendingUp,
+      label: 'Growth',
+      value: `${Math.max(products.length - 1, 0)} live`,
+      color: 'bg-pink-50',
+      iconColor: 'text-pink-600',
+    },
   ];
 
-  const handleAddProduct = () => {
+  const handleAddProduct = async () => {
     if (!newProduct.name || !newProduct.price || !newProduct.stock || !newProduct.category) {
-      toast.error('Please fill all fields');
+      toast.error('Please fill all required fields');
+      return;
+    }
+    try {
+      // If an image file was selected, send FormData (supports file upload)
+      if (imageFile) {
+        const form = new FormData();
+        form.append('name', newProduct.name);
+        form.append('description', newProduct.description ?? '');
+        form.append('price', String(newProduct.price));
+        form.append('stock', String(newProduct.stock));
+        form.append('category', newProduct.category ?? '');
+        form.append('image', imageFile);
+        
+        // Add user_id to track product ownership
+        if (currentUser?.id) {
+          form.append('user_id', String(currentUser.id));
+        }
+        
+          // Use POST with _method override for PUT (Laravel supports PUT for updates)
+          if (editingProductId) {
+            form.append('_method', 'PUT');
+          }
+
+        const baseUrl = 'http://localhost:8000';
+        const url = editingProductId ? `${baseUrl}/api/products/${editingProductId}` : `${baseUrl}/api/products`;
+          const method = 'POST';  // Always POST when sending FormData (Laravel uses _method override)
+
+        try {
+          const token = getAuthToken();
+          const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+          const res = await fetch(url, { method, headers, body: form });
+          console.log('Upload response:', { status: res.status, ok: res.ok, contentType: res.headers.get('content-type') });
+          const contentType = res.headers.get('content-type');
+          let errorMsg = `HTTP ${res.status}`;
+
+          if (!res.ok) {
+            // Try to parse JSON error response
+            if (contentType?.includes('application/json')) {
+              try {
+                const data = await res.json();
+                errorMsg = data.message || data.error || JSON.stringify(data);
+              } catch {
+                errorMsg = await res.text().catch(() => errorMsg);
+              }
+            } else {
+              errorMsg = await res.text().catch(() => errorMsg);
+            }
+            throw new Error(errorMsg);
+          }
+
+          await showProductSuccess(editingProductId ? 'updated' : 'added', newProduct.name);
+          
+          // Refresh product list to show updated image
+          await fetchData();
+        } catch (err) {
+          console.error('Upload error:', err);
+          throw err;
+        }
+      } else {
+        if (editingProductId) {
+          await putJSON(`/products/${editingProductId}`, {
+            name: newProduct.name,
+            description: newProduct.description,
+            price: newProduct.price,
+            stock: newProduct.stock,
+            category: newProduct.category,
+          });
+          await showProductSuccess('updated', newProduct.name);
+          await fetchData();
+        } else {
+          await postJSON('/products', {
+            name: newProduct.name,
+            description: newProduct.description,
+            price: newProduct.price,
+            stock: newProduct.stock,
+            category: newProduct.category,
+            image: '',
+            user_id: currentUser?.id, // Track product ownership
+          });
+          await showProductSuccess('added', newProduct.name);
+          await fetchData();
+        }
+      }
+
+      setNewProduct({ name: '', description: '', price: 0, stock: 0, category: '' });
+      setImageFile(null);
+      setImagePreview(null);
+      setEditingProductId(null);
+      setShowAddProduct(false);
+      await fetchData();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save product');
+    }
+  };
+
+  const handleEditProduct = (product: Product) => {
+    setEditingProductId(product.id);
+    setNewProduct({
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      stock: product.stock,
+      category: product.category,
+    });
+    setImagePreview(product.image || null);
+    setImageFile(null);
+    setShowAddProduct(true);
+  };
+
+  const handleDeleteProduct = async (id: string) => {
+    try {
+      await fetch(`http://localhost:8000/api/products/${id}`, { method: 'DELETE' });
+      await showProductSuccess('deleted');
+      await fetchData();
+    } catch {
+      toast.error('Failed to delete product');
+    }
+  };
+
+  const handleUpdateOrderStatus = async (orderId: number, currentStatus: string) => {
+    const nextStatus = orderStatusFlow[currentStatus];
+    if (!nextStatus) {
+      toast.error('No further status available');
       return;
     }
 
-    const product: Product = {
-      id: `p${products.length + 1}`,
-      ...newProduct,
-      sold: 0,
-    };
-
-    setProducts([...products, product]);
-    setNewProduct({ name: '', price: 0, stock: 0, category: '' });
-    setShowAddProduct(false);
-    toast.success('Product added successfully!');
-  };
-
-  const handleDeleteProduct = (id: string) => {
-    setProducts(products.filter(p => p.id !== id));
-    toast.success('Product deleted');
-  };
-
-  const handleUpdateOrderStatus = (orderId: string) => {
-    setOrders(prev =>
-      prev.map(order => {
-        if (order.id === orderId) {
-          const nextStatus = orderStatusFlow[order.status];
-          if (nextStatus) {
-            toast.success(`Order ${orderId} updated to ${nextStatus}`);
-            return { ...order, status: nextStatus };
-          }
-        }
-        return order;
-      })
-    );
+    try {
+      await patchJSON(`/api/orders/${orderId}`, { status: nextStatus });
+      await showStatusUpdateSuccess('order', `ORD-${String(orderId).padStart(3, '0')}`, nextStatus);
+      await fetchData();
+    } catch {
+      toast.error('Failed to update order');
+    }
   };
 
   const getStatusBadge = (status: string) => {
-    const styles = {
+    const styles: Record<string, string> = {
       pending: 'bg-orange-100 text-orange-700 border-orange-300',
       confirmed: 'bg-green-100 text-green-700 border-green-300',
       shipped: 'bg-blue-100 text-blue-700 border-blue-300',
       delivered: 'bg-green-100 text-green-700 border-green-300',
     };
-    return `px-3 py-1 rounded-full border text-sm ${styles[status as keyof typeof styles]}`;
+    return `px-3 py-1 rounded-full border text-sm ${styles[status] || 'bg-gray-100 text-gray-700'}`;
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="bg-white border-2 border-primary/20 rounded-lg p-12 text-center">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -149,8 +318,8 @@ export function EnterpriseProfile() {
               <Store className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1>Enterprise Profile</h1>
-              <p className="text-sm text-muted-foreground">Local Crafts Shop</p>
+              <h1 className="text-2xl font-bold">Enterprise Profile</h1>
+              <p className="text-sm text-muted-foreground">{currentUser?.name || 'Live product management'}</p>
             </div>
           </div>
           <Link
@@ -165,18 +334,15 @@ export function EnterpriseProfile() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat) => {
+        {stats.map(stat => {
           const Icon = stat.icon;
           return (
-            <div
-              key={stat.label}
-              className="bg-white border-2 border-primary/20 rounded-lg p-6"
-            >
+            <div key={stat.label} className="bg-white border-2 border-primary/20 rounded-lg p-6">
               <div className={`${stat.color} p-3 rounded-lg w-fit mb-4`}>
                 <Icon className={`h-6 w-6 ${stat.iconColor}`} />
               </div>
               <p className="text-sm text-muted-foreground mb-1">{stat.label}</p>
-              <p className="text-2xl text-primary">{stat.value}</p>
+              <p className="text-2xl text-primary font-bold">{stat.value}</p>
             </div>
           );
         })}
@@ -185,9 +351,15 @@ export function EnterpriseProfile() {
       {/* Products Management */}
       <div className="bg-white border-2 border-primary/20 rounded-lg p-6 mb-8">
         <div className="flex items-center justify-between mb-6">
-          <h2>Product Inventory</h2>
+          <h2 className="text-xl font-bold">Product Inventory</h2>
           <button
-            onClick={() => setShowAddProduct(!showAddProduct)}
+            onClick={() => {
+              setShowAddProduct(!showAddProduct);
+              if (showAddProduct) {
+                setEditingProductId(null);
+                setNewProduct({ name: '', description: '', price: 0, stock: 0, category: '' });
+              }
+            }}
             className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-2"
           >
             <Plus className="h-4 w-4" />
@@ -197,23 +369,23 @@ export function EnterpriseProfile() {
 
         {showAddProduct && (
           <div className="bg-primary/5 border-2 border-primary/20 rounded-lg p-6 mb-6">
-            <h3 className="mb-4">Add New Product</h3>
+            <h3 className="text-lg font-semibold mb-4">{editingProductId ? 'Edit Product' : 'Add New Product'}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm mb-2">Product Name</label>
+                <label className="block text-sm font-medium mb-2">Product Name</label>
                 <input
                   type="text"
                   value={newProduct.name}
-                  onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                  onChange={e => setNewProduct({ ...newProduct, name: e.target.value })}
                   className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
                   placeholder="Enter product name"
                 />
               </div>
               <div>
-                <label className="block text-sm mb-2">Category</label>
+                <label className="block text-sm font-medium mb-2">Category</label>
                 <select
                   value={newProduct.category}
-                  onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
+                  onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
                   className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
                 >
                   <option value="">Select category</option>
@@ -224,36 +396,96 @@ export function EnterpriseProfile() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm mb-2">Price (₱)</label>
+                <label className="block text-sm font-medium mb-2">Price (₱)</label>
                 <input
                   type="number"
                   value={newProduct.price || ''}
-                  onChange={(e) => setNewProduct({ ...newProduct, price: parseFloat(e.target.value) })}
+                  onChange={e => setNewProduct({ ...newProduct, price: parseFloat(e.target.value) || 0 })}
                   className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
                   placeholder="0"
                 />
               </div>
               <div>
-                <label className="block text-sm mb-2">Stock Quantity</label>
+                <label className="block text-sm font-medium mb-2">Stock Quantity</label>
                 <input
                   type="number"
                   value={newProduct.stock || ''}
-                  onChange={(e) => setNewProduct({ ...newProduct, stock: parseInt(e.target.value) })}
+                  onChange={e => setNewProduct({ ...newProduct, stock: parseInt(e.target.value) || 0 })}
                   className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
                   placeholder="0"
                 />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-2">Description</label>
+                <textarea
+                  value={newProduct.description}
+                  onChange={e => setNewProduct({ ...newProduct, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white resize-none"
+                  placeholder="Enter product description..."
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-2">Product Image</label>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-4">
+                    <label className="flex-1 cursor-pointer">
+                      <div className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg hover:border-primary transition-colors bg-white flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          {imageFile ? imageFile.name : 'Choose image file...'}
+                        </span>
+                        <span className="px-3 py-1 bg-primary/10 text-primary text-xs rounded">
+                          Browse
+                        </span>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={e => {
+                          const f = e.target.files?.[0] ?? null;
+                          setImageFile(f);
+                          setImagePreview(f ? URL.createObjectURL(f) : null);
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  {imagePreview && (
+                    <div className="relative w-full max-w-xs">
+                      <img 
+                        src={imagePreview} 
+                        alt="Product preview" 
+                        className="w-full h-48 object-cover rounded-lg border-2 border-primary/20"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImageFile(null);
+                          setImagePreview(null);
+                        }}
+                        className="absolute top-2 right-2 p-2 bg-destructive text-white rounded-full hover:bg-destructive/90 transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div className="flex gap-3 mt-4">
               <button
                 onClick={handleAddProduct}
-                className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors font-medium"
               >
-                Add Product
+                {editingProductId ? 'Update Product' : 'Add Product'}
               </button>
               <button
-                onClick={() => setShowAddProduct(false)}
-                className="px-6 py-2 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors"
+                onClick={() => {
+                  setShowAddProduct(false);
+                  setEditingProductId(null);
+                  setNewProduct({ name: '', description: '', price: 0, stock: 0, category: '' });
+                }}
+                className="px-6 py-2 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors font-medium"
               >
                 Cancel
               </button>
@@ -265,48 +497,71 @@ export function EnterpriseProfile() {
           <table className="w-full">
             <thead>
               <tr className="border-b-2 border-primary/20">
-                <th className="text-left pb-3">Product Name</th>
-                <th className="text-left pb-3">Category</th>
-                <th className="text-left pb-3">Price</th>
-                <th className="text-left pb-3">Stock</th>
-                <th className="text-left pb-3">Sold</th>
-                <th className="text-left pb-3">Actions</th>
+                <th className="text-left pb-3 font-semibold">Image</th>
+                <th className="text-left pb-3 font-semibold">Product Name</th>
+                <th className="text-left pb-3 font-semibold">Category</th>
+                <th className="text-left pb-3 font-semibold">Price</th>
+                <th className="text-left pb-3 font-semibold">Stock</th>
+                <th className="text-left pb-3 font-semibold">Sold</th>
+                <th className="text-left pb-3 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {products.map((product) => (
-                <tr key={product.id} className="border-b border-primary/10">
-                  <td className="py-4">{product.name}</td>
-                  <td className="py-4">
-                    <span className="px-2 py-1 bg-primary/10 text-primary text-xs rounded">
-                      {product.category}
-                    </span>
-                  </td>
-                  <td className="py-4">₱{product.price}</td>
-                  <td className="py-4">
-                    <span className={product.stock < 10 ? 'text-orange-600' : 'text-green-600'}>
-                      {product.stock} units
-                    </span>
-                  </td>
-                  <td className="py-4">{product.sold}</td>
-                  <td className="py-4">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => toast.info('Edit feature coming soon')}
-                        className="p-2 text-primary hover:bg-primary/10 rounded transition-colors"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteProduct(product.id)}
-                        className="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
+              {products.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-4 text-center text-muted-foreground">
+                    No products yet
                   </td>
                 </tr>
-              ))}
+              ) : (
+                products.map(product => (
+                  <tr key={product.id} className="border-b border-primary/10">
+                    <td className="py-4">
+                      {product.image ? (
+                        <img 
+                          src={product.image} 
+                          alt={product.name}
+                          className="w-16 h-16 object-cover rounded border-2 border-primary/20"
+                          onError={(e) => {
+                            e.currentTarget.src = '/assets/default-product.jpg';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">
+                          No image
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-4">{product.name}</td>
+                    <td className="py-4">
+                      <span className="px-2 py-1 bg-primary/10 text-primary text-xs rounded">{product.category}</span>
+                    </td>
+                    <td className="py-4">₱{product.price.toLocaleString()}</td>
+                    <td className="py-4">
+                      <span className={product.stock < 10 ? 'text-orange-600 font-medium' : 'text-green-600'}>
+                        {product.stock} units
+                      </span>
+                    </td>
+                    <td className="py-4">{soldByProduct.get(product.name) || 0}</td>
+                    <td className="py-4">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleEditProduct(product)}
+                          className="p-2 text-primary hover:bg-primary/10 rounded transition-colors"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProduct(product.id)}
+                          className="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -314,48 +569,54 @@ export function EnterpriseProfile() {
 
       {/* Recent Orders */}
       <div className="bg-white border-2 border-primary/20 rounded-lg p-6">
-        <h2 className="mb-6">Recent Orders</h2>
+        <h2 className="text-xl font-bold mb-6">Recent Orders</h2>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b-2 border-primary/20">
-                <th className="text-left pb-3">Order ID</th>
-                <th className="text-left pb-3">Product</th>
-                <th className="text-left pb-3">Quantity</th>
-                <th className="text-left pb-3">Customer</th>
-                <th className="text-left pb-3">Total</th>
-                <th className="text-left pb-3">Date</th>
-                <th className="text-left pb-3">Status</th>
-                <th className="text-left pb-3">Actions</th>
+                <th className="text-left pb-3 font-semibold">Order ID</th>
+                <th className="text-left pb-3 font-semibold">Items</th>
+                <th className="text-left pb-3 font-semibold">Total</th>
+                <th className="text-left pb-3 font-semibold">Date</th>
+                <th className="text-left pb-3 font-semibold">Status</th>
+                <th className="text-left pb-3 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {orders.map((order) => (
-                <tr key={order.id} className="border-b border-primary/10">
-                  <td className="py-4">{order.id}</td>
-                  <td className="py-4">{order.product}</td>
-                  <td className="py-4">{order.quantity}</td>
-                  <td className="py-4">{order.customer}</td>
-                  <td className="py-4">₱{order.total}</td>
-                  <td className="py-4">{new Date(order.date).toLocaleDateString()}</td>
-                  <td className="py-4">
-                    <span className={getStatusBadge(order.status)}>
-                      {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                    </span>
-                  </td>
-                  <td className="py-4">
-                    {orderStatusFlow[order.status] && (
-                      <button
-                        onClick={() => handleUpdateOrderStatus(order.id)}
-                        className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-2 text-sm"
-                      >
-                        <ChevronDown className="h-4 w-4" />
-                        {orderStatusFlow[order.status].charAt(0).toUpperCase() + orderStatusFlow[order.status]!.slice(1)}
-                      </button>
-                    )}
+              {orders.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-4 text-center text-muted-foreground">
+                    No orders yet
                   </td>
                 </tr>
-              ))}
+              ) : (
+                orders.map(order => (
+                  <tr key={order.id} className="border-b border-primary/10">
+                    <td className="py-4">ORD-{String(order.id).padStart(3, '0')}</td>
+                    <td className="py-4 text-sm">
+                      {order.items.map(item => `${item.name} (${item.quantity})`).join(', ')}
+                    </td>
+                    <td className="py-4">₱{order.total.toLocaleString()}</td>
+                    <td className="py-4">{new Date(order.created_at).toLocaleDateString()}</td>
+                    <td className="py-4">
+                      <span className={getStatusBadge(order.status)}>
+                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                      </span>
+                    </td>
+                    <td className="py-4">
+                      {orderStatusFlow[order.status] && (
+                        <button
+                          onClick={() => handleUpdateOrderStatus(order.id, order.status)}
+                          className="px-3 py-2 bg-primary text-white text-xs rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-1"
+                        >
+                          <ChevronDown className="h-3 w-3" />
+                          Update
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

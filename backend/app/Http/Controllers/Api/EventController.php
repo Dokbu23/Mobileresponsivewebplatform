@@ -25,7 +25,21 @@ class EventController extends Controller
      */
     public function store(Request $request)
     {
-        //
+        $data = $request->validate([
+            'name' => 'required|string|max:255',
+            'location' => 'nullable|string|max:255',
+            'category' => 'nullable|string|max:255',
+            'image' => 'nullable|string|max:255',
+            'date' => 'nullable|date',
+            'time' => 'nullable|string|max:255',
+            'capacity' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+            'full_description' => 'nullable|string',
+        ]);
+
+        $item = \App\Models\Event::create($data);
+
+        return response()->json($item, 201);
     }
 
     /**
@@ -49,7 +63,22 @@ class EventController extends Controller
      */
     public function update(Request $request, $id)
     {
-        //
+        $data = $request->validate([
+            'name' => 'sometimes|required|string|max:255',
+            'location' => 'sometimes|nullable|string|max:255',
+            'category' => 'sometimes|nullable|string|max:255',
+            'image' => 'sometimes|nullable|string|max:255',
+            'date' => 'sometimes|nullable|date',
+            'time' => 'sometimes|nullable|string|max:255',
+            'capacity' => 'sometimes|nullable|string|max:255',
+            'description' => 'sometimes|nullable|string',
+            'full_description' => 'sometimes|nullable|string',
+        ]);
+
+        $item = \App\Models\Event::findOrFail($id);
+        $item->update($data);
+
+        return response()->json($item);
     }
 
     /**
@@ -60,6 +89,9 @@ class EventController extends Controller
      */
     public function destroy($id)
     {
-        //
+        $item = \App\Models\Event::findOrFail($id);
+        $item->delete();
+
+        return response()->json(['message' => 'Event deleted']);
     }
 }
