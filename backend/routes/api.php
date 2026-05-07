@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\AccommodationController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\PaymentReceiptController;
+use App\Http\Controllers\Api\UserController;
 use App\Models\User;
 
 /*
@@ -127,6 +129,34 @@ Route::group(['middleware' => ['jwt.auth']], function () {
     Route::group(['middleware' => ['role:admin,enterprise,resort']], function () {
         Route::get('orders/my', [OrderController::class, 'index']);
         Route::get('bookings/my', [BookingController::class, 'index']);
+    });
+
+    // Payment receipt routes
+    Route::group(['middleware' => ['role:tourist,enterprise,resort']], function () {
+        Route::post('payment-receipts', [PaymentReceiptController::class, 'store']);
+        Route::get('payment-receipts', [PaymentReceiptController::class, 'index']);
+        Route::get('payment-receipts/{id}', [PaymentReceiptController::class, 'show']);
+    });
+
+    // Business owner routes for receipt verification
+    Route::group(['middleware' => ['role:enterprise,resort']], function () {
+        Route::patch('payment-receipts/{id}/verify', [PaymentReceiptController::class, 'verify']);
+    });
+
+    // User payment details routes
+    Route::group(['middleware' => ['role:enterprise,resort']], function () {
+        // Test route for debugging
+        Route::get('test-auth', [UserController::class, 'testAuth']);
+        
+        Route::patch('payment-details', [UserController::class, 'updatePaymentDetails']);
+        
+        // Get business user details by ID (for fetching business payment details)
+        Route::get('business-users/{id}', [UserController::class, 'show']);
+    });
+    
+    // Tourist routes for fetching business payment details
+    Route::group(['middleware' => ['role:tourist']], function () {
+        Route::get('business-users/{id}', [UserController::class, 'show']);
     });
 });
 

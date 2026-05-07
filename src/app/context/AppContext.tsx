@@ -22,6 +22,7 @@ export interface Accommodation {
   pricePerNight: number;
   image: string;
   availability: { [date: string]: 'available' | 'booked' | 'full' };
+  user_id?: number;
 }
 
 export interface Order {

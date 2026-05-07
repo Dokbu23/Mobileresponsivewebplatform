@@ -40,9 +40,16 @@ export async function getPublicJSON(path: string) {
 
 // Authenticated API calls
 export async function getJSON(path: string) {
+  console.log('GET request to:', `${API_BASE}/api${path}`);
+  
+  const token = getAuthToken();
+  console.log('Auth token:', token ? 'Present' : 'Missing');
+  
   const res = await fetch(`${API_BASE}/api${path}`, {
     headers: createHeaders(),
   });
+  
+  console.log('Response status:', res.status);
   
   if (res.status === 401) {
     // Token expired or invalid
@@ -52,7 +59,9 @@ export async function getJSON(path: string) {
   }
   
   if (!res.ok) throw new Error('API error');
-  return res.json();
+  const data = await res.json();
+  console.log('Response data:', data);
+  return data;
 }
 
 export async function postJSON(path: string, body: unknown, requireAuth: boolean = true) {
@@ -78,13 +87,23 @@ export async function postJSON(path: string, body: unknown, requireAuth: boolean
 }
 
 export async function patchJSON(path: string, body: unknown) {
+  console.log('PATCH request to:', `${API_BASE}/api${path}`);
+  console.log('Request body:', body);
+  
+  const token = getAuthToken();
+  console.log('Auth token:', token ? 'Present' : 'Missing');
+  
   const res = await fetch(`${API_BASE}/api${path}`, {
     method: 'PATCH',
     headers: createHeaders(),
     body: JSON.stringify(body),
   });
 
+  console.log('Response status:', res.status);
+  console.log('Response headers:', Object.fromEntries(res.headers.entries()));
+
   const data = await res.json().catch(() => null);
+  console.log('Response data:', data);
 
   if (res.status === 401) {
     removeAuthToken();
@@ -140,6 +159,44 @@ export async function deleteJSON(path: string) {
   }
 
   return data;
+}
+
+// Payment-related API functions
+export async function uploadPaymentReceipt(formData: FormData) {
+  const token = getAuthToken();
+  const res = await fetch(`${API_BASE}/api/payment-receipts`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (res.status === 401) {
+    removeAuthToken();
+    window.location.href = '/select-role';
+    throw new Error('Authentication required');
+  }
+
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    throw new Error(data?.message ?? 'Failed to upload receipt');
+  }
+
+  return data;
+}
+
+export async function updatePaymentDetails(paymentDetails: any[]) {
+  return await patchJSON('/users/payment-details', { payment_details: paymentDetails });
+}
+
+export async function getPaymentReceipts() {
+  return await getJSON('/payment-receipts');
+}
+
+export async function verifyPaymentReceipt(receiptId: number, status: 'verified' | 'rejected', notes?: string) {
+  return await patchJSON(`/payment-receipts/${receiptId}/verify`, { status, notes });
 }
 
 // Legacy API calls (for backward compatibility)

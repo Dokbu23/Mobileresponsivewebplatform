@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { CreditCard, Building2, CheckCircle, LogIn } from 'lucide-react';
+import { CreditCard, Building2, CheckCircle, LogIn, Upload, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
-import { postJSON } from '../../lib/api';
+import { postJSON, getJSON, getPublicJSON, API_BASE } from '../../lib/api';
 import { showTransactionSuccess } from '../../lib/sweetAlert';
 
 export function Checkout() {
@@ -11,6 +11,13 @@ export function Checkout() {
   const navigate = useNavigate();
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'otc'>('online');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showPaymentDetails, setShowPaymentDetails] = useState(false);
+  const [businessPaymentDetails, setBusinessPaymentDetails] = useState<any[]>([]);
+  const [selectedPayment, setSelectedPayment] = useState<any>(null);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [paymentReference, setPaymentReference] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
   const [shippingInfo, setShippingInfo] = useState({
     fullName: '',
     phone: '',
@@ -29,7 +36,64 @@ export function Checkout() {
     }
   }, [userType, navigate]);
 
+  useEffect(() => {
+    if (paymentMethod === 'online') {
+      fetchBusinessPaymentDetails();
+    }
+  }, [paymentMethod, cart]);
+
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  // Fetch business payment details when online payment is selected
+  const fetchBusinessPaymentDetails = async () => {
+    if (cart.length === 0) return;
+    
+    try {
+      // Get the business owner of the first product (assuming single business per order)
+      const firstProduct = cart[0];
+      const productsResponse = await getPublicJSON('/products');
+      const product = productsResponse.find((p: any) => p.id === firstProduct.id);
+      
+      if (product?.user_id) {
+        // Fetch business owner details
+        const businessResponse = await getJSON(`/business-users/${product.user_id}`);
+        const paymentDetails = businessResponse.payment_details || [];
+        
+        // Add business_id to each payment method for receipt upload
+        const detailsWithBusinessId = paymentDetails.map((payment: any) => ({
+          ...payment,
+          business_id: product.user_id
+        }));
+        
+        setBusinessPaymentDetails(detailsWithBusinessId);
+        setShowPaymentDetails(true);
+      }
+    } catch (error) {
+      console.error('Error fetching business payment details:', error);
+    }
+  };
+
+  const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        toast.error('File size must be less than 5MB');
+        return;
+      }
+      
+      setReceiptFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setReceiptPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeReceipt = () => {
+    setReceiptFile(null);
+    setReceiptPreview(null);
+  };
 
   if (!userType) {
     return (
@@ -83,6 +147,22 @@ export function Checkout() {
       return;
     }
 
+    // For online payment, validate receipt upload
+    if (paymentMethod === 'online') {
+      if (!selectedPayment) {
+        toast.error('Please select a payment method');
+        return;
+      }
+      if (!receiptFile) {
+        toast.error('Please upload payment receipt');
+        return;
+      }
+      if (!paymentReference) {
+        toast.error('Please enter payment reference number');
+        return;
+      }
+    }
+
     setIsProcessing(true);
 
     try {
@@ -93,6 +173,28 @@ export function Checkout() {
         user_role: userType,
         user_id: currentUser?.id,
       });
+
+      // If online payment, upload receipt
+      if (paymentMethod === 'online' && receiptFile && selectedPayment) {
+        const formData = new FormData();
+        formData.append('type', 'order');
+        formData.append('reference_id', order.id.toString());
+        formData.append('business_id', selectedPayment.business_id.toString());
+        formData.append('receipt_image', receiptFile);
+        formData.append('amount', total.toString());
+        formData.append('payment_method', selectedPayment.type);
+        formData.append('payment_reference', paymentReference);
+        formData.append('notes', paymentNotes);
+
+        const token = localStorage.getItem('discover-mansalay:token');
+        await fetch(`${API_BASE}/api/payment-receipts`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+          body: formData,
+        });
+      }
 
       addOrder({
         items: cart,
@@ -317,6 +419,109 @@ export function Checkout() {
             </label>
           </div>
         </div>
+
+        {/* Online Payment Details */}
+        {paymentMethod === 'online' && showPaymentDetails && businessPaymentDetails.length > 0 && (
+          <div className="bg-white border-2 border-primary/20 rounded-lg p-6">
+            <h2 className="mb-4">Business Payment Details</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Select a payment method and send your payment, then upload the receipt below.
+            </p>
+            
+            <div className="space-y-3 mb-6">
+              {businessPaymentDetails.map((payment, index) => (
+                <label key={index} className="flex items-center gap-3 p-4 border-2 border-primary/20 rounded-lg cursor-pointer hover:border-primary transition-colors">
+                  <input
+                    type="radio"
+                    name="businessPayment"
+                    checked={selectedPayment === payment}
+                    onChange={() => setSelectedPayment(payment)}
+                    className="w-4 h-4 text-primary"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-medium text-primary uppercase">{payment.type}</span>
+                      <span className="text-sm text-muted-foreground">•</span>
+                      <span className="text-sm font-medium">{payment.name}</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Account: {payment.account_number} - {payment.account_name}
+                    </p>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            {selectedPayment && (
+              <div className="bg-primary/5 border-2 border-primary/20 rounded-lg p-6">
+                <h3 className="mb-4">Upload Payment Receipt</h3>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm mb-2">Payment Reference Number *</label>
+                    <input
+                      type="text"
+                      value={paymentReference}
+                      onChange={(e) => setPaymentReference(e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                      placeholder="Enter transaction/reference number"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm mb-2">Receipt Image *</label>
+                    <div className="space-y-3">
+                      {!receiptPreview ? (
+                        <div className="relative">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleReceiptUpload}
+                            className="hidden"
+                            id="receipt-upload"
+                          />
+                          <label
+                            htmlFor="receipt-upload"
+                            className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-primary/30 rounded-lg cursor-pointer hover:border-primary transition-colors"
+                          >
+                            <Upload className="h-8 w-8 text-primary/60 mb-2" />
+                            <span className="text-sm text-muted-foreground">Click to upload receipt</span>
+                            <span className="text-xs text-muted-foreground">PNG, JPG up to 5MB</span>
+                          </label>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <img
+                            src={receiptPreview}
+                            alt="Receipt preview"
+                            className="w-full h-48 object-cover rounded-lg border-2 border-primary/20"
+                          />
+                          <button
+                            onClick={removeReceipt}
+                            className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm mb-2">Additional Notes (Optional)</label>
+                    <textarea
+                      value={paymentNotes}
+                      onChange={(e) => setPaymentNotes(e.target.value)}
+                      rows={3}
+                      className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                      placeholder="Any additional information about the payment..."
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Order Summary */}
         <div className="bg-gradient-to-br from-primary/5 to-secondary/10 border-2 border-primary/20 rounded-lg p-6">
