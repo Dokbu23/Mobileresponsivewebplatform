@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Hotel, Upload } from 'lucide-react';
+import { Hotel, Upload, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
 import { showRegistrationSuccess } from '../../lib/sweetAlert';
@@ -8,11 +8,15 @@ import { showRegistrationSuccess } from '../../lib/sweetAlert';
 export function ResortRegistration() {
   const navigate = useNavigate();
   const { setUserType } = useApp();
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     resortName: '',
     ownerName: '',
     email: '',
     phone: '',
+    password: '',
+    confirmPassword: '',
     address: '',
     barangay: '',
     city: 'Mansalay', // Locked to Mansalay
@@ -25,11 +29,65 @@ export function ResortRegistration() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setUserType('resort');
-    const result = await showRegistrationSuccess('Resort');
-    
-    if (result.isConfirmed) {
-      navigate('/resort/dashboard');
+
+    // Validate required fields
+    if (!formData.resortName || !formData.ownerName || !formData.email || !formData.phone || 
+        !formData.password || !formData.confirmPassword || !formData.address || !formData.barangay || 
+        !formData.description || !formData.rooms || !formData.priceRange) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    try {
+      // Call registration API
+      const response = await fetch('http://localhost:8000/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.resortName,
+          email: formData.email,
+          password: formData.password,
+          role: 'resort',
+          phone: formData.phone,
+          address: `${formData.address}, ${formData.barangay}, ${formData.city}, ${formData.province}`,
+          barangay: formData.barangay,
+          description: formData.description,
+          owner_name: formData.ownerName,
+          facilities: formData.facilities,
+          price_range: formData.priceRange,
+          rooms: formData.rooms,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Registration failed');
+      }
+
+      // Redirect to email verification page
+      navigate('/resort/verify-email', {
+        state: {
+          email: formData.email,
+          role: 'resort',
+        },
+      });
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      toast.error(error.message || 'Registration failed. Please try again.');
     }
   };
 
@@ -38,6 +96,48 @@ export function ResortRegistration() {
       ...prev,
       [e.target.name]: e.target.value,
     }));
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    
+    // Validate file types and sizes
+    const validFiles = files.filter(file => {
+      const isValidType = ['image/png', 'image/jpeg', 'image/jpg'].includes(file.type);
+      const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB
+      
+      if (!isValidType) {
+        toast.error(`${file.name} is not a valid image type (PNG, JPG only)`);
+        return false;
+      }
+      if (!isValidSize) {
+        toast.error(`${file.name} exceeds 10MB size limit`);
+        return false;
+      }
+      return true;
+    });
+
+    if (validFiles.length === 0) return;
+
+    // Add new files to existing ones
+    setSelectedImages(prev => [...prev, ...validFiles]);
+
+    // Create preview URLs
+    validFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreviews(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    toast.success(`${validFiles.length} image(s) added`);
+  };
+
+  const removeImage = (index: number) => {
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+    toast.success('Image removed');
   };
 
   return (
@@ -104,6 +204,30 @@ export function ResortRegistration() {
                 onChange={handleChange}
                 className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
                 placeholder="+63 912 345 6789"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm mb-2">Password *</label>
+              <input
+                type="password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                placeholder="Create a password"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm mb-2">Confirm Password *</label>
+              <input
+                type="password"
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                placeholder="Re-enter password"
                 required
               />
             </div>
@@ -245,7 +369,16 @@ export function ResortRegistration() {
         {/* Photos Upload */}
         <div className="bg-white border-2 border-primary/20 rounded-lg p-6">
           <h2 className="mb-4">Photos</h2>
-          <div className="border-2 border-dashed border-primary/20 rounded-lg p-8 text-center hover:border-primary transition-colors cursor-pointer">
+          
+          {/* Upload Area */}
+          <label className="block border-2 border-dashed border-primary/20 rounded-lg p-8 text-center hover:border-primary transition-colors cursor-pointer">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/jpg"
+              multiple
+              onChange={handleImageChange}
+              className="hidden"
+            />
             <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <p className="text-muted-foreground mb-2">
               Click to upload or drag and drop
@@ -253,7 +386,32 @@ export function ResortRegistration() {
             <p className="text-sm text-muted-foreground">
               PNG, JPG up to 10MB (Multiple files allowed)
             </p>
-          </div>
+          </label>
+
+          {/* Image Previews */}
+          {imagePreviews.length > 0 && (
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+              {imagePreviews.map((preview, index) => (
+                <div key={index} className="relative group">
+                  <img
+                    src={preview}
+                    alt={`Preview ${index + 1}`}
+                    className="w-full h-32 object-cover rounded-lg border-2 border-primary/20"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(index)}
+                    className="absolute top-2 right-2 p-1 bg-destructive text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                  <p className="text-xs text-center mt-1 text-muted-foreground truncate">
+                    {selectedImages[index]?.name}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Submit Button */}

@@ -20,6 +20,11 @@ class JwtAuth
      */
     public function handle(Request $request, Closure $next)
     {
+        // Allow OPTIONS requests to pass through without authentication (CORS preflight)
+        if ($request->isMethod('OPTIONS')) {
+            return response()->json([], 200);
+        }
+
         $token = $request->bearerToken() ?? $request->header('X-Auth-Token');
         
         if (!$token) {

@@ -23,6 +23,12 @@ export interface Accommodation {
   image: string;
   availability: { [date: string]: 'available' | 'booked' | 'full' };
   user_id?: number;
+  is_registered?: boolean;
+  type?: 'static' | 'resort_profile';
+  resort_amenities?: string[];
+  resort_facilities?: string | null;
+  resort_policies?: string | null;
+  resort_images?: string[];
 }
 
 export interface Order {
@@ -30,7 +36,7 @@ export interface Order {
   items: CartItem[];
   total: number;
   status: 'pending' | 'confirmed' | 'shipped' | 'delivered';
-  paymentMethod: 'online' | 'otc';
+  paymentMethod: 'online' | 'otc' | 'cod';
   date: string;
 }
 
@@ -40,7 +46,7 @@ export interface Booking {
   checkIn: string;
   checkOut: string;
   status: 'pending' | 'confirmed' | 'checked-in' | 'completed';
-  paymentMethod: 'online' | 'otc';
+  paymentMethod: 'online' | 'otc' | 'cod';
   total: number;
 }
 
@@ -163,13 +169,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [cart, userType]);
 
   useEffect(() => {
+    // Only load orders and bookings for tourists
+    if (!userType || userType !== 'tourist') {
+      return;
+    }
+
     let isMounted = true;
 
     (async () => {
       try {
         const [ordersResponse, bookingsResponse] = await Promise.all([
-          getJSON('/api/orders'),
-          getJSON('/api/bookings'),
+          getJSON('/orders/my'),
+          getJSON('/bookings/my'),
         ]);
 
         if (!isMounted) {
@@ -222,7 +233,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [userType]);
 
   const addToCart = (product: Product) => {
     // Only tourists can add to cart

@@ -14,9 +14,32 @@ class OrderController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(\App\Models\Order::orderBy('created_at','desc')->get());
+        $user = $request->user();
+        
+        // If admin, show all orders
+        if ($user && $user->role === 'admin') {
+            return response()->json(\App\Models\Order::with(['customer', 'businessOwner'])
+                ->orderBy('created_at','desc')->get());
+        }
+        
+        // If enterprise owner, show only their orders
+        if ($user && $user->role === 'enterprise') {
+            return response()->json(\App\Models\Order::with(['customer'])
+                ->where('business_owner_id', $user->id)
+                ->orderBy('created_at','desc')->get());
+        }
+        
+        // If tourist, show only their orders
+        if ($user && $user->role === 'tourist') {
+            return response()->json(\App\Models\Order::with(['businessOwner'])
+                ->where('customer_id', $user->id)
+                ->orderBy('created_at','desc')->get());
+        }
+        
+        // Default: return empty array for other roles
+        return response()->json([]);
     }
 
     /**
@@ -32,9 +55,10 @@ class OrderController extends Controller
             'items.*.id' => 'required',
             'items.*.quantity' => 'required|integer|min:1',
             'total' => 'required|numeric',
-            'payment_method' => 'nullable|string',
+            'payment_method' => 'nullable|string|in:online,otc,cod',
             'user_role' => 'required|string',
             'user_id' => 'nullable|integer',
+            'shipping_info' => 'nullable|array',
         ]);
 
         // Only tourists can place orders
@@ -46,8 +70,10 @@ class OrderController extends Controller
         }
         
         try {
-            $order = DB::transaction(function () use ($data) {
-                // Step 1: Validate stock availability for all items
+            $orders = DB::transaction(function () use ($data, $request) {
+                // Step 1: Group items by business owner
+                $itemsByBusiness = [];
+                
                 foreach ($data['items'] as $item) {
                     $product = Product::find($item['id']);
                     
@@ -61,6 +87,14 @@ class OrderController extends Controller
                             "Available: {$product->stock}, Requested: {$item['quantity']}"
                         );
                     }
+
+                    $businessOwnerId = $product->user_id;
+                    
+                    if (!isset($itemsByBusiness[$businessOwnerId])) {
+                        $itemsByBusiness[$businessOwnerId] = [];
+                    }
+                    
+                    $itemsByBusiness[$businessOwnerId][] = $item;
                 }
 
                 // Step 2: Reduce stock for all items
@@ -69,16 +103,57 @@ class OrderController extends Controller
                     $product->decrement('stock', $item['quantity']);
                 }
 
-                // Step 3: Create order
-                return \App\Models\Order::create([
-                    'items' => $data['items'],
-                    'total' => (int)$data['total'],
-                    'payment_method' => $data['payment_method'] ?? null,
-                    'status' => 'pending',
-                ]);
+                // Step 3: Get customer information
+                $customer = $request->user();
+                $customerName = $customer ? $customer->name : 'Guest';
+                $customerEmail = $customer ? $customer->email : null;
+                $customerPhone = $data['shipping_info']['phone'] ?? null;
+
+                // Step 4: Create separate orders for each business
+                $createdOrders = [];
+                
+                foreach ($itemsByBusiness as $businessOwnerId => $businessItems) {
+                    // Calculate total for this business
+                    $businessTotal = 0;
+                    foreach ($businessItems as $item) {
+                        $businessTotal += $item['price'] * $item['quantity'];
+                    }
+                    
+                    $order = \App\Models\Order::create([
+                        'items' => $businessItems,
+                        'total' => $businessTotal,
+                        'payment_method' => $data['payment_method'] ?? null,
+                        'status' => 'pending',
+                        'customer_id' => $customer ? $customer->id : null,
+                        'customer_name' => $customerName,
+                        'customer_email' => $customerEmail,
+                        'customer_phone' => $customerPhone,
+                        'shipping_address' => $data['shipping_info'] ?? null,
+                        'business_owner_id' => $businessOwnerId,
+                    ]);
+                    
+                    $createdOrders[] = $order;
+                }
+                
+                return $createdOrders;
             });
 
-            return response()->json($order, 201);
+            // Return the first order (or all orders info)
+            $response = [
+                'success' => true,
+                'orders_created' => count($orders),
+                'orders' => $orders,
+                'message' => count($orders) > 1 
+                    ? 'Multiple orders created for different businesses' 
+                    : 'Order created successfully'
+            ];
+            
+            // For backward compatibility, return the first order's structure
+            if (count($orders) === 1) {
+                return response()->json($orders[0], 201);
+            }
+            
+            return response()->json($response, 201);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 400);
         }
@@ -109,11 +184,39 @@ class OrderController extends Controller
         ]);
 
         $order = \App\Models\Order::findOrFail($id);
+        $user = $request->user();
+        
+        // Verify business ownership - only the business owner can update their orders
+        if ($user->role === 'enterprise' && $order->business_owner_id !== $user->id) {
+            return response()->json([
+                'error' => 'You can only update orders for your own products.'
+            ], 403);
+        }
+
+        // Store old status for notification
+        $oldStatus = $order->status;
+        $newStatus = $data['status'];
+
         $order->update([
-            'status' => $data['status'],
+            'status' => $newStatus,
         ]);
 
-        return response()->json($order);
+        // Load the order with relationships for the response
+        $order->load(['customer', 'businessOwner']);
+
+        // Here you could add real-time notification logic
+        // For now, we'll rely on the frontend to poll for updates
+        // In a production app, you might use WebSockets, Pusher, or similar
+
+        return response()->json([
+            'order' => $order,
+            'status_changed' => $oldStatus !== $newStatus,
+            'old_status' => $oldStatus,
+            'new_status' => $newStatus,
+            'message' => $oldStatus !== $newStatus 
+                ? "Order status updated from {$oldStatus} to {$newStatus}" 
+                : "Order status remains {$newStatus}"
+        ]);
     }
 
     /**

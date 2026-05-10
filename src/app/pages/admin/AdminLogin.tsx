@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, Link } from 'react-router';
 import { Lock, User } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
@@ -93,8 +93,13 @@ export function AdminLogin() {
             Sign In
           </button>
 
-          <div className="text-center text-sm text-muted-foreground">
-            Demo credentials: admin@mansalay.com / admin123
+          <div className="text-center">
+            <Link
+              to="/forgot-password"
+              className="text-sm text-primary hover:underline"
+            >
+              Forgot Password?
+            </Link>
           </div>
         </form>
       </div>

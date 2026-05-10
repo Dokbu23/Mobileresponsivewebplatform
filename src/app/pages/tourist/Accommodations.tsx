@@ -1,20 +1,26 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
-import { Hotel, MapPin, Star, ChevronDown, ChevronUp, Calendar, CreditCard, Building2, LogIn, Upload, X } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate, Link } from 'react-router';
+import { Hotel, MapPin, Star, ChevronDown, ChevronUp, Calendar, CreditCard, Building2, LogIn, Upload, X, Truck, ExternalLink } from 'lucide-react';
 import { useApp, Accommodation } from '../../context/AppContext';
 import { toast } from 'sonner';
 import { getPublicJSON, postJSON, getJSON, API_BASE } from '../../lib/api';
 import { showTransactionSuccess } from '../../lib/sweetAlert';
+import { SearchBar } from '../../components/SearchBar';
+import { FilterButton } from '../../components/FilterButton';
+import { FilterSidebar } from '../../components/FilterSidebar';
+import { FilterChips } from '../../components/FilterChips';
+import { useSearchAndFilter } from '../../hooks/useSearchAndFilter';
 
 export function Accommodations() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [bookingModal, setBookingModal] = useState<string | null>(null);
   const [checkIn, setCheckIn] = useState('');
   const [checkOut, setCheckOut] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'online' | 'otc'>('online');
+  const [paymentMethod, setPaymentMethod] = useState<'online' | 'otc' | 'cod'>('online');
   const { addBooking, userType, currentUser } = useApp();
   const navigate = useNavigate();
   const [items, setItems] = useState<Accommodation[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Payment-related state
   const [businessPaymentDetails, setBusinessPaymentDetails] = useState<any[]>([]);
@@ -24,23 +30,93 @@ export function Accommodations() {
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
 
+  const bookingAccommodation = useMemo(
+    () => items.find(item => item.id === bookingModal) ?? null,
+    [items, bookingModal]
+  );
+
+  const bookingNights = useMemo(() => {
+    if (!checkIn || !checkOut) return 0;
+    const checkInDate = new Date(checkIn);
+    const checkOutDate = new Date(checkOut);
+    const diff = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : 0;
+  }, [checkIn, checkOut]);
+
+  const bookingTotal = bookingAccommodation && bookingNights > 0
+    ? bookingAccommodation.pricePerNight * bookingNights
+    : 0;
+
+  // Initialize search and filter hook
+  const {
+    filters,
+    queryParams,
+    updateFilter,
+    clearAllFilters,
+    activeFilterCount,
+  } = useSearchAndFilter();
+
+  // Fetch accommodations with query parameters (backend only supports search)
   useEffect(() => {
     (async () => {
       try {
-        const data = await getPublicJSON('/accommodations');
+        const data = await getPublicJSON(`/accommodations${queryParams}`);
         const mapped = data.map((d: any) => ({
           ...d,
           id: String(d.id),
           pricePerNight: d.price_per_night ?? d.pricePerNight,
           availability: d.availability ?? d.availability,
           user_id: d.user_id,
+          is_registered: d.is_registered ?? false,
+          type: d.type ?? 'static',
+          resort_amenities: d.resort_amenities ?? [],
+          resort_facilities: d.resort_facilities ?? null,
+          resort_policies: d.resort_policies ?? null,
+          resort_images: d.resort_images ?? [],
+          image: d.image
+            ? (String(d.image).startsWith('http') ? d.image : `${API_BASE}${d.image}`)
+            : '',
         }));
         setItems(mapped);
       } catch (e) {
         setItems([]);
       }
     })();
-  }, []);
+  }, [queryParams]);
+
+  // Apply frontend date filtering using availability JSON field
+  const filteredAccommodations = useMemo(() => {
+    let filtered = items;
+
+    // Filter by month and year if specified
+    if (filters.month || filters.year) {
+      filtered = filtered.filter(accommodation => {
+        // Check if any availability date matches the selected month/year
+        const availabilityDates = Object.keys(accommodation.availability || {});
+        
+        return availabilityDates.some(dateStr => {
+          const date = new Date(dateStr);
+          const matchesMonth = !filters.month || (date.getMonth() + 1) === parseInt(filters.month);
+          const matchesYear = !filters.year || date.getFullYear() === parseInt(filters.year);
+          
+          return matchesMonth && matchesYear;
+        });
+      });
+    }
+
+    return filtered;
+  }, [items, filters.month, filters.year]);
+
+  // Handle filter removal from chips
+  const handleRemoveFilter = (filterKey: keyof typeof filters) => {
+    updateFilter({ [filterKey]: '' });
+  };
+
+  // Handle clear all filters
+  const handleClearAllFilters = () => {
+    clearAllFilters();
+    setIsSidebarOpen(false);
+  };
 
   const handleOpenBooking = (accommodationId: string) => {
     if (!userType) {
@@ -52,6 +128,13 @@ export function Accommodations() {
     // Only tourists can book accommodations (enterprise and resort are business accounts)
     if (userType !== 'tourist') {
       toast.error('Only tourists can book accommodations. Business accounts are for management only.');
+      return;
+    }
+
+    // Block booking for unregistered static listings
+    const accommodation = items.find(item => item.id === accommodationId);
+    if (accommodation && !accommodation.is_registered && !accommodation.user_id) {
+      toast.error('This accommodation is not available for online booking. Please contact them directly.');
       return;
     }
 
@@ -149,8 +232,10 @@ export function Accommodations() {
     const total = accommodation.pricePerNight * nights;
 
     try {
-      const booking = await postJSON('/api/bookings', {
-        accommodation_id: Number(accommodation.id),
+      const booking = await postJSON('/bookings', {
+        accommodation_type: accommodation.type ?? 'static',
+        accommodation_id: accommodation.type === 'resort_profile' ? null : Number(accommodation.id),
+        resort_user_id: accommodation.type === 'resort_profile' ? accommodation.user_id : null,
         accommodation_snapshot: accommodation,
         check_in: checkIn,
         check_out: checkOut,
@@ -265,8 +350,41 @@ export function Accommodations() {
         </p>
       </div>
 
+      {/* Search Bar with Filter Button */}
+      <div className="mb-6 flex gap-3">
+        <SearchBar
+          value={filters.search}
+          onChange={(value) => updateFilter({ search: value })}
+          placeholder="Search accommodations by name or description..."
+          className="flex-1"
+        />
+        <FilterButton
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          activeFilterCount={activeFilterCount}
+          isOpen={isSidebarOpen}
+        />
+      </div>
+
+      {/* Filter Chips */}
+      <FilterChips
+        filters={filters}
+        onRemoveFilter={handleRemoveFilter}
+      />
+
+      {/* Filter Sidebar */}
+      <FilterSidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        filters={filters}
+        onFilterChange={updateFilter}
+        onClearFilters={handleClearAllFilters}
+        availableBarangays={[]}
+        showBarangayFilter={false}
+        showDateFilters={true}
+      />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {items.map(accommodation => {
+        {filteredAccommodations.map(accommodation => {
           const isExpanded = expandedId === accommodation.id;
           const isBooking = bookingModal === accommodation.id;
 
@@ -298,6 +416,28 @@ export function Accommodations() {
                     <Star className="h-4 w-4 fill-primary text-primary" />
                     4.8
                   </div>
+                  {/* Registered business: show View Business Page link */}
+                  {accommodation.user_id && (accommodation as any).is_registered && (
+                    <Link
+                      to={`/business/resort/${accommodation.user_id}`}
+                      className="flex items-center gap-1 text-primary hover:underline text-xs"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      View Business Page
+                    </Link>
+                  )}
+                  {accommodation.type === 'resort_profile' && (
+                    <span className="text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                      Resort Profile
+                    </span>
+                  )}
+                  {/* Unregistered static listing badge */}
+                  {!(accommodation as any).is_registered && !accommodation.user_id && (
+                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                      Static Listing
+                    </span>
+                  )}
                 </div>
 
                 {!isExpanded && (
@@ -347,28 +487,37 @@ export function Accommodations() {
                       </>
                     )}
                   </button>
-                  <button
-                    onClick={() => handleOpenBooking(accommodation.id)}
-                    disabled={userType !== 'tourist' && userType !== null}
-                    className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
-                  >
-                    {!userType ? (
-                      <>
-                        <LogIn className="h-4 w-4" />
-                        Login to Book
-                      </>
-                    ) : userType !== 'tourist' ? (
-                      <>
-                        <Building2 className="h-4 w-4" />
-                        Business Account
-                      </>
-                    ) : (
-                      <>
-                        <Hotel className="h-4 w-4" />
-                        Book Now
-                      </>
-                    )}
-                  </button>
+
+                  {/* Unregistered static listing — no online booking */}
+                  {!(accommodation as any).is_registered && !(accommodation as any).user_id ? (
+                    <div className="flex-1 px-4 py-2 bg-gray-100 text-gray-500 border-2 border-gray-200 rounded-lg inline-flex items-center justify-center gap-2 text-sm cursor-default">
+                      <Hotel className="h-4 w-4" />
+                      Contact Directly
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleOpenBooking(accommodation.id)}
+                      disabled={userType !== 'tourist' && userType !== null}
+                      className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+                    >
+                      {!userType ? (
+                        <>
+                          <LogIn className="h-4 w-4" />
+                          Login to Book
+                        </>
+                      ) : userType !== 'tourist' ? (
+                        <>
+                          <Building2 className="h-4 w-4" />
+                          Business Account
+                        </>
+                      ) : (
+                        <>
+                          <Hotel className="h-4 w-4" />
+                          Book Now
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -409,7 +558,7 @@ export function Accommodations() {
                               type="radio"
                               value="online"
                               checked={paymentMethod === 'online'}
-                              onChange={(e) => setPaymentMethod(e.target.value as 'online')}
+                              onChange={(e) => setPaymentMethod(e.target.value as 'online' | 'otc' | 'cod')}
                             />
                             <CreditCard className="h-4 w-4 text-primary" />
                             <span className="text-sm">Online Payment (Advance Payment)</span>
@@ -417,9 +566,19 @@ export function Accommodations() {
                           <label className="flex items-center gap-2 p-3 border-2 border-primary/20 rounded-lg cursor-pointer">
                             <input
                               type="radio"
+                              value="cod"
+                              checked={paymentMethod === 'cod'}
+                              onChange={(e) => setPaymentMethod(e.target.value as 'online' | 'otc' | 'cod')}
+                            />
+                            <Truck className="h-4 w-4 text-primary" />
+                            <span className="text-sm">Cash on Arrival</span>
+                          </label>
+                          <label className="flex items-center gap-2 p-3 border-2 border-primary/20 rounded-lg cursor-pointer">
+                            <input
+                              type="radio"
                               value="otc"
                               checked={paymentMethod === 'otc'}
-                              onChange={(e) => setPaymentMethod(e.target.value as 'otc')}
+                              onChange={(e) => setPaymentMethod(e.target.value as 'online' | 'otc' | 'cod')}
                             />
                             <Building2 className="h-4 w-4 text-primary" />
                             <span className="text-sm">Pay at Resort</span>
@@ -433,6 +592,11 @@ export function Accommodations() {
                           <h4 className="mb-3">Resort Payment Details</h4>
                           <p className="text-sm text-muted-foreground mb-4">
                             Select a payment method and send your advance payment, then upload the receipt below.
+                          </p>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            {bookingTotal > 0
+                              ? `Pay the exact amount: ₱${bookingTotal.toFixed(2)}`
+                              : 'Select your dates to see the exact amount.'}
                           </p>
                           
                           <div className="space-y-3 mb-4">

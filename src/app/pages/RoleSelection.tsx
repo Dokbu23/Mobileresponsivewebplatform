@@ -1,8 +1,10 @@
 import { useNavigate } from 'react-router';
 import { MapPin, Shield, Hotel, Store, LogIn, UserPlus } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 
 export function RoleSelection() {
   const navigate = useNavigate();
+  const { currentUser } = useApp();
 
   const roles = [
     {
@@ -52,6 +54,44 @@ export function RoleSelection() {
       hasRegister: true,
     },
   ];
+
+  // If user is already logged in, show a message instead of role selection
+  if (currentUser) {
+    return (
+      <div className="min-h-[calc(100vh-200px)] flex items-center justify-center px-4 py-16">
+        <div className="max-w-2xl w-full text-center">
+          <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+            <MapPin className="h-10 w-10 text-primary" />
+          </div>
+          <h1 className="mb-4">You're already logged in!</h1>
+          <p className="text-lg text-muted-foreground mb-8">
+            Welcome back, {currentUser.name}
+          </p>
+          <button
+            onClick={() => {
+              switch (currentUser.role) {
+                case 'admin':
+                  navigate('/admin/dashboard');
+                  break;
+                case 'enterprise':
+                  navigate('/enterprise/dashboard');
+                  break;
+                case 'resort':
+                  navigate('/resort/dashboard');
+                  break;
+                case 'tourist':
+                  navigate('/dashboard');
+                  break;
+              }
+            }}
+            className="px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-200px)] flex items-center justify-center px-4 py-16">

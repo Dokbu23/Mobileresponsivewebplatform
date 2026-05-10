@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\PaymentReceipt;
+use App\Models\Order;
+use App\Models\Booking;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -78,11 +80,47 @@ class PaymentReceiptController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        if ($data['status'] === 'verified') {
+            if ($receipt->type === 'order') {
+                $order = Order::find($receipt->reference_id);
+                if ($order && (float) $receipt->amount !== (float) $order->total) {
+                    return response()->json([
+                        'message' => 'Receipt amount does not match order total.'
+                    ], 422);
+                }
+            }
+
+            if ($receipt->type === 'booking') {
+                $booking = Booking::find($receipt->reference_id);
+                if ($booking && (float) $receipt->amount !== (float) $booking->total) {
+                    return response()->json([
+                        'message' => 'Receipt amount does not match booking total.'
+                    ], 422);
+                }
+            }
+        }
+
         $receipt->update([
             'status' => $data['status'],
             'notes' => $data['notes'] ?? null,
             'verified_at' => $data['status'] === 'verified' ? now() : null,
         ]);
+
+        if ($data['status'] === 'verified') {
+            if ($receipt->type === 'order') {
+                $order = Order::find($receipt->reference_id);
+                if ($order && $order->status === 'pending') {
+                    $order->update(['status' => 'confirmed']);
+                }
+            }
+
+            if ($receipt->type === 'booking') {
+                $booking = Booking::find($receipt->reference_id);
+                if ($booking && $booking->status === 'pending') {
+                    $booking->update(['status' => 'confirmed']);
+                }
+            }
+        }
 
         return response()->json($receipt->load(['tourist', 'business']));
     }

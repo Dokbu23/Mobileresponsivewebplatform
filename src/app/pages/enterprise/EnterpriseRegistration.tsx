@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Store, Upload } from 'lucide-react';
+import { Store, Upload, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
 import { showRegistrationSuccess } from '../../lib/sweetAlert';
@@ -13,6 +13,8 @@ export function EnterpriseRegistration() {
     ownerName: '',
     email: '',
     phone: '',
+    password: '',
+    confirmPassword: '',
     address: '',
     barangay: '',
     city: 'Mansalay', // Locked to Mansalay
@@ -21,14 +23,68 @@ export function EnterpriseRegistration() {
     category: '',
     registrationNumber: '',
   });
+  const [businessPermitFile, setBusinessPermitFile] = useState<File | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setUserType('enterprise');
-    const result = await showRegistrationSuccess('Enterprise');
-    
-    if (result.isConfirmed) {
-      navigate('/enterprise/dashboard');
+
+    // Validate required fields
+    if (!formData.businessName || !formData.ownerName || !formData.email || !formData.phone || 
+        !formData.password || !formData.confirmPassword || !formData.address || !formData.barangay || 
+        !formData.description || !formData.category) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    try {
+      // Call registration API
+      const response = await fetch('http://localhost:8000/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.businessName,
+          email: formData.email,
+          password: formData.password,
+          role: 'enterprise',
+          phone: formData.phone,
+          address: `${formData.address}, ${formData.barangay}, ${formData.city}, ${formData.province}`,
+          barangay: formData.barangay,
+          description: formData.description,
+          owner_name: formData.ownerName,
+          category: formData.category,
+          registration_number: formData.registrationNumber,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Registration failed');
+      }
+
+      // Redirect to email verification page
+      navigate('/enterprise/verify-email', {
+        state: {
+          email: formData.email,
+          role: 'enterprise',
+        },
+      });
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      toast.error(error.message || 'Registration failed. Please try again.');
     }
   };
 
@@ -103,6 +159,30 @@ export function EnterpriseRegistration() {
                 onChange={handleChange}
                 className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
                 placeholder="+63 912 345 6789"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm mb-2">Password *</label>
+              <input
+                type="password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                placeholder="Create a password"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm mb-2">Confirm Password *</label>
+              <input
+                type="password"
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                placeholder="Re-enter password"
                 required
               />
             </div>
@@ -234,7 +314,24 @@ export function EnterpriseRegistration() {
         <div className="bg-white border-2 border-primary/20 rounded-lg p-6">
           <h2 className="mb-4">Business Documents</h2>
           <div className="space-y-4">
-            <div className="border-2 border-dashed border-primary/20 rounded-lg p-8 text-center hover:border-primary transition-colors cursor-pointer">
+            <label className="block border-2 border-dashed border-primary/20 rounded-lg p-8 text-center hover:border-primary transition-colors cursor-pointer">
+              <input
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    // Check file size (10MB limit)
+                    if (file.size > 10 * 1024 * 1024) {
+                      toast.error('File size must be less than 10MB');
+                      return;
+                    }
+                    setBusinessPermitFile(file);
+                    toast.success('File uploaded successfully');
+                  }
+                }}
+                className="hidden"
+              />
               <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <p className="text-muted-foreground mb-2">
                 Upload Business Permits & Licenses
@@ -242,7 +339,34 @@ export function EnterpriseRegistration() {
               <p className="text-sm text-muted-foreground">
                 PDF, PNG, JPG up to 10MB
               </p>
-            </div>
+            </label>
+
+            {/* Display uploaded file */}
+            {businessPermitFile && (
+              <div className="flex items-center justify-between p-4 bg-primary/5 border-2 border-primary/20 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary/10 rounded flex items-center justify-center">
+                    <Upload className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">{businessPermitFile.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(businessPermitFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBusinessPermitFile(null);
+                    toast.success('File removed');
+                  }}
+                  className="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

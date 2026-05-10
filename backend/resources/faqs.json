@@ -1,0 +1,42 @@
+{
+  "tourist": [
+    {
+      "question": "How do I book an accommodation?",
+      "answer": "Pumunta sa accommodation page, piliin ang petsa ng check-in at check-out, ilagay ang bilang ng bisita, at i-click ang 'Book Now'. Kung kailangan ng tulong, magbigay ng detalye ng inaasam mong petsa at lokasyon at tutulungan ka namin."
+    },
+    {
+      "question": "What payment methods are accepted?",
+      "answer": "Tumatanggap kami ng online payments, over-the-counter (OTC), at cash on delivery (kung available). Tingnan ang payment methods sa payment settings page para sa detalyadong instruksyon."
+    }
+  ],
+  "resort": [
+    {
+      "question": "How do I set up my resort profile?",
+      "answer": "Pumunta sa Resort Profile sa dashboard, punan ang pangalan, deskripsyon, presyo per night, at mag-upload ng mga larawan. Siguraduhin na sumunod sa image requirements (JPG/JPEG/PNG/WebP/AVIF, max 5MB)."
+    },
+    {
+      "question": "How do I view my bookings?",
+      "answer": "Pumunta sa Bookings sa iyong dashboard para makita ang listahan ng bookings, status, at contact details ng guests. Maaari mong i-confirm o i-update ang status ng booking mula rito."
+    }
+  ],
+  "enterprise": [
+    {
+      "question": "How do I add products?",
+      "answer": "Pumunta sa Products > Add Product, punan ang detalye, presyo, stock, at mag-upload ng larawan. Siguraduhin naka-subscribe ang iyong account kung kinakailangan."
+    },
+    {
+      "question": "How is stock managed?",
+      "answer": "Ang stock ay naka-save sa product record. Kapag nagdagdag ka ng stock sa enterprise dashboard, ia-update nito ang database. Kung may discrepancy, i-check ang audit logs o i-contact ang admin para ma-verify ang update."
+    }
+  ],
+  "admin": [
+    {
+      "question": "How do I approve a listing?",
+      "answer": "Pumunta sa Admin > Listings, buksan ang profile ng business at gamitin ang 'Approve' button. Pag na-approve, makikita na ang resort/enterprise sa public listings."
+    },
+    {
+      "question": "How do I manage users?",
+      "answer": "Pumunta sa Admin > Users para i-edit, i-patch, o i-delete ang user accounts. Huwag i-delete ang sariling admin account habang naka-login."
+    }
+  ]
+}

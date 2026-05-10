@@ -1,22 +1,34 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router';
-import { MapPin, User, Mail, Lock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router';
+import { MapPin, Mail, Lock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
-import { postJSON } from '../../lib/api';
+import { postJSON, setAuthToken } from '../../lib/api';
 import { showErrorAlert, showLoginSuccess } from '../../lib/sweetAlert';
 
 export function TouristLogin() {
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { setUserType, setCurrentUser } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Check if redirected from email verification
+  useEffect(() => {
+    if (location.state?.verificationSuccess) {
+      toast.success('Email verified successfully! You can now login.', { duration: 5000 });
+      
+      // Pre-fill email if provided
+      if (location.state?.email) {
+        setEmail(location.state.email);
+      }
+    }
+  }, [location.state]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name || !email || !password) {
+    if (!email || !password) {
       toast.error('Please fill in all fields');
       return;
     }
@@ -27,12 +39,27 @@ export function TouristLogin() {
         password,
         role: 'tourist',
       }, false);
+      
+      // Store the JWT token
+      setAuthToken(response.token);
+      
       setUserType('tourist');
       setCurrentUser(response.user);
-      await showLoginSuccess(name, 'Tourist');
+      await showLoginSuccess(response.user.name, 'Tourist');
       navigate('/dashboard');
-    } catch {
-      await showErrorAlert('Login failed', 'Invalid credentials.');
+    } catch (error: any) {
+      // Check if email verification is required
+      if (error.requires_verification) {
+        await showErrorAlert('Email not verified', 'Please verify your email before logging in.');
+        navigate('/tourist/verify-email', {
+          state: {
+            email: error.email || email,
+            role: 'tourist',
+          },
+        });
+      } else {
+        await showErrorAlert('Login failed', 'Invalid credentials.');
+      }
     }
   };
 
@@ -57,20 +84,6 @@ export function TouristLogin() {
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
-            <label className="block text-sm mb-2">Name</label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                placeholder="Enter your name"
-              />
-            </div>
-          </div>
-
-          <div>
             <label className="block text-sm mb-2">Email</label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
@@ -80,6 +93,7 @@ export function TouristLogin() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
                 placeholder="Enter your email"
+                required
               />
             </div>
           </div>
@@ -106,6 +120,15 @@ export function TouristLogin() {
             Sign In as Tourist
           </button>
 
+          <div className="text-center">
+            <Link
+              to="/forgot-password"
+              className="text-sm text-primary hover:underline"
+            >
+              Forgot Password?
+            </Link>
+          </div>
+
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-primary/20"></div>
@@ -115,13 +138,12 @@ export function TouristLogin() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleGuestContinue}
-            className="w-full py-3 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors"
+          <Link
+            to="/tourist/register"
+            className="w-full py-3 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors text-center block"
           >
-            Continue as Guest
-          </button>
+            Sign Up
+          </Link>
         </form>
 
         <div className="mt-6 text-center text-sm text-muted-foreground">

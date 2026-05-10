@@ -1,121 +1,242 @@
-/* SweetAlert2 Custom Styles */
+/* SweetAlert2 Custom Styles - Complete Rewrite */
 
-/* Reduce popup size */
-.swal2-popup {
-  width: 400px !important;
-  max-width: 90vw !important;
-  padding: 1.5rem !important;
-  font-size: 0.95rem !important;
+/* ============================================
+   TOAST MODE (Top-right notifications)
+   ============================================ */
+
+.swal2-container.swal2-top-end {
+  top: 20px !important;
+  right: 20px !important;
+  z-index: 99999 !important;
 }
 
-/* Reduce icon size */
-.swal2-icon {
-  width: 60px !important;
-  height: 60px !important;
-  margin: 1rem auto 1rem !important;
+.swal2-toast {
+  display: flex !important;
+  align-items: center !important;
+  padding: 12px 16px !important;
+  min-width: 300px !important;
+  max-width: 400px !important;
+  box-shadow: none !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+  background: white !important;
 }
 
-.swal2-icon .swal2-icon-content {
-  font-size: 2.5rem !important;
+.swal2-toast .swal2-icon {
+  width: 28px !important;
+  height: 28px !important;
+  margin: 0 12px 0 0 !important;
+  border-width: 2px !important;
+  flex-shrink: 0 !important;
 }
 
-/* Reduce title size */
-.swal2-title {
-  font-size: 1.5rem !important;
-  margin: 0 0 0.5rem !important;
+.swal2-toast .swal2-icon.swal2-success [class^='swal2-success-line'] {
+  height: 3px !important;
+}
+
+.swal2-toast .swal2-icon.swal2-success .swal2-success-ring {
+  width: 28px !important;
+  height: 28px !important;
+}
+
+.swal2-toast .swal2-icon.swal2-error [class^='swal2-x-mark-line'] {
+  width: 16px !important;
+  height: 3px !important;
+}
+
+.swal2-toast .swal2-content {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: center !important;
+  flex: 1 !important;
+  margin: 0 !important;
   padding: 0 !important;
 }
 
-/* Reduce text size */
-.swal2-html-container {
-  font-size: 0.9rem !important;
-  margin: 0.5rem 0 1rem !important;
+.swal2-toast .swal2-title {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 1.4 !important;
+  color: #1f2937 !important;
+  text-align: left !important;
 }
 
-/* Reduce button size */
+.swal2-toast .swal2-html-container {
+  font-size: 13px !important;
+  margin: 2px 0 0 0 !important;
+  padding: 0 !important;
+  line-height: 1.4 !important;
+  color: #6b7280 !important;
+  text-align: left !important;
+}
+
+.swal2-toast .swal2-timer-progress-bar {
+  background: #10b981 !important;
+}
+
+.swal2-toast .swal2-close {
+  display: none !important;
+}
+
+/* ============================================
+   MODAL MODE (Center dialogs)
+   ============================================ */
+
+.swal2-popup:not(.swal2-toast) {
+  width: 400px !important;
+  max-width: 90vw !important;
+  padding: 24px !important;
+  border-radius: 12px !important;
+}
+
+.swal2-popup:not(.swal2-toast) .swal2-icon {
+  width: 60px !important;
+  height: 60px !important;
+  margin: 0 auto 16px !important;
+  border-width: 3px !important;
+}
+
+.swal2-popup:not(.swal2-toast) .swal2-title {
+  font-size: 20px !important;
+  font-weight: 600 !important;
+  margin: 0 0 8px !important;
+  padding: 0 !important;
+  color: #1f2937 !important;
+}
+
+.swal2-popup:not(.swal2-toast) .swal2-html-container {
+  font-size: 14px !important;
+  margin: 0 0 20px !important;
+  padding: 0 !important;
+  color: #6b7280 !important;
+}
+
 .swal2-actions {
-  margin: 1rem 0 0 !important;
-  gap: 0.5rem !important;
+  margin: 20px 0 0 !important;
+  gap: 8px !important;
 }
 
 .swal2-styled {
-  font-size: 0.9rem !important;
-  padding: 0.5rem 1.5rem !important;
+  font-size: 14px !important;
+  padding: 10px 24px !important;
   min-width: 100px !important;
+  border-radius: 6px !important;
+  font-weight: 500 !important;
 }
 
-.swal-success-popup {
-  border-radius: 12px !important;
-  font-family: inherit !important;
+/* ============================================
+   ICON COLORS
+   ============================================ */
+
+.swal2-icon.swal2-success {
+  border-color: #10b981 !important;
+  color: #10b981 !important;
 }
 
-.swal-login-popup {
-  border-radius: 12px !important;
-  font-family: inherit !important;
+.swal2-icon.swal2-success [class^='swal2-success-line'] {
+  background-color: #10b981 !important;
 }
 
-.swal-registration-popup {
-  border-radius: 12px !important;
-  font-family: inherit !important;
+.swal2-icon.swal2-success .swal2-success-ring {
+  border-color: rgba(16, 185, 129, 0.3) !important;
 }
 
-.swal-transaction-popup {
-  border-radius: 12px !important;
-  font-family: inherit !important;
+.swal2-icon.swal2-error {
+  border-color: #ef4444 !important;
+  color: #ef4444 !important;
 }
 
-.swal-product-popup {
-  border-radius: 12px !important;
-  font-family: inherit !important;
+.swal2-icon.swal2-error [class^='swal2-x-mark-line'] {
+  background-color: #ef4444 !important;
 }
 
-.swal-status-popup {
-  border-radius: 12px !important;
-  font-family: inherit !important;
+.swal2-icon.swal2-warning {
+  border-color: #f59e0b !important;
+  color: #f59e0b !important;
 }
 
-.swal-error-popup {
-  border-radius: 12px !important;
-  font-family: inherit !important;
+.swal2-icon.swal2-info {
+  border-color: #3b82f6 !important;
+  color: #3b82f6 !important;
 }
 
-/* Custom button colors to match theme */
+.swal2-icon.swal2-question {
+  border-color: #8b5cf6 !important;
+  color: #8b5cf6 !important;
+}
+
+/* ============================================
+   BUTTON COLORS
+   ============================================ */
+
 .swal2-confirm {
   background-color: #10b981 !important;
   border: none !important;
-  border-radius: 8px !important;
-  font-weight: 500 !important;
+}
+
+.swal2-confirm:hover {
+  background-color: #059669 !important;
 }
 
 .swal2-cancel {
   background-color: #6b7280 !important;
   border: none !important;
-  border-radius: 8px !important;
-  font-weight: 500 !important;
+}
+
+.swal2-cancel:hover {
+  background-color: #4b5563 !important;
 }
 
 .swal2-deny {
   background-color: #ef4444 !important;
   border: none !important;
-  border-radius: 8px !important;
-  font-weight: 500 !important;
 }
 
-/* Progress bar styling */
+.swal2-deny:hover {
+  background-color: #dc2626 !important;
+}
+
+/* ============================================
+   PROGRESS BAR
+   ============================================ */
+
 .swal2-timer-progress-bar {
-  background-color: #10b981 !important;
+  background: #10b981 !important;
 }
 
-/* Icon styling */
-.swal2-success .swal2-success-ring {
-  border-color: #10b981 !important;
+/* ============================================
+   CUSTOM CLASS OVERRIDES
+   ============================================ */
+
+.swal-success-popup,
+.swal-login-popup,
+.swal-registration-popup,
+.swal-transaction-popup,
+.swal-product-popup,
+.swal-status-popup,
+.swal-error-popup,
+.swal-logout-popup,
+.swal-logout-success-popup {
+  font-family: inherit !important;
 }
 
-.swal2-success .swal2-success-fix {
-  background-color: #10b981 !important;
+/* ============================================
+   Z-INDEX FIX
+   ============================================ */
+
+.swal2-container {
+  z-index: 99999 !important;
 }
 
-.swal2-success .swal2-success-line-tip,
-.swal2-success .swal2-success-line-long {
-  background-color: #10b981 !important;
+/* Remove backdrop for toast mode */
+.swal2-container.swal2-top-end .swal2-backdrop-show {
+  display: none !important;
+}
+
+/* Keep backdrop only for modal dialogs */
+.swal2-container:not(.swal2-top-end) .swal2-backdrop-show {
+  background: rgba(0, 0, 0, 0.4) !important;
 }

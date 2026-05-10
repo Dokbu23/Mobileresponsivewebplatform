@@ -17,6 +17,11 @@ class RoleAuth
      */
     public function handle(Request $request, Closure $next, ...$roles)
     {
+        // Allow OPTIONS requests to pass through without authentication (CORS preflight)
+        if ($request->isMethod('OPTIONS')) {
+            return response()->json([], 200);
+        }
+
         $user = $request->user();
         
         if (!$user) {

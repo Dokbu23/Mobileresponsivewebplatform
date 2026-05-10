@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
-import { CreditCard, Building2, CheckCircle, LogIn, Upload, X } from 'lucide-react';
+import { Link, useNavigate } from 'react-router';
+import { CreditCard, Building2, CheckCircle, LogIn, Upload, X, Truck, MapPin, Plus } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
 import { postJSON, getJSON, getPublicJSON, API_BASE } from '../../lib/api';
@@ -9,7 +9,9 @@ import { showTransactionSuccess } from '../../lib/sweetAlert';
 export function Checkout() {
   const { cart, addOrder, clearCart, userType, currentUser } = useApp();
   const navigate = useNavigate();
-  const [paymentMethod, setPaymentMethod] = useState<'online' | 'otc'>('online');
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'online' | 'otc' | 'cod'>('online');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   const [businessPaymentDetails, setBusinessPaymentDetails] = useState<any[]>([]);
@@ -28,6 +30,7 @@ export function Checkout() {
     zipCode: '5213', // Default zip code for Mansalay
     notes: '',
   });
+  const [hasAppliedSavedAddress, setHasAppliedSavedAddress] = useState(false);
 
   useEffect(() => {
     if (!userType) {
@@ -35,6 +38,47 @@ export function Checkout() {
       navigate('/select-role');
     }
   }, [userType, navigate]);
+
+  useEffect(() => {
+    if (userType !== 'tourist' || hasAppliedSavedAddress) {
+      return;
+    }
+
+    const loadDefaultAddress = async () => {
+      try {
+        const addresses = await getJSON('/shipping-addresses');
+        setSavedAddresses(addresses ?? []);
+        const defaultAddress = addresses?.find((address: any) => address.is_default);
+
+        const hasShippingInput = Boolean(
+          shippingInfo.fullName ||
+          shippingInfo.phone ||
+          shippingInfo.address ||
+          shippingInfo.barangay
+        );
+
+        if (defaultAddress && !hasShippingInput) {
+          setSelectedAddressId(defaultAddress.id ?? null);
+          setShippingInfo({
+            fullName: defaultAddress.full_name ?? '',
+            phone: defaultAddress.phone ?? '',
+            address: defaultAddress.address ?? '',
+            barangay: defaultAddress.barangay ?? '',
+            city: defaultAddress.city ?? 'Mansalay',
+            province: defaultAddress.province ?? 'Oriental Mindoro',
+            zipCode: defaultAddress.zip ?? '5213',
+            notes: defaultAddress.notes ?? '',
+          });
+        }
+      } catch (error) {
+        // Ignore address load errors to avoid blocking checkout.
+      } finally {
+        setHasAppliedSavedAddress(true);
+      }
+    };
+
+    loadDefaultAddress();
+  }, [userType, hasAppliedSavedAddress, shippingInfo]);
 
   useEffect(() => {
     if (paymentMethod === 'online') {
@@ -93,6 +137,20 @@ export function Checkout() {
   const removeReceipt = () => {
     setReceiptFile(null);
     setReceiptPreview(null);
+  };
+
+  const applyAddress = (address: any) => {
+    if (!address) return;
+    setShippingInfo({
+      fullName: address.full_name ?? '',
+      phone: address.phone ?? '',
+      address: address.address ?? '',
+      barangay: address.barangay ?? '',
+      city: address.city ?? 'Mansalay',
+      province: address.province ?? 'Oriental Mindoro',
+      zipCode: address.zip ?? '5213',
+      notes: address.notes ?? '',
+    });
   };
 
   if (!userType) {
@@ -166,44 +224,71 @@ export function Checkout() {
     setIsProcessing(true);
 
     try {
-      const order = await postJSON('/api/orders', {
+      console.log('Creating order with data:', {
         items: cart,
         total,
         payment_method: paymentMethod,
         user_role: userType,
         user_id: currentUser?.id,
+        shipping_info: shippingInfo,
+      });
+      
+      const order = await postJSON('/orders', {
+        items: cart,
+        total,
+        payment_method: paymentMethod,
+        user_role: userType,
+        user_id: currentUser?.id,
+        shipping_info: shippingInfo,
       });
 
-      // If online payment, upload receipt
-      if (paymentMethod === 'online' && receiptFile && selectedPayment) {
-        const formData = new FormData();
-        formData.append('type', 'order');
-        formData.append('reference_id', order.id.toString());
-        formData.append('business_id', selectedPayment.business_id.toString());
-        formData.append('receipt_image', receiptFile);
-        formData.append('amount', total.toString());
-        formData.append('payment_method', selectedPayment.type);
-        formData.append('payment_reference', paymentReference);
-        formData.append('notes', paymentNotes);
+      console.log('Order created successfully:', order);
 
-        const token = localStorage.getItem('discover-mansalay:token');
-        await fetch(`${API_BASE}/api/payment-receipts`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-          body: formData,
+      // Handle multiple orders response
+      const orders = order.orders || [order];
+      const isMultipleOrders = Array.isArray(order.orders) && order.orders.length > 1;
+
+      // If online payment, upload receipt for each order
+      if (paymentMethod === 'online' && receiptFile && selectedPayment) {
+        for (const singleOrder of orders) {
+          const formData = new FormData();
+          formData.append('type', 'order');
+          formData.append('reference_id', singleOrder.id.toString());
+          formData.append('business_id', selectedPayment.business_id.toString());
+          formData.append('receipt_image', receiptFile);
+          formData.append('amount', singleOrder.total.toString());
+          formData.append('payment_method', selectedPayment.type);
+          formData.append('payment_reference', paymentReference);
+          formData.append('notes', paymentNotes);
+
+          const token = localStorage.getItem('discover-mansalay:token');
+          await fetch(`${API_BASE}/api/payment-receipts`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+            body: formData,
+          });
+        }
+      }
+
+      // Add orders to local state
+      for (const singleOrder of orders) {
+        addOrder({
+          items: singleOrder.items,
+          total: singleOrder.total,
+          status: singleOrder.status ?? 'pending',
+          paymentMethod,
         });
       }
 
-      addOrder({
-        items: cart,
-        total,
-        status: order.status ?? 'pending',
-        paymentMethod,
-      });
-
       clearCart();
+      
+      // Show appropriate success message
+      if (isMultipleOrders) {
+        toast.success(`${orders.length} orders created for different businesses`);
+      }
+      
       const result = await showTransactionSuccess('order');
       
       if (result.isConfirmed) {
@@ -212,7 +297,14 @@ export function Checkout() {
         navigate('/products');
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to place order');
+      console.error('Order creation error:', error);
+      if (error instanceof Error) {
+        console.error('Error message:', error.message);
+        toast.error(error.message);
+      } else {
+        console.error('Unknown error:', error);
+        toast.error('Failed to place order');
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -242,118 +334,221 @@ export function Checkout() {
       <div className="space-y-6">
         {/* Shipping Information */}
         <div className="bg-white border-2 border-primary/20 rounded-lg p-6">
-          <h2 className="mb-4">Shipping Information</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm mb-2">Full Name *</label>
-              <input
-                type="text"
-                value={shippingInfo.fullName}
-                onChange={(e) => setShippingInfo({ ...shippingInfo, fullName: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                placeholder="Juan Dela Cruz"
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-2">Phone Number *</label>
-              <input
-                type="tel"
-                value={shippingInfo.phone}
-                onChange={(e) => setShippingInfo({ ...shippingInfo, phone: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                placeholder="+63 912 345 6789"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm mb-2">Complete Address *</label>
-              <input
-                type="text"
-                value={shippingInfo.address}
-                onChange={(e) => setShippingInfo({ ...shippingInfo, address: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                placeholder="Street, House/Unit Number"
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-2">Barangay *</label>
-              <select
-                value={shippingInfo.barangay}
-                onChange={(e) => setShippingInfo({ ...shippingInfo, barangay: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                required
-              >
-                <option value="">Select Barangay</option>
-                <optgroup label="A - D">
-                  <option value="B. Del Mundo">B. Del Mundo</option>
-                  <option value="Balugo">Balugo</option>
-                  <option value="Bonbon">Bonbon</option>
-                  <option value="Budburan">Budburan</option>
-                  <option value="Cabalwa">Cabalwa</option>
-                  <option value="Don Pedro">Don Pedro</option>
-                </optgroup>
-                <optgroup label="M - P">
-                  <option value="Maliwanag">Maliwanag</option>
-                  <option value="Manaul">Manaul</option>
-                  <option value="Panaytayan">Panaytayan</option>
-                  <option value="Poblacion">Poblacion</option>
-                </optgroup>
-                <optgroup label="R - S">
-                  <option value="Roma">Roma</option>
-                  <option value="Santa Brigida (Sta. Brigida)">Santa Brigida (Sta. Brigida)</option>
-                  <option value="Santa Maria">Santa Maria</option>
-                  <option value="Santa Teresita">Santa Teresita</option>
-                </optgroup>
-                <optgroup label="V - W">
-                  <option value="Villa Celestial">Villa Celestial</option>
-                  <option value="Wasig">Wasig</option>
-                  <option value="Waygan">Waygan</option>
-                </optgroup>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm mb-2">City/Municipality *</label>
-              <input
-                type="text"
-                value={shippingInfo.city}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
-                placeholder="Mansalay"
-                disabled
-                readOnly
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-2">Province</label>
-              <input
-                type="text"
-                value={shippingInfo.province}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
-                placeholder="Oriental Mindoro"
-                disabled
-                readOnly
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-2">Zip Code</label>
-              <input
-                type="text"
-                value={shippingInfo.zipCode}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
-                placeholder="5213"
-                disabled
-                readOnly
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm mb-2">Delivery Notes (Optional)</label>
-              <textarea
-                value={shippingInfo.notes}
-                onChange={(e) => setShippingInfo({ ...shippingInfo, notes: e.target.value })}
-                rows={3}
-                className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                placeholder="Landmark, special instructions, etc."
-              />
-            </div>
+          <div className="flex items-center justify-between mb-4">
+            <h2>Shipping Information</h2>
+            <Link
+              to="/shipping-addresses"
+              className="text-sm text-primary hover:text-primary/80 flex items-center gap-1"
+            >
+              <MapPin className="h-4 w-4" />
+              Manage addresses
+            </Link>
           </div>
+
+          {/* Address Selection */}
+          {savedAddresses.length > 0 ? (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm mb-3 font-medium">Choose Delivery Address</label>
+                <div className="space-y-3">
+                  {savedAddresses.map((address) => (
+                    <label
+                      key={address.id}
+                      className={`block p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                        selectedAddressId === address.id
+                          ? 'border-primary bg-primary/5'
+                          : 'border-gray-200 hover:border-primary/50'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="radio"
+                          name="address"
+                          value={address.id}
+                          checked={selectedAddressId === address.id}
+                          onChange={() => {
+                            setSelectedAddressId(address.id);
+                            applyAddress(address);
+                          }}
+                          className="mt-1 w-4 h-4 text-primary"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium">{address.full_name}</span>
+                            {address.is_default && (
+                              <span className="px-2 py-0.5 bg-primary text-white text-xs rounded-full">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600">{address.phone}</p>
+                          <p className="text-sm text-gray-600">
+                            {address.address}, {address.barangay}, {address.city}
+                          </p>
+                          {address.notes && (
+                            <p className="text-xs text-gray-500 mt-1">Note: {address.notes}</p>
+                          )}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Manual Address Entry Toggle */}
+              <div className="border-t pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedAddressId(null);
+                    setShippingInfo({
+                      fullName: '',
+                      phone: '',
+                      address: '',
+                      barangay: '',
+                      city: 'Mansalay',
+                      province: 'Oriental Mindoro',
+                      zipCode: '5213',
+                      notes: '',
+                    });
+                  }}
+                  className="text-sm text-primary hover:text-primary/80"
+                >
+                  + Use a different address
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-6">
+              <MapPin className="h-12 w-12 mx-auto text-gray-400 mb-3" />
+              <p className="text-gray-600 mb-4">No saved addresses yet</p>
+              <Link
+                to="/shipping-addresses"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Add Address
+              </Link>
+            </div>
+          )}
+
+          {/* Manual Address Form (shown when no address selected or "use different address" clicked) */}
+          {(savedAddresses.length === 0 || selectedAddressId === null) && (
+            <div className="mt-6 pt-6 border-t">
+              <h3 className="text-sm font-medium mb-4">Enter Delivery Address</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm mb-2">Full Name *</label>
+                  <input
+                    type="text"
+                    value={shippingInfo.fullName}
+                    onChange={(e) => setShippingInfo({ ...shippingInfo, fullName: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                    placeholder="Juan Dela Cruz"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm mb-2">Phone Number *</label>
+                  <input
+                    type="tel"
+                    value={shippingInfo.phone}
+                    onChange={(e) => setShippingInfo({ ...shippingInfo, phone: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                    placeholder="+63 912 345 6789"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm mb-2">Complete Address *</label>
+                  <input
+                    type="text"
+                    value={shippingInfo.address}
+                    onChange={(e) => setShippingInfo({ ...shippingInfo, address: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                    placeholder="Street, House/Unit Number"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm mb-2">Barangay *</label>
+                  <select
+                    value={shippingInfo.barangay}
+                    onChange={(e) => setShippingInfo({ ...shippingInfo, barangay: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                    required
+                  >
+                    <option value="">Select Barangay</option>
+                    <optgroup label="A - D">
+                      <option value="B. Del Mundo">B. Del Mundo</option>
+                      <option value="Balugo">Balugo</option>
+                      <option value="Bonbon">Bonbon</option>
+                      <option value="Budburan">Budburan</option>
+                      <option value="Cabalwa">Cabalwa</option>
+                      <option value="Don Pedro">Don Pedro</option>
+                    </optgroup>
+                    <optgroup label="M - P">
+                      <option value="Maliwanag">Maliwanag</option>
+                      <option value="Manaul">Manaul</option>
+                      <option value="Panaytayan">Panaytayan</option>
+                      <option value="Poblacion">Poblacion</option>
+                    </optgroup>
+                    <optgroup label="R - S">
+                      <option value="Roma">Roma</option>
+                      <option value="Santa Brigida (Sta. Brigida)">Santa Brigida (Sta. Brigida)</option>
+                      <option value="Santa Maria">Santa Maria</option>
+                      <option value="Santa Teresita">Santa Teresita</option>
+                    </optgroup>
+                    <optgroup label="V - W">
+                      <option value="Villa Celestial">Villa Celestial</option>
+                      <option value="Wasig">Wasig</option>
+                      <option value="Waygan">Waygan</option>
+                    </optgroup>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm mb-2">City/Municipality *</label>
+                  <input
+                    type="text"
+                    value={shippingInfo.city}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                    placeholder="Mansalay"
+                    disabled
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm mb-2">Province</label>
+                  <input
+                    type="text"
+                    value={shippingInfo.province}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                    placeholder="Oriental Mindoro"
+                    disabled
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm mb-2">Zip Code</label>
+                  <input
+                    type="text"
+                    value={shippingInfo.zipCode}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                    placeholder="5213"
+                    disabled
+                    readOnly
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm mb-2">Delivery Notes (Optional)</label>
+                  <textarea
+                    value={shippingInfo.notes}
+                    onChange={(e) => setShippingInfo({ ...shippingInfo, notes: e.target.value })}
+                    rows={3}
+                    className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                    placeholder="Landmark, special instructions, etc."
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Order Items */}
@@ -388,7 +583,7 @@ export function Checkout() {
                 name="payment"
                 value="online"
                 checked={paymentMethod === 'online'}
-                onChange={(e) => setPaymentMethod(e.target.value as 'online')}
+                onChange={(e) => setPaymentMethod(e.target.value as 'online' | 'otc' | 'cod')}
                 className="w-4 h-4 text-primary"
               />
               <CreditCard className="h-5 w-5 text-primary" />
@@ -404,9 +599,27 @@ export function Checkout() {
               <input
                 type="radio"
                 name="payment"
+                value="cod"
+                checked={paymentMethod === 'cod'}
+                onChange={(e) => setPaymentMethod(e.target.value as 'online' | 'otc' | 'cod')}
+                className="w-4 h-4 text-primary"
+              />
+              <Truck className="h-5 w-5 text-primary" />
+              <div className="flex-1">
+                <p>Cash on Delivery (COD)</p>
+                <p className="text-sm text-muted-foreground">
+                  Pay with cash when your order is delivered
+                </p>
+              </div>
+            </label>
+
+            <label className="flex items-center gap-3 p-4 border-2 border-primary/20 rounded-lg cursor-pointer hover:border-primary transition-colors">
+              <input
+                type="radio"
+                name="payment"
                 value="otc"
                 checked={paymentMethod === 'otc'}
-                onChange={(e) => setPaymentMethod(e.target.value as 'otc')}
+                onChange={(e) => setPaymentMethod(e.target.value as 'online' | 'otc' | 'cod')}
                 className="w-4 h-4 text-primary"
               />
               <Building2 className="h-5 w-5 text-primary" />
@@ -426,6 +639,9 @@ export function Checkout() {
             <h2 className="mb-4">Business Payment Details</h2>
             <p className="text-sm text-muted-foreground mb-4">
               Select a payment method and send your payment, then upload the receipt below.
+            </p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Pay the exact amount: ₱{total.toFixed(2)}
             </p>
             
             <div className="space-y-3 mb-6">
@@ -536,7 +752,10 @@ export function Checkout() {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Payment Method</span>
-              <span>{paymentMethod === 'online' ? 'Online Payment' : 'Over-the-Counter'}</span>
+              <span>
+                {paymentMethod === 'online' ? 'Online Payment' : 
+                 paymentMethod === 'cod' ? 'Cash on Delivery' : 'Over-the-Counter'}
+              </span>
             </div>
             <div className="border-t border-primary/20 pt-2 flex justify-between">
               <span>Total</span>

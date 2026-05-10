@@ -186,3 +186,50 @@ export const showConfirmAlert = (title: string, text: string) => {
     cancelButtonText: 'Cancel'
   });
 };
+
+// Confirmation dialog (returns boolean)
+export const showConfirmDialog = async (
+  title: string,
+  text: string,
+  confirmText: string = 'Confirm',
+  cancelText: string = 'Cancel'
+): Promise<boolean> => {
+  const result = await Swal.fire({
+    icon: 'warning',
+    title,
+    text,
+    showCancelButton: true,
+    confirmButtonColor: '#ef4444',
+    cancelButtonColor: '#6b7280',
+    confirmButtonText: confirmText,
+    cancelButtonText: cancelText
+  });
+  return result.isConfirmed;
+};
+
+// Payment method success alert
+export const showPaymentMethodSuccess = (action: 'added' | 'deleted', methodName?: string) => {
+  const titles = {
+    added: 'Payment Method Added!',
+    deleted: 'Payment Method Removed!'
+  };
+
+  const texts = {
+    added: `${methodName || 'Payment method'} has been added successfully.`,
+    deleted: `${methodName || 'Payment method'} has been removed successfully.`
+  };
+
+  return Swal.fire({
+    icon: 'success',
+    title: titles[action],
+    text: texts[action],
+    showConfirmButton: false,
+    timer: 2000,
+    timerProgressBar: true,
+    toast: true,
+    position: 'top-end',
+    customClass: {
+      popup: 'swal-product-popup'
+    }
+  });
+};

@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import { MapPin, Calendar, ShoppingBag, Hotel, ArrowRight, Users, ShoppingCart, Star, TrendingUp, Package } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { getJSON } from '../../lib/api';
+import { getPublicJSON } from '../../lib/api';
+import { OrderTrackingWidget } from '../../components/OrderTrackingWidget';
 
 export function Dashboard() {
   const { userType, cart, bookings } = useApp();
@@ -16,10 +17,10 @@ export function Dashboard() {
     (async () => {
       try {
         const [attractionsRes, productsRes, accommodationsRes, eventsRes] = await Promise.all([
-          getJSON('/api/attractions'),
-          getJSON('/api/products'),
-          getJSON('/api/accommodations'),
-          getJSON('/api/events'),
+          getPublicJSON('/attractions'),
+          getPublicJSON('/products'),
+          getPublicJSON('/accommodations'),
+          getPublicJSON('/events'),
         ]);
 
         setAttractions(Array.isArray(attractionsRes) ? attractionsRes : []);
@@ -113,28 +114,6 @@ export function Dashboard() {
 
   return (
     <div className="min-h-screen">
-      {/* Role Selection Banner */}
-      {!userType && (
-        <div className="bg-primary/10 border-b-2 border-primary/20">
-          <div className="max-w-7xl mx-auto px-4 py-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Users className="h-6 w-6 text-primary" />
-                <div>
-                  <p className="text-sm">Welcome! Please select your role to get the full experience</p>
-                </div>
-              </div>
-              <Link
-                to="/select-role"
-                className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors whitespace-nowrap"
-              >
-                Select Role
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Tourist Stats (only show if logged in as tourist) */}
       {userType === 'tourist' && (
         <div className="bg-gradient-to-r from-primary/5 to-secondary/10 border-b-2 border-primary/20">
@@ -166,27 +145,48 @@ export function Dashboard() {
         </div>
       )}
 
+      {/* Real-time Order Tracking Widget (only show if logged in as tourist) */}
+      {userType === 'tourist' && (
+        <div className="bg-gradient-to-r from-primary/5 to-secondary/10 border-b-2 border-primary/20">
+          <div className="max-w-7xl mx-auto px-4 py-6">
+            <OrderTrackingWidget />
+          </div>
+        </div>
+      )}
+
       {/* Hero Section */}
-      <section className="relative bg-gradient-to-br from-primary/10 via-secondary/20 to-accent/10 py-20 px-4">
-        <div className="max-w-7xl mx-auto text-center">
-          <h1 className="text-4xl md:text-6xl mb-6 text-foreground">
+      <section 
+        className="relative py-20 px-4"
+        style={{
+          backgroundImage: 'url(http://localhost:8000/background_landingpage/mansalay.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        {/* Dark overlay for better text readability */}
+        <div className="absolute inset-0 bg-black/50"></div>
+        
+        {/* Content */}
+        <div className="max-w-7xl mx-auto text-center relative z-10">
+          <h1 className="text-4xl md:text-6xl mb-6 text-white drop-shadow-lg">
             Welcome to DiscoverMansalay
           </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
+          <p className="text-lg md:text-xl text-white/90 max-w-2xl mx-auto mb-8 drop-shadow-md">
             Your gateway to experiencing the rich culture, stunning landscapes,
             and warm hospitality of Mansalay
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               to="/attractions"
-              className="px-8 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-2"
+              className="px-8 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-2 shadow-lg"
             >
               Start Exploring
               <ArrowRight className="h-5 w-5" />
             </Link>
             <Link
               to="/accommodations"
-              className="px-8 py-3 bg-white text-primary border-2 border-primary rounded-lg hover:bg-primary/5 transition-colors"
+              className="px-8 py-3 bg-white text-primary border-2 border-white rounded-lg hover:bg-white/90 transition-colors shadow-lg"
             >
               Book Your Stay
             </Link>

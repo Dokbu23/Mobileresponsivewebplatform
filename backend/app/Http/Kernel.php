@@ -16,7 +16,8 @@ class Kernel extends HttpKernel
     protected $middleware = [
         // \App\Http\Middleware\TrustHosts::class,
         \App\Http\Middleware\TrustProxies::class,
-        \Fruitcake\Cors\HandleCors::class,
+        \App\Http\Middleware\CorsMiddleware::class, // Custom CORS middleware
+        // \Fruitcake\Cors\HandleCors::class, // DISABLED - Using custom CORS middleware
         \App\Http\Middleware\PreventRequestsDuringMaintenance::class,
         \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
         \App\Http\Middleware\TrimStrings::class,
@@ -67,5 +68,6 @@ class Kernel extends HttpKernel
         'role' => \App\Http\Middleware\RoleAuth::class,
         'api.rate' => \App\Http\Middleware\ApiRateLimit::class,
         'api.validate' => \App\Http\Middleware\ValidateApiRequest::class,
+        'check.subscription' => \App\Http\Middleware\CheckSubscription::class,
     ];
 }

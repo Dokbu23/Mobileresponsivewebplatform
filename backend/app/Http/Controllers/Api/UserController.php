@@ -27,6 +27,15 @@ class UserController extends Controller
         ]);
     }
 
+    public function paymentDetails(Request $request)
+    {
+        $user = $request->user();
+
+        return response()->json([
+            'payment_details' => $user->payment_details ?? []
+        ]);
+    }
+
     public function show($id)
     {
         $user = User::findOrFail($id);

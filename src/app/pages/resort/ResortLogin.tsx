@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router';
 import { Hotel, Mail, Lock } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
-import { postJSON } from '../../lib/api';
+import { postJSON, setAuthToken } from '../../lib/api';
 import { showErrorAlert, showLoginSuccess } from '../../lib/sweetAlert';
 
 export function ResortLogin() {
@@ -11,6 +11,19 @@ export function ResortLogin() {
   const [password, setPassword] = useState('');
   const { setUserType, setCurrentUser } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Check if redirected from email verification
+  useEffect(() => {
+    if (location.state?.verificationSuccess) {
+      toast.success('Email verified successfully! You can now login.', { duration: 5000 });
+      
+      // Pre-fill email if provided
+      if (location.state?.email) {
+        setEmail(location.state.email);
+      }
+    }
+  }, [location.state]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,12 +34,39 @@ export function ResortLogin() {
         password,
         role: 'resort',
       }, false);
+      
+      // Store the JWT token
+      setAuthToken(response.token);
+      
       setUserType('resort');
       setCurrentUser(response.user);
-      await showLoginSuccess(response.user.name, 'Resort');
-      navigate('/resort/dashboard');
-    } catch {
-      await showErrorAlert('Login failed', 'Invalid credentials.');
+      
+      // Check subscription status
+      if (response.user.subscription_status === 'unpaid') {
+        await showLoginSuccess(response.user.name, 'Resort');
+        toast.info('Please complete your subscription payment to access all features');
+        navigate('/resort/dashboard');
+      } else if (response.user.subscription_status === 'pending') {
+        await showLoginSuccess(response.user.name, 'Resort');
+        toast.info('Your payment is being reviewed by admin');
+        navigate('/resort/dashboard');
+      } else {
+        await showLoginSuccess(response.user.name, 'Resort');
+        navigate('/resort/dashboard');
+      }
+    } catch (error: any) {
+      // Check if error is due to unverified email
+      if (error.requires_verification) {
+        toast.info('Please verify your email first');
+        navigate('/resort/verify-email', {
+          state: {
+            email: email,
+            role: 'resort',
+          },
+        });
+      } else {
+        await showErrorAlert('Login failed', 'Invalid credentials.');
+      }
     }
   };
 
@@ -81,8 +121,13 @@ export function ResortLogin() {
             Sign In
           </button>
 
-          <div className="text-center text-sm text-muted-foreground">
-            Demo credentials: resort@discovermansalay.test / password123
+          <div className="text-center">
+            <Link
+              to="/forgot-password"
+              className="text-sm text-primary hover:underline"
+            >
+              Forgot Password?
+            </Link>
           </div>
 
           <div className="relative">

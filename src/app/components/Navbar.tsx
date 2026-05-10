@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { ShoppingCart, Menu, X, MapPin, User, LogOut, Shield, Hotel, Store } from 'lucide-react';
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { NotificationBell } from './NotificationBell';
 import { showLogoutConfirm, showLogoutSuccess } from '../lib/sweetAlert';
 
 type RoleType = 'tourist' | 'admin' | 'resort' | 'enterprise';
@@ -14,7 +15,7 @@ type RoleMenuItem = {
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const { cart, userType, setUserType, setIsAdmin, clearCart, setCurrentUser } = useApp();
+  const { cart, userType, setUserType, setIsAdmin, clearCart, setCurrentUser, currentUser } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -33,7 +34,7 @@ export function Navbar() {
   })();
 
   const navLinks = [
-    { path: dashboardPath, label: 'Dashboard' },
+    { path: dashboardPath, label: 'Home' },
     { path: '/attractions', label: 'Attractions' },
     { path: '/events', label: 'Events' },
     { path: '/products', label: 'Products' },
@@ -46,12 +47,15 @@ export function Navbar() {
     tourist: [
       { to: '/', label: 'Dashboard' },
       { to: '/status', label: 'My Orders & Bookings' },
+      { to: '/settings', label: 'Settings' },
     ],
     admin: [
       { to: '/admin/dashboard', label: 'Dashboard' },
       { to: '/admin/listings', label: 'Manage Listings' },
+      { to: '/admin/events', label: 'Manage Events' },
       { to: '/admin/users', label: 'User Management' },
-      { to: '/admin/orders', label: 'Manage Orders' },
+      { to: '/admin/subscriptions', label: 'Subscriptions' },
+      { to: '/admin/payment-settings', label: 'Payment Settings' },
     ],
     resort: [
       { to: '/resort/dashboard', label: 'Dashboard' },
@@ -60,6 +64,7 @@ export function Navbar() {
     enterprise: [
       { to: '/enterprise/dashboard', label: 'Dashboard' },
       { to: '/enterprise/profile', label: 'Manage Products' },
+      { to: '/enterprise/orders', label: 'Manage Orders' },
     ],
   };
 
@@ -90,13 +95,13 @@ export function Navbar() {
   const getRoleInfo = () => {
     switch (userType) {
       case 'tourist':
-        return { icon: User, label: 'Tourist', color: 'text-blue-600' };
+        return { icon: User, label: currentUser?.name || 'Tourist', color: 'text-blue-600' };
       case 'admin':
-        return { icon: Shield, label: 'Admin', color: 'text-purple-600' };
+        return { icon: Shield, label: currentUser?.name || 'Admin', color: 'text-purple-600' };
       case 'resort':
-        return { icon: Hotel, label: 'Resort Owner', color: 'text-green-600' };
+        return { icon: Hotel, label: currentUser?.name || 'Resort Owner', color: 'text-green-600' };
       case 'enterprise':
-        return { icon: Store, label: 'Enterprise', color: 'text-pink-600' };
+        return { icon: Store, label: currentUser?.name || 'Enterprise', color: 'text-pink-600' };
       default:
         return { icon: User, label: 'Guest', color: 'text-gray-600' };
     }
@@ -142,45 +147,69 @@ export function Navbar() {
               </Link>
             ) : null}
 
-            {/* User Role Menu */}
-            <div className="relative">
-              <button
-                onClick={() => userType ? setShowUserMenu(!showUserMenu) : navigate('/select-role')}
-                className="flex items-center gap-2 px-4 py-2 bg-primary/10 border-2 border-primary/20 rounded-lg hover:border-primary transition-colors"
-              >
-                <RoleIcon className={`h-5 w-5 ${roleInfo.color}`} />
-                <span className="text-sm">{roleInfo.label}</span>
-              </button>
+            {/* Notification Bell - Show for all logged in users */}
+            {userType && <NotificationBell />}
 
-              {showUserMenu && userType && (
-                <div className="absolute right-0 mt-2 w-56 bg-white border-2 border-primary/20 rounded-lg shadow-lg overflow-hidden">
-                  <div className="p-3 border-b border-primary/20 bg-primary/5">
-                    <p className="text-sm">Current Role</p>
-                    <p className={`flex items-center gap-2 ${roleInfo.color}`}>
-                      <RoleIcon className="h-4 w-4" />
-                      {roleInfo.label}
-                    </p>
-                  </div>
-                  {activeRoleItems.map(item => (
-                    <Link
-                      key={item.to}
-                      to={item.to}
+            {/* User Role Menu */}
+            {userType ? (
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary/10 border-2 border-primary/20 rounded-lg hover:border-primary transition-colors"
+                >
+                  <RoleIcon className={`h-5 w-5 ${roleInfo.color}`} />
+                  <span className="text-sm">{roleInfo.label}</span>
+                </button>
+
+                {showUserMenu && (
+                  <>
+                    {/* Backdrop to close menu when clicking outside */}
+                    <div 
+                      className="fixed inset-0 z-10" 
                       onClick={() => setShowUserMenu(false)}
-                      className="block px-4 py-3 hover:bg-primary/5 transition-colors"
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
-                  <button
-                    onClick={handleLogout}
-                    className="w-full text-left px-4 py-3 hover:bg-primary/5 transition-colors flex items-center gap-2 text-destructive"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Logout
-                  </button>
-                </div>
-              )}
-            </div>
+                    />
+                    <div className="absolute right-0 mt-2 w-56 bg-white border-2 border-primary/20 rounded-lg shadow-lg overflow-hidden z-20">
+                      <div className="p-3 border-b border-primary/20 bg-primary/5">
+                        <p className="text-sm text-muted-foreground">Current Role</p>
+                        <p className={`flex items-center gap-2 font-medium ${roleInfo.color}`}>
+                          <RoleIcon className="h-4 w-4" />
+                          {roleInfo.label}
+                        </p>
+                      </div>
+                      <div className="py-1">
+                        {activeRoleItems.map(item => (
+                          <Link
+                            key={item.to}
+                            to={item.to}
+                            onClick={() => setShowUserMenu(false)}
+                            className="block px-4 py-3 hover:bg-primary/5 transition-colors text-foreground"
+                          >
+                            {item.label}
+                          </Link>
+                        ))}
+                      </div>
+                      <div className="border-t border-primary/20">
+                        <button
+                          onClick={handleLogout}
+                          className="w-full text-left px-4 py-3 hover:bg-destructive/10 transition-colors flex items-center gap-2 text-destructive font-medium"
+                        >
+                          <LogOut className="h-4 w-4" />
+                          Logout
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <Link
+                to="/select-role"
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+              >
+                <User className="h-5 w-5" />
+                <span className="text-sm">Login / Register</span>
+              </Link>
+            )}
           </div>
 
           {/* Mobile Menu Button */}

@@ -10,46 +10,59 @@ class ProductController extends Controller
     /**
      * Display a listing of the resource.
      *
+     * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function index()
+    public function index(Request $request)
     {
-        return response()->json(\App\Models\Product::all());
+        $query = \App\Models\Product::query();
+
+        // Apply search filter (case-insensitive search on name and description)
+        // Products do not support location or date filters
+        if ($request->has('search') && $request->input('search') !== '') {
+            $search = $request->input('search');
+            $query->where(function($q) use ($search) {
+                $q->where('name', 'LIKE', "%{$search}%")
+                  ->orWhere('description', 'LIKE', "%{$search}%");
+            });
+        }
+
+        return response()->json($query->get());
     }
 
     /**
      * Store a newly created resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * - Enterprise owner: sets is_registered = true automatically
+     * - Admin: sets is_registered = false (static listing)
      */
     public function store(Request $request)
     {
         $data = $request->validate([
-            'name' => 'required|string|max:255',
+            'name'        => 'required|string|max:255',
             'description' => 'nullable|string',
-            'price' => 'required|numeric',
-            'stock' => 'required|integer',
-            'image' => 'nullable|file|image|max:5120',
-            'category' => 'nullable|string|max:255',
-            'user_id' => 'nullable|integer', // User ID of the product owner
+            'price'       => 'required|numeric',
+            'stock'       => 'required|integer',
+            'image'       => 'nullable|file|image|max:5120',
+            'category'    => 'nullable|string|max:255',
+            'user_id'     => 'nullable|integer',
         ]);
 
-        \Log::info('Store request received', ['hasFile' => $request->hasFile('image')]);
+        $user = $request->user();
 
         // handle uploaded image file
         if ($request->hasFile('image')) {
             try {
                 $file = $request->file('image');
-                \Log::info('File detected', ['name' => $file->getClientOriginalName(), 'size' => $file->getSize()]);
                 $path = $file->store('products', 'public');
                 $data['image'] = '/storage/' . $path;
-                \Log::info('File stored successfully', ['path' => $path]);
             } catch (\Exception $e) {
-                \Log::error('File storage error', ['error' => $e->getMessage()]);
                 return response()->json(['error' => 'Failed to store file: ' . $e->getMessage()], 400);
             }
         }
+
+        // Enterprise owner creates a registered listing; admin creates a static listing
+        $data['user_id']       = ($user && $user->role === 'enterprise') ? $user->id : ($data['user_id'] ?? null);
+        $data['is_registered'] = ($user && $user->role === 'enterprise');
 
         $product = \App\Models\Product::create($data);
 
@@ -129,5 +142,27 @@ class ProductController extends Controller
         $product->delete();
 
         return response()->json(['message' => 'Product deleted']);
+    }
+
+    /**
+     * Get public business profile for an enterprise owner.
+     * Returns owner info + all their products.
+     * Used for the dedicated business page visible to tourists.
+     */
+    public function businessProfile($userId)
+    {
+        $owner = \App\Models\User::where('id', $userId)
+            ->where('role', 'enterprise')
+            ->where('listing_status', 'approved')
+            ->select('id', 'name', 'email', 'phone', 'address', 'barangay', 'description', 'payment_details')
+            ->firstOrFail();
+
+        $products = \App\Models\Product::where('user_id', $userId)->get();
+
+        return response()->json([
+            'owner'         => $owner,
+            'products'      => $products,
+            'is_registered' => true,
+        ]);
     }
 }

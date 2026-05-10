@@ -9,13 +9,14 @@ class Product extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name','description','price','stock','image','category','user_id'];
+    protected $fillable = ['name','description','price','stock','image','category','user_id','is_registered'];
 
-    /**
-     * Get the user that owns the product.
-     */
-    public function user()
+    protected $casts = [
+        'is_registered' => 'boolean',
+    ];
+
+    public function owner()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

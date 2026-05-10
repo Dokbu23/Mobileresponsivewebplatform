@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Store, Plus, Edit, Trash2, Package, DollarSign, ShoppingCart, TrendingUp, BarChart3, ChevronDown, CreditCard, Eye, CheckCircle, XCircle } from 'lucide-react';
+import { Store, Plus, Edit, Trash2, Package, DollarSign, ShoppingCart, TrendingUp, BarChart3, ChevronDown, CreditCard, Eye, CheckCircle, XCircle, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router';
 import { useApp } from '../../context/AppContext';
 import { getAuthToken, getJSON, getPublicJSON, postJSON, putJSON, patchJSON } from '../../lib/api';
-import { showProductSuccess, showStatusUpdateSuccess } from '../../lib/sweetAlert';
+import { showPaymentMethodSuccess, showProductSuccess, showStatusUpdateSuccess } from '../../lib/sweetAlert';
 
 interface Product {
   id: string;
@@ -30,13 +30,33 @@ interface Order {
   created_at: string;
 }
 
+interface Event {
+  id: number;
+  name: string;
+  location: string | null;
+  category: string | null;
+  image: string | null;
+  date: string | null;
+  time: string | null;
+  capacity: string | null;
+  description: string | null;
+  full_description: string | null;
+  user_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+const CATEGORIES = ['Festival', 'Concert', 'Workshop', 'Sports', 'Cultural', 'Other'];
+
 export function EnterpriseProfile() {
   const { currentUser } = useApp();
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
   const [newProduct, setNewProduct] = useState({
     name: '',
     description: '',
@@ -46,6 +66,22 @@ export function EnterpriseProfile() {
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  
+  // Event management state
+  const [showAddEvent, setShowAddEvent] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<number | null>(null);
+  const [newEvent, setNewEvent] = useState({
+    name: '',
+    location: '',
+    category: '',
+    date: '',
+    time: '',
+    capacity: '',
+    description: '',
+    full_description: '',
+  });
+  const [eventImageFile, setEventImageFile] = useState<File | null>(null);
+  const [eventImagePreview, setEventImagePreview] = useState<string | null>(null);
   
   // Payment details state
   const [paymentDetails, setPaymentDetails] = useState<any[]>([]);
@@ -68,7 +104,17 @@ export function EnterpriseProfile() {
 
   useEffect(() => {
     fetchData();
+    fetchSubscriptionStatus();
   }, []);
+
+  const fetchSubscriptionStatus = async () => {
+    try {
+      const statusResponse = await getJSON('/subscription/status');
+      setSubscriptionStatus(statusResponse);
+    } catch (error) {
+      console.error('Failed to check subscription status:', error);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -98,7 +144,7 @@ export function EnterpriseProfile() {
     }
 
     try {
-      const ordersResponse = await getJSON('/orders/my');
+      const ordersResponse = await getJSON('/orders/my');  // Changed from /orders/my to match the route
       setOrders(
         Array.isArray(ordersResponse)
           ? ordersResponse.map((order: any) => ({
@@ -114,6 +160,35 @@ export function EnterpriseProfile() {
     } catch (error) {
       console.error('Error fetching orders:', error);
       setOrders([]);
+    }
+
+    try {
+      const eventsResponse = await getJSON('/events/my');
+      console.log('Events response:', eventsResponse);
+      setEvents(
+        Array.isArray(eventsResponse)
+          ? eventsResponse.map((event: any) => ({
+              id: event.id,
+              name: event.name || '',
+              location: event.location || null,
+              category: event.category || null,
+              image: event.image || null,
+              date: event.date || null,
+              time: event.time || null,
+              capacity: event.capacity || null,
+              description: event.description || null,
+              full_description: event.full_description || null,
+              user_id: event.user_id || null,
+              created_at: event.created_at || new Date().toISOString(),
+              updated_at: event.updated_at || new Date().toISOString(),
+            }))
+          : []
+      );
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      console.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
+      toast.error('Failed to load events');
+      setEvents([]);
     } finally {
       setLoading(false);
     }
@@ -293,7 +368,7 @@ export function EnterpriseProfile() {
     }
 
     try {
-      await patchJSON(`/api/orders/${orderId}`, { status: nextStatus });
+      await patchJSON(`/orders/${orderId}`, { status: nextStatus });
       await showStatusUpdateSuccess('order', `ORD-${String(orderId).padStart(3, '0')}`, nextStatus);
       await fetchData();
     } catch {
@@ -315,7 +390,7 @@ export function EnterpriseProfile() {
   const fetchPaymentDetails = async () => {
     try {
       console.log('Fetching payment details...');
-      const response = await getJSON('/me');
+      const response = await getJSON('/payment-details');
       console.log('Payment details response:', response);
       setPaymentDetails(response.payment_details || []);
     } catch (error) {
@@ -340,7 +415,7 @@ export function EnterpriseProfile() {
       setPaymentDetails(updatedPayments);
       setNewPayment({ type: 'gcash', name: '', account_number: '', account_name: '' });
       setShowPaymentForm(false);
-      await showProductSuccess('added', 'payment method');
+      await showPaymentMethodSuccess('added', newPayment.name || 'Payment method');
     } catch (error) {
       console.error('Error adding payment method:', error);
       toast.error('Failed to add payment method');
@@ -352,7 +427,7 @@ export function EnterpriseProfile() {
       const updatedPayments = paymentDetails.filter((_, i) => i !== index);
       await patchJSON('/payment-details', { payment_details: updatedPayments });
       setPaymentDetails(updatedPayments);
-      await showProductSuccess('deleted', 'payment method');
+      await showPaymentMethodSuccess('deleted', 'Payment method');
     } catch (error) {
       toast.error('Failed to delete payment method');
     }
@@ -394,6 +469,111 @@ export function EnterpriseProfile() {
     } catch (error) {
       console.error('Auth test error:', error);
     }
+  };
+
+  // Event Management Functions
+  const handleAddEvent = async () => {
+    if (!newEvent.name.trim()) {
+      toast.error('Event name is required');
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('name', newEvent.name);
+      if (newEvent.location) formData.append('location', newEvent.location);
+      if (newEvent.category) formData.append('category', newEvent.category);
+      if (newEvent.date) formData.append('date', newEvent.date);
+      if (newEvent.time) formData.append('time', newEvent.time);
+      if (newEvent.capacity) formData.append('capacity', newEvent.capacity);
+      if (newEvent.description) formData.append('description', newEvent.description);
+      if (newEvent.full_description) formData.append('full_description', newEvent.full_description);
+      if (eventImageFile) formData.append('image', eventImageFile);
+
+      if (editingEventId) {
+        formData.append('_method', 'PUT');
+      }
+
+      const baseUrl = 'http://localhost:8000';
+      const url = editingEventId ? `${baseUrl}/api/events/${editingEventId}` : `${baseUrl}/api/events`;
+      const method = 'POST';
+
+      console.log('Creating event:', { url, method, hasImage: !!eventImageFile });
+      const token = getAuthToken();
+      console.log('Auth token:', token ? 'Present' : 'Missing');
+      const headers: HeadersInit = token
+        ? { Authorization: `Bearer ${token}`, Accept: 'application/json' }
+        : { Accept: 'application/json' };
+      const res = await fetch(url, { method, headers, body: formData });
+      console.log('Event creation response:', { status: res.status, ok: res.ok });
+
+      if (!res.ok) {
+        const contentType = res.headers.get('content-type');
+        let errorMsg = `HTTP ${res.status}`;
+        if (contentType?.includes('application/json')) {
+          try {
+            const data = await res.json();
+            console.error('Event creation error data:', data);
+            errorMsg = data.message || data.error || JSON.stringify(data);
+          } catch {
+            errorMsg = await res.text().catch(() => errorMsg);
+          }
+        } else {
+          errorMsg = await res.text().catch(() => errorMsg);
+        }
+        throw new Error(errorMsg);
+      }
+
+      await showProductSuccess(editingEventId ? 'updated' : 'added', newEvent.name);
+      console.log('Event created successfully, fetching updated data...');
+      await fetchData();
+      setNewEvent({ name: '', location: '', category: '', date: '', time: '', capacity: '', description: '', full_description: '' });
+      setEventImageFile(null);
+      setEventImagePreview(null);
+      setEditingEventId(null);
+      setShowAddEvent(false);
+    } catch (error) {
+      console.error('Event creation error:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to save event');
+    }
+  };
+
+  const handleEditEvent = (event: Event) => {
+    setEditingEventId(event.id);
+    setNewEvent({
+      name: event.name,
+      location: event.location || '',
+      category: event.category || '',
+      date: event.date || '',
+      time: event.time || '',
+      capacity: event.capacity || '',
+      description: event.description || '',
+      full_description: event.full_description || '',
+    });
+    setEventImagePreview(event.image ? getEventImageUrl(event.image) : null);
+    setEventImageFile(null);
+    setShowAddEvent(true);
+  };
+
+  const handleDeleteEvent = async (id: number) => {
+    try {
+      await fetch(`http://localhost:8000/api/events/${id}`, { 
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${getAuthToken()}`,
+        },
+      });
+      await showProductSuccess('deleted');
+      await fetchData();
+    } catch {
+      toast.error('Failed to delete event');
+    }
+  };
+
+  const getEventImageUrl = (imagePath: string | null) => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith('http')) return imagePath;
+    return `http://localhost:8000${imagePath}`;
   };
 
   if (loading) {
@@ -578,13 +758,18 @@ export function EnterpriseProfile() {
           <h2 className="text-xl font-bold">Product Inventory</h2>
           <button
             onClick={() => {
+              if (subscriptionStatus?.subscription_status !== 'paid') {
+                toast.error('Subscription required to add products');
+                return;
+              }
               setShowAddProduct(!showAddProduct);
               if (showAddProduct) {
                 setEditingProductId(null);
                 setNewProduct({ name: '', description: '', price: 0, stock: 0, category: '' });
               }
             }}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-2"
+            disabled={subscriptionStatus?.subscription_status !== 'paid'}
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="h-4 w-4" />
             Add Product
@@ -770,14 +955,305 @@ export function EnterpriseProfile() {
                     <td className="py-4">
                       <div className="flex gap-2">
                         <button
-                          onClick={() => handleEditProduct(product)}
-                          className="p-2 text-primary hover:bg-primary/10 rounded transition-colors"
+                          onClick={() => {
+                            if (subscriptionStatus?.subscription_status !== 'paid') {
+                              toast.error('Subscription required to edit products');
+                              return;
+                            }
+                            handleEditProduct(product);
+                          }}
+                          disabled={subscriptionStatus?.subscription_status !== 'paid'}
+                          className="p-2 text-primary hover:bg-primary/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => handleDeleteProduct(product.id)}
-                          className="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors"
+                          onClick={() => {
+                            if (subscriptionStatus?.subscription_status !== 'paid') {
+                              toast.error('Subscription required to delete products');
+                              return;
+                            }
+                            handleDeleteProduct(product.id);
+                          }}
+                          disabled={subscriptionStatus?.subscription_status !== 'paid'}
+                          className="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Event Management */}
+      <div className="bg-white border-2 border-primary/20 rounded-lg p-6 mb-8">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Calendar className="h-6 w-6 text-primary" />
+            <div>
+              <h2 className="text-xl font-bold">Event Management</h2>
+              <p className="text-sm text-muted-foreground">Manage your events and activities</p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              if (subscriptionStatus?.subscription_status !== 'paid') {
+                toast.error('Subscription required to add events');
+                return;
+              }
+              setShowAddEvent(!showAddEvent);
+              if (showAddEvent) {
+                setEditingEventId(null);
+                setNewEvent({ name: '', location: '', category: '', date: '', time: '', capacity: '', description: '', full_description: '' });
+                setEventImageFile(null);
+                setEventImagePreview(null);
+              }
+            }}
+            disabled={subscriptionStatus?.subscription_status !== 'paid'}
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Plus className="h-4 w-4" />
+            Add Event
+          </button>
+        </div>
+
+        {showAddEvent && (
+          <div className="bg-primary/5 border-2 border-primary/20 rounded-lg p-6 mb-6">
+            <h3 className="text-lg font-semibold mb-4">{editingEventId ? 'Edit Event' : 'Add New Event'}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Event Name *</label>
+                <input
+                  type="text"
+                  value={newEvent.name}
+                  onChange={e => setNewEvent({ ...newEvent, name: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
+                  placeholder="Enter event name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Location</label>
+                <input
+                  type="text"
+                  value={newEvent.location}
+                  onChange={e => setNewEvent({ ...newEvent, location: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
+                  placeholder="Enter location"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Category</label>
+                <select
+                  value={newEvent.category}
+                  onChange={e => setNewEvent({ ...newEvent, category: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
+                >
+                  <option value="">Select category</option>
+                  {CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Capacity</label>
+                <input
+                  type="text"
+                  value={newEvent.capacity}
+                  onChange={e => setNewEvent({ ...newEvent, capacity: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
+                  placeholder="e.g., 100 people"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Date</label>
+                <input
+                  type="date"
+                  value={newEvent.date}
+                  onChange={e => setNewEvent({ ...newEvent, date: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Time</label>
+                <input
+                  type="time"
+                  value={newEvent.time}
+                  onChange={e => setNewEvent({ ...newEvent, time: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-2">Short Description</label>
+                <textarea
+                  value={newEvent.description}
+                  onChange={e => setNewEvent({ ...newEvent, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white resize-none"
+                  placeholder="Brief description of the event"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-2">Full Description</label>
+                <textarea
+                  value={newEvent.full_description}
+                  onChange={e => setNewEvent({ ...newEvent, full_description: e.target.value })}
+                  rows={5}
+                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white resize-none"
+                  placeholder="Detailed description of the event"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-2">Event Image</label>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-4">
+                    <label className="flex-1 cursor-pointer">
+                      <div className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg hover:border-primary transition-colors bg-white flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          {eventImageFile ? eventImageFile.name : 'Choose image file...'}
+                        </span>
+                        <span className="px-3 py-1 bg-primary/10 text-primary text-xs rounded">
+                          Browse
+                        </span>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={e => {
+                          const f = e.target.files?.[0] ?? null;
+                          if (f && f.size > 5 * 1024 * 1024) {
+                            toast.error('Image size must be less than 5MB');
+                            return;
+                          }
+                          setEventImageFile(f);
+                          setEventImagePreview(f ? URL.createObjectURL(f) : null);
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  {eventImagePreview && (
+                    <div className="relative w-full max-w-xs">
+                      <img 
+                        src={eventImagePreview} 
+                        alt="Event preview" 
+                        className="w-full h-48 object-cover rounded-lg border-2 border-primary/20"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEventImageFile(null);
+                          setEventImagePreview(null);
+                        }}
+                        className="absolute top-2 right-2 p-2 bg-destructive text-white rounded-full hover:bg-destructive/90 transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={handleAddEvent}
+                className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors font-medium"
+              >
+                {editingEventId ? 'Update Event' : 'Add Event'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowAddEvent(false);
+                  setEditingEventId(null);
+                  setNewEvent({ name: '', location: '', category: '', date: '', time: '', capacity: '', description: '', full_description: '' });
+                  setEventImageFile(null);
+                  setEventImagePreview(null);
+                }}
+                className="px-6 py-2 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b-2 border-primary/20">
+                <th className="text-left pb-3 font-semibold">Image</th>
+                <th className="text-left pb-3 font-semibold">Event Name</th>
+                <th className="text-left pb-3 font-semibold">Category</th>
+                <th className="text-left pb-3 font-semibold">Date</th>
+                <th className="text-left pb-3 font-semibold">Location</th>
+                <th className="text-left pb-3 font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-4 text-center text-muted-foreground">
+                    No events yet
+                  </td>
+                </tr>
+              ) : (
+                events.map(event => (
+                  <tr key={event.id} className="border-b border-primary/10">
+                    <td className="py-4">
+                      {event.image ? (
+                        <img 
+                          src={getEventImageUrl(event.image) || ''} 
+                          alt={event.name}
+                          className="w-16 h-16 object-cover rounded border-2 border-primary/20"
+                          onError={(e) => {
+                            e.currentTarget.src = '/assets/default-event.jpg';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">
+                          No image
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-4">{event.name}</td>
+                    <td className="py-4">
+                      {event.category && (
+                        <span className="px-2 py-1 bg-primary/10 text-primary text-xs rounded">{event.category}</span>
+                      )}
+                    </td>
+                    <td className="py-4">
+                      {event.date ? new Date(event.date).toLocaleDateString() : '-'}
+                    </td>
+                    <td className="py-4">{event.location || '-'}</td>
+                    <td className="py-4">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            if (subscriptionStatus?.subscription_status !== 'paid') {
+                              toast.error('Subscription required to edit events');
+                              return;
+                            }
+                            handleEditEvent(event);
+                          }}
+                          disabled={subscriptionStatus?.subscription_status !== 'paid'}
+                          className="p-2 text-primary hover:bg-primary/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (subscriptionStatus?.subscription_status !== 'paid') {
+                              toast.error('Subscription required to delete events');
+                              return;
+                            }
+                            handleDeleteEvent(event.id);
+                          }}
+                          disabled={subscriptionStatus?.subscription_status !== 'paid'}
+                          className="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>

@@ -159,6 +159,12 @@ export function ManageListings() {
     return `http://localhost:8000${decodedPath}`;
   };
 
+  const formatPrice = (value: number | string | null | undefined) => {
+    const num = typeof value === 'number' ? value : value ? Number(value) : NaN;
+    if (!Number.isFinite(num)) return '0.00';
+    return num.toFixed(2);
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
@@ -433,7 +439,7 @@ export function ManageListings() {
                       {product.description}
                     </p>
                     <div className="flex items-center justify-between">
-                      <p className="text-lg text-primary">₱{product.price.toFixed(2)}</p>
+                      <p className="text-lg text-primary">₱{formatPrice(product.price)}</p>
                       <p className="text-sm text-muted-foreground">
                         Stock: {product.stock}
                       </p>
@@ -499,7 +505,7 @@ export function ManageListings() {
                       {accommodation.description}
                     </p>
                     <p className="text-lg text-primary mb-2">
-                      ₱{accommodation.price_per_night.toFixed(2)} / night
+                      ₱{formatPrice(accommodation.price_per_night)} / night
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Added: {new Date(accommodation.created_at).toLocaleDateString()}
