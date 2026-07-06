@@ -270,8 +270,8 @@ export async function getChatHistory(room: string) {
   return await getJSON(`/chat/history?room=${encodeURIComponent(room)}`);
 }
 
-export async function sendChatMessage(room: string, message: string) {
-  return await postJSON('/chat/send', { room, message });
+export async function sendChatMessage(room: string, message: string, language?: 'filipino' | 'english') {
+  return await postJSON('/chat/send', { room, message, language: language || 'filipino' });
 }
 
 export async function verifyPaymentReceipt(receiptId: number, status: 'verified' | 'rejected', notes?: string) {
@@ -369,4 +369,94 @@ export async function sendPasswordResetCode(email: string): Promise<{ message: s
 
 export async function resetPassword(email: string, code: string, password: string, password_confirmation: string): Promise<{ message: string }> {
   return await postJSON('/password/reset', { email, code, password, password_confirmation }, false);
+}
+
+
+// Get platform statistics (public endpoint)
+export async function getPlatformStats() {
+  return getPublicJSON('/stats');
+}
+
+
+// Review API functions
+export async function submitReview(orderId: number, productId: number, rating: number, comment: string) {
+  return postJSON('/reviews', {
+    order_id: orderId,
+    product_id: productId,
+    rating,
+    comment,
+  });
+}
+
+export async function getOrderReviewStatus(orderId: number) {
+  return getJSON(`/orders/${orderId}/reviews`);
+}
+
+export async function getProductReviews(productId: number) {
+  return getPublicJSON(`/products/${productId}/reviews`);
+}
+
+
+// Messaging API functions
+export async function sendMessage(receiverId: number, message: string) {
+  return postJSON('/messages/send', {
+    receiver_id: receiverId,
+    message,
+  });
+}
+
+export async function getConversation(otherUserId: number) {
+  return getJSON(`/messages/conversation/${otherUserId}`);
+}
+
+export async function getMessagesInbox() {
+  return getJSON('/messages/inbox');
+}
+
+export async function getUnreadMessageCount() {
+  return getJSON('/messages/unread-count');
+}
+
+
+// ============================================================================
+// Notification API
+// ============================================================================
+
+export interface ApiNotification {
+  id: number;
+  user_id: number;
+  type: string;
+  title: string;
+  message: string;
+  data: Record<string, any> | null;
+  link: string | null;
+  is_read: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationListResponse {
+  success: boolean;
+  notifications: ApiNotification[];
+  unread_count: number;
+}
+
+export async function getNotifications(): Promise<NotificationListResponse> {
+  return getJSON('/notifications');
+}
+
+export async function getUnreadNotificationCount(): Promise<{ success: boolean; unread_count: number }> {
+  return getJSON('/notifications/unread-count');
+}
+
+export async function markNotificationAsRead(id: number) {
+  return patchJSON(`/notifications/${id}/read`, {});
+}
+
+export async function markAllNotificationsAsRead() {
+  return postJSON('/notifications/mark-all-read', {});
+}
+
+export async function deleteNotification(id: number) {
+  return deleteJSON(`/notifications/${id}`);
 }

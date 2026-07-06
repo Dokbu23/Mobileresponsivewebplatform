@@ -20,8 +20,11 @@ class User extends Authenticatable
         'name', 'email', 'password', 'role', 'listing_status', 'is_active', 'payment_details',
         'subscription_status', 'subscription_paid_at', 'subscription_expires_at', 'subscription_amount',
         'phone', 'address', 'barangay', 'description', 'registration_details', 'email_verified_at',
-        'resort_name', 'resort_description', 'resort_price_per_night', 'resort_images', 
+        'resort_name', 'resort_description', 'resort_price_per_night', 'resort_images',
         'resort_amenities', 'resort_facilities', 'resort_policies', 'resort_is_setup',
+        'store_name', 'store_description', 'store_logo', 'store_banner', 'store_is_setup',
+        'avatar',
+        'latitude', 'longitude',
     ];
 
     /**
@@ -46,14 +49,16 @@ class User extends Authenticatable
         'resort_images' => 'array',
         'resort_amenities' => 'array',
         'resort_is_setup' => 'boolean',
+        'store_is_setup'  => 'boolean',
     ];
 
     /**
      * Get the resort setup status.
      *
+     * @param mixed $value
      * @return bool
      */
-    public function getResortIsSetupAttribute(mixed $value): bool
+    public function getResortIsSetupAttribute($value): bool
     {
         return (bool) $value;
     }

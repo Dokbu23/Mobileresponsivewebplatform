@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PaymentReceipt;
 use App\Models\Order;
 use App\Models\Booking;
+use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -36,6 +37,32 @@ class PaymentReceiptController extends Controller
         $data['status'] = 'pending';
 
         $receipt = PaymentReceipt::create($data);
+
+        // Notify business owner about receipt submission
+        try {
+            $tourist = $request->user();
+            $touristName = $tourist ? $tourist->name : 'A tourist';
+            $amount = number_format((float) $data['amount'], 2);
+            $businessOwner = \App\Models\User::find($data['business_id']);
+            $link = ($businessOwner && $businessOwner->role === 'resort')
+                ? '/resort/dashboard'
+                : '/enterprise/profile';
+
+            Notification::notify(
+                $data['business_id'],
+                'payment_submitted',
+                'Payment Receipt Submitted',
+                "{$touristName} submitted a payment receipt of ₱{$amount}.",
+                [
+                    'receipt_id' => $receipt->id,
+                    'type' => $data['type'],
+                    'reference_id' => $data['reference_id'],
+                ],
+                $link
+            );
+        } catch (\Throwable $e) {
+            \Log::warning('Payment receipt notification failed', ['error' => $e->getMessage()]);
+        }
 
         return response()->json($receipt->load(['tourist', 'business']), 201);
     }
@@ -83,7 +110,7 @@ class PaymentReceiptController extends Controller
         if ($data['status'] === 'verified') {
             if ($receipt->type === 'order') {
                 $order = Order::find($receipt->reference_id);
-                if ($order && (float) $receipt->amount !== (float) $order->total) {
+                if ($order && abs((float) $receipt->amount - (float) $order->total) > 1.0) {
                     return response()->json([
                         'message' => 'Receipt amount does not match order total.'
                     ], 422);
@@ -92,7 +119,7 @@ class PaymentReceiptController extends Controller
 
             if ($receipt->type === 'booking') {
                 $booking = Booking::find($receipt->reference_id);
-                if ($booking && (float) $receipt->amount !== (float) $booking->total) {
+                if ($booking && abs((float) $receipt->amount - (float) $booking->total) > 1.0) {
                     return response()->json([
                         'message' => 'Receipt amount does not match booking total.'
                     ], 422);
@@ -120,6 +147,29 @@ class PaymentReceiptController extends Controller
                     $booking->update(['status' => 'confirmed']);
                 }
             }
+        }
+
+        // Notify the tourist about the decision
+        try {
+            $statusLabel = $data['status'] === 'verified' ? 'Verified' : 'Rejected';
+            $message = $data['status'] === 'verified'
+                ? 'Approved na ang payment mo! Processing na ang order/booking.'
+                : 'Hindi na-approve ang payment mo. ' . ($data['notes'] ?? 'Pakisuri at subukan muli.');
+
+            Notification::notify(
+                $receipt->tourist_id,
+                'payment_verified',
+                "Payment {$statusLabel}",
+                $message,
+                [
+                    'receipt_id' => $receipt->id,
+                    'type' => $receipt->type,
+                    'reference_id' => $receipt->reference_id,
+                ],
+                '/status'
+            );
+        } catch (\Throwable $e) {
+            \Log::warning('Payment verification notification failed', ['error' => $e->getMessage()]);
         }
 
         return response()->json($receipt->load(['tourist', 'business']));

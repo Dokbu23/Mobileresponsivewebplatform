@@ -174,15 +174,15 @@ export const showErrorAlert = (title: string, text?: string) => {
 };
 
 // Confirmation alert
-export const showConfirmAlert = (title: string, text: string) => {
+export const showConfirmAlert = (title: string, text: string, icon: 'warning' | 'question' | 'info' = 'warning', confirmText: string = 'Yes, confirm!') => {
   return Swal.fire({
-    icon: 'warning',
+    icon,
     title,
     text,
     showCancelButton: true,
     confirmButtonColor: '#ef4444',
     cancelButtonColor: '#6b7280',
-    confirmButtonText: 'Yes, delete it!',
+    confirmButtonText: confirmText,
     cancelButtonText: 'Cancel'
   });
 };

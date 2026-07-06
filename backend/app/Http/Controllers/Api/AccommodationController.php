@@ -73,6 +73,8 @@ class AccommodationController extends Controller
                 'user_id' => $user->id,
                 'is_registered' => true,
                 'type' => 'resort_profile',
+                'latitude' => $user->latitude,
+                'longitude' => $user->longitude,
             ];
         });
 

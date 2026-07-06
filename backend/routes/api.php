@@ -17,11 +17,18 @@ use App\Http\Controllers\Api\ShippingAddressController;
 use App\Http\Controllers\Api\EmailVerificationController;
 use App\Http\Controllers\Api\PaymentSettingsController;
 use App\Http\Controllers\Api\ChatController;
+use App\Http\Controllers\Api\StatsController;
+use App\Http\Controllers\Api\ReviewController;
+use App\Http\Controllers\Api\MessageController;
+use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\ResortRoomController;
+use App\Http\Controllers\Api\ResortAvailabilityController;
+use App\Http\Controllers\Api\PromoCodeController;
+use App\Http\Controllers\Api\EnterpriseProfileController;
+
 use App\Models\User;
 
 /*
-|--------------------------------------------------------------------------
-| API Routes
 |--------------------------------------------------------------------------
 |
 | Here is where you can register API routes for your application. These
@@ -34,6 +41,7 @@ use App\Models\User;
 Route::group(['prefix' => 'public'], function () {  
     Route::get('attractions', [AttractionController::class, 'index']);
     Route::get('attractions/{id}', [AttractionController::class, 'show']);
+    Route::post('attractions/{id}/view', [AttractionController::class, 'recordView']);
     Route::get('events', [EventController::class, 'index']);
     Route::get('events/{id}', [EventController::class, 'show']);
     Route::get('products', [ProductController::class, 'index']);
@@ -41,6 +49,17 @@ Route::group(['prefix' => 'public'], function () {
     Route::get('accommodations', [AccommodationController::class, 'index']);
     Route::get('accommodations/{id}', [AccommodationController::class, 'show']);
 
+    // Public resort rooms (for tourists when booking)
+    Route::get('resort-rooms/{userId}', [ResortRoomController::class, 'publicIndex']);
+
+    // Public blocked dates (for tourists when booking)
+    Route::get('resort-availability/{userId}', [ResortAvailabilityController::class, 'publicIndex']);
+
+    // Platform statistics
+    Route::get('stats', [StatsController::class, 'getPlatformStats']);
+
+    // Product reviews (public)
+    Route::get('products/{productId}/reviews', [ReviewController::class, 'getProductReviews']);
 
     // Public business profile pages (for registered businesses)
     // Tourists can view dedicated pages of registered resort/enterprise owners
@@ -68,6 +87,27 @@ Route::group(['middleware' => ['jwt.auth']], function () {
     Route::post('logout', [AuthController::class, 'logout']);
     Route::get('me', [AuthController::class, 'me']);
     Route::post('refresh', [AuthController::class, 'refresh']);
+
+    // Messaging routes (available to all authenticated users)
+    Route::post('messages/send', [MessageController::class, 'send']);
+    Route::get('messages/conversation/{userId}', [MessageController::class, 'getConversation']);
+    Route::get('messages/inbox', [MessageController::class, 'getInbox']);
+    Route::get('messages/unread-count', [MessageController::class, 'getUnreadCount']);
+
+    // Notification routes (available to all authenticated users)
+    Route::get('notifications', [NotificationController::class, 'index']);
+    Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::patch('notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
+    Route::delete('notifications/{id}', [NotificationController::class, 'destroy']);
+
+    // Promo code apply (tourist) — validate without redeeming
+    Route::post('promo-codes/apply', [PromoCodeController::class, 'apply']);
+    Route::post('promo-codes/redeem', [PromoCodeController::class, 'redeem']);
+    Route::patch('profile', [UserController::class, 'updateProfile']);
+    Route::post('profile', [UserController::class, 'updateProfile']); // FormData support
+    Route::post('profile/change-password', [UserController::class, 'changePassword']);
+    Route::patch('profile/location', [UserController::class, 'updateLocation']);
 
     // Subscription routes
     Route::group(['middleware' => ['role:enterprise,resort']], function () {
@@ -100,12 +140,30 @@ Route::group(['middleware' => ['jwt.auth']], function () {
     // Tourist-only routes
     Route::group(['middleware' => ['role:tourist']], function () {
         Route::post('orders', [OrderController::class, 'store']);
+        Route::post('orders/{id}/cancel', [OrderController::class, 'cancel']);
         Route::post('bookings', [BookingController::class, 'store']);
+        Route::post('bookings/{id}/cancel', [BookingController::class, 'cancel']);
         Route::get('shipping-addresses', [ShippingAddressController::class, 'index']);
         Route::post('shipping-addresses', [ShippingAddressController::class, 'store']);
         Route::patch('shipping-addresses/{id}', [ShippingAddressController::class, 'update']);
         Route::delete('shipping-addresses/{id}', [ShippingAddressController::class, 'destroy']);
         Route::patch('shipping-addresses/{id}/default', [ShippingAddressController::class, 'setDefault']);
+        
+        // Review routes
+        Route::post('reviews', [ReviewController::class, 'store']);
+        Route::get('orders/{orderId}/reviews', [ReviewController::class, 'getOrderReviewStatus']);
+    });
+
+    // Admin-only static listing management (no subscription required)
+    Route::group(['middleware' => ['role:admin']], function () {
+        Route::post('admin/products', [ProductController::class, 'store']);
+        Route::post('admin/products/{id}', [ProductController::class, 'update']);
+        Route::put('admin/products/{id}', [ProductController::class, 'update']);
+        Route::delete('admin/products/{id}', [ProductController::class, 'destroy']);
+        Route::post('admin/accommodations', [AccommodationController::class, 'store']);
+        Route::post('admin/accommodations/{id}', [AccommodationController::class, 'update']);
+        Route::put('admin/accommodations/{id}', [AccommodationController::class, 'update']);
+        Route::delete('admin/accommodations/{id}', [AccommodationController::class, 'destroy']);
     });
 
     // Enterprise-only routes (admin allowed) - PROTECTED BY SUBSCRIPTION
@@ -127,6 +185,27 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::get('resort-profile', [App\Http\Controllers\Api\ResortProfileController::class, 'show']);
         Route::put('resort-profile', [App\Http\Controllers\Api\ResortProfileController::class, 'update']);
         Route::post('resort-profile/setup', [App\Http\Controllers\Api\ResortProfileController::class, 'setup']);
+
+        // Room management
+        Route::get('resort-rooms', [ResortRoomController::class, 'index']);
+        Route::post('resort-rooms', [ResortRoomController::class, 'store']);
+        Route::post('resort-rooms/{id}', [ResortRoomController::class, 'update']); // FormData support
+        Route::put('resort-rooms/{id}', [ResortRoomController::class, 'update']);
+        Route::delete('resort-rooms/{id}', [ResortRoomController::class, 'destroy']);
+
+        // Availability calendar management
+        Route::get('resort-availability', [ResortAvailabilityController::class, 'index']);
+        Route::post('resort-availability', [ResortAvailabilityController::class, 'store']);
+        Route::post('resort-availability/bulk', [ResortAvailabilityController::class, 'storeBulk']);
+        Route::delete('resort-availability/{id}', [ResortAvailabilityController::class, 'destroy']);
+        Route::post('resort-availability-unblock', [ResortAvailabilityController::class, 'destroyByDate']);
+    });
+
+    // Enterprise Profile Management Routes - JWT + role:enterprise required
+    Route::group(['middleware' => ['role:enterprise']], function () {
+        Route::get('enterprise-profile', [EnterpriseProfileController::class, 'show']);
+        Route::put('enterprise-profile', [EnterpriseProfileController::class, 'update']);
+        Route::post('enterprise-profile/setup', [EnterpriseProfileController::class, 'setup']);
     });
 
     // Resort-only routes (admin allowed) - PROTECTED BY SUBSCRIPTION
@@ -135,7 +214,11 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::post('accommodations/{id}', [AccommodationController::class, 'update']); // FormData upload
         Route::put('accommodations/{id}', [AccommodationController::class, 'update']);
         Route::patch('accommodations/{id}', [AccommodationController::class, 'update']);
-        Route::get('bookings', [BookingController::class, 'index']); // Get all bookings for resort owner
+    });
+
+    // Booking management - resort owners and admin (NO subscription gate - owners must always see bookings)
+    Route::group(['middleware' => ['role:resort,admin']], function () {
+        Route::get('bookings', [BookingController::class, 'index']);
         Route::patch('bookings/{id}', [BookingController::class, 'update']);
     });
 
@@ -149,8 +232,6 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         // Note: Attraction routes are now in the multi-role group below
         // Note: Event routes are now in the multi-role group above
         Route::get('orders', [OrderController::class, 'index']);
-        Route::get('bookings', [BookingController::class, 'index']);
-        Route::patch('bookings/{id}', [BookingController::class, 'update']);
         Route::get('users', function () {
             return response()->json(\App\Models\User::all());
         });
@@ -219,6 +300,7 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         // Chat (FAQ-based) - available to authenticated roles: admin, enterprise, resort, tourist
         Route::get('chat/history', [ChatController::class, 'index']);
         Route::post('chat/send', [ChatController::class, 'send']);
+        Route::post('chat/feedback', [ChatController::class, 'feedback']);
     });
 
     // Payment receipt routes
@@ -243,6 +325,13 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         
         // Get business user details by ID (for fetching business payment details)
         Route::get('business-users/{id}', [UserController::class, 'show']);
+
+        // Promo code management (business owners)
+        Route::get('promo-codes', [PromoCodeController::class, 'index']);
+        Route::post('promo-codes', [PromoCodeController::class, 'store']);
+        Route::put('promo-codes/{id}', [PromoCodeController::class, 'update']);
+        Route::patch('promo-codes/{id}', [PromoCodeController::class, 'update']);
+        Route::delete('promo-codes/{id}', [PromoCodeController::class, 'destroy']);
     });
     
     // Tourist routes for fetching business payment details

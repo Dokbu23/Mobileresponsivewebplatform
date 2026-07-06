@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Models\Notification;
 
 class BookingController extends Controller
 {
@@ -117,6 +118,43 @@ class BookingController extends Controller
             'customer_phone' => $customerPhone,
         ]);
 
+        // Notifications (fire-and-forget, never break the flow)
+        try {
+            // Resolve resort owner id
+            $resortOwnerId = $booking->resort_user_id;
+            if (!$resortOwnerId && $booking->accommodation_id) {
+                $accommodation = \App\Models\Accommodation::find($booking->accommodation_id);
+                if ($accommodation) {
+                    $resortOwnerId = $accommodation->user_id;
+                }
+            }
+
+            $checkIn = $booking->check_in instanceof \Carbon\Carbon
+                ? $booking->check_in->format('M d, Y')
+                : (string) $booking->check_in;
+
+            if ($resortOwnerId) {
+                Notification::notify(
+                    $resortOwnerId,
+                    'booking_new',
+                    'May Nag-book!',
+                    "{$customerName} booked a stay starting {$checkIn}.",
+                    ['booking_id' => $booking->id, 'customer_id' => $booking->customer_id],
+                    '/resort/dashboard'
+                );
+            }
+
+            Notification::notifyAdmins(
+                'booking_new',
+                'New Booking Created',
+                "{$customerName} created a new booking (check-in {$checkIn}).",
+                ['booking_id' => $booking->id],
+                '/admin/dashboard'
+            );
+        } catch (\Throwable $e) {
+            \Log::warning('Booking notifications failed', ['error' => $e->getMessage()]);
+        }
+
         return response()->json($booking, 201);
     }
 
@@ -145,9 +183,26 @@ class BookingController extends Controller
         ]);
 
         $booking = \App\Models\Booking::findOrFail($id);
+        $oldStatus = $booking->status;
         $booking->update([
             'status' => $data['status'],
         ]);
+
+        // Notify tourist about status change
+        if ($oldStatus !== $data['status'] && $booking->customer_id) {
+            try {
+                Notification::notify(
+                    $booking->customer_id,
+                    'booking_status',
+                    'Booking Status Updated',
+                    "Your booking #{$booking->id} is now {$data['status']}.",
+                    ['booking_id' => $booking->id, 'status' => $data['status']],
+                    '/status'
+                );
+            } catch (\Throwable $e) {
+                \Log::warning('Booking status notification failed', ['error' => $e->getMessage()]);
+            }
+        }
 
         return response()->json($booking);
     }
@@ -161,5 +216,79 @@ class BookingController extends Controller
     public function destroy($id)
     {
         //
+    }
+
+    /**
+     * Cancel a booking (tourist only).
+     * Only bookings with status 'pending' or 'confirmed' can be cancelled.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function cancel(Request $request, $id)
+    {
+        $user = $request->user();
+        $booking = \App\Models\Booking::find($id);
+
+        if (!$booking) {
+            return response()->json(['message' => 'Booking not found.'], 404);
+        }
+
+        if ((int) $booking->customer_id !== (int) $user->id) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
+        $nonCancellable = ['checked-in', 'completed', 'cancelled'];
+        if (in_array($booking->status, $nonCancellable)) {
+            return response()->json([
+                'message' => 'Booking cannot be cancelled after check-in.',
+            ], 422);
+        }
+
+        $booking->update(['status' => 'cancelled']);
+
+        // Notifications (fire-and-forget)
+        try {
+            $touristName = $user->name ?? 'A customer';
+
+            // Notify tourist
+            Notification::notify(
+                $booking->customer_id,
+                'booking_status',
+                'Booking Cancelled',
+                "Your booking #{$booking->id} has been cancelled by you.",
+                ['booking_id' => $booking->id, 'new_status' => 'cancelled'],
+                '/status'
+            );
+
+            // Notify resort owner
+            $resortOwnerId = $booking->resort_user_id;
+            if (!$resortOwnerId && $booking->accommodation_id) {
+                $accommodation = \App\Models\Accommodation::find($booking->accommodation_id);
+                if ($accommodation) {
+                    $resortOwnerId = $accommodation->user_id;
+                }
+            }
+
+            if ($resortOwnerId) {
+                Notification::notify(
+                    $resortOwnerId,
+                    'booking_cancelled',
+                    'Booking Cancelled by Customer',
+                    "{$touristName} cancelled booking #{$booking->id}.",
+                    ['booking_id' => $booking->id, 'customer_id' => $booking->customer_id],
+                    '/resort/dashboard'
+                );
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Cancel booking notifications failed', ['error' => $e->getMessage()]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Booking cancelled successfully.',
+            'booking' => $booking->fresh(),
+        ]);
     }
 }

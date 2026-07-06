@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Calendar, MapPin, Clock, ChevronDown, ChevronUp, Users } from 'lucide-react';
+import { Calendar, MapPin, Clock, X, Users } from 'lucide-react';
 import { API_BASE, getPublicJSON } from '../../lib/api';
 import { SearchBar } from '../../components/SearchBar';
 import { FilterButton } from '../../components/FilterButton';
@@ -21,11 +21,10 @@ interface EventType {
 }
 
 export function Events() {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<EventType | null>(null);
   const [items, setItems] = useState<EventType[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Initialize search and filter hook
   const {
     filters,
     queryParams,
@@ -34,7 +33,6 @@ export function Events() {
     activeFilterCount,
   } = useSearchAndFilter();
 
-  // Fetch events with query parameters
   useEffect(() => {
     (async () => {
       try {
@@ -48,7 +46,7 @@ export function Events() {
             : undefined,
         }));
         setItems(mapped);
-      } catch (e) {
+      } catch {
         setItems([]);
       }
     })();
@@ -56,15 +54,11 @@ export function Events() {
 
   const categories = Array.from(new Set(items.map(e => e.category).filter(Boolean))) as string[];
 
-  // Extract unique barangays for filter sidebar
   const availableBarangays = useMemo(() => {
-    const barangays = items
-      .map(e => e.location)
-      .filter((loc): loc is string => Boolean(loc));
+    const barangays = items.map(e => e.location).filter((loc): loc is string => Boolean(loc));
     return Array.from(new Set(barangays)).sort();
   }, [items]);
 
-  // Filter events by selected category from filters
   const filteredEvents = filters.category && filters.category !== 'All'
     ? items.filter(e => e.category === filters.category)
     : items;
@@ -73,48 +67,23 @@ export function Events() {
     new Date((a.date || '')).getTime() - new Date((b.date || '')).getTime()
   );
 
-  // Handle filter removal from chips
-  const handleRemoveFilter = (filterKey: keyof typeof filters) => {
-    updateFilter({ [filterKey]: '' });
-  };
-
-  // Handle clear all filters
-  const handleClearAllFilters = () => {
-    clearAllFilters();
-    setIsSidebarOpen(false);
-  };
+  const handleRemoveFilter = (filterKey: keyof typeof filters) => updateFilter({ [filterKey]: '' });
+  const handleClearAllFilters = () => { clearAllFilters(); setIsSidebarOpen(false); };
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="mb-8">
         <h1 className="mb-2">Events</h1>
-        <p className="text-muted-foreground">
-          Discover upcoming festivals, activities, and community gatherings
-        </p>
+        <p className="text-muted-foreground">Discover upcoming festivals, activities, and community gatherings</p>
       </div>
 
-      {/* Search Bar with Filter Button */}
       <div className="mb-6 flex gap-3">
-        <SearchBar
-          value={filters.search}
-          onChange={(value) => updateFilter({ search: value })}
-          placeholder="Search events by name or description..."
-          className="flex-1"
-        />
-        <FilterButton
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          activeFilterCount={activeFilterCount}
-          isOpen={isSidebarOpen}
-        />
+        <SearchBar value={filters.search} onChange={(value) => updateFilter({ search: value })} placeholder="Search events..." className="flex-1" />
+        <FilterButton onClick={() => setIsSidebarOpen(!isSidebarOpen)} activeFilterCount={activeFilterCount} isOpen={isSidebarOpen} />
       </div>
 
-      {/* Filter Chips */}
-      <FilterChips
-        filters={filters}
-        onRemoveFilter={handleRemoveFilter}
-      />
+      <FilterChips filters={filters} onRemoveFilter={handleRemoveFilter} />
 
-      {/* Filter Sidebar */}
       <FilterSidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -128,98 +97,142 @@ export function Events() {
         showCategoryFilter={true}
       />
 
-      {/* Events Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Events Grid — image + name + category only */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
         {sortedEvents.map(event => {
-          const isExpanded = expandedId === event.id;
-          const eventDate = new Date(event.date);
+          const eventDate = new Date(event.date || '');
           const isUpcoming = eventDate >= new Date();
-
           return (
             <div
               key={event.id}
-              className={`bg-white border-2 rounded-lg overflow-hidden hover:shadow-lg transition-all ${
-                isUpcoming ? 'border-primary/20 hover:border-primary' : 'border-gray-300 opacity-75'
+              onClick={() => setSelectedEvent(event)}
+              className={`group cursor-pointer rounded-xl overflow-hidden border-2 transition-all hover:scale-105 hover:shadow-xl ${
+                isUpcoming ? 'border-primary/20 hover:border-primary' : 'border-gray-300 opacity-80'
               }`}
             >
               <div className="relative">
                 <img
                   src={event.image}
                   alt={event.name}
-                  className="w-full h-48 object-cover"
+                  className="w-full h-44 object-cover group-hover:brightness-90 transition-all"
                 />
                 {!isUpcoming && (
-                  <div className="absolute top-2 right-2 bg-gray-800 text-white px-2 py-1 rounded text-xs">
-                    Past Event
-                  </div>
+                  <div className="absolute top-2 right-2 bg-black/60 text-white px-2 py-0.5 rounded text-xs">Past</div>
                 )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
+                  <span className="text-white text-xs font-medium">Click to view details</span>
+                </div>
               </div>
-              <div className="p-4">
-                <div className="mb-2">
-                  <h3 className="mb-1">{event.name}</h3>
-                  <span className="px-2 py-1 bg-primary/10 text-primary text-xs rounded">
-                    {event.category}
-                  </span>
-                </div>
-
-                <div className="space-y-1 mb-3 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    {eventDate.toLocaleDateString('en-US', {
-                      month: 'long',
-                      day: 'numeric',
-                      year: 'numeric'
-                    })}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    {event.time}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
-                    {event.location}
-                  </div>
-                </div>
-
-                {!isExpanded && (
-                  <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
-                    {event.description}
-                  </p>
+              <div className="p-3 bg-white">
+                <h3 className="font-semibold text-sm line-clamp-1 mb-1">{event.name}</h3>
+                {event.category && (
+                  <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full">{event.category}</span>
                 )}
-
-                {isExpanded && (
-                  <div className="mb-4 space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                      {event.fullDescription}
-                    </p>
-                    <div className="bg-primary/5 p-3 rounded-lg">
-                      <p className="text-sm flex items-center gap-2">
-                        <Users className="h-4 w-4 text-primary" />
-                        <strong>Capacity:</strong> {event.capacity}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  onClick={() => setExpandedId(isExpanded ? null : event.id)}
-                  className="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-2"
-                >
-                  {isExpanded ? (
-                    <>
-                      Less Details <ChevronUp className="h-4 w-4" />
-                    </>
-                  ) : (
-                    <>
-                      More Details <ChevronDown className="h-4 w-4" />
-                    </>
-                  )}
-                </button>
               </div>
             </div>
           );
         })}
       </div>
+
+      {sortedEvents.length === 0 && (
+        <div className="text-center py-16 text-muted-foreground">
+          <Calendar className="h-12 w-12 mx-auto mb-3 opacity-30" />
+          <p>No events found</p>
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {selectedEvent && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          onClick={() => setSelectedEvent(null)}
+        >
+          <div
+            className="bg-white rounded-2xl overflow-hidden max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Large image */}
+            <div className="relative">
+              <img
+                src={selectedEvent.image}
+                alt={selectedEvent.name}
+                className="w-full h-72 object-cover"
+              />
+              {(() => {
+                const d = new Date(selectedEvent.date || '');
+                const isUpcoming = d >= new Date();
+                return !isUpcoming ? (
+                  <div className="absolute top-3 right-3 bg-gray-800 text-white px-3 py-1 rounded-full text-xs">Past Event</div>
+                ) : null;
+              })()}
+              <button
+                onClick={() => setSelectedEvent(null)}
+                className="absolute top-3 right-3 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Info */}
+            <div className="p-6 space-y-4">
+              <div>
+                <h2 className="text-2xl font-bold mb-2">{selectedEvent.name}</h2>
+                {selectedEvent.category && (
+                  <span className="px-3 py-1 bg-primary/10 text-primary text-sm rounded-full">{selectedEvent.category}</span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {selectedEvent.date && (
+                  <div className="flex items-center gap-2 bg-primary/5 rounded-lg p-3">
+                    <Calendar className="h-5 w-5 text-primary flex-shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Date</p>
+                      <p className="text-sm font-medium">
+                        {new Date(selectedEvent.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {selectedEvent.time && (
+                  <div className="flex items-center gap-2 bg-primary/5 rounded-lg p-3">
+                    <Clock className="h-5 w-5 text-primary flex-shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Time</p>
+                      <p className="text-sm font-medium">{selectedEvent.time}</p>
+                    </div>
+                  </div>
+                )}
+                {selectedEvent.location && (
+                  <div className="flex items-center gap-2 bg-primary/5 rounded-lg p-3">
+                    <MapPin className="h-5 w-5 text-primary flex-shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Location</p>
+                      <p className="text-sm font-medium">{selectedEvent.location}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {selectedEvent.capacity && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Users className="h-4 w-4 text-primary" />
+                  <span>Capacity: <strong>{selectedEvent.capacity}</strong></span>
+                </div>
+              )}
+
+              {(selectedEvent.fullDescription || selectedEvent.description) && (
+                <div>
+                  <h4 className="font-semibold mb-2">About this Event</h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {selectedEvent.fullDescription || selectedEvent.description}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

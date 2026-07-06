@@ -7,12 +7,18 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class ChatController extends Controller
 {
     protected $allowedRooms = ['tourist', 'resort', 'enterprise', 'admin'];
-    // Optional OpenAI model name to use when local KB can't answer.
     protected string $openaiModel = 'gpt-4o-mini';
+    
+    // Response cache duration (5 minutes)
+    protected int $cacheDuration = 300;
+    
+    // Conversation memory limit
+    protected int $memoryLimit = 5;
 
     public function index(Request $request)
     {
@@ -34,16 +40,19 @@ class ChatController extends Controller
         $data = $request->validate([
             'room' => 'required|string|in:tourist,resort,enterprise,admin',
             'message' => 'required|string|max:2000',
+            'language' => 'nullable|string|in:filipino,english',
         ]);
 
         $room = $data['room'];
         $message = $data['message'];
+        $language = $data['language'] ?? 'filipino';
 
         $history = $this->readHistory();
 
-        // Attempt to get authenticated user's name (may be null for unauthenticated requests)
+        // Get authenticated user
         $authUser = $request->user();
         $userName = $authUser->name ?? null;
+        $userId = $authUser->id ?? null;
 
         $userMessage = [
             'id' => Str::uuid()->toString(),
@@ -55,7 +64,10 @@ class ChatController extends Controller
 
         $history[] = $userMessage;
 
-        $botReplyText = $this->generateReply($message, $room, $userName);
+        // Track analytics
+        $this->trackQuestion($room, $message, $userId);
+
+        $botReplyText = $this->generateReply($message, $room, $userName, $userId, $language);
 
         $botMessage = [
             'id' => Str::uuid()->toString(),
@@ -68,8 +80,35 @@ class ChatController extends Controller
         $history[] = $botMessage;
 
         $this->writeHistory($history);
+        
+        // Store in conversation memory
+        $this->addToConversationMemory($room, $userId, $message, $botReplyText);
 
         return response()->json(['reply' => $botMessage, 'user_message' => $userMessage]);
+    }
+    
+    /**
+     * Feedback endpoint for thumbs up/down
+     */
+    public function feedback(Request $request)
+    {
+        $data = $request->validate([
+            'message_id' => 'required|string',
+            'rating' => 'required|in:up,down',
+            'feedback_text' => 'nullable|string|max:500',
+        ]);
+        
+        // Store feedback in cache or database
+        $feedbackKey = "chat_feedback:{$data['message_id']}";
+        Cache::put($feedbackKey, [
+            'rating' => $data['rating'],
+            'feedback_text' => $data['feedback_text'] ?? null,
+            'created_at' => now()->toDateTimeString(),
+        ], 86400); // 24 hours
+        
+        Log::info('Chat feedback received', $data);
+        
+        return response()->json(['message' => 'Salamat sa feedback!']);
     }
 
     protected function knowledgeBase(): array
@@ -81,29 +120,47 @@ class ChatController extends Controller
         $json = file_get_contents($path);
         return json_decode($json, true) ?? [];
     }
-    protected function generateReply(string $text, string $room, ?string $userName = null): string
+    
+    protected function generateReply(string $text, string $room, ?string $userName = null, ?int $userId = null, string $language = 'filipino'): string
     {
+        // Check response cache first
+        $cacheKey = "chat_response:" . md5($room . ':' . $language . ':' . strtolower(trim($text)));
+        $cached = Cache::get($cacheKey);
+        if ($cached) {
+            Log::info('Cache hit for query', ['query' => $text, 'language' => $language]);
+            $this->trackCacheHit($room);
+            return $cached;
+        }
+        
         $kb = $this->knowledgeBase();
         $entries = $kb[$room] ?? [];
 
         if (empty($entries)) {
-            return "Pasensya na, wala akong sapat na impormasyon para rito. Ipapaabot namin ang iyong tanong sa support.";
+            return $language === 'filipino' 
+                ? "Pasensya na, wala akong sapat na impormasyon para rito. Ipapaabot namin ang iyong tanong sa support."
+                : "Sorry, I don't have enough information for this. We'll forward your question to support.";
         }
 
-        // Quick greeting detection: if user sends a short greeting, reply with a personalized greeting.
+        // Quick greeting detection
         $clean = $this->normalize($text);
         $cleanWords = preg_split('/\s+/', $clean, -1, PREG_SPLIT_NO_EMPTY);
-        $greetings = ['kumusta','kamusta','hello','hi','hey','magandang umaga','magandang hapon','magandang gabi','musta','kumusta po','kumusta ka'];
+        
+        $greetingsFil = ['kumusta','kamusta','hello','hi','hey','magandang umaga','magandang hapon','magandang gabi','musta','kumusta po','kumusta ka'];
+        $greetingsEng = ['hello','hi','hey','good morning','good afternoon','good evening','how are you','what\'s up','sup'];
+        $greetings = $language === 'filipino' ? $greetingsFil : array_merge($greetingsFil, $greetingsEng);
+        
         if (is_array($cleanWords) && count($cleanWords) <= 3) {
             foreach ($greetings as $g) {
                 if (strpos($clean, $this->normalize($g)) !== false) {
-                    $name = $userName ? $userName : 'Kaibigan';
-                    return "Kumusta, {$name}! Paano kita matutulungan ngayon?";
+                    $name = $userName ? $userName : ($language === 'filipino' ? 'Kaibigan' : 'Friend');
+                    $greeting = $this->getTimeBasedGreeting($language);
+                    $helpText = $language === 'filipino' ? 'Paano kita matutulungan ngayon?' : 'How can I help you today?';
+                    return "{$greeting}, {$name}! {$helpText}";
                 }
             }
         }
 
-        // Build a lightweight TF-IDF index (cached in-process)
+        // Build TF-IDF index
         static $indexCache = [];
         $entriesKey = md5(json_encode($entries));
         if (!isset($indexCache[$entriesKey])) {
@@ -113,7 +170,9 @@ class ChatController extends Controller
 
         $queryTokens = $this->tokenize($text);
         if (empty($queryTokens)) {
-            return "Pasensya na, hindi ko maintindihan ang tanong. Maaari mo ba itong ipaliwanag nang mas malinaw?";
+            return $language === 'filipino'
+                ? "Pasensya na, hindi ko maintindihan ang tanong. Maaari mo ba itong ipaliwanag nang mas malinaw?"
+                : "Sorry, I don't understand the question. Can you explain it more clearly?";
         }
 
         // Query TF
@@ -146,7 +205,6 @@ class ChatController extends Controller
             $percent = 0;
             similar_text($text, $entry['question'], $percent);
 
-            // Combine cosine similarity and surface similarity
             $score = ($cos * 0.85) + ($percent / 100 * 0.15);
 
             if ($score > $bestScore) {
@@ -155,109 +213,427 @@ class ChatController extends Controller
             }
         }
 
-        // Threshold tuned for short FAQ-style KB
+        // Threshold
         if ($bestScore > 0.18) {
+            // Cache the response
+            Cache::put($cacheKey, $bestAnswer, $this->cacheDuration);
             return $bestAnswer;
         }
 
-        // Use Groq only as the LLM fallback per request.
+        // Use Groq with conversation context
         $groqKey = env('GROQ_API_KEY') ?: config('services.groq.key');
-        $groqModel = env('GROQ_MODEL') ?: config('services.groq.model') ?: 'groq-1';
-        $groqUrl = env('GROQ_API_URL') ?: config('services.groq.url') ?: 'https://api.groq.ai';
+        $groqModel = env('GROQ_MODEL') ?: config('services.groq.model') ?: 'llama-3.1-8b-instant';
+        $groqUrl = env('GROQ_API_URL') ?: config('services.groq.url') ?: 'https://api.groq.com';
 
         if (!empty($groqKey)) {
             try {
-                $ai = $this->callGroq($text, $room, $entries, $groqKey, $groqModel, $groqUrl);
-                if (!empty($ai)) return $ai;
+                $conversationContext = $this->getConversationContext($room, $userId);
+                $ai = $this->callGroq($text, $room, $entries, $groqKey, $groqModel, $groqUrl, $conversationContext, $language);
+                if (!empty($ai)) {
+                    // Cache the response
+                    Cache::put($cacheKey, $ai, $this->cacheDuration);
+                    return $ai;
+                }
             } catch (\Throwable $ex) {
                 Log::warning('Groq fallback failed: ' . $ex->getMessage());
             }
         }
 
-        return "Pasensya na, hindi ako sigurado. Ipapaabot namin ang iyong tanong sa support. Para sa agarang tulong, kontakin ang admin o tumawag sa support number.";
+        return $language === 'filipino'
+            ? "Pasensya na, hindi ako sigurado. Ipapaabot namin ang iyong tanong sa support. Para sa agarang tulong, kontakin ang admin o tumawag sa support number."
+            : "Sorry, I'm not sure. We'll forward your question to support. For immediate help, contact the admin or call the support number.";
     }
 
-    // Hugging Face fallback removed — Groq-only deployment in use.
-
-    /**
-     * Call Groq / Groq Cloud LLM via configurable endpoints. This method will
-     * attempt several common LLM endpoint shapes until one responds.
-     */
-    protected function callGroq(string $text, string $room, array $entries, string $apiKey, string $modelId = 'groq-1', string $apiUrl = 'https://api.groq.ai'): ?string
+    protected function callGroq(string $text, string $room, array $entries, string $apiKey, string $modelId = 'llama-3.1-8b-instant', string $apiUrl = 'https://api.groq.com', array $conversationContext = [], string $language = 'filipino'): ?string
     {
-        $kbText = '';
-        foreach ($entries as $e) {
+        // Build knowledge base context
+        $kbText = $this->buildKnowledgeBaseContext($entries);
+        
+        // Enrich with database data
+        $kbText .= $this->enrichWithDatabaseData();
+        
+        // Build system prompt
+        $systemPrompt = $this->buildSystemPrompt($kbText, $room, $language);
+        
+        // Build messages with conversation context
+        $messages = [
+            ['role' => 'system', 'content' => $systemPrompt]
+        ];
+        
+        // Add conversation history
+        foreach ($conversationContext as $ctx) {
+            $messages[] = ['role' => 'user', 'content' => $ctx['user']];
+            $messages[] = ['role' => 'assistant', 'content' => $ctx['bot']];
+        }
+        
+        // Add current question
+        $messages[] = ['role' => 'user', 'content' => $text];
+        
+        $endpoint = rtrim($apiUrl, '/') . '/openai/v1/chat/completions';
+        
+        $payload = [
+            'model' => $modelId,
+            'messages' => $messages,
+            'temperature' => 0.3,
+            'max_tokens' => 500,
+            'top_p' => 0.9
+        ];
+        
+        try {
+            $startTime = microtime(true);
+            
+            $response = Http::withHeaders([
+                'Authorization' => "Bearer {$apiKey}",
+                'Content-Type' => 'application/json',
+            ])->timeout(30)->post($endpoint, $payload);
+            
+            $responseTime = (microtime(true) - $startTime) * 1000; // ms
+            $this->trackResponseTime($room, $responseTime);
+            
+            if (!$response->successful()) {
+                Log::warning('Groq API failed', [
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ]);
+                return null;
+            }
+            
+            $json = $response->json();
+            
+            if (isset($json['choices'][0]['message']['content'])) {
+                return trim($json['choices'][0]['message']['content']);
+            }
+            
+            Log::warning('Unexpected Groq response format', ['response' => $json]);
+            return null;
+            
+        } catch (\Throwable $ex) {
+            Log::error('Groq API error', [
+                'error' => $ex->getMessage()
+            ]);
+            return null;
+        }
+    }
+
+    protected function buildKnowledgeBaseContext(array $entries): string
+    {
+        $context = "# Knowledge Base\n\n## Frequently Asked Questions\n\n";
+        
+        foreach (array_slice($entries, 0, 20) as $e) {
             $q = $e['question'] ?? '';
             $a = $e['answer'] ?? '';
-            $kbText .= "Q: {$q}\nA: {$a}\n\n";
-            if (strlen($kbText) > 3000) break;
-        }
-
-        $system = "You are an assistant for the DISC Mansalay platform. Use the knowledge base below and answer ONLY from it. Reply in Filipino.\n\nKnowledge base:\n" . $kbText;
-        $prompt = $system . "\nUser question: {$text}";
-
-        $endpoints = [
-            rtrim($apiUrl, '/') . "/v1/models/{$modelId}/outputs",
-            rtrim($apiUrl, '/') . "/models/{$modelId}/outputs",
-            rtrim($apiUrl, '/') . "/v1/models/{$modelId}/generate",
-            rtrim($apiUrl, '/') . "/models/{$modelId}/generate",
-            rtrim($apiUrl, '/') . "/v1/models/{$modelId}/invoke",
-            rtrim($apiUrl, '/') . "/models/{$modelId}/invoke",
-            rtrim($apiUrl, '/') . "/v1/chat/completions",
-            rtrim($apiUrl, '/') . "/v1/completions",
-        ];
-
-        $payloadVariants = [
-            ['inputs' => $prompt, 'parameters' => ['max_new_tokens' => 300, 'temperature' => 0.0]],
-            ['input' => $prompt, 'max_tokens' => 300, 'temperature' => 0.0],
-            ['messages' => [['role' => 'system', 'content' => $system], ['role' => 'user', 'content' => $text]], 'max_tokens' => 300],
-            ['prompt' => $prompt, 'max_tokens' => 300, 'temperature' => 0.0],
-        ];
-
-        foreach ($endpoints as $endpoint) {
-            foreach ($payloadVariants as $payload) {
-                try {
-                    $res = Http::withHeaders([
-                        'Authorization' => "Bearer {$apiKey}",
-                        'Content-Type' => 'application/json',
-                    ])->timeout(60)->post($endpoint, $payload);
-
-                    if (!$res->successful()) {
-                        Log::info('Groq attempt failed', ['endpoint' => $endpoint, 'status' => $res->status()]);
-                        continue;
-                    }
-
-                    $json = $res->json();
-
-                    // Try to find likely text fields
-                    if (is_array($json)) {
-                        // common fields: generated_text, output, result, choices
-                        if (isset($json[0]['generated_text'])) return trim($json[0]['generated_text']);
-                        if (isset($json['generated_text'])) return trim($json['generated_text']);
-                        if (isset($json['output']) && is_string($json['output'])) return trim($json['output']);
-                        if (isset($json['result']) && is_string($json['result'])) return trim($json['result']);
-                        if (isset($json['choices'][0]['text'])) return trim($json['choices'][0]['text']);
-                        if (isset($json['choices'][0]['message']['content'])) return trim($json['choices'][0]['message']['content']);
-
-                        // Fallback: walk and concat strings
-                        $out = '';
-                        array_walk_recursive($json, function ($v) use (&$out) { if (is_string($v)) $out .= $v . " "; });
-                        $out = trim($out);
-                        if (!empty($out)) return $out;
-                    } elseif (is_string($json)) {
-                        return trim($json);
-                    }
-                } catch (\Throwable $ex) {
-                    Log::warning('Groq request error', ['endpoint' => $endpoint, 'error' => $ex->getMessage()]);
-                    continue;
-                }
+            if ($q && $a) {
+                $context .= "Q: {$q}\nA: {$a}\n\n";
             }
         }
-
-        return null;
+        
+        return $context;
     }
 
-    // OpenAI fallback removed — Groq-only deployment in use.
+    protected function enrichWithDatabaseData(): string
+    {
+        $context = "";
+        
+        try {
+            // Attractions
+            if (class_exists(\App\Models\Attraction::class)) {
+                $attractions = \App\Models\Attraction::select('name', 'description', 'address', 'category')
+                    ->whereNotNull('name')
+                    ->take(30)
+                    ->get();
+                
+                if ($attractions->count() > 0) {
+                    $context .= "## Tourist Attractions\n\n";
+                    foreach ($attractions as $item) {
+                        $name = $item->name ?? '';
+                        $desc = trim(strip_tags($item->description ?? ''));
+                        $addr = $item->address ?? '';
+                        $cat = $item->category ?? '';
+                        $context .= "**{$name}**\n";
+                        if ($cat) $context .= "Category: {$cat}\n";
+                        if ($desc) $context .= "Description: {$desc}\n";
+                        if ($addr) $context .= "Location: {$addr}\n";
+                        $context .= "\n";
+                    }
+                }
+            }
+        } catch (\Throwable $ex) {
+            Log::debug('Attractions enrichment skipped: ' . $ex->getMessage());
+        }
+        
+        try {
+            // Accommodations
+            if (class_exists(\App\Models\Accommodation::class)) {
+                $accommodations = \App\Models\Accommodation::select('name', 'description', 'address', 'price_per_night', 'amenities')
+                    ->whereNotNull('name')
+                    ->take(30)
+                    ->get();
+                
+                if ($accommodations->count() > 0) {
+                    $context .= "## Accommodations\n\n";
+                    foreach ($accommodations as $item) {
+                        $name = $item->name ?? '';
+                        $desc = trim(strip_tags($item->description ?? ''));
+                        $addr = $item->address ?? '';
+                        $price = $item->price_per_night ?? '';
+                        $amenities = $item->amenities ?? '';
+                        $context .= "**{$name}**\n";
+                        if ($desc) $context .= "Description: {$desc}\n";
+                        if ($addr) $context .= "Location: {$addr}\n";
+                        if ($price) $context .= "Price: ₱{$price} per night\n";
+                        if ($amenities) $context .= "Amenities: {$amenities}\n";
+                        $context .= "\n";
+                    }
+                }
+            }
+        } catch (\Throwable $ex) {
+            Log::debug('Accommodations enrichment skipped: ' . $ex->getMessage());
+        }
+        
+        try {
+            // Products
+            if (class_exists(\App\Models\Product::class)) {
+                $products = \App\Models\Product::select('name', 'description', 'price', 'category')
+                    ->whereNotNull('name')
+                    ->take(30)
+                    ->get();
+                
+                if ($products->count() > 0) {
+                    $context .= "## Local Products\n\n";
+                    foreach ($products as $item) {
+                        $name = $item->name ?? '';
+                        $desc = trim(strip_tags($item->description ?? ''));
+                        $price = $item->price ?? '';
+                        $cat = $item->category ?? '';
+                        $context .= "**{$name}**\n";
+                        if ($cat) $context .= "Category: {$cat}\n";
+                        if ($desc) $context .= "Description: {$desc}\n";
+                        if ($price) $context .= "Price: ₱{$price}\n";
+                        $context .= "\n";
+                    }
+                }
+            }
+        } catch (\Throwable $ex) {
+            Log::debug('Products enrichment skipped: ' . $ex->getMessage());
+        }
+        
+        try {
+            // Events
+            if (class_exists(\App\Models\Event::class)) {
+                $events = \App\Models\Event::select('title', 'description', 'start_date', 'end_date', 'location')
+                    ->whereNotNull('title')
+                    ->where('start_date', '>=', now())
+                    ->take(20)
+                    ->get();
+                
+                if ($events->count() > 0) {
+                    $context .= "## Upcoming Events\n\n";
+                    foreach ($events as $item) {
+                        $title = $item->title ?? '';
+                        $desc = trim(strip_tags($item->description ?? ''));
+                        $start = $item->start_date ?? '';
+                        $end = $item->end_date ?? '';
+                        $loc = $item->location ?? '';
+                        $context .= "**{$title}**\n";
+                        if ($start) $context .= "Date: {$start}";
+                        if ($end && $end != $start) $context .= " to {$end}";
+                        $context .= "\n";
+                        if ($loc) $context .= "Location: {$loc}\n";
+                        if ($desc) $context .= "Description: {$desc}\n";
+                        $context .= "\n";
+                    }
+                }
+            }
+        } catch (\Throwable $ex) {
+            Log::debug('Events enrichment skipped: ' . $ex->getMessage());
+        }
+        
+        try {
+            // Recent Bookings (for resort/enterprise rooms)
+            if (class_exists(\App\Models\Booking::class)) {
+                $bookings = \App\Models\Booking::select('id', 'status', 'check_in', 'check_out', 'total_price')
+                    ->whereIn('status', ['pending', 'confirmed'])
+                    ->orderBy('created_at', 'desc')
+                    ->take(10)
+                    ->get();
+                
+                if ($bookings->count() > 0) {
+                    $context .= "## Recent Bookings\n\n";
+                    $context .= "Total pending/confirmed bookings: {$bookings->count()}\n";
+                    $context .= "Status breakdown:\n";
+                    $pending = $bookings->where('status', 'pending')->count();
+                    $confirmed = $bookings->where('status', 'confirmed')->count();
+                    $context .= "- Pending: {$pending}\n";
+                    $context .= "- Confirmed: {$confirmed}\n\n";
+                }
+            }
+        } catch (\Throwable $ex) {
+            Log::debug('Bookings enrichment skipped: ' . $ex->getMessage());
+        }
+        
+        return $context;
+    }
+
+    protected function buildSystemPrompt(string $kbText, string $room, string $language = 'filipino'): string
+    {
+        $roleContextFil = [
+            'tourist' => 'Ikaw ay tumutulong sa mga turista na bumisita sa Mansalay. Tulungan sila na makahanap ng attractions, accommodations, at local products. Magbigay ng detalyadong impormasyon tungkol sa presyo, lokasyon, at kung paano mag-book.',
+            'resort' => 'Ikaw ay tumutulong sa mga resort owners na pamahalaan ang kanilang negosyo. Sagutin ang kanilang mga tanong tungkol sa bookings, payments, profile management, at platform features. Magbigay ng step-by-step instructions kung kinakailangan.',
+            'enterprise' => 'Ikaw ay tumutulong sa mga enterprise owners na pamahalaan ang kanilang produkto at orders. Sagutin ang kanilang mga tanong tungkol sa inventory, sales, product management, at platform features. Magbigay ng konkretong solusyon.',
+            'admin' => 'Ikaw ay tumutulong sa admin na pamahalaan ang platform. Sagutin ang kanilang mga tanong tungkol sa user management, listings approval, payment verification, at system operations. Magbigay ng technical guidance kung kinakailangan.'
+        ];
+        
+        $roleContextEng = [
+            'tourist' => 'You help tourists visiting Mansalay. Help them find attractions, accommodations, and local products. Provide detailed information about prices, locations, and how to book.',
+            'resort' => 'You help resort owners manage their business. Answer their questions about bookings, payments, profile management, and platform features. Provide step-by-step instructions when needed.',
+            'enterprise' => 'You help enterprise owners manage their products and orders. Answer their questions about inventory, sales, product management, and platform features. Provide concrete solutions.',
+            'admin' => 'You help admins manage the platform. Answer their questions about user management, listings approval, payment verification, and system operations. Provide technical guidance when needed.'
+        ];
+        
+        $roleContext = $language === 'filipino' ? $roleContextFil : $roleContextEng;
+        $context = $roleContext[$room] ?? $roleContext['tourist'];
+        
+        $greeting = $this->getTimeBasedGreeting($language);
+        
+        if ($language === 'filipino') {
+            return <<<PROMPT
+{$greeting}! Ikaw ay isang helpful at friendly Tourism Assistant para sa Mansalay, Oriental Mindoro.
+
+{$context}
+
+MAHALAGANG PANUNTUNAN:
+1. ✅ Sumagot LAMANG base sa knowledge base at database information na ibinigay sa ibaba
+2. ❌ Kung walang impormasyon sa knowledge base, sabihin na "Pasensya na, wala akong impormasyon tungkol diyan. Maaari mong kontakin ang support para sa tulong."
+3. 🇵🇭 Sumagot sa FILIPINO (Tagalog) language - natural at conversational
+4. 😊 Maging friendly, helpful, at approachable
+5. 💯 Kung may tanong tungkol sa presyo, location, o detalye, ibigay ang EXACT information mula sa database
+6. 🚫 Huwag mag-imbento ng impormasyon - accuracy is critical
+7. 📋 Kung may multiple options, ilista lahat ng available choices
+8. 🎯 Magbigay ng konkretong sagot, hindi generic responses
+9. 🔢 Kung may numbers (presyo, bilang), i-format ng maayos (₱1,000 instead of 1000)
+10. 📍 Kung may location, ibigay ang complete address kung available
+
+FORMATTING GUIDELINES:
+- Use bullet points (•) para sa lists
+- Use bold (**text**) para sa important information
+- Use line breaks para sa readability
+- Keep responses concise pero complete
+
+{$kbText}
+
+Sumagot ngayon base sa knowledge base sa itaas. Maging accurate, helpful, at friendly!
+PROMPT;
+        } else {
+            return <<<PROMPT
+{$greeting}! You are a helpful and friendly Tourism Assistant for Mansalay, Oriental Mindoro.
+
+{$context}
+
+IMPORTANT RULES:
+1. ✅ Answer ONLY based on the knowledge base and database information provided below
+2. ❌ If there's no information in the knowledge base, say "Sorry, I don't have information about that. You can contact support for help."
+3. 🇺🇸 Answer in ENGLISH language - natural and conversational
+4. 😊 Be friendly, helpful, and approachable
+5. 💯 If asked about prices, locations, or details, provide EXACT information from the database
+6. 🚫 Don't make up information - accuracy is critical
+7. 📋 If there are multiple options, list all available choices
+8. 🎯 Provide concrete answers, not generic responses
+9. 🔢 If there are numbers (prices, quantities), format them properly (₱1,000 instead of 1000)
+10. 📍 If there's a location, provide the complete address if available
+
+FORMATTING GUIDELINES:
+- Use bullet points (•) for lists
+- Use bold (**text**) for important information
+- Use line breaks for readability
+- Keep responses concise but complete
+
+{$kbText}
+
+Answer now based on the knowledge base above. Be accurate, helpful, and friendly!
+PROMPT;
+        }
+    }
+
+    // Helper methods
+    
+    protected function getTimeBasedGreeting(string $language = 'filipino'): string
+    {
+        $hour = (int) date('H');
+        
+        if ($language === 'filipino') {
+            if ($hour >= 5 && $hour < 12) {
+                return 'Magandang umaga';
+            } elseif ($hour >= 12 && $hour < 18) {
+                return 'Magandang hapon';
+            } else {
+                return 'Magandang gabi';
+            }
+        } else {
+            if ($hour >= 5 && $hour < 12) {
+                return 'Good morning';
+            } elseif ($hour >= 12 && $hour < 18) {
+                return 'Good afternoon';
+            } else {
+                return 'Good evening';
+            }
+        }
+    }
+    
+    protected function getConversationContext(string $room, ?int $userId): array
+    {
+        $key = "chat_memory:{$room}:" . ($userId ?? 'guest');
+        return Cache::get($key, []);
+    }
+    
+    protected function addToConversationMemory(string $room, ?int $userId, string $userMsg, string $botMsg): void
+    {
+        $key = "chat_memory:{$room}:" . ($userId ?? 'guest');
+        $memory = Cache::get($key, []);
+        
+        $memory[] = [
+            'user' => $userMsg,
+            'bot' => $botMsg,
+            'timestamp' => now()->toDateTimeString()
+        ];
+        
+        // Keep only last N messages
+        if (count($memory) > $this->memoryLimit) {
+            $memory = array_slice($memory, -$this->memoryLimit);
+        }
+        
+        Cache::put($key, $memory, 3600); // 1 hour
+    }
+    
+    protected function trackQuestion(string $room, string $question, ?int $userId): void
+    {
+        $key = "chat_analytics:questions:{$room}:" . date('Y-m-d');
+        $questions = Cache::get($key, []);
+        
+        $questions[] = [
+            'question' => $question,
+            'user_id' => $userId,
+            'timestamp' => now()->toDateTimeString()
+        ];
+        
+        Cache::put($key, $questions, 86400); // 24 hours
+    }
+    
+    protected function trackCacheHit(string $room): void
+    {
+        $key = "chat_analytics:cache_hits:{$room}:" . date('Y-m-d');
+        Cache::increment($key, 1);
+        Cache::put($key . ':ttl', true, 86400); // 24 hours
+    }
+    
+    protected function trackResponseTime(string $room, float $timeMs): void
+    {
+        $key = "chat_analytics:response_times:{$room}:" . date('Y-m-d');
+        $times = Cache::get($key, []);
+        
+        $times[] = $timeMs;
+        
+        Cache::put($key, $times, 86400); // 24 hours
+    }
 
     protected function buildIndex(array $entries): array
     {
@@ -267,7 +643,6 @@ class ChatController extends Controller
 
         foreach ($entries as $idx => $e) {
             $question = $e['question'] ?? '';
-            // Index primarily on the question text to keep answers precise to system KB
             $tokens = $this->tokenize($question);
             $tf = [];
             foreach ($tokens as $t) {
@@ -333,15 +708,6 @@ class ChatController extends Controller
         $s = preg_replace('/[^\p{L}\p{N}\s]+/u', ' ', $s);
         $s = preg_replace('/\s+/', ' ', $s);
         return trim($s);
-    }
-
-    protected function wordOverlap(string $a, string $b): int
-    {
-        $wa = array_unique(array_filter(explode(' ', $a)));
-        $wb = array_unique(array_filter(explode(' ', $b)));
-        if (count($wa) === 0 || count($wb) === 0) return 0;
-        $common = array_intersect($wa, $wb);
-        return count($common);
     }
 
     protected function readHistory(): array

@@ -70,6 +70,11 @@ export function Cart() {
               />
               <div className="flex-1">
                 <h3 className="mb-1">{item.name}</h3>
+                {item.selectedVariation && (
+                  <p className="text-xs text-pink-600 mb-1">
+                    {item.selectedVariation.name}: <strong>{item.selectedVariation.value}</strong>
+                  </p>
+                )}
                 <p className="text-primary mb-2">₱{item.price}</p>
                 <p className="text-sm text-muted-foreground">
                   Stock available: {item.stock} units

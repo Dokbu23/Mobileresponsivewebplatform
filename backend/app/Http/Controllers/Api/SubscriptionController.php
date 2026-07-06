@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SubscriptionPayment;
 use App\Models\PaymentSetting;
 use App\Models\PaymentMethod;
+use App\Models\Notification;
 use Illuminate\Http\Request;
 
 class SubscriptionController extends Controller
@@ -39,7 +40,8 @@ class SubscriptionController extends Controller
             'subscription_paid_at' => $user->subscription_paid_at,
             'subscription_expires_at' => $user->subscription_expires_at,
             'subscription_amount' => $user->subscription_amount,
-            'has_access' => $user->subscription_status === 'paid'
+            'has_access' => $user->subscription_status === 'paid',
+            'store_is_setup' => (bool) $user->store_is_setup,
         ]);
     }
 
@@ -73,6 +75,20 @@ class SubscriptionController extends Controller
 
         // Update user status to pending
         $user->update(['subscription_status' => 'pending']);
+
+        // Notify all admins of subscription payment submission
+        try {
+            $amount = number_format((float) $data['amount'], 2);
+            Notification::notifyAdmins(
+                'subscription_paid',
+                'Subscription Payment Submitted',
+                "{$user->name} submitted a subscription payment of ₱{$amount}.",
+                ['payment_id' => $payment->id, 'user_id' => $user->id],
+                '/admin/subscriptions'
+            );
+        } catch (\Throwable $e) {
+            \Log::warning('Subscription submission notification failed', ['error' => $e->getMessage()]);
+        }
 
         return response()->json([
             'message' => 'Payment receipt uploaded successfully. Waiting for admin verification.',
@@ -120,17 +136,45 @@ class SubscriptionController extends Controller
             'verified_at' => now()
         ]);
 
-        // If verified, update user subscription status
+        // If verified, update user subscription status and auto-approve listing
         if ($data['status'] === 'verified') {
             $payment->user->update([
                 'subscription_status' => 'paid',
                 'subscription_paid_at' => now(),
                 'subscription_expires_at' => now()->addYear(), // 1 year subscription
-                'subscription_amount' => $payment->amount
+                'subscription_amount' => $payment->amount,
+                'listing_status' => 'approved', // Auto-approve listing when payment is verified
             ]);
         } else {
             // If rejected, set back to unpaid
             $payment->user->update(['subscription_status' => 'unpaid']);
+        }
+
+        // Notify the business owner about the decision
+        try {
+            $ownerRole = $payment->user->role ?? 'enterprise';
+            $ownerLink = $ownerRole === 'resort' ? '/resort/dashboard' : '/enterprise/dashboard';
+            if ($data['status'] === 'verified') {
+                Notification::notify(
+                    $payment->user_id,
+                    'subscription_paid',
+                    'Subscription Activated',
+                    'Approved na ang subscription payment mo! Makakagamit ka na ng buong platform.',
+                    ['payment_id' => $payment->id],
+                    $ownerLink
+                );
+            } else {
+                Notification::notify(
+                    $payment->user_id,
+                    'subscription_paid',
+                    'Subscription Rejected',
+                    'Hindi na-approve ang subscription payment mo. ' . ($data['notes'] ?? 'Pakisuri at subukan muli.'),
+                    ['payment_id' => $payment->id],
+                    $ownerLink
+                );
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Subscription verification notification failed', ['error' => $e->getMessage()]);
         }
 
         return response()->json([

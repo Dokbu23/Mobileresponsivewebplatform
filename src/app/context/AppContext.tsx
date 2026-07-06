@@ -1,6 +1,15 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { getJSON } from '../lib/api';
 
+export interface ProductVariation {
+  id: number;
+  name: string;
+  value: string;
+  price: number | null;
+  stock: number;
+  image?: string | null;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -9,10 +18,17 @@ export interface Product {
   stock: number;
   image: string;
   category: string;
+  variations?: ProductVariation[];
 }
 
 export interface CartItem extends Product {
   quantity: number;
+  selectedVariation?: {
+    id?: number;
+    name: string;
+    value: string;
+    price?: number | null;
+  } | null;
 }
 
 export interface Accommodation {
@@ -52,7 +68,7 @@ export interface Booking {
 
 interface AppContextType {
   cart: CartItem[];
-  addToCart: (product: Product) => void;
+  addToCart: (product: Product, quantity?: number, selectedVariation?: CartItem['selectedVariation']) => void;
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
@@ -235,22 +251,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [userType]);
 
-  const addToCart = (product: Product) => {
+  const addToCart = (
+    product: Product,
+    quantity: number = 1,
+    selectedVariation?: CartItem['selectedVariation'],
+  ) => {
     // Only tourists can add to cart
     if (userType !== 'tourist') {
       return;
     }
-    
+
+    const qty = Math.max(1, quantity);
+
+    // Variation key lets the same product with different variations live as
+    // separate cart lines (Shopee-style). Empty string when no variation.
+    const variationKey = selectedVariation
+      ? `${selectedVariation.name}:${selectedVariation.value}`
+      : '';
+
+    // Cart line identifier - composite of product id + variation. This keeps
+    // distinct sizes/colors separate but ensures duplicate adds merge.
+    const cartLineId = variationKey
+      ? `${product.id}__${variationKey}`
+      : String(product.id);
+
+    // Effective unit price: variation price override if set, else base price.
+    const effectivePrice =
+      selectedVariation && selectedVariation.price != null
+        ? Number(selectedVariation.price)
+        : product.price;
+
     setCart(prev => {
-      const existing = prev.find(item => item.id === product.id);
+      const existing = prev.find(item => item.id === cartLineId);
+
       if (existing) {
         return prev.map(item =>
-          item.id === product.id
-            ? { ...item, quantity: Math.min(item.quantity + 1, product.stock) }
-            : item
+          item.id === cartLineId
+            ? { ...item, quantity: Math.min(item.quantity + qty, product.stock) }
+            : item,
         );
       }
-      return [...prev, { ...product, quantity: 1 }];
+
+      return [
+        ...prev,
+        {
+          ...product,
+          id: cartLineId,
+          price: effectivePrice,
+          quantity: Math.min(qty, product.stock),
+          selectedVariation: selectedVariation ?? null,
+        } as CartItem,
+      ];
     });
   };
 

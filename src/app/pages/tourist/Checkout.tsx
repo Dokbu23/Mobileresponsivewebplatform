@@ -20,6 +20,11 @@ export function Checkout() {
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
+
+  // Promo code state
+  const [promoCode, setPromoCode] = useState('');
+  const [promoApplied, setPromoApplied] = useState<{ code: string; discount: number; message: string } | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
   const [shippingInfo, setShippingInfo] = useState({
     fullName: '',
     phone: '',
@@ -86,7 +91,9 @@ export function Checkout() {
     }
   }, [paymentMethod, cart]);
 
-  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const discount = promoApplied?.discount ?? 0;
+  const total = Math.max(0, subtotal - discount);
 
   // Fetch business payment details when online payment is selected
   const fetchBusinessPaymentDetails = async () => {
@@ -111,9 +118,15 @@ export function Checkout() {
         
         setBusinessPaymentDetails(detailsWithBusinessId);
         setShowPaymentDetails(true);
+      } else {
+        // Static listing — no business payment details
+        setBusinessPaymentDetails([]);
+        setShowPaymentDetails(true);
       }
     } catch (error) {
       console.error('Error fetching business payment details:', error);
+      setBusinessPaymentDetails([]);
+      setShowPaymentDetails(true);
     }
   };
 
@@ -188,6 +201,21 @@ export function Checkout() {
     );
   }
 
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) return;
+    setPromoLoading(true);
+    try {
+      const res = await postJSON('/promo-codes/apply', { code: promoCode.trim(), amount: subtotal });
+      setPromoApplied({ code: res.code, discount: res.discount, message: res.message });
+      toast.success(`${res.message} — ₱${res.discount.toFixed(2)} off!`);
+    } catch (err: any) {
+      toast.error(err.message || 'Invalid promo code');
+      setPromoApplied(null);
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+
   const handlePlaceOrder = async () => {
     if (userType !== 'tourist') {
       toast.error('Only tourists can place orders. Business accounts are for management only.');
@@ -207,16 +235,20 @@ export function Checkout() {
 
     // For online payment, validate receipt upload
     if (paymentMethod === 'online') {
+      if (businessPaymentDetails.length === 0) {
+        toast.error('This seller has no payment methods set up. Please choose COD or OTC.');
+        return;
+      }
       if (!selectedPayment) {
-        toast.error('Please select a payment method');
+        toast.error('Please select a payment account');
         return;
       }
       if (!receiptFile) {
-        toast.error('Please upload payment receipt');
+        toast.error('Please upload your payment receipt screenshot');
         return;
       }
       if (!paymentReference) {
-        toast.error('Please enter payment reference number');
+        toast.error('Please enter the transaction/reference number');
         return;
       }
     }
@@ -270,6 +302,13 @@ export function Checkout() {
             body: formData,
           });
         }
+      }
+
+      // Redeem promo code if applied
+      if (promoApplied) {
+        try {
+          await postJSON('/promo-codes/redeem', { code: promoApplied.code, amount: subtotal });
+        } catch { /* non-critical */ }
       }
 
       // Add orders to local state
@@ -559,6 +598,11 @@ export function Checkout() {
               <div key={item.id} className="flex justify-between items-center">
                 <div>
                   <p>{item.name}</p>
+                  {item.selectedVariation && (
+                    <p className="text-xs text-pink-600">
+                      {item.selectedVariation.name}: <strong>{item.selectedVariation.value}</strong>
+                    </p>
+                  )}
                   <p className="text-sm text-muted-foreground">
                     Qty: {item.quantity} × ₱{item.price}
                   </p>
@@ -634,61 +678,80 @@ export function Checkout() {
         </div>
 
         {/* Online Payment Details */}
-        {paymentMethod === 'online' && showPaymentDetails && businessPaymentDetails.length > 0 && (
+        {paymentMethod === 'online' && showPaymentDetails && (
           <div className="bg-white border-2 border-primary/20 rounded-lg p-6">
-            <h2 className="mb-4">Business Payment Details</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              Select a payment method and send your payment, then upload the receipt below.
+            <h2 className="mb-1">Online Payment</h2>
+            <p className="text-sm text-muted-foreground mb-5">
+              Transfer the exact amount then upload your receipt below.
             </p>
-            <p className="text-sm text-muted-foreground mb-4">
-              Pay the exact amount: ₱{total.toFixed(2)}
-            </p>
-            
-            <div className="space-y-3 mb-6">
-              {businessPaymentDetails.map((payment, index) => (
-                <label key={index} className="flex items-center gap-3 p-4 border-2 border-primary/20 rounded-lg cursor-pointer hover:border-primary transition-colors">
-                  <input
-                    type="radio"
-                    name="businessPayment"
-                    checked={selectedPayment === payment}
-                    onChange={() => setSelectedPayment(payment)}
-                    className="w-4 h-4 text-primary"
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-medium text-primary uppercase">{payment.type}</span>
-                      <span className="text-sm text-muted-foreground">•</span>
-                      <span className="text-sm font-medium">{payment.name}</span>
+
+            {businessPaymentDetails.length === 0 ? (
+              <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-4 text-center">
+                <CreditCard className="h-10 w-10 mx-auto text-orange-400 mb-2" />
+                <p className="font-medium text-orange-800">No payment details available</p>
+                <p className="text-sm text-orange-700 mt-1">
+                  This seller hasn't set up their payment methods yet. Please choose Cash on Delivery or Over-the-Counter instead.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 mb-5 flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Amount to transfer</span>
+                  <span className="text-lg font-bold text-primary">₱{total.toFixed(2)}</span>
+                </div>
+
+                <p className="text-sm font-medium mb-3">Select payment account:</p>
+                <div className="space-y-3 mb-6">
+                  {businessPaymentDetails.map((payment, index) => (
+                    <label
+                      key={index}
+                      className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                        selectedPayment === payment
+                          ? 'border-primary bg-primary/5'
+                          : 'border-primary/20 hover:border-primary/50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="businessPayment"
+                        checked={selectedPayment === payment}
+                        onChange={() => setSelectedPayment(payment)}
+                        className="w-4 h-4 text-primary"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-xs font-bold text-white bg-primary px-2 py-0.5 rounded uppercase">{payment.type}</span>
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                {selectedPayment && (
+                  <div className="bg-primary/5 border-2 border-primary/20 rounded-lg p-5 space-y-4">
+                    <h3 className="font-semibold text-sm">Upload Payment Proof</h3>
+
+                    <div>
+                      <label className="block text-sm mb-1.5">Reference / Transaction Number *</label>
+                      <input
+                        type="text"
+                        value={paymentReference}
+                        onChange={(e) => setPaymentReference(e.target.value)}
+                        className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm"
+                        placeholder="e.g. 1234567890"
+                      />
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      Account: {payment.account_number} - {payment.account_name}
-                    </p>
-                  </div>
-                </label>
-              ))}
-            </div>
 
-            {selectedPayment && (
-              <div className="bg-primary/5 border-2 border-primary/20 rounded-lg p-6">
-                <h3 className="mb-4">Upload Payment Receipt</h3>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm mb-2">Payment Reference Number *</label>
-                    <input
-                      type="text"
-                      value={paymentReference}
-                      onChange={(e) => setPaymentReference(e.target.value)}
-                      className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                      placeholder="Enter transaction/reference number"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm mb-2">Receipt Image *</label>
-                    <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm mb-1.5">Receipt Screenshot *</label>
                       {!receiptPreview ? (
-                        <div className="relative">
+                        <label
+                          htmlFor="receipt-upload"
+                          className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-primary/30 rounded-lg cursor-pointer hover:border-primary hover:bg-primary/5 transition-all"
+                        >
+                          <Upload className="h-8 w-8 text-primary/40 mb-2" />
+                          <span className="text-sm text-muted-foreground">Click to upload screenshot</span>
+                          <span className="text-xs text-muted-foreground">PNG, JPG up to 5MB</span>
                           <input
                             type="file"
                             accept="image/*"
@@ -696,15 +759,7 @@ export function Checkout() {
                             className="hidden"
                             id="receipt-upload"
                           />
-                          <label
-                            htmlFor="receipt-upload"
-                            className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-primary/30 rounded-lg cursor-pointer hover:border-primary transition-colors"
-                          >
-                            <Upload className="h-8 w-8 text-primary/60 mb-2" />
-                            <span className="text-sm text-muted-foreground">Click to upload receipt</span>
-                            <span className="text-xs text-muted-foreground">PNG, JPG up to 5MB</span>
-                          </label>
-                        </div>
+                        </label>
                       ) : (
                         <div className="relative">
                           <img
@@ -714,30 +769,62 @@ export function Checkout() {
                           />
                           <button
                             onClick={removeReceipt}
-                            className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                            className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow"
                           >
                             <X className="h-4 w-4" />
                           </button>
                         </div>
                       )}
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-sm mb-2">Additional Notes (Optional)</label>
-                    <textarea
-                      value={paymentNotes}
-                      onChange={(e) => setPaymentNotes(e.target.value)}
-                      rows={3}
-                      className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                      placeholder="Any additional information about the payment..."
-                    />
+                    <div>
+                      <label className="block text-sm mb-1.5">Notes (Optional)</label>
+                      <textarea
+                        value={paymentNotes}
+                        onChange={(e) => setPaymentNotes(e.target.value)}
+                        rows={2}
+                        className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm resize-none"
+                        placeholder="Any additional info about the payment..."
+                      />
+                    </div>
                   </div>
-                </div>
-              </div>
+                )}
+              </>
             )}
           </div>
         )}
+
+        {/* Promo Code */}
+        <div className="bg-white border-2 border-primary/20 rounded-lg p-6">
+          <h2 className="mb-4">Promo Code</h2>
+          {promoApplied ? (
+            <div className="flex items-center justify-between bg-green-50 border-2 border-green-200 rounded-lg px-4 py-3">
+              <div>
+                <p className="font-mono font-bold text-green-700">{promoApplied.code}</p>
+                <p className="text-sm text-green-600">-₱{promoApplied.discount.toFixed(2)} discount applied</p>
+              </div>
+              <button onClick={() => { setPromoApplied(null); setPromoCode(''); }} className="text-sm text-red-500 hover:text-red-700">Remove</button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={promoCode}
+                onChange={e => setPromoCode(e.target.value.toUpperCase())}
+                onKeyDown={e => e.key === 'Enter' && handleApplyPromo()}
+                className="flex-1 px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none font-mono text-sm"
+                placeholder="Enter promo code"
+              />
+              <button
+                onClick={handleApplyPromo}
+                disabled={promoLoading || !promoCode.trim()}
+                className="px-5 py-2.5 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium disabled:opacity-50"
+              >
+                {promoLoading ? '...' : 'Apply'}
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Order Summary */}
         <div className="bg-gradient-to-br from-primary/5 to-secondary/10 border-2 border-primary/20 rounded-lg p-6">
@@ -748,8 +835,14 @@ export function Checkout() {
           <div className="space-y-2 mb-4">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Subtotal</span>
-              <span>₱{total.toFixed(2)}</span>
+              <span>₱{subtotal.toFixed(2)}</span>
             </div>
+            {promoApplied && (
+              <div className="flex justify-between text-green-600">
+                <span>Promo ({promoApplied.code})</span>
+                <span>-₱{promoApplied.discount.toFixed(2)}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Payment Method</span>
               <span>

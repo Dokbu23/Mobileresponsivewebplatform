@@ -385,6 +385,26 @@ export function EnterpriseDashboard() {
         </div>
       )}
 
+      {/* Store Setup Banner — shown when subscription is paid but store not set up */}
+      {subscriptionStatus && subscriptionStatus.subscription_status === 'paid' && subscriptionStatus.store_is_setup === false && (
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-blue-900 mb-1">🏪 Set Up Your Store Profile</h3>
+              <p className="text-sm text-blue-700">
+                Your subscription is active! Set up your store profile so tourists can find and visit your shop.
+              </p>
+            </div>
+            <Link
+              to="/enterprise/profile/setup"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap font-medium"
+            >
+              Set Up Store
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Low Stock Alert */}
       {lowStockItems.length > 0 && (
         <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-4 mb-6">
@@ -547,17 +567,23 @@ export function EnterpriseDashboard() {
           <div className="text-center p-4 bg-green-50 rounded-lg">
             <Package className="h-8 w-8 text-green-600 mx-auto mb-2" />
             <p className="text-sm text-muted-foreground mb-1">In Stock</p>
-            <p className="text-2xl text-green-600">12 items</p>
+            <p className="text-2xl text-green-600">
+              {products.filter(p => Number(p.stock ?? 0) >= 15).length} items
+            </p>
           </div>
           <div className="text-center p-4 bg-orange-50 rounded-lg">
             <AlertTriangle className="h-8 w-8 text-orange-600 mx-auto mb-2" />
             <p className="text-sm text-muted-foreground mb-1">Low Stock</p>
-            <p className="text-2xl text-orange-600">3 items</p>
+            <p className="text-2xl text-orange-600">
+              {products.filter(p => Number(p.stock ?? 0) > 0 && Number(p.stock ?? 0) < 15).length} items
+            </p>
           </div>
           <div className="text-center p-4 bg-red-50 rounded-lg">
             <AlertTriangle className="h-8 w-8 text-red-600 mx-auto mb-2" />
             <p className="text-sm text-muted-foreground mb-1">Out of Stock</p>
-            <p className="text-2xl text-red-600">1 item</p>
+            <p className="text-2xl text-red-600">
+              {products.filter(p => Number(p.stock ?? 0) === 0).length} {products.filter(p => Number(p.stock ?? 0) === 0).length === 1 ? 'item' : 'items'}
+            </p>
           </div>
         </div>
       </div>
@@ -567,17 +593,32 @@ export function EnterpriseDashboard() {
         <h3 className="mb-4">Performance Summary</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
-            <p className="text-sm text-muted-foreground mb-1">Conversion Rate</p>
-            <p className="text-2xl text-primary">12.5%</p>
+            <p className="text-sm text-muted-foreground mb-1">Fulfilled Orders</p>
+            <p className="text-2xl text-primary">
+              {orders.length > 0
+                ? `${Math.round((orders.filter(o => o.status === 'delivered').length / orders.length) * 100)}%`
+                : '0%'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {orders.filter(o => o.status === 'delivered').length} of {orders.length} delivered
+            </p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground mb-1">Repeat Customers</p>
-            <p className="text-2xl text-primary">45%</p>
+            <p className="text-sm text-muted-foreground mb-1">Pending Orders</p>
+            <p className="text-2xl text-primary">
+              {orders.filter(o => o.status === 'pending' || o.status === 'confirmed').length}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              awaiting fulfillment
+            </p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground mb-1">Average Rating</p>
+            <p className="text-sm text-muted-foreground mb-1">Total Revenue</p>
             <p className="text-2xl text-primary flex items-center gap-2">
-              4.7 <Star className="h-5 w-5 fill-primary" />
+              ₱{orders.reduce((sum, o) => sum + Number(o.total || 0), 0).toLocaleString()}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              from {orders.length} orders
             </p>
           </div>
         </div>

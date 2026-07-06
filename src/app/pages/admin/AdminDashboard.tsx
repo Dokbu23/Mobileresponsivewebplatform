@@ -91,18 +91,26 @@ export function AdminDashboard() {
     { category: 'Bookings', count: bookings.length },
   ];
 
-  const topAttractions = attractions.slice(0, 4).map((attraction, index) => ({
-    name: attraction.name,
-    views: attractions.length - index, // Simulated views based on order
-  }));
+  const topAttractions = attractions
+    .map((attraction: any) => ({
+      name: attraction.name,
+      views: Number(attraction.view_count) || 0,
+    }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 4);
 
-  // Calculate actual product sales from orders
+  // Calculate actual product sales from orders — items is a JSON array per order
   const productSales = products.map(product => {
-    const sales = orders.filter((order: any) => order.product_id === product.id).length;
-    return {
-      ...product,
-      sales,
-    };
+    let totalSold = 0;
+    for (const order of orders as any[]) {
+      const items: any[] = Array.isArray(order.items) ? order.items : [];
+      for (const item of items) {
+        if (String(item.id) === String(product.id)) {
+          totalSold += Number(item.quantity) || 1;
+        }
+      }
+    }
+    return { ...product, sales: totalSold };
   });
 
   const topProducts = productSales
@@ -234,7 +242,7 @@ export function AdminDashboard() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="truncate">{attraction.name}</p>
-                    <p className="text-sm text-muted-foreground">{attraction.views} views</p>
+                    <p className="text-sm text-muted-foreground">{attraction.views} {attraction.views === 1 ? 'view' : 'views'}</p>
                   </div>
                   <div className="w-24 bg-primary/10 rounded-full h-2">
                     <div

@@ -48,6 +48,27 @@ class UserController extends Controller
         return response()->json(['message' => 'User not found'], 404);
     }
 
+    /**
+     * Change password for authenticated user (no OTP needed — they're already logged in).
+     */
+    public function changePassword(Request $request)
+    {
+        $user = $request->user();
+
+        $data = $request->validate([
+            'current_password' => 'required|string',
+            'password'         => 'required|string|min:8|confirmed',
+        ]);
+
+        if (!\Illuminate\Support\Facades\Hash::check($data['current_password'], $user->password)) {
+            return response()->json(['message' => 'Current password is incorrect.'], 422);
+        }
+
+        $user->update(['password' => bcrypt($data['password'])]);
+
+        return response()->json(['message' => 'Password changed successfully.']);
+    }
+
     public function testAuth(Request $request)
     {
         $user = $request->user();
@@ -55,6 +76,67 @@ class UserController extends Controller
             'message' => 'Authentication working',
             'user' => $user,
             'role' => $user->role ?? 'no role'
+        ]);
+    }
+
+    /**
+     * Update the authenticated user's map location (lat/lng).
+     */
+    public function updateLocation(Request $request)
+    {
+        $user = $request->user();
+
+        // Mansalay bounding box validation
+        $data = $request->validate([
+            'latitude'  => 'required|numeric|between:12.45,12.60',
+            'longitude' => 'required|numeric|between:121.38,121.50',
+        ]);
+
+        $user->update([
+            'latitude'  => $data['latitude'],
+            'longitude' => $data['longitude'],
+        ]);
+
+        return response()->json([
+            'message'   => 'Location updated successfully',
+            'latitude'  => $user->latitude,
+            'longitude' => $user->longitude,
+        ]);
+    }
+
+    /**
+     * Update the authenticated user's profile.
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+
+        $data = $request->validate([
+            'name'        => 'required|string|max:255',
+            'phone'       => 'nullable|string|max:20',
+            'address'     => 'nullable|string|max:500',
+            'barangay'    => 'nullable|string|max:100',
+            'description' => 'nullable|string|max:1000',
+            'avatar'      => 'nullable|file|mimes:jpg,jpeg,png,webp|max:5120',
+        ]);
+
+        if ($request->hasFile('avatar')) {
+            $path = $request->file('avatar')->store('avatars', 'public');
+            $data['avatar'] = '/storage/' . $path;
+        }
+
+        $user->update(array_filter([
+            'name'        => $data['name'],
+            'phone'       => $data['phone'] ?? null,
+            'address'     => $data['address'] ?? null,
+            'barangay'    => $data['barangay'] ?? null,
+            'description' => $data['description'] ?? null,
+            'avatar'      => $data['avatar'] ?? null,
+        ], fn($v) => $v !== null));
+
+        return response()->json([
+            'message' => 'Profile updated successfully.',
+            'user'    => $user->fresh(),
         ]);
     }
 }

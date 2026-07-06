@@ -6,6 +6,7 @@ import { TouristRegistration } from "./pages/tourist/TouristRegistration";
 import { EmailVerification } from "./pages/tourist/EmailVerification";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { ResetPassword } from "./pages/ResetPassword";
+import { Profile } from "./pages/Profile";
 import { Dashboard } from "./pages/tourist/Dashboard";
 import { Attractions } from "./pages/tourist/Attractions";
 import { Events } from "./pages/tourist/Events";
@@ -17,6 +18,8 @@ import { OrderStatus } from "./pages/tourist/OrderStatus";
 import { Settings } from "./pages/tourist/Settings";
 import { ShippingAddresses } from "./pages/tourist/ShippingAddresses";
 import { BusinessProfile } from "./pages/tourist/BusinessProfile";
+import { MapExplore } from "./pages/tourist/MapExplore";
+import { Messages } from "./pages/Messages";
 import { AdminLogin } from "./pages/admin/AdminLogin";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { ManageListings } from "./pages/admin/ManageListings";
@@ -34,6 +37,7 @@ import { EnterpriseRegistration } from "./pages/enterprise/EnterpriseRegistratio
 import { EnterpriseDashboard } from "./pages/enterprise/EnterpriseDashboard";
 import { EnterpriseProfile } from "./pages/enterprise/EnterpriseProfile";
 import { ManageOrders as EnterpriseManageOrders } from "./pages/enterprise/ManageOrders";
+import { EnterpriseProfileSetup } from "./pages/enterprise/EnterpriseProfileSetup";
 
 export const router = createBrowserRouter([
   {
@@ -45,6 +49,7 @@ export const router = createBrowserRouter([
       { path: "select-role", Component: RoleSelection },
       { path: "forgot-password", Component: ForgotPassword },
       { path: "reset-password", Component: ResetPassword },
+      { path: "profile", Component: Profile },
       { path: "tourist/login", Component: TouristLogin },
       { path: "tourist/register", Component: TouristRegistration },
       { path: "tourist/verify-email", Component: EmailVerification },
@@ -52,12 +57,14 @@ export const router = createBrowserRouter([
       { path: "events", Component: Events },
       { path: "products", Component: Products },
       { path: "accommodations", Component: Accommodations },
+      { path: "map", Component: MapExplore },
       { path: "cart", Component: Cart },
       { path: "checkout", Component: Checkout },
       { path: "status", Component: OrderStatus },
       { path: "settings", Component: Settings },
       { path: "settings/shipping", Component: ShippingAddresses },
       { path: "shipping-addresses", Component: ShippingAddresses },
+      { path: "messages", Component: Messages },
       // Public business profile pages for registered businesses
       { path: "business/:type/:userId", Component: BusinessProfile },
       { path: "admin/login", Component: AdminLogin },
@@ -78,6 +85,7 @@ export const router = createBrowserRouter([
       { path: "enterprise/verify-email", Component: EmailVerification },
       { path: "enterprise/dashboard", Component: EnterpriseDashboard },
       { path: "enterprise/profile", Component: EnterpriseProfile },
+      { path: "enterprise/profile/setup", Component: EnterpriseProfileSetup },
       { path: "enterprise/orders", Component: EnterpriseManageOrders },
     ],
   },

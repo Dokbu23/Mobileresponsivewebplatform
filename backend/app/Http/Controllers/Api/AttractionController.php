@@ -111,7 +111,7 @@ class AttractionController extends Controller
     }
 
     /**
-     * Display the specified resource.
+     * Display the specified resource and increment its view count.
      *
      * @param  int  $id
      * @return \Illuminate\Http\Response
@@ -119,7 +119,22 @@ class AttractionController extends Controller
     public function show($id)
     {
         $item = \App\Models\Attraction::findOrFail($id);
-        return response()->json($item);
+        // Increment view count atomically
+        $item->increment('view_count');
+        return response()->json($item->fresh());
+    }
+
+    /**
+     * POST /api/public/attractions/{id}/view
+     * Lightweight endpoint to record a view without returning full data.
+     */
+    public function recordView($id)
+    {
+        $item = \App\Models\Attraction::find($id);
+        if ($item) {
+            $item->increment('view_count');
+        }
+        return response()->json(['success' => true]);
     }
 
     /**

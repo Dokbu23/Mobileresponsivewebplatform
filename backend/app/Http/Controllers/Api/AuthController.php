@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Firebase\JWT\JWT;
@@ -176,6 +177,19 @@ class AuthController extends Controller
             'description' => $validated['description'] ?? null,
             'registration_details' => empty($registrationDetails) ? null : $registrationDetails,
         ]);
+
+        // Notify admins of new registration (fire-and-forget)
+        try {
+            Notification::notifyAdmins(
+                'user_registered',
+                'New User Registration',
+                "{$user->name} ({$user->role}) just registered.",
+                ['new_user_id' => $user->id, 'role' => $user->role],
+                '/admin/users'
+            );
+        } catch (\Throwable $e) {
+            \Log::warning('User registration notification failed', ['error' => $e->getMessage()]);
+        }
 
         return response()->json([
             'message' => 'Registration successful',

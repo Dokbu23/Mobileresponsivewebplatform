@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router';
-import { ShoppingCart, Menu, X, MapPin, User, LogOut, Shield, Hotel, Store } from 'lucide-react';
-import { useState } from 'react';
+import { ShoppingCart, Menu, X, MapPin, User, LogOut, Shield, Hotel, Store, Moon, Sun } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { NotificationBell } from './NotificationBell';
 import { showLogoutConfirm, showLogoutSuccess } from '../lib/sweetAlert';
@@ -18,6 +18,24 @@ export function Navbar() {
   const { cart, userType, setUserType, setIsAdmin, clearCart, setCurrentUser, currentUser } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Dark mode
+  const [isDark, setIsDark] = useState(() => {
+    return localStorage.getItem('discover-mansalay:dark') === 'true' ||
+      document.documentElement.classList.contains('dark');
+  });
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('discover-mansalay:dark', 'true');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('discover-mansalay:dark', 'false');
+    }
+  }, [isDark]);
+
+  const toggleDark = () => setIsDark(prev => !prev);
 
   const dashboardPath = (() => {
     switch (userType) {
@@ -39,32 +57,37 @@ export function Navbar() {
     { path: '/events', label: 'Events' },
     { path: '/products', label: 'Products' },
     { path: '/accommodations', label: 'Accommodations' },
+    { path: '/map', label: '🗺️ Map' },
   ];
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const roleMenuItems: Record<RoleType, RoleMenuItem[]> = {
     tourist: [
-      { to: '/', label: 'Dashboard' },
+      { to: '/profile', label: 'My Profile' },
       { to: '/status', label: 'My Orders & Bookings' },
+      { to: '/messages', label: 'Messages' },
       { to: '/settings', label: 'Settings' },
     ],
     admin: [
-      { to: '/admin/dashboard', label: 'Dashboard' },
+      { to: '/profile', label: 'My Profile' },
       { to: '/admin/listings', label: 'Manage Listings' },
       { to: '/admin/events', label: 'Manage Events' },
       { to: '/admin/users', label: 'User Management' },
       { to: '/admin/subscriptions', label: 'Subscriptions' },
       { to: '/admin/payment-settings', label: 'Payment Settings' },
+      { to: '/messages', label: 'Messages' },
     ],
     resort: [
-      { to: '/resort/dashboard', label: 'Dashboard' },
-      { to: '/resort/profile', label: 'Manage Profile' },
+      { to: '/profile', label: 'My Profile' },
+      { to: '/resort/profile', label: 'Manage Resort' },
+      { to: '/messages', label: 'Messages' },
     ],
     enterprise: [
-      { to: '/enterprise/dashboard', label: 'Dashboard' },
+      { to: '/profile', label: 'My Profile' },
       { to: '/enterprise/profile', label: 'Manage Products' },
       { to: '/enterprise/orders', label: 'Manage Orders' },
+      { to: '/messages', label: 'Messages' },
     ],
   };
 
@@ -135,9 +158,21 @@ export function Navbar() {
               </Link>
             ))}
 
+            {/* Dark mode toggle */}
+            <button
+              onClick={toggleDark}
+              className="p-2 rounded-lg hover:bg-primary/10 transition-colors"
+              title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {isDark ? (
+                <Sun className="h-5 w-5 text-yellow-400" />
+              ) : (
+                <Moon className="h-5 w-5 text-gray-600" />
+              )}
+            </button>
+
             {/* Show cart only for tourists */}
-            {userType === 'tourist' ? (
-              <Link to="/cart" className="relative">
+            {userType === 'tourist' ? (              <Link to="/cart" className="relative">
                 <ShoppingCart className="h-6 w-6 text-foreground hover:text-primary transition-colors" />
                 {cartCount > 0 && (
                   <span className="absolute -top-2 -right-2 bg-primary text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
@@ -213,12 +248,24 @@ export function Navbar() {
           </div>
 
           {/* Mobile Menu Button */}
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="md:hidden p-2"
-          >
-            {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-          </button>
+          <div className="md:hidden flex items-center gap-2">
+            <button
+              onClick={toggleDark}
+              className="p-2 rounded-lg hover:bg-primary/10 transition-colors"
+            >
+              {isDark ? (
+                <Sun className="h-5 w-5 text-yellow-400" />
+              ) : (
+                <Moon className="h-5 w-5 text-gray-600" />
+              )}
+            </button>
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="p-2"
+            >
+              {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Navigation */}

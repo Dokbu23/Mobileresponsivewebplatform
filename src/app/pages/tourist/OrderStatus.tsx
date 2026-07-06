@@ -1,10 +1,12 @@
-import { Package, Hotel, Clock, CheckCircle, Truck, MapPin, LogIn, RefreshCw } from 'lucide-react';
+import { Package, Hotel, Clock, CheckCircle, Truck, MapPin, LogIn, RefreshCw, Star } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { Link } from 'react-router';
 import { useState, useEffect } from 'react';
-import { getJSON } from '../../lib/api';
+import { getJSON, getOrderReviewStatus, postJSON } from '../../lib/api';
+import { showConfirmDialog } from '../../lib/sweetAlert';
 import { toast } from 'sonner';
+import ReviewModal from '../../components/ReviewModal';
 
 export function OrderStatus() {
   const { userType, currentUser } = useApp();
@@ -13,6 +15,17 @@ export function OrderStatus() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastOrderStatuses, setLastOrderStatuses] = useState<Record<string, string>>({});
+  const [orderReviews, setOrderReviews] = useState<Record<number, any>>({});
+  
+  const [cancellingOrderId, setCancellingOrderId] = useState<number | null>(null);
+  const [cancellingBookingId, setCancellingBookingId] = useState<number | null>(null);
+
+  // Review modal state
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [selectedProductName, setSelectedProductName] = useState<string>('');
+  const [existingReview, setExistingReview] = useState<any>(null);
 
   useEffect(() => {
     if (!userType || userType !== 'tourist') {
@@ -68,6 +81,27 @@ export function OrderStatus() {
 
       setOrders(Array.isArray(ordersResponse) ? ordersResponse : []);
       setBookings(Array.isArray(bookingsResponse) ? bookingsResponse : []);
+      
+      // Fetch review status for delivered orders
+      if (Array.isArray(ordersResponse)) {
+        const deliveredOrders = ordersResponse.filter((order: any) => 
+          order.status === 'delivered' || order.status === 'completed'
+        );
+        
+        for (const order of deliveredOrders) {
+          try {
+            const reviewResponse = await getOrderReviewStatus(order.id);
+            if (reviewResponse.success) {
+              setOrderReviews(prev => ({
+                ...prev,
+                [order.id]: reviewResponse.reviews
+              }));
+            }
+          } catch (err) {
+            console.error(`Failed to fetch reviews for order ${order.id}:`, err);
+          }
+        }
+      }
     } catch (err: any) {
       console.error('Error fetching orders and bookings:', err);
       console.error('Error details:', {
@@ -79,6 +113,68 @@ export function OrderStatus() {
       toast.error('Failed to load orders and bookings');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleWriteReview = (orderId: number, productId: number, productName: string) => {
+    const reviews = orderReviews[orderId] || {};
+    const existingReview = reviews[productId];
+    
+    setSelectedOrderId(orderId);
+    setSelectedProductId(productId);
+    setSelectedProductName(productName);
+    setExistingReview(existingReview || null);
+    setReviewModalOpen(true);
+  };
+
+  const handleReviewSubmitted = () => {
+    // Refresh orders to get updated review status
+    fetchOrdersAndBookings();
+  };
+
+  const handleCancelOrder = async (orderId: number) => {
+    const confirmed = await showConfirmDialog(
+      'Cancel Order',
+      'Are you sure you want to cancel this order? This cannot be undone.',
+      'Yes, Cancel Order',
+      'Keep Order'
+    );
+    if (!confirmed) return;
+
+    setCancellingOrderId(orderId);
+    try {
+      await postJSON(`/orders/${orderId}/cancel`, {});
+      setOrders(prev =>
+        prev.map(o => o.id === orderId ? { ...o, status: 'cancelled' } : o)
+      );
+      toast.success('Order cancelled successfully.');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to cancel order. Please try again.');
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
+
+  const handleCancelBooking = async (bookingId: number) => {
+    const confirmed = await showConfirmDialog(
+      'Cancel Booking',
+      'Are you sure you want to cancel this booking? This cannot be undone.',
+      'Yes, Cancel Booking',
+      'Keep Booking'
+    );
+    if (!confirmed) return;
+
+    setCancellingBookingId(bookingId);
+    try {
+      await postJSON(`/bookings/${bookingId}/cancel`, {});
+      setBookings(prev =>
+        prev.map(b => b.id === bookingId ? { ...b, status: 'cancelled' } : b)
+      );
+      toast.success('Booking cancelled successfully.');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to cancel booking. Please try again.');
+    } finally {
+      setCancellingBookingId(null);
     }
   };
 
@@ -239,6 +335,84 @@ export function OrderStatus() {
             Awaiting owner verification of your receipt.
           </div>
         )}
+
+        {/* Check-In Voucher — shown when status is checked-in */}
+        {booking.status === 'checked-in' && (
+          <div className="mt-4 rounded-xl border-2 border-blue-300 bg-gradient-to-br from-blue-50 to-blue-100 overflow-hidden">
+            {/* Voucher header */}
+            <div className="bg-blue-600 text-white px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Hotel className="h-5 w-5" />
+                <span className="font-bold text-sm">CHECK-IN VOUCHER</span>
+              </div>
+              <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">✓ Active Stay</span>
+            </div>
+            {/* Voucher body */}
+            <div className="p-4 space-y-3">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-blue-800">#{String(booking.id).padStart(6, '0')}</p>
+                <p className="text-xs text-blue-600">Booking Reference</p>
+              </div>
+              <div className="border-t border-blue-200 pt-3 grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-blue-500 font-semibold uppercase">Guest</p>
+                  <p className="font-medium text-blue-900">{booking.customer_name ?? 'Guest'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-blue-500 font-semibold uppercase">Resort</p>
+                  <p className="font-medium text-blue-900 text-xs">
+                    {(accName).replace(/&amp;/g, '&')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-blue-500 font-semibold uppercase">Check-in</p>
+                  <p className="font-medium text-blue-900">{new Date(booking.checkIn ?? booking.check_in).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-blue-500 font-semibold uppercase">Check-out</p>
+                  <p className="font-medium text-blue-900">{new Date(booking.checkOut ?? booking.check_out).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                </div>
+                {(booking.accommodation_snapshot?.selected_room) && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-blue-500 font-semibold uppercase">Room</p>
+                    <p className="font-medium text-blue-900">{booking.accommodation_snapshot.selected_room.name}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-blue-500 font-semibold uppercase">Total Paid</p>
+                  <p className="font-bold text-blue-900">₱{bookingTotal.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-blue-500 font-semibold uppercase">Payment</p>
+                  <p className="font-medium text-blue-900 capitalize">{booking.paymentMethod ?? booking.payment_method ?? '—'}</p>
+                </div>
+              </div>
+              <div className="border-t border-blue-200 pt-3 text-center">
+                <p className="text-xs text-blue-600">Present this voucher to the resort staff</p>
+                <p className="text-xs text-blue-500 mt-0.5">Checked in on {new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cancel Booking Button — only for pending or confirmed */}
+        {(booking.status === 'pending' || booking.status === 'confirmed') && (
+          <div className="mt-3">
+            <button
+              onClick={() => handleCancelBooking(booking.id)}
+              disabled={cancellingBookingId === booking.id}
+              className="px-3 py-1 text-sm bg-red-50 border border-red-300 text-red-700 rounded-full hover:bg-red-100 transition-colors disabled:opacity-50"
+            >
+              {cancellingBookingId === booking.id ? 'Cancelling…' : 'Cancel Booking'}
+            </button>
+          </div>
+        )}
+
+        {booking.status === 'cancelled' && (
+          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            This booking has been cancelled.
+          </div>
+        )}
       </div>
     );
   });
@@ -286,19 +460,37 @@ export function OrderStatus() {
                       <p className="text-sm text-muted-foreground">Order ID</p>
                       <p>#{order.id}</p>
                     </div>
-                    <div className={`px-3 py-1 rounded-full border text-sm flex items-center gap-2 ${getStatusColor(order.status)}`}>
-                      {getOrderStatusIcon(order.status)}
-                      {getOrderStatusLabel(order.status)}
+                    <div className="flex items-center gap-2">
+                      <div className={`px-3 py-1 rounded-full border text-sm flex items-center gap-2 ${getStatusColor(order.status)}`}>
+                        {getOrderStatusIcon(order.status)}
+                        {getOrderStatusLabel(order.status)}
+                      </div>
+                      {(order.status === 'pending' || order.status === 'confirmed') && (
+                        <button
+                          onClick={() => handleCancelOrder(order.id)}
+                          disabled={cancellingOrderId === order.id}
+                          className="px-3 py-1 text-sm bg-red-50 border border-red-300 text-red-700 rounded-full hover:bg-red-100 transition-colors disabled:opacity-50"
+                        >
+                          {cancellingOrderId === order.id ? 'Cancelling…' : 'Cancel Order'}
+                        </button>
+                      )}
                     </div>
                   </div>
 
                   <div className="space-y-2 mb-3">
                     {Array.isArray(order.items) && order.items.map((item: any, index: number) => {
                       const itemTotal = Number(item.price || 0) * Number(item.quantity || 0);
+                      const variation = item.selectedVariation;
                       return (
                         <div key={index} className="flex justify-between text-sm">
                           <span className="text-muted-foreground">
-                            {item.name ?? 'Item'} × {item.quantity ?? 0}
+                            {item.name ?? 'Item'}
+                            {variation && (
+                              <span className="text-pink-600 ml-1">
+                                ({variation.name}: {variation.value})
+                              </span>
+                            )}
+                            {' × '}{item.quantity ?? 0}
                           </span>
                           <span>₱{itemTotal.toFixed(2)}</span>
                         </div>
@@ -345,8 +537,33 @@ export function OrderStatus() {
                   )}
 
                   {order.status === 'delivered' && (
-                    <div className="mt-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
-                      Your order has been delivered successfully. Thank you for your purchase!
+                    <div className="mt-3 space-y-2">
+                      <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
+                        Your order has been delivered successfully. Thank you for your purchase!
+                      </div>
+                      
+                      {/* Review buttons for each product */}
+                      {Array.isArray(order.items) && order.items.map((item: any, index: number) => {
+                        const reviews = orderReviews[order.id] || {};
+                        const hasReview = reviews[item.product_id];
+                        
+                        return (
+                          <button
+                            key={index}
+                            onClick={() => handleWriteReview(order.id, item.product_id, item.name)}
+                            className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                              hasReview
+                                ? 'bg-yellow-50 border border-yellow-300 text-yellow-700 hover:bg-yellow-100'
+                                : 'bg-blue-50 border border-blue-300 text-blue-700 hover:bg-blue-100'
+                            }`}
+                          >
+                            <Star className={`h-4 w-4 ${hasReview ? 'fill-yellow-500 text-yellow-500' : ''}`} />
+                            <span className="text-sm font-medium">
+                              {hasReview ? `Update Review for ${item.name}` : `Write Review for ${item.name}`}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -377,6 +594,19 @@ export function OrderStatus() {
           )}
         </div>
       </div>
+
+      {/* Review Modal */}
+      {selectedOrderId && selectedProductId && (
+        <ReviewModal
+          isOpen={reviewModalOpen}
+          onClose={() => setReviewModalOpen(false)}
+          orderId={selectedOrderId}
+          productId={selectedProductId}
+          productName={selectedProductName}
+          existingReview={existingReview}
+          onReviewSubmitted={handleReviewSubmitted}
+        />
+      )}
     </div>
   );
 }

@@ -15,7 +15,9 @@ class ProductController extends Controller
      */
     public function index(Request $request)
     {
-        $query = \App\Models\Product::query();
+        $query = \App\Models\Product::query()
+            ->with('owner:id,name,email,phone')
+            ->with('variations');
 
         // Apply search filter (case-insensitive search on name and description)
         // Products do not support location or date filters
@@ -66,7 +68,10 @@ class ProductController extends Controller
 
         $product = \App\Models\Product::create($data);
 
-        return response()->json($product, 201);
+        // Handle optional variations payload
+        $this->syncVariations($request, $product, false);
+
+        return response()->json($product->load('variations'), 201);
     }
 
     /**
@@ -77,7 +82,7 @@ class ProductController extends Controller
      */
     public function show($id)
     {
-        $item = \App\Models\Product::findOrFail($id);
+        $item = \App\Models\Product::with('variations')->findOrFail($id);
         return response()->json($item);
     }
 
@@ -125,9 +130,12 @@ class ProductController extends Controller
         $product = \App\Models\Product::findOrFail($id);
         $product->update($data);
 
+        // Handle optional variations payload (delete & re-create)
+        $this->syncVariations($request, $product, true);
+
             \Log::info('Product updated', ['id' => $id]);
 
-        return response()->json($product);
+        return response()->json($product->load('variations'));
     }
 
     /**
@@ -153,16 +161,68 @@ class ProductController extends Controller
     {
         $owner = \App\Models\User::where('id', $userId)
             ->where('role', 'enterprise')
-            ->where('listing_status', 'approved')
-            ->select('id', 'name', 'email', 'phone', 'address', 'barangay', 'description', 'payment_details')
+            ->whereIn('listing_status', ['approved', 'pending']) // Allow pending too for now
+            ->select('id', 'name', 'email', 'phone', 'address', 'barangay', 'description', 'payment_details', 'created_at',
+                     'store_name', 'store_description', 'store_logo', 'store_banner', 'store_is_setup')
             ->firstOrFail();
 
-        $products = \App\Models\Product::where('user_id', $userId)->get();
+        $products = \App\Models\Product::where('user_id', $userId)
+            ->with('variations')
+            ->get();
 
         return response()->json([
             'owner'         => $owner,
             'products'      => $products,
             'is_registered' => true,
         ]);
+    }
+
+    /**
+     * Sync the variations payload for a product.
+     * Accepts either a JSON string or an array under the "variations" key.
+     * For updates, existing variations are deleted first so the client
+     * payload is always authoritative.
+     */
+    private function syncVariations(Request $request, \App\Models\Product $product, bool $isUpdate): void
+    {
+        if (! $request->has('variations')) {
+            return;
+        }
+
+        $raw = $request->input('variations');
+
+        // Accept JSON strings (typical for multipart/form-data) or arrays
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
+            $variations = is_array($decoded) ? $decoded : [];
+        } elseif (is_array($raw)) {
+            $variations = $raw;
+        } else {
+            $variations = [];
+        }
+
+        // For updates, remove existing rows so we can re-create a clean set
+        if ($isUpdate) {
+            $product->variations()->delete();
+        }
+
+        foreach ($variations as $var) {
+            if (empty($var['name']) || empty($var['value'])) {
+                continue;
+            }
+
+            $price = $var['price'] ?? null;
+            if ($price === '' ) {
+                $price = null;
+            }
+
+            $product->variations()->create([
+                'name'  => (string) $var['name'],
+                'value' => (string) $var['value'],
+                'price' => $price !== null ? (float) $price : null,
+                'stock' => isset($var['stock']) ? (int) $var['stock'] : 0,
+                'image' => $var['image'] ?? null,
+            ]);
+        }
     }
 }

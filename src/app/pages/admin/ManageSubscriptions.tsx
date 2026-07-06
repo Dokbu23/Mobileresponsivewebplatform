@@ -102,7 +102,9 @@ export function ManageSubscriptions() {
   const handleVerifyPayment = async (payment: SubscriptionPayment) => {
     const result = await showConfirmAlert(
       'Verify Payment?',
-      `Verify subscription payment from ${payment.user.name}? This will grant them full access for 1 year.`
+      `Verify subscription payment from ${payment.user.name}? This will grant them full access for 1 year.`,
+      'warning',
+      'Yes, verify it!'
     );
 
     if (result.isConfirmed) {
@@ -129,7 +131,8 @@ export function ManageSubscriptions() {
     const result = await showConfirmAlert(
       'Reject Payment?',
       `Reject subscription payment from ${payment.user.name}? They will need to submit a new payment.`,
-      'warning'
+      'warning',
+      'Yes, reject it!'
     );
 
     if (result.isConfirmed) {

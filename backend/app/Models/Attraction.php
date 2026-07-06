@@ -9,7 +9,7 @@ class Attraction extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id','name','location','category','image','description','full_description'];
+    protected $fillable = ['user_id','name','location','category','image','description','full_description','view_count'];
 
     public function creator()
     {

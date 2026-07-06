@@ -17,25 +17,108 @@ class DatabaseSeeder extends Seeder
      */
     public function run()
     {
-        // Seed Admin User only (if doesn't exist)
-        $adminUser = [
-            'name' => 'Admin User',
-            'email' => 'admin@mansalay.com',
-            'password' => bcrypt('admin123'),
-            'role' => 'admin',
-            'email_verified_at' => now(),
+        // ---------------------------------------------------------------
+        // Seed all test users (idempotent — uses firstOrCreate)
+        // ---------------------------------------------------------------
+        $users = [
+            // Admin
+            [
+                'name'             => 'Admin User',
+                'email'            => 'admin@mansalay.com',
+                'password'         => bcrypt('admin123'),
+                'role'             => 'admin',
+                'listing_status'   => 'approved',
+                'subscription_status' => 'paid',
+                'is_active'        => true,
+                'email_verified_at' => now(),
+            ],
+            // Tourists
+            [
+                'name'             => 'Juan Dela Cruz',
+                'email'            => 'tourist@example.com',
+                'password'         => bcrypt('tourist123'),
+                'role'             => 'tourist',
+                'listing_status'   => 'approved',
+                'subscription_status' => 'paid',
+                'is_active'        => true,
+                'email_verified_at' => now(),
+            ],
+            [
+                'name'             => 'Maria Santos',
+                'email'            => 'tourist2@example.com',
+                'password'         => bcrypt('tourist123'),
+                'role'             => 'tourist',
+                'listing_status'   => 'approved',
+                'subscription_status' => 'paid',
+                'is_active'        => true,
+                'email_verified_at' => now(),
+            ],
+            // Resorts
+            [
+                'name'             => 'Mansalay Beach Resort',
+                'email'            => 'resort@mansalay.com',
+                'password'         => bcrypt('resort123'),
+                'role'             => 'resort',
+                'listing_status'   => 'approved',
+                'subscription_status' => 'active',
+                'is_active'        => true,
+                'email_verified_at' => now(),
+            ],
+            [
+                'name'             => 'Mountain View Lodge',
+                'email'            => 'lodge@mansalay.com',
+                'password'         => bcrypt('resort123'),
+                'role'             => 'resort',
+                'listing_status'   => 'approved',
+                'subscription_status' => 'active',
+                'is_active'        => true,
+                'email_verified_at' => now(),
+            ],
+            // Enterprises
+            [
+                'name'             => 'Local Handicrafts Shop',
+                'email'            => 'enterprise@mansalay.com',
+                'password'         => bcrypt('enterprise123'),
+                'role'             => 'enterprise',
+                'listing_status'   => 'approved',
+                'subscription_status' => 'active',
+                'is_active'        => true,
+                'email_verified_at' => now(),
+            ],
+            [
+                'name'             => 'Mansalay Food Products',
+                'email'            => 'foodshop@mansalay.com',
+                'password'         => bcrypt('enterprise123'),
+                'role'             => 'enterprise',
+                'listing_status'   => 'approved',
+                'subscription_status' => 'active',
+                'is_active'        => true,
+                'email_verified_at' => now(),
+            ],
         ];
 
-        \App\Models\User::firstOrCreate(
-            ['email' => $adminUser['email']],
-            $adminUser
-        );
+        foreach ($users as $userData) {
+            \App\Models\User::firstOrCreate(
+                ['email' => $userData['email']],
+                $userData
+            );
+        }
 
         // Seed Payment Settings
         $this->call(PaymentSettingsSeeder::class);
 
+        // Seed Tourism Data
+        $this->call(TourismDataSeeder::class);
+
         $this->command->info('Database seeded successfully!');
-        $this->command->info('Admin user created: admin@mansalay.com / admin123');
+        $this->command->info('Test accounts:');
+        $this->command->info('  admin@mansalay.com / admin123');
+        $this->command->info('  tourist@example.com / tourist123');
+        $this->command->info('  tourist2@example.com / tourist123');
+        $this->command->info('  resort@mansalay.com / resort123');
+        $this->command->info('  lodge@mansalay.com / resort123');
+        $this->command->info('  enterprise@mansalay.com / enterprise123');
+        $this->command->info('  foodshop@mansalay.com / enterprise123');
         $this->command->info('Users: ' . \App\Models\User::count());
         $this->command->info('Products: ' . Product::count());
         $this->command->info('Attractions: ' . Attraction::count());

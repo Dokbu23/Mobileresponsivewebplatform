@@ -45,6 +45,8 @@ class ResortProfileController extends Controller
             'resort_policies' => $user->resort_policies,
             'resort_is_setup' => (bool) $user->resort_is_setup,
             'listing_status' => $user->listing_status,
+            'latitude' => $user->latitude,
+            'longitude' => $user->longitude,
         ]);
     }
 

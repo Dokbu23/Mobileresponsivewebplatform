@@ -1,147 +1,219 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  ReactNode,
+} from 'react';
 import { toast } from 'sonner';
+import {
+  ApiNotification,
+  deleteNotification as apiDeleteNotification,
+  getAuthToken,
+  getNotifications as apiGetNotifications,
+  markAllNotificationsAsRead as apiMarkAllRead,
+  markNotificationAsRead as apiMarkRead,
+} from '../lib/api';
 
-export interface Notification {
-  id: string;
-  type: 'order_status_changed' | 'order_placed' | 'booking_status_changed';
-  title: string;
-  message: string;
-  timestamp: string;
-  read: boolean;
-  orderId?: string;
-  bookingId?: string;
-}
+const POLL_INTERVAL_MS = 15000;
 
 interface NotificationContextType {
-  notifications: Notification[];
-  addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void;
-  markAsRead: (id: string) => void;
-  markAllAsRead: () => void;
+  notifications: ApiNotification[];
   unreadCount: number;
+  loading: boolean;
+  refresh: () => Promise<void>;
+  markAsRead: (id: number) => Promise<void>;
+  markAllAsRead: () => Promise<void>;
+  deleteNotification: (id: number) => Promise<void>;
+  setChatOpen: (receiverId: number | null) => void;
+  // Backward-compatible client-side toast helpers (used across the app)
   showOrderStatusNotification: (orderId: string, oldStatus: string, newStatus: string) => void;
   showOrderPlacedNotification: (orderId: string, businessName: string) => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
-const NOTIFICATIONS_STORAGE_KEY = 'discover-mansalay:notifications';
+export function NotificationProvider({ children }: { children: ReactNode }) {
+  const [notifications, setNotifications] = useState<ApiNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [openChatReceiverId, setOpenChatReceiverId] = useState<number | null>(null);
 
-function readStoredNotifications(): Notification[] {
-  if (typeof window === 'undefined') {
-    return [];
-  }
+  // Ref mirror of openChatReceiverId so refresh() can read it without a stale closure
+  const openChatReceiverIdRef = useRef<number | null>(null);
 
-  try {
-    const stored = window.localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
-    if (!stored) {
-      return [];
+  // Keep the ref in sync with the state
+  useEffect(() => {
+    openChatReceiverIdRef.current = openChatReceiverId;
+  }, [openChatReceiverId]);
+
+  // Track previous unread count so we can surface a toast when new items arrive
+  const prevUnreadRef = useRef<number>(0);
+  const prevTopIdRef = useRef<number | null>(null);
+  const initializedRef = useRef(false);
+
+  const refresh = useCallback(async () => {
+    // Only fetch if there's an auth token
+    if (!getAuthToken()) {
+      setNotifications([]);
+      setUnreadCount(0);
+      prevUnreadRef.current = 0;
+      prevTopIdRef.current = null;
+      return;
     }
 
-    const parsed = JSON.parse(stored) as Notification[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
+    try {
+      setLoading(true);
+      const res = await apiGetNotifications();
+      const list = Array.isArray(res?.notifications) ? res.notifications : [];
+      const nextUnread = typeof res?.unread_count === 'number' ? res.unread_count : 0;
+      const topId = list.length > 0 ? list[0].id : null;
 
-export function NotificationProvider({ children }: { children: ReactNode }) {
-  const [notifications, setNotifications] = useState<Notification[]>(() => readStoredNotifications());
-
-  const addNotification = (notificationData: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
-    const newNotification: Notification = {
-      ...notificationData,
-      id: `notif-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      read: false,
-    };
-
-    setNotifications(prev => {
-      const updated = [newNotification, ...prev];
-      // Keep only last 50 notifications
-      const limited = updated.slice(0, 50);
-      
-      // Save to localStorage
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(limited));
+      // Fire a toast if a new notification arrived after the first load
+      if (initializedRef.current && topId !== null && prevTopIdRef.current !== topId && nextUnread > prevUnreadRef.current) {
+        const latest = list[0];
+        if (latest) {
+          if (latest.type === 'message_received') {
+            const senderId = latest.data?.sender_id ?? null;
+            // Suppress toast if ChatModal is open for this sender's conversation
+            if (senderId !== null && senderId === openChatReceiverIdRef.current) {
+              // suppress — user is already viewing this conversation
+            } else {
+              toast.info(latest.title, {
+                description: latest.message,
+              });
+            }
+          } else {
+            toast.info(latest.title, {
+              description: latest.message,
+            });
+          }
+        }
       }
-      
-      return limited;
-    });
 
-    // Show toast notification
-    toast.success(notificationData.title, {
-      description: notificationData.message,
-    });
-  };
+      setNotifications(list);
+      setUnreadCount(nextUnread);
+      prevUnreadRef.current = nextUnread;
+      prevTopIdRef.current = topId;
+      initializedRef.current = true;
+    } catch (error) {
+      // Silent fail — keep previous state
+      console.warn('Failed to refresh notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const markAsRead = (id: string) => {
-    setNotifications(prev => {
-      const updated = prev.map(notif => 
-        notif.id === id ? { ...notif, read: true } : notif
-      );
-      
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
-      }
-      
-      return updated;
-    });
-  };
+  // Initial load + polling
+  useEffect(() => {
+    refresh();
+    const intervalId = window.setInterval(() => {
+      refresh();
+    }, POLL_INTERVAL_MS);
 
-  const markAllAsRead = () => {
-    setNotifications(prev => {
-      const updated = prev.map(notif => ({ ...notif, read: true }));
-      
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(updated));
-      }
-      
-      return updated;
-    });
-  };
+    // Re-fetch when the window regains focus
+    const handleFocus = () => refresh();
+    window.addEventListener('focus', handleFocus);
 
-  const showOrderStatusNotification = (orderId: string, oldStatus: string, newStatus: string) => {
-    const statusMessages = {
-      pending: 'Your order is being processed',
-      confirmed: 'Your order has been confirmed and is being prepared',
-      shipped: 'Your order has been shipped and is on the way',
-      delivered: 'Your order has been delivered successfully'
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
     };
+  }, [refresh]);
 
-    const statusEmojis = {
-      pending: '⏳',
-      confirmed: '✅',
-      shipped: '🚚',
-      delivered: '📦'
-    };
+  const markAsRead = useCallback(async (id: number) => {
+    // Optimistic update
+    setNotifications(prev =>
+      prev.map(n => (n.id === id ? { ...n, is_read: true } : n))
+    );
+    setUnreadCount(prev => Math.max(0, prev - 1));
 
-    addNotification({
-      type: 'order_status_changed',
-      title: `${statusEmojis[newStatus as keyof typeof statusEmojis]} Order #${orderId} ${newStatus.charAt(0).toUpperCase() + newStatus.slice(1)}`,
-      message: statusMessages[newStatus as keyof typeof statusMessages] || `Order status updated to ${newStatus}`,
-      orderId,
-    });
-  };
+    try {
+      await apiMarkRead(id);
+    } catch (error) {
+      console.warn('Failed to mark notification as read:', error);
+      // Refresh to re-sync
+      refresh();
+    }
+  }, [refresh]);
 
-  const showOrderPlacedNotification = (orderId: string, businessName: string) => {
-    addNotification({
-      type: 'order_placed',
-      title: `🛍️ New Order Received`,
-      message: `Order #${orderId} has been placed by a customer`,
-      orderId,
-    });
-  };
+  const markAllAsRead = useCallback(async () => {
+    // Optimistic update
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    setUnreadCount(0);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+    try {
+      await apiMarkAllRead();
+    } catch (error) {
+      console.warn('Failed to mark all as read:', error);
+      refresh();
+    }
+  }, [refresh]);
+
+  const deleteNotification = useCallback(async (id: number) => {
+    const previous = notifications;
+    // Optimistic update
+    setNotifications(prev => prev.filter(n => n.id !== id));
+    const removed = previous.find(n => n.id === id);
+    if (removed && !removed.is_read) {
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    }
+
+    try {
+      await apiDeleteNotification(id);
+    } catch (error) {
+      console.warn('Failed to delete notification:', error);
+      refresh();
+    }
+  }, [notifications, refresh]);
+
+  const setChatOpen = useCallback((receiverId: number | null) => {
+    setOpenChatReceiverId(receiverId);
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // Backward-compatible helpers that show a local toast only.
+  // Real persistence now happens server-side via backend triggers.
+  // -------------------------------------------------------------------------
+
+  const showOrderStatusNotification = useCallback(
+    (orderId: string, _oldStatus: string, newStatus: string) => {
+      const statusEmojis: Record<string, string> = {
+        pending: '⏳',
+        confirmed: '✅',
+        shipped: '🚚',
+        delivered: '📦',
+      };
+      const emoji = statusEmojis[newStatus] ?? '🔔';
+      toast.info(`${emoji} Order #${orderId} ${newStatus}`, {
+        description: `Order status is now ${newStatus}.`,
+      });
+    },
+    []
+  );
+
+  const showOrderPlacedNotification = useCallback(
+    (orderId: string, _businessName: string) => {
+      toast.success('🛍️ New Order Received', {
+        description: `Order #${orderId} has been placed by a customer.`,
+      });
+    },
+    []
+  );
 
   return (
     <NotificationContext.Provider
       value={{
         notifications,
-        addNotification,
+        unreadCount,
+        loading,
+        refresh,
         markAsRead,
         markAllAsRead,
-        unreadCount,
+        deleteNotification,
+        setChatOpen,
         showOrderStatusNotification,
         showOrderPlacedNotification,
       }}

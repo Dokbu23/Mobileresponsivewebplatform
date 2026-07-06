@@ -5,6 +5,8 @@ import { Link } from 'react-router';
 import { useApp } from '../../context/AppContext';
 import { API_BASE, deleteJSON, getJSON, patchJSON, postJSON, getAuthToken } from '../../lib/api';
 import { showPaymentMethodSuccess, showProductSuccess, showStatusUpdateSuccess } from '../../lib/sweetAlert';
+import { LocationPicker } from '../../components/LocationPicker';
+import { AvailabilityCalendar } from '../../components/AvailabilityCalendar';
 
 interface ApiBooking {
   id: number;
@@ -16,8 +18,11 @@ interface ApiBooking {
   check_in: string;
   check_out: string;
   total: number;
-  status: 'pending' | 'confirmed' | 'checked-in' | 'completed';
+  status: 'pending' | 'confirmed' | 'checked-in' | 'completed' | 'cancelled';
   payment_method: 'online' | 'otc' | null;
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone?: string;
 }
 
 interface BookingRow {
@@ -26,8 +31,11 @@ interface BookingRow {
   checkIn: string;
   checkOut: string;
   total: number;
-  status: 'pending' | 'confirmed' | 'checked-in' | 'completed';
+  status: 'pending' | 'confirmed' | 'checked-in' | 'completed' | 'cancelled';
   paymentMethod: 'online' | 'otc' | null;
+  customerName: string;
+  customerEmail: string | null;
+  customerPhone: string | null;
 }
 
 interface Event {
@@ -75,6 +83,7 @@ export function ResortProfile() {
   });
   const [profileImages, setProfileImages] = useState<File[]>([]);
   const [profileImagePreviews, setProfileImagePreviews] = useState<string[]>([]);
+  const [profileLocation, setProfileLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,8 +129,136 @@ export function ResortProfile() {
   const [attractionImageFile, setAttractionImageFile] = useState<File | null>(null);
   const [attractionImagePreview, setAttractionImagePreview] = useState<string | null>(null);
 
-  const loadResortProfile = async () => {
+  // Room management state
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [showRoomForm, setShowRoomForm] = useState(false);
+  const [editingRoomId, setEditingRoomId] = useState<number | null>(null);
+  const [roomSubmitting, setRoomSubmitting] = useState(false);
+  const [roomForm, setRoomForm] = useState({
+    name: '',
+    type: '',
+    price_per_night: '',
+    capacity: '2',
+    description: '',
+    is_available: true,
+  });
+  const [roomImageFile, setRoomImageFile] = useState<File | null>(null);
+  const [roomImagePreview, setRoomImagePreview] = useState<string | null>(null);
+
+  // Availability calendar state
+  const [blockedDates, setBlockedDates] = useState<string[]>([]);
+  const [calendarSaving, setCalendarSaving] = useState(false);
+
+  const fetchRooms = async () => {
     try {
+      const response = await getJSON('/resort-rooms');
+      setRooms(Array.isArray(response) ? response : []);
+    } catch {
+      setRooms([]);
+    }
+  };
+
+  const fetchBlockedDates = async () => {
+    try {
+      const res = await getJSON('/resort-availability');
+      setBlockedDates(Array.isArray(res) ? res.map((d: any) => d.blocked_date) : []);
+    } catch {
+      setBlockedDates([]);
+    }
+  };
+
+  const handleToggleDate = async (dateStr: string) => {
+    const isBlocked = blockedDates.includes(dateStr);
+    setCalendarSaving(true);
+    try {
+      if (isBlocked) {
+        // Unblock — use POST endpoint
+        await postJSON('/resort-availability-unblock', { date: dateStr });
+        setBlockedDates(prev => prev.filter(d => d !== dateStr));
+        toast.success(`${dateStr} unblocked`);
+      } else {
+        // Block
+        await postJSON('/resort-availability', { blocked_date: dateStr, reason: 'Fully booked' });
+        setBlockedDates(prev => [...prev, dateStr].sort());
+        toast.success(`${dateStr} blocked`);
+      }
+    } catch (err) {
+      toast.error('Failed to update availability');
+    } finally {
+      setCalendarSaving(false);
+    }
+  };
+
+  const resetRoomForm = () => {
+    setRoomForm({ name: '', type: '', price_per_night: '', capacity: '2', description: '', is_available: true });
+    setRoomImageFile(null);
+    setRoomImagePreview(null);
+    setEditingRoomId(null);
+    setShowRoomForm(false);
+  };
+
+  const handleSaveRoom = async () => {
+    if (!roomForm.name.trim() || !roomForm.price_per_night) {
+      toast.error('Room name and price are required');
+      return;
+    }
+    setRoomSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append('name', roomForm.name.trim());
+      if (roomForm.type.trim()) formData.append('type', roomForm.type.trim());
+      formData.append('price_per_night', roomForm.price_per_night);
+      formData.append('capacity', roomForm.capacity || '2');
+      if (roomForm.description.trim()) formData.append('description', roomForm.description.trim());
+      formData.append('is_available', roomForm.is_available ? '1' : '0');
+      if (roomImageFile) formData.append('image', roomImageFile);
+
+      if (editingRoomId) {
+        formData.append('_method', 'PUT');
+        await postJSON(`/resort-rooms/${editingRoomId}`, formData, true);
+        toast.success('Room updated');
+      } else {
+        await postJSON('/resort-rooms', formData, true);
+        toast.success('Room added');
+      }
+      resetRoomForm();
+      await fetchRooms();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save room');
+    } finally {
+      setRoomSubmitting(false);
+    }
+  };
+
+  const handleEditRoom = (room: any) => {
+    setEditingRoomId(room.id);
+    setRoomForm({
+      name: room.name || '',
+      type: room.type || '',
+      price_per_night: String(room.price_per_night || ''),
+      capacity: String(room.capacity || '2'),
+      description: room.description || '',
+      is_available: room.is_available !== false,
+    });
+    const imgUrl = room.image
+      ? (String(room.image).startsWith('http') ? room.image : `${API_BASE}${room.image}`)
+      : null;
+    setRoomImagePreview(imgUrl);
+    setRoomImageFile(null);
+    setShowRoomForm(true);
+  };
+
+  const handleDeleteRoom = async (id: number) => {
+    try {
+      await deleteJSON(`/resort-rooms/${id}`);
+      toast.success('Room deleted');
+      await fetchRooms();
+    } catch {
+      toast.error('Failed to delete room');
+    }
+  };
+
+  const loadResortProfile = async () => {    try {
       const profile = await getJSON('/resort-profile');
       setResortProfile(profile);
       setProfileForm({
@@ -138,6 +275,10 @@ export function ResortProfile() {
         String(img).startsWith('http') ? img : `${API_BASE}${img}`
       );
       setProfileImagePreviews(resolved);
+
+      if (profile?.latitude && profile?.longitude) {
+        setProfileLocation({ lat: Number(profile.latitude), lng: Number(profile.longitude) });
+      }
     } catch {
       setResortProfile(null);
     } finally {
@@ -267,6 +408,16 @@ export function ResortProfile() {
 
       await postJSON('/resort-profile', formData, true);
       toast.success('Resort profile updated');
+
+      // Save location if set
+      if (profileLocation) {
+        try {
+          await patchJSON('/profile/location', { latitude: profileLocation.lat, longitude: profileLocation.lng });
+        } catch {
+          // non-critical
+        }
+      }
+
       setProfileEditMode(false);
       setProfileImages([]);
       await loadResortProfile();
@@ -275,16 +426,27 @@ export function ResortProfile() {
     }
   };
 
-  const bookingStatusFlow = {
-    pending: 'confirmed' as const,
-    confirmed: 'checked-in' as const,
-    'checked-in': 'completed' as const,
+  const bookingStatusFlow: Record<string, string | null> = {
+    pending: 'confirmed',
+    confirmed: 'checked-in',
+    'checked-in': 'completed',
     completed: null,
+    cancelled: null,
+  };
+
+  const bookingStatusLabels: Record<string, string> = {
+    pending: 'Confirm Booking',
+    confirmed: 'Check In',
+    'checked-in': 'Complete Stay',
+    completed: '',
+    cancelled: '',
   };
 
   useEffect(() => {
     loadResortProfile();
     fetchAttractions();
+    fetchRooms();
+    fetchBlockedDates();
   }, []);
 
   useEffect(() => {
@@ -303,12 +465,19 @@ export function ResortProfile() {
           Array.isArray(bookingsResponse)
             ? bookingsResponse.map((booking: ApiBooking) => ({
                 id: booking.id,
-                accommodation: booking.accommodation_snapshot?.name ?? 'Accommodation',
+                accommodation: (booking.accommodation_snapshot?.name ?? 'Accommodation')
+                  .replace(/&amp;/g, '&')
+                  .replace(/&lt;/g, '<')
+                  .replace(/&gt;/g, '>')
+                  .replace(/&quot;/g, '"'),
                 checkIn: booking.check_in,
                 checkOut: booking.check_out,
                 total: Number(booking.total) || 0,
                 status: booking.status,
                 paymentMethod: booking.payment_method,
+                customerName: booking.customer_name ?? 'Guest',
+                customerEmail: booking.customer_email ?? null,
+                customerPhone: booking.customer_phone ?? null,
               }))
             : []
         );
@@ -361,8 +530,8 @@ export function ResortProfile() {
     return Array.from(summary.entries()).map(([name, count]) => ({ name, count }));
   }, [bookings]);
 
-  const handleUpdateBookingStatus = async (bookingId: string) => {
-    const currentBooking = bookings.find(booking => `BKG-${String(booking.id).padStart(3, '0')}` === bookingId);
+  const handleUpdateBookingStatus = async (bookingId: number) => {
+    const currentBooking = bookings.find(booking => booking.id === bookingId);
     if (!currentBooking) {
       return;
     }
@@ -374,20 +543,22 @@ export function ResortProfile() {
 
     try {
       await patchJSON(`/bookings/${currentBooking.id}`, { status: nextStatus });
-      setBookings(prev => prev.map(booking => (booking.id === currentBooking.id ? { ...booking, status: nextStatus } : booking)));
-      await showStatusUpdateSuccess('booking', bookingId, nextStatus);
+      setBookings(prev => prev.map(booking => (booking.id === currentBooking.id ? { ...booking, status: nextStatus as BookingRow['status'] } : booking)));
+      await showStatusUpdateSuccess('booking', `BKG-${String(currentBooking.id).padStart(3, '0')}`, nextStatus);
     } catch {
       toast.error('Failed to update booking');
     }
   };
 
   const getStatusBadge = (status: string) => {
-    const styles = {
+    const styles: Record<string, string> = {
       pending: 'bg-orange-100 text-orange-700 border-orange-300',
       confirmed: 'bg-green-100 text-green-700 border-green-300',
-      completed: 'bg-blue-100 text-blue-700 border-blue-300',
+      'checked-in': 'bg-blue-100 text-blue-700 border-blue-300',
+      completed: 'bg-gray-100 text-gray-700 border-gray-300',
+      cancelled: 'bg-red-100 text-red-700 border-red-300',
     };
-    return `px-3 py-1 rounded-full border text-sm ${styles[status as keyof typeof styles]}`;
+    return `px-3 py-1 rounded-full border text-sm ${styles[status] ?? 'bg-gray-100 text-gray-700 border-gray-300'}`;
   };
 
   // Payment Details Functions
@@ -448,10 +619,13 @@ export function ResortProfile() {
     }
   };
 
-  // Load payment details and receipts on component mount
+  // Load payment details and receipts on component mount, poll every 30s for new receipts
   useEffect(() => {
     fetchPaymentDetails();
     fetchReceipts();
+
+    const interval = setInterval(fetchReceipts, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   // Event Management Functions
@@ -662,7 +836,7 @@ export function ResortProfile() {
             className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-2"
           >
             <Edit className="h-4 w-4" />
-            {profileEditMode ? 'Cancel' : 'Edit Profile'}
+            {profileEditMode ? 'Cancel' : 'Edit Resort'}
           </button>
         </div>
 
@@ -777,6 +951,16 @@ export function ResortProfile() {
               )}
             </div>
 
+            <div>
+              <label className="block text-sm mb-2">📍 Your Location on Map</label>
+              <LocationPicker
+                initialLat={profileLocation?.lat}
+                initialLng={profileLocation?.lng}
+                onLocationSelect={(lat, lng) => setProfileLocation({ lat, lng })}
+                height="280px"
+              />
+            </div>
+
             <div className="flex justify-end">
               <button
                 onClick={handleSaveProfile}
@@ -784,22 +968,40 @@ export function ResortProfile() {
               >
                 Save Profile
               </button>
-            </div>
-          </div>
+            </div>          </div>
         ) : resortProfile ? (
-          <div className="space-y-5">
-            <div>
-              <h3 className="text-lg mb-1">{resortProfile.resort_name || currentUser?.name}</h3>
-              <p className="text-sm text-muted-foreground">₱{resortProfile.resort_price_per_night || 0} per night</p>
-            </div>
-            <p className="text-sm text-muted-foreground">{resortProfile.resort_description || 'No description provided.'}</p>
+          <div className="space-y-6">
+            {/* Hero banner using first gallery image */}
+            {profileImagePreviews.length > 0 && (
+              <div className="relative w-full h-48 rounded-xl overflow-hidden">
+                <img src={profileImagePreviews[0]} alt="Resort" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                <div className="absolute bottom-4 left-4 text-white">
+                  <h3 className="text-xl font-bold">{resortProfile.resort_name || currentUser?.name}</h3>
+                  <p className="text-sm opacity-90">₱{Number(resortProfile.resort_price_per_night || 0).toLocaleString()} per night</p>
+                </div>
+              </div>
+            )}
 
+            {!profileImagePreviews.length && (
+              <div>
+                <h3 className="text-xl font-bold">{resortProfile.resort_name || currentUser?.name}</h3>
+                <p className="text-primary font-semibold">₱{Number(resortProfile.resort_price_per_night || 0).toLocaleString()} per night</p>
+              </div>
+            )}
+
+            <p className="text-sm text-muted-foreground leading-relaxed">{resortProfile.resort_description || 'No description provided.'}</p>
+
+            {/* Amenities */}
             <div>
-              <h4 className="text-sm font-medium mb-2">Amenities</h4>
+              <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                <span className="w-1.5 h-4 bg-primary rounded-full inline-block" />
+                Amenities
+              </h4>
               <div className="flex flex-wrap gap-2">
                 {(resortProfile.resort_amenities || []).length ? (
                   resortProfile.resort_amenities.map((amenity: string) => (
-                    <span key={amenity} className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-full">
+                    <span key={amenity} className="px-3 py-1 bg-primary/10 text-primary text-xs rounded-full font-medium border border-primary/20">
                       {amenity}
                     </span>
                   ))
@@ -809,36 +1011,46 @@ export function ResortProfile() {
               </div>
             </div>
 
+            {/* Facilities & Policies */}
             {(resortProfile.resort_facilities || resortProfile.resort_policies) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <h4 className="text-sm font-medium mb-1">Facilities</h4>
-                  <p className="text-sm text-muted-foreground">{resortProfile.resort_facilities || 'None listed'}</p>
-                </div>
-                <div>
-                  <h4 className="text-sm font-medium mb-1">Policies</h4>
-                  <p className="text-sm text-muted-foreground">{resortProfile.resort_policies || 'None listed'}</p>
-                </div>
+                {resortProfile.resort_facilities && (
+                  <div className="bg-blue-50 rounded-xl p-4">
+                    <h4 className="text-sm font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                      <span className="w-1.5 h-4 bg-blue-500 rounded-full inline-block" />
+                      Facilities
+                    </h4>
+                    <p className="text-sm text-blue-700">{resortProfile.resort_facilities}</p>
+                  </div>
+                )}
+                {resortProfile.resort_policies && (
+                  <div className="bg-amber-50 rounded-xl p-4">
+                    <h4 className="text-sm font-semibold text-amber-800 mb-2 flex items-center gap-2">
+                      <span className="w-1.5 h-4 bg-amber-500 rounded-full inline-block" />
+                      Policies
+                    </h4>
+                    <p className="text-sm text-amber-700">{resortProfile.resort_policies}</p>
+                  </div>
+                )}
               </div>
             )}
 
-            <div>
-              <h4 className="text-sm font-medium mb-2">Gallery</h4>
-              {profileImagePreviews.length > 0 ? (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Gallery */}
+            {profileImagePreviews.length > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <span className="w-1.5 h-4 bg-primary rounded-full inline-block" />
+                  Gallery
+                </h4>
+                <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
                   {profileImagePreviews.map((preview, index) => (
-                    <div key={`${preview}-${index}`} className="rounded-lg overflow-hidden border">
-                      <img src={preview} alt="Resort" className="w-full h-24 object-cover" />
+                    <div key={`${preview}-${index}`} className="rounded-lg overflow-hidden border-2 border-primary/10 hover:border-primary transition-colors">
+                      <img src={preview} alt="Resort" className="w-full h-20 object-cover" />
                     </div>
                   ))}
                 </div>
-              ) : (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <ImageIcon className="h-4 w-4" />
-                  No images uploaded yet.
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-sm text-muted-foreground">No resort profile data available.</div>
@@ -1015,6 +1227,390 @@ export function ResortProfile() {
           );
         })}
       </div>
+
+      {/* Availability Calendar */}
+      <div className="bg-white border-2 border-primary/20 rounded-2xl overflow-hidden mb-8">
+        <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 py-4 flex items-center justify-between border-b border-primary/10">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-primary/20 rounded-xl flex items-center justify-center">
+              <Calendar className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold">Availability Calendar</h2>
+              <p className="text-xs text-muted-foreground">Click a date to block it — tourists won't be able to book on blocked dates</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {calendarSaving && <span className="text-xs text-muted-foreground animate-pulse">Saving...</span>}
+            <span className="text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-full font-medium">
+              {blockedDates.length} blocked
+            </span>
+          </div>
+        </div>
+        <div className="p-6">
+          <AvailabilityCalendar
+            blockedDates={blockedDates}
+            onToggleDate={handleToggleDate}
+          />
+          {blockedDates.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-primary/10">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Blocked Dates</p>
+              <div className="flex flex-wrap gap-2">
+                {blockedDates.slice(0, 20).map(d => (
+                  <span
+                    key={d}
+                    className="inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full cursor-pointer hover:bg-red-200 transition-colors"
+                    onClick={() => handleToggleDate(d)}
+                    title="Click to unblock"
+                  >
+                    {d} ✕
+                  </span>
+                ))}
+                {blockedDates.length > 20 && (
+                  <span className="text-xs text-muted-foreground">+{blockedDates.length - 20} more</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Room Management */}
+      <div className="bg-white border-2 border-primary/20 rounded-2xl overflow-hidden mb-8">
+        {/* Section Header */}
+        <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 py-5 flex items-center justify-between border-b border-primary/10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center">
+              <Hotel className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold">Room Management</h2>
+              <p className="text-xs text-muted-foreground">Tourists pick a room when booking your resort</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs bg-primary/10 text-primary px-3 py-1 rounded-full font-medium">
+              {rooms.length} room{rooms.length !== 1 ? 's' : ''}
+            </span>
+            <button
+              onClick={() => {
+                if (showRoomForm && !editingRoomId) {
+                  resetRoomForm();
+                } else {
+                  resetRoomForm();
+                  setShowRoomForm(true);
+                }
+              }}
+              className="px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors inline-flex items-center gap-2 text-sm font-medium shadow-sm"
+            >
+              <Plus className="h-4 w-4" />
+              Add Room
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {/* Add/Edit Room Form */}
+          {showRoomForm && (
+            <div className="bg-gradient-to-br from-primary/5 to-primary/10 border-2 border-primary/20 rounded-2xl p-6 mb-6">
+              <div className="flex items-center gap-2 mb-5">
+                <div className="w-8 h-8 bg-primary text-white rounded-lg flex items-center justify-center">
+                  {editingRoomId ? <Edit className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                </div>
+                <h3 className="text-base font-bold">{editingRoomId ? 'Edit Room' : 'Add New Room'}</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Room Name *</label>
+                  <input
+                    type="text"
+                    value={roomForm.name}
+                    onChange={e => setRoomForm(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-4 py-2.5 border-2 border-white rounded-xl focus:border-primary outline-none bg-white shadow-sm text-sm"
+                    placeholder="e.g. Deluxe Room, Family Suite"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Room Type</label>
+                  <select
+                    value={roomForm.type}
+                    onChange={e => setRoomForm(prev => ({ ...prev, type: e.target.value }))}
+                    className="w-full px-4 py-2.5 border-2 border-white rounded-xl focus:border-primary outline-none bg-white shadow-sm text-sm"
+                  >
+                    <option value="">Select type</option>
+                    <option value="Standard">Standard</option>
+                    <option value="Deluxe">Deluxe</option>
+                    <option value="Suite">Suite</option>
+                    <option value="Family">Family</option>
+                    <option value="Cottage">Cottage</option>
+                    <option value="Villa">Villa</option>
+                    <option value="Dormitory">Dormitory</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Price Per Night (₱) *</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">₱</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={roomForm.price_per_night}
+                      onChange={e => setRoomForm(prev => ({ ...prev, price_per_night: e.target.value }))}
+                      className="w-full pl-8 pr-4 py-2.5 border-2 border-white rounded-xl focus:border-primary outline-none bg-white shadow-sm text-sm"
+                      placeholder="2500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Max Guests</label>
+                  <div className="relative">
+                    <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={roomForm.capacity}
+                      onChange={e => setRoomForm(prev => ({ ...prev, capacity: e.target.value }))}
+                      className="w-full pl-9 pr-4 py-2.5 border-2 border-white rounded-xl focus:border-primary outline-none bg-white shadow-sm text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Description</label>
+                  <textarea
+                    value={roomForm.description}
+                    onChange={e => setRoomForm(prev => ({ ...prev, description: e.target.value }))}
+                    rows={3}
+                    className="w-full px-4 py-2.5 border-2 border-white rounded-xl focus:border-primary outline-none bg-white shadow-sm text-sm resize-none"
+                    placeholder="Describe the room — bed type, view, special features..."
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Room Photo</label>
+                  {!roomImagePreview ? (
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-primary/30 rounded-xl cursor-pointer hover:border-primary hover:bg-primary/5 transition-all bg-white">
+                      <Upload className="h-8 w-8 text-primary/40 mb-2" />
+                      <span className="text-sm text-muted-foreground">Click to upload room photo</span>
+                      <span className="text-xs text-muted-foreground">PNG, JPG up to 5MB</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={e => {
+                          const f = e.target.files?.[0] ?? null;
+                          if (f && f.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return; }
+                          setRoomImageFile(f);
+                          setRoomImagePreview(f ? URL.createObjectURL(f) : null);
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  ) : (
+                    <div className="relative w-full max-w-sm">
+                      <img src={roomImagePreview} alt="Room preview" className="w-full h-40 object-cover rounded-xl border-2 border-primary/20 shadow-sm" />
+                      <button
+                        type="button"
+                        onClick={() => { setRoomImageFile(null); setRoomImagePreview(null); }}
+                        className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-md"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="md:col-span-2">
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <div className={`w-11 h-6 rounded-full transition-colors relative ${roomForm.is_available ? 'bg-primary' : 'bg-gray-300'}`}>
+                      <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${roomForm.is_available ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                      <input
+                        type="checkbox"
+                        checked={roomForm.is_available}
+                        onChange={e => setRoomForm(prev => ({ ...prev, is_available: e.target.checked }))}
+                        className="sr-only"
+                      />
+                    </div>
+                    <span className="text-sm font-medium">Room is available for booking</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-5 pt-4 border-t border-primary/10">
+                <button
+                  onClick={handleSaveRoom}
+                  disabled={roomSubmitting}
+                  className="px-6 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-70 font-medium text-sm shadow-sm"
+                >
+                  {roomSubmitting ? 'Saving...' : editingRoomId ? 'Update Room' : 'Save Room'}
+                </button>
+                <button
+                  onClick={resetRoomForm}
+                  className="px-6 py-2.5 bg-white border-2 border-primary/20 text-muted-foreground rounded-xl hover:border-primary hover:text-primary transition-colors font-medium text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Empty State */}
+          {rooms.length === 0 && !showRoomForm && (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Hotel className="h-8 w-8 text-primary/40" />
+              </div>
+              <p className="font-semibold text-muted-foreground mb-1">No rooms yet</p>
+              <p className="text-sm text-muted-foreground mb-4">Add rooms so tourists can pick their preferred room when booking</p>
+              <button
+                onClick={() => { resetRoomForm(); setShowRoomForm(true); }}
+                className="px-5 py-2 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors text-sm font-medium inline-flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Add Your First Room
+              </button>
+            </div>
+          )}
+
+          {/* Room Cards */}
+          {rooms.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {rooms.map(room => {
+                const imgUrl = room.image
+                  ? (String(room.image).startsWith('http') ? room.image : `${API_BASE}${room.image}`)
+                  : null;
+                return (
+                  <div key={room.id} className="group border-2 border-primary/10 rounded-2xl overflow-hidden hover:border-primary hover:shadow-md transition-all">
+                    {/* Room Image */}
+                    <div className="relative">
+                      {imgUrl ? (
+                        <img src={imgUrl} alt={room.name} className="w-full h-40 object-cover" />
+                      ) : (
+                        <div className="w-full h-40 bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+                          <Hotel className="h-12 w-12 text-primary/20" />
+                        </div>
+                      )}
+                      {/* Availability badge */}
+                      <span className={`absolute top-3 right-3 text-xs px-2.5 py-1 rounded-full font-semibold shadow-sm ${room.is_available ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
+                        {room.is_available ? '✓ Available' : '✗ Unavailable'}
+                      </span>
+                      {/* Type badge */}
+                      {room.type && (
+                        <span className="absolute top-3 left-3 text-xs bg-black/50 text-white px-2.5 py-1 rounded-full backdrop-blur-sm">
+                          {room.type}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Room Info */}
+                    <div className="p-4">
+                      <h4 className="font-bold text-base mb-1">{room.name}</h4>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-primary font-bold text-lg">₱{Number(room.price_per_night).toLocaleString()}<span className="text-xs font-normal text-muted-foreground">/night</span></span>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Users className="h-3.5 w-3.5" />
+                          Up to {room.capacity}
+                        </span>
+                      </div>
+                      {room.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{room.description}</p>
+                      )}
+                      <div className="flex gap-2 pt-3 border-t border-primary/10">
+                        <button
+                          onClick={() => handleEditRoom(room)}
+                          className="flex-1 px-3 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-white transition-colors text-xs font-semibold inline-flex items-center justify-center gap-1"
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteRoom(room.id)}
+                          className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-500 hover:text-white transition-colors text-xs font-semibold inline-flex items-center justify-center gap-1"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Pending Payment Receipts */}
+      {receipts.filter((r: any) => r.status === 'pending').length > 0 && (
+        <div className="bg-orange-50 border-2 border-orange-300 rounded-2xl overflow-hidden mb-8">
+          <div className="bg-orange-100 px-6 py-4 flex items-center justify-between border-b border-orange-200">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center">
+                <CreditCard className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-orange-900">Pending Payment Receipts</h2>
+                <p className="text-xs text-orange-700">Verify these payments to confirm bookings</p>
+              </div>
+            </div>
+            <span className="bg-orange-500 text-white text-sm font-bold px-3 py-1 rounded-full">
+              {receipts.filter((r: any) => r.status === 'pending').length} pending
+            </span>
+          </div>
+          <div className="p-6 space-y-4">
+            {receipts.filter((r: any) => r.status === 'pending').map((receipt: any) => (
+              <div key={receipt.id} className="bg-white rounded-xl border border-orange-200 p-4">
+                <div className="flex flex-col md:flex-row gap-4">
+                  <div className="flex-shrink-0">
+                    <img
+                      src={`http://localhost:8000${receipt.receipt_image}`}
+                      alt="Payment receipt"
+                      className="w-32 h-32 object-cover rounded-lg border-2 border-orange-100"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div>
+                        <p className="font-semibold">
+                          🏨 Accommodation Booking — ₱{Number(receipt.amount).toLocaleString()}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          From: <span className="font-medium">{receipt.tourist?.name ?? 'Customer'}</span>
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Via: <span className="uppercase font-medium text-primary">{receipt.payment_method}</span>
+                          {receipt.payment_reference && ` · Ref: ${receipt.payment_reference}`}
+                        </p>
+                        {receipt.notes && (
+                          <p className="text-xs text-muted-foreground mt-1">Note: {receipt.notes}</p>
+                        )}
+                      </div>
+                      <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full whitespace-nowrap font-medium">
+                        Awaiting Verification
+                      </span>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={() => handleVerifyReceipt(receipt.id, 'verified')}
+                        className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-flex items-center justify-center gap-2 text-sm font-medium"
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                        Verify & Confirm Booking
+                      </button>
+                      <button
+                        onClick={() => handleVerifyReceipt(receipt.id, 'rejected', 'Invalid receipt')}
+                        className="flex-1 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-600 hover:text-white transition-colors inline-flex items-center justify-center gap-2 text-sm font-medium"
+                      >
+                        <XCircle className="h-4 w-4" />
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Payment Details Management */}
       <div className="bg-white border-2 border-primary/20 rounded-lg p-6 mb-8">
@@ -1439,6 +2035,7 @@ export function ResortProfile() {
             <thead>
               <tr className="border-b-2 border-primary/20">
                 <th className="text-left pb-3">Booking ID</th>
+                <th className="text-left pb-3">Customer</th>
                 <th className="text-left pb-3">Accommodation</th>
                 <th className="text-left pb-3">Check-in</th>
                 <th className="text-left pb-3">Check-out</th>
@@ -1448,127 +2045,163 @@ export function ResortProfile() {
               </tr>
             </thead>
             <tbody>
-              {bookings.map((booking) => (
-                <tr key={booking.id} className="border-b border-primary/10">
-                  <td className="py-4">BKG-{String(booking.id).padStart(3, '0')}</td>
-                  <td className="py-4">{booking.accommodation}</td>
-                  <td className="py-4">{new Date(booking.checkIn).toLocaleDateString()}</td>
-                  <td className="py-4">{new Date(booking.checkOut).toLocaleDateString()}</td>
-                  <td className="py-4">₱{booking.total.toLocaleString()}</td>
-                  <td className="py-4">
-                    <span className={getStatusBadge(booking.status)}>
-                      {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                    </span>
-                  </td>
-                  <td className="py-4">
-                    {bookingStatusFlow[booking.status] && (
-                      <button
-                        onClick={() => handleUpdateBookingStatus(String(booking.id))}
-                        className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-2 text-sm"
-                      >
-                        <ChevronDown className="h-4 w-4" />
-                        {(bookingStatusFlow[booking.status] ? (bookingStatusFlow[booking.status]!.charAt(0).toUpperCase() + bookingStatusFlow[booking.status]!.slice(1)) : '')}
-                      </button>
-                    )}
+              {bookings.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-muted-foreground">
+                    No bookings yet
                   </td>
                 </tr>
-              ))}
+              ) : (
+                bookings.map((booking) => (
+                  <tr key={booking.id} className="border-b border-primary/10">
+                    <td className="py-4 font-mono text-sm">BKG-{String(booking.id).padStart(3, '0')}</td>
+                    <td className="py-4">
+                      <div>
+                        <p className="font-medium">{booking.customerName}</p>
+                        {booking.customerPhone && (
+                          <p className="text-xs text-muted-foreground">{booking.customerPhone}</p>
+                        )}
+                        {booking.customerEmail && (
+                          <p className="text-xs text-muted-foreground">{booking.customerEmail}</p>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-4">{booking.accommodation}</td>
+                    <td className="py-4">{new Date(booking.checkIn).toLocaleDateString()}</td>
+                    <td className="py-4">{new Date(booking.checkOut).toLocaleDateString()}</td>
+                    <td className="py-4">₱{booking.total.toLocaleString()}</td>
+                    <td className="py-4">
+                      <span className={getStatusBadge(booking.status)}>
+                        {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                      </span>
+                    </td>
+                    <td className="py-4">
+                      {booking.paymentMethod === 'online' && booking.status === 'pending' ? (
+                        <span className="text-xs text-orange-700 bg-orange-100 border border-orange-200 px-2 py-1 rounded-lg">
+                          ⏳ Verify receipt above
+                        </span>
+                      ) : bookingStatusFlow[booking.status] ? (
+                        <button
+                          onClick={() => handleUpdateBookingStatus(booking.id)}
+                          className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-2 text-sm"
+                        >
+                          <ChevronDown className="h-4 w-4" />
+                          {bookingStatusLabels[booking.status]}
+                        </button>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Receipts Modal */}
-      {showReceiptsModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-primary/20">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold">Payment Receipts</h3>
-                <button
-                  onClick={() => setShowReceiptsModal(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <XCircle className="h-6 w-6" />
-                </button>
+      {/* Payment Receipts — inline, always visible */}
+      {receipts.length > 0 && (
+        <div className="bg-white border-2 border-primary/20 rounded-2xl overflow-hidden mb-8">
+          <div className="bg-primary/5 px-6 py-4 flex items-center justify-between border-b border-primary/10">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 bg-primary/20 rounded-xl flex items-center justify-center">
+                <Eye className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold">Payment Receipts</h2>
+                <p className="text-xs text-muted-foreground">Receipts submitted by customers for their bookings</p>
               </div>
             </div>
-            <div className="p-6">
-              {receipts.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Eye className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No payment receipts yet</p>
+            <div className="flex items-center gap-2">
+              {receipts.filter((r: any) => r.status === 'pending').length > 0 && (
+                <span className="bg-orange-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">
+                  {receipts.filter((r: any) => r.status === 'pending').length} pending
+                </span>
+              )}
+              <span className="text-xs text-muted-foreground">{receipts.length} total</span>
+            </div>
+          </div>
+          <div className="p-6 space-y-4">
+            {receipts.map((receipt: any) => (
+              <div key={receipt.id} className={`rounded-xl border-2 overflow-hidden ${
+                receipt.status === 'pending' ? 'border-orange-200' :
+                receipt.status === 'verified' ? 'border-green-200' : 'border-red-200'
+              }`}>
+                <div className={`px-4 py-2 flex items-center justify-between ${
+                  receipt.status === 'pending' ? 'bg-orange-50' :
+                  receipt.status === 'verified' ? 'bg-green-50' : 'bg-red-50'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      receipt.status === 'pending' ? 'bg-orange-200 text-orange-800' :
+                      receipt.status === 'verified' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'
+                    }`}>
+                      {receipt.status === 'pending' ? '⏳ Pending' : receipt.status === 'verified' ? '✓ Verified' : '✗ Rejected'}
+                    </span>
+                    <span className="text-sm font-semibold">
+                      {receipt.type === 'order' ? '🛍️ Order' : '🏨 Booking'} — ₱{Number(receipt.amount).toLocaleString()}
+                    </span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(receipt.created_at).toLocaleDateString()}
+                  </span>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {receipts.map((receipt) => (
-                    <div key={receipt.id} className="border-2 border-primary/20 rounded-lg p-4">
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <p className="font-semibold">
-                            {receipt.type === 'order' ? 'Product Order' : 'Accommodation Booking'} - ₱{receipt.amount}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {receipt.payment_method} • {receipt.payment_reference}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            From: {receipt.tourist?.name || 'Tourist'}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`px-3 py-1 rounded-full text-sm ${
-                            receipt.status === 'verified' 
-                              ? 'bg-green-100 text-green-700' 
-                              : receipt.status === 'rejected'
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-orange-100 text-orange-700'
-                          }`}>
-                            {receipt.status.charAt(0).toUpperCase() + receipt.status.slice(1)}
-                          </span>
-                        </div>
+                <div className="p-4 flex flex-col md:flex-row gap-4">
+                  <a
+                    href={`http://localhost:8000${receipt.receipt_image}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-shrink-0"
+                  >
+                    <img
+                      src={`http://localhost:8000${receipt.receipt_image}`}
+                      alt="Payment receipt"
+                      className="w-40 h-40 object-cover rounded-lg border-2 border-primary/10 hover:opacity-90 transition-opacity cursor-zoom-in"
+                    />
+                    <p className="text-xs text-primary text-center mt-1">Click to enlarge</p>
+                  </a>
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">Customer</p>
+                      <p className="font-medium">{receipt.tourist?.name ?? 'Customer'}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-0.5">Payment Method</p>
+                        <p className="text-sm font-medium uppercase">{receipt.payment_method}</p>
                       </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <img
-                            src={`http://localhost:8000${receipt.receipt_image}`}
-                            alt="Payment receipt"
-                            className="w-full h-48 object-cover rounded-lg border-2 border-primary/20"
-                          />
-                        </div>
-                        <div className="space-y-3">
-                          {receipt.notes && (
-                            <div>
-                              <p className="text-sm font-medium">Notes:</p>
-                              <p className="text-sm text-muted-foreground">{receipt.notes}</p>
-                            </div>
-                          )}
-                          
-                          {receipt.status === 'pending' && (
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleVerifyReceipt(receipt.id, 'verified')}
-                                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
-                              >
-                                <CheckCircle className="h-4 w-4" />
-                                Verify
-                              </button>
-                              <button
-                                onClick={() => handleVerifyReceipt(receipt.id, 'rejected', 'Invalid receipt')}
-                                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors inline-flex items-center gap-2"
-                              >
-                                <XCircle className="h-4 w-4" />
-                                Reject
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-0.5">Reference No.</p>
+                        <p className="text-sm font-mono">{receipt.payment_reference ?? '—'}</p>
                       </div>
                     </div>
-                  ))}
+                    {receipt.notes && (
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-0.5">Notes</p>
+                        <p className="text-sm text-muted-foreground">{receipt.notes}</p>
+                      </div>
+                    )}
+                    {receipt.status === 'pending' && (
+                      <div className="flex gap-2 pt-2">
+                        <button
+                          onClick={() => handleVerifyReceipt(receipt.id, 'verified')}
+                          className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-flex items-center justify-center gap-2 text-sm font-medium"
+                        >
+                          <CheckCircle className="h-4 w-4" />
+                          Verify & Confirm Booking
+                        </button>
+                        <button
+                          onClick={() => handleVerifyReceipt(receipt.id, 'rejected', 'Invalid receipt')}
+                          className="px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-600 hover:text-white transition-colors inline-flex items-center gap-2 text-sm font-medium"
+                        >
+                          <XCircle className="h-4 w-4" />
+                          Reject
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

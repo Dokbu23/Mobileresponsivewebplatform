@@ -10,6 +10,7 @@ import { FilterButton } from '../../components/FilterButton';
 import { FilterSidebar } from '../../components/FilterSidebar';
 import { FilterChips } from '../../components/FilterChips';
 import { useSearchAndFilter } from '../../hooks/useSearchAndFilter';
+import { AvailabilityCalendar } from '../../components/AvailabilityCalendar';
 
 export function Accommodations() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -30,6 +31,12 @@ export function Accommodations() {
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentNotes, setPaymentNotes] = useState('');
 
+  // Room selection state
+  const [resortRooms, setResortRooms] = useState<any[]>([]);
+  const [selectedRoom, setSelectedRoom] = useState<any>(null);
+
+  // Blocked dates state
+  const [blockedDates, setBlockedDates] = useState<string[]>([]);
   const bookingAccommodation = useMemo(
     () => items.find(item => item.id === bookingModal) ?? null,
     [items, bookingModal]
@@ -44,7 +51,7 @@ export function Accommodations() {
   }, [checkIn, checkOut]);
 
   const bookingTotal = bookingAccommodation && bookingNights > 0
-    ? bookingAccommodation.pricePerNight * bookingNights
+    ? (selectedRoom ? selectedRoom.price_per_night : bookingAccommodation.pricePerNight) * bookingNights
     : 0;
 
   // Initialize search and filter hook
@@ -141,6 +148,9 @@ export function Accommodations() {
     // Fetch resort payment details when opening booking modal
     fetchResortPaymentDetails(accommodationId);
     setBookingModal(accommodationId);
+    setSelectedRoom(null);
+    setResortRooms([]);
+    setBlockedDates([]);
   };
 
   // Fetch resort payment details for advance payment
@@ -159,6 +169,22 @@ export function Accommodations() {
         }));
         
         setBusinessPaymentDetails(detailsWithBusinessId);
+
+        // Fetch rooms for this resort
+        try {
+          const roomsResponse = await getPublicJSON(`/resort-rooms/${accommodation.user_id}`);
+          setResortRooms(Array.isArray(roomsResponse) ? roomsResponse : []);
+        } catch {
+          setResortRooms([]);
+        }
+
+        // Fetch blocked dates for this resort
+        try {
+          const blockedResponse = await getPublicJSON(`/resort-availability/${accommodation.user_id}`);
+          setBlockedDates(Array.isArray(blockedResponse) ? blockedResponse : []);
+        } catch {
+          setBlockedDates([]);
+        }
       }
     } catch (error) {
       console.error('Error fetching resort payment details:', error);
@@ -204,19 +230,42 @@ export function Accommodations() {
       return;
     }
 
+    // Check if any date in the range is blocked
+    if (blockedDates.length > 0) {
+      const checkInDate = new Date(checkIn);
+      const checkOutDate = new Date(checkOut);
+      const blockedSet = new Set(blockedDates);
+      const current = new Date(checkInDate);
+      while (current < checkOutDate) {
+        const dateStr = current.toISOString().split('T')[0];
+        if (blockedSet.has(dateStr)) {
+          toast.error(`${dateStr} is not available. Please choose different dates.`);
+          return;
+        }
+        current.setDate(current.getDate() + 1);
+      }
+    }
+
     // For online payment, validate receipt upload
     if (paymentMethod === 'online') {
-      if (!selectedPayment) {
-        toast.error('Please select a payment method');
+      if (resortRooms.length === 0 && businessPaymentDetails.length === 0) {
+        // No payment details — allow booking without receipt (will be paid on arrival)
+      } else if (businessPaymentDetails.length === 0) {
+        toast.error('This resort has no payment methods set up. Please choose Cash on Arrival or Pay at Resort.');
         return;
-      }
-      if (!receiptFile) {
-        toast.error('Please upload payment receipt');
-        return;
-      }
-      if (!paymentReference) {
-        toast.error('Please enter payment reference number');
-        return;
+      } else {
+        if (!selectedPayment) {
+          toast.error('Please select a payment account');
+          return;
+        }
+        if (!receiptFile) {
+          toast.error('Please upload your payment receipt screenshot');
+          return;
+        }
+        if (!paymentReference) {
+          toast.error('Please enter the transaction/reference number');
+          return;
+        }
       }
     }
 
@@ -229,14 +278,18 @@ export function Accommodations() {
       return;
     }
 
-    const total = accommodation.pricePerNight * nights;
+    const total = (selectedRoom ? selectedRoom.price_per_night : accommodation.pricePerNight) * nights;
 
     try {
       const booking = await postJSON('/bookings', {
         accommodation_type: accommodation.type ?? 'static',
         accommodation_id: accommodation.type === 'resort_profile' ? null : Number(accommodation.id),
         resort_user_id: accommodation.type === 'resort_profile' ? accommodation.user_id : null,
-        accommodation_snapshot: accommodation,
+        accommodation_snapshot: {
+          ...accommodation,
+          selected_room: selectedRoom ?? null,
+          pricePerNight: selectedRoom ? selectedRoom.price_per_night : accommodation.pricePerNight,
+        },
         check_in: checkIn,
         check_out: checkOut,
         payment_method: paymentMethod,
@@ -258,13 +311,19 @@ export function Accommodations() {
         formData.append('notes', paymentNotes);
 
         const token = localStorage.getItem('discover-mansalay:token');
-        await fetch(`${API_BASE}/api/payment-receipts`, {
+        const receiptRes = await fetch(`${API_BASE}/api/payment-receipts`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
           },
           body: formData,
         });
+
+        if (!receiptRes.ok) {
+          // Booking was created but receipt upload failed — warn but don't block
+          const errData = await receiptRes.json().catch(() => ({}));
+          toast.error(`Booking created but receipt upload failed: ${errData.message ?? 'Please contact the resort.'}`);
+        }
       }
 
       addBooking({
@@ -285,7 +344,9 @@ export function Accommodations() {
       setReceiptPreview(null);
       setPaymentReference('');
       setPaymentNotes('');
-      
+      setSelectedRoom(null);
+      setResortRooms([]);
+      setBlockedDates([]);      
       if (result.isConfirmed) {
         navigate('/status');
       }
@@ -550,6 +611,82 @@ export function Accommodations() {
                         />
                       </div>
 
+                      {/* Availability Calendar — read-only for tourists */}
+                      {blockedDates.length > 0 && (
+                        <div>
+                          <label className="block text-sm font-medium mb-2 flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-primary" />
+                            Availability
+                          </label>
+                          <div className="border-2 border-primary/20 rounded-xl p-3 bg-primary/5">
+                            <AvailabilityCalendar
+                              blockedDates={blockedDates}
+                              onToggleDate={() => {}}
+                              readOnly
+                            />
+                            <p className="text-xs text-red-600 mt-2 text-center">
+                              🔴 Red dates are fully booked — please avoid selecting them
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Room Selection */}
+                      {resortRooms.length > 0 && (                        <div>
+                          <label className="block text-sm font-medium mb-2">Select Room</label>
+                          <div className="space-y-2">
+                            {resortRooms.map((room: any) => {
+                              const roomImg = room.image
+                                ? (String(room.image).startsWith('http') ? room.image : `${API_BASE}${room.image}`)
+                                : null;
+                              return (
+                                <label
+                                  key={room.id}
+                                  className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${
+                                    selectedRoom?.id === room.id
+                                      ? 'border-primary bg-primary/5'
+                                      : 'border-primary/20 hover:border-primary/50'
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="roomSelect"
+                                    checked={selectedRoom?.id === room.id}
+                                    onChange={() => setSelectedRoom(room)}
+                                    className="w-4 h-4 accent-primary"
+                                  />
+                                  {roomImg && (
+                                    <img src={roomImg} alt={room.name} className="w-16 h-12 object-cover rounded" />
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <p className="font-medium text-sm">{room.name}</p>
+                                      {room.type && (
+                                        <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{room.type}</span>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">Up to {room.capacity} guests</p>
+                                    {room.description && (
+                                      <p className="text-xs text-muted-foreground line-clamp-1">{room.description}</p>
+                                    )}
+                                  </div>
+                                  <p className="text-primary font-semibold text-sm whitespace-nowrap">
+                                    ₱{Number(room.price_per_night).toLocaleString()}/night
+                                  </p>
+                                </label>
+                              );
+                            })}
+                          </div>
+                          {selectedRoom && bookingNights > 0 && (
+                            <div className="mt-3 p-3 bg-primary/5 rounded-lg">
+                              <p className="text-sm font-medium">
+                                {selectedRoom.name} × {bookingNights} night{bookingNights > 1 ? 's' : ''} = <span className="text-primary">₱{bookingTotal.toLocaleString()}</span>
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div>
                         <label className="block text-sm mb-2">Payment Method</label>
                         <div className="space-y-2">
@@ -587,105 +724,106 @@ export function Accommodations() {
                       </div>
 
                       {/* Resort Payment Details for Online Payment */}
-                      {paymentMethod === 'online' && businessPaymentDetails.length > 0 && (
+                      {paymentMethod === 'online' && (
                         <div className="bg-primary/5 border-2 border-primary/20 rounded-lg p-4">
-                          <h4 className="mb-3">Resort Payment Details</h4>
-                          <p className="text-sm text-muted-foreground mb-4">
-                            Select a payment method and send your advance payment, then upload the receipt below.
-                          </p>
-                          <p className="text-sm text-muted-foreground mb-4">
-                            {bookingTotal > 0
-                              ? `Pay the exact amount: ₱${bookingTotal.toFixed(2)}`
-                              : 'Select your dates to see the exact amount.'}
-                          </p>
-                          
-                          <div className="space-y-3 mb-4">
-                            {businessPaymentDetails.map((payment, index) => (
-                              <label key={index} className="flex items-center gap-3 p-3 border-2 border-primary/20 rounded-lg cursor-pointer hover:border-primary transition-colors">
-                                <input
-                                  type="radio"
-                                  name="resortPayment"
-                                  checked={selectedPayment === payment}
-                                  onChange={() => setSelectedPayment(payment)}
-                                  className="w-4 h-4 text-primary"
-                                />
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-sm font-medium text-primary uppercase">{payment.type}</span>
-                                    <span className="text-sm text-muted-foreground">•</span>
-                                    <span className="text-sm font-medium">{payment.name}</span>
-                                  </div>
-                                  <p className="text-sm text-muted-foreground">
-                                    Account: {payment.account_number} - {payment.account_name}
-                                  </p>
-                                </div>
-                              </label>
-                            ))}
-                          </div>
-
-                          {selectedPayment && (
-                            <div className="space-y-4">
-                              <div>
-                                <label className="block text-sm mb-2">Payment Reference Number *</label>
-                                <input
-                                  type="text"
-                                  value={paymentReference}
-                                  onChange={(e) => setPaymentReference(e.target.value)}
-                                  className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                                  placeholder="Enter transaction/reference number"
-                                />
+                          {businessPaymentDetails.length === 0 ? (
+                            <div className="text-center py-3">
+                              <CreditCard className="h-8 w-8 mx-auto text-orange-400 mb-2" />
+                              <p className="text-sm font-medium text-orange-800">No payment details set up</p>
+                              <p className="text-xs text-orange-700 mt-1">
+                                This resort hasn't added payment methods yet. Please choose Cash on Arrival or Pay at Resort.
+                              </p>
+                            </div>
+                          ) : (
+                            <>
+                              <h4 className="mb-2 font-semibold">Resort Payment Details</h4>
+                              <div className="bg-white rounded-lg px-3 py-2 mb-3 flex items-center justify-between">
+                                <span className="text-xs text-muted-foreground">Amount to transfer</span>
+                                <span className="font-bold text-primary">
+                                  {bookingTotal > 0 ? `₱${bookingTotal.toLocaleString()}` : 'Select dates first'}
+                                </span>
                               </div>
 
-                              <div>
-                                <label className="block text-sm mb-2">Receipt Image *</label>
-                                <div className="space-y-3">
-                                  {!receiptPreview ? (
-                                    <div className="relative">
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={handleReceiptUpload}
-                                        className="hidden"
-                                        id="booking-receipt-upload"
-                                      />
+                              <div className="space-y-2 mb-4">
+                                {businessPaymentDetails.map((payment, index) => (
+                                  <label key={index} className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${selectedPayment === payment ? 'border-primary bg-white' : 'border-primary/20 hover:border-primary/50'}`}>
+                                    <input
+                                      type="radio"
+                                      name="resortPayment"
+                                      checked={selectedPayment === payment}
+                                      onChange={() => setSelectedPayment(payment)}
+                                      className="w-4 h-4 text-primary"
+                                    />
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-0.5">
+                                        <span className="text-xs font-bold text-white bg-primary px-1.5 py-0.5 rounded uppercase">{payment.type}</span>
+                                      </div>
+                                    </div>
+                                  </label>
+                                ))}
+                              </div>
+
+                              {selectedPayment && (
+                                <div className="space-y-3 bg-white rounded-lg p-3 border border-primary/10">
+                                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Upload Payment Proof</p>
+                                  <div>
+                                    <label className="block text-xs mb-1">Reference / Transaction No. *</label>
+                                    <input
+                                      type="text"
+                                      value={paymentReference}
+                                      onChange={(e) => setPaymentReference(e.target.value)}
+                                      className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm"
+                                      placeholder="e.g. 1234567890"
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-xs mb-1">Receipt Screenshot *</label>
+                                    {!receiptPreview ? (
                                       <label
                                         htmlFor="booking-receipt-upload"
-                                        className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-primary/30 rounded-lg cursor-pointer hover:border-primary transition-colors"
+                                        className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-primary/30 rounded-lg cursor-pointer hover:border-primary hover:bg-primary/5 transition-all"
                                       >
-                                        <Upload className="h-8 w-8 text-primary/60 mb-2" />
-                                        <span className="text-sm text-muted-foreground">Click to upload receipt</span>
-                                        <span className="text-xs text-muted-foreground">PNG, JPG up to 5MB</span>
+                                        <Upload className="h-6 w-6 text-primary/40 mb-1" />
+                                        <span className="text-xs text-muted-foreground">Click to upload screenshot</span>
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          onChange={handleReceiptUpload}
+                                          className="hidden"
+                                          id="booking-receipt-upload"
+                                        />
                                       </label>
-                                    </div>
-                                  ) : (
-                                    <div className="relative">
-                                      <img
-                                        src={receiptPreview}
-                                        alt="Receipt preview"
-                                        className="w-full h-32 object-cover rounded-lg border-2 border-primary/20"
-                                      />
-                                      <button
-                                        onClick={removeReceipt}
-                                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                                      >
-                                        <X className="h-4 w-4" />
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
+                                    ) : (
+                                      <div className="relative">
+                                        <img
+                                          src={receiptPreview}
+                                          alt="Receipt preview"
+                                          className="w-full h-32 object-cover rounded-lg border-2 border-primary/20"
+                                        />
+                                        <button
+                                          onClick={removeReceipt}
+                                          className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                                        >
+                                          <X className="h-4 w-4" />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
 
-                              <div>
-                                <label className="block text-sm mb-2">Additional Notes (Optional)</label>
-                                <textarea
-                                  value={paymentNotes}
-                                  onChange={(e) => setPaymentNotes(e.target.value)}
-                                  rows={2}
-                                  className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                                  placeholder="Any additional information about the payment..."
-                                />
-                              </div>
-                            </div>
+                                  <div>
+                                    <label className="block text-xs mb-1">Notes (Optional)</label>
+                                    <textarea
+                                      value={paymentNotes}
+                                      onChange={(e) => setPaymentNotes(e.target.value)}
+                                      rows={2}
+                                      className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm resize-none"
+                                      placeholder="Any additional info..."
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       )}

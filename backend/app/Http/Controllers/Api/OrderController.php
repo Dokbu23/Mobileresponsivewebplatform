@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Product;
+use App\Models\Notification;
+use App\Models\User;
 
 class OrderController extends Controller
 {
@@ -147,6 +149,34 @@ class OrderController extends Controller
                     ? 'Multiple orders created for different businesses' 
                     : 'Order created successfully'
             ];
+
+            // Fire-and-forget notifications (never break the flow)
+            try {
+                $customer = $request->user();
+                $customerName = $customer ? $customer->name : 'Guest';
+                foreach ($orders as $order) {
+                    $amount = number_format((float) $order->total, 2);
+                    // Notify business owner
+                    Notification::notify(
+                        $order->business_owner_id,
+                        'order_new',
+                        'Bagong Order!',
+                        "{$customerName} placed an order worth ₱{$amount}.",
+                        ['order_id' => $order->id, 'customer_id' => $order->customer_id],
+                        '/enterprise/orders'
+                    );
+                    // Notify admins
+                    Notification::notifyAdmins(
+                        'order_new',
+                        'New Order Placed',
+                        "{$customerName} placed an order worth ₱{$amount}.",
+                        ['order_id' => $order->id],
+                        '/admin/dashboard'
+                    );
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('Order notifications failed', ['error' => $e->getMessage()]);
+            }
             
             // For backward compatibility, return the first order's structure
             if (count($orders) === 1) {
@@ -204,6 +234,22 @@ class OrderController extends Controller
         // Load the order with relationships for the response
         $order->load(['customer', 'businessOwner']);
 
+        // Notify the customer (tourist) about the status change
+        if ($oldStatus !== $newStatus && $order->customer_id) {
+            try {
+                Notification::notify(
+                    $order->customer_id,
+                    'order_status',
+                    'Order Status Updated',
+                    "Your order #{$order->id} is now {$newStatus}.",
+                    ['order_id' => $order->id, 'status' => $newStatus],
+                    '/status'
+                );
+            } catch (\Throwable $e) {
+                \Log::warning('Order status notification failed', ['error' => $e->getMessage()]);
+            }
+        }
+
         // Here you could add real-time notification logic
         // For now, we'll rely on the frontend to poll for updates
         // In a production app, you might use WebSockets, Pusher, or similar
@@ -216,6 +262,70 @@ class OrderController extends Controller
             'message' => $oldStatus !== $newStatus 
                 ? "Order status updated from {$oldStatus} to {$newStatus}" 
                 : "Order status remains {$newStatus}"
+        ]);
+    }
+
+    /**
+     * Cancel an order (tourist only).
+     * Restores product stock and fires notifications to the customer and seller.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function cancel(Request $request, $id)
+    {
+        $user = $request->user();
+        $order = \App\Models\Order::find($id);
+
+        if (!$order) {
+            return response()->json(['message' => 'Order not found.'], 404);
+        }
+
+        if ((int) $order->customer_id !== (int) $user->id) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
+        if (in_array($order->status, ['shipped', 'delivered', 'cancelled'])) {
+            return response()->json([
+                'message' => 'Order cannot be cancelled after it has been shipped.',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($order) {
+            foreach ($order->items as $item) {
+                Product::where('id', $item['id'])->increment('stock', $item['quantity']);
+            }
+            $order->update(['status' => 'cancelled']);
+        });
+
+        // Notifications (fire-and-forget)
+        try {
+            $touristName = $user->name ?? 'A customer';
+            Notification::notify(
+                $order->customer_id,
+                'order_status',
+                'Order Cancelled',
+                "Your order #{$order->id} has been cancelled by you.",
+                ['order_id' => $order->id, 'new_status' => 'cancelled'],
+                '/status'
+            );
+            Notification::notify(
+                $order->business_owner_id,
+                'order_cancelled',
+                'Order Cancelled by Customer',
+                "{$touristName} cancelled order #{$order->id}.",
+                ['order_id' => $order->id, 'customer_id' => $order->customer_id],
+                '/enterprise/orders'
+            );
+        } catch (\Throwable $e) {
+            \Log::warning('Cancel order notifications failed', ['error' => $e->getMessage()]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Order cancelled successfully.',
+            'order'   => $order->fresh(),
         ]);
     }
 

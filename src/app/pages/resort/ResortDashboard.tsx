@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Hotel, Users, DollarSign, Calendar, TrendingUp, Star, AlertTriangle } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Link, useNavigate } from 'react-router';
-import { getJSON, postJSON, putJSON, deleteJSON } from '../../lib/api';
+import { getJSON, postJSON, putJSON, deleteJSON, patchJSON } from '../../lib/api';
 import { SubscriptionPaymentModal } from '../../components/SubscriptionPaymentModal';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
@@ -125,6 +125,38 @@ export function ResortDashboard() {
     }
   };
 
+  const bookingStatusFlow: Record<string, string | null> = {
+    pending: 'confirmed',
+    confirmed: 'checked-in',
+    'checked-in': 'completed',
+    completed: null,
+    cancelled: null,
+  };
+
+  const bookingStatusLabels: Record<string, string> = {
+    pending: 'Confirm Booking',
+    confirmed: 'Check In',
+    'checked-in': 'Complete Stay',
+    completed: '',
+    cancelled: '',
+  };
+
+  const handleUpdateBookingStatus = async (bookingId: number) => {
+    const currentBooking = bookings.find((b: any) => b.id === bookingId);
+    if (!currentBooking) return;
+    const nextStatus = bookingStatusFlow[currentBooking.status];
+    if (!nextStatus) return;
+    try {
+      await patchJSON(`/bookings/${bookingId}`, { status: nextStatus });
+      setBookings((prev: any[]) =>
+        prev.map((b: any) => (b.id === bookingId ? { ...b, status: nextStatus } : b))
+      );
+      toast.success(`Booking updated to: ${nextStatus}`);
+    } catch {
+      toast.error('Failed to update booking status');
+    }
+  };
+
   const handleEventSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -231,13 +263,13 @@ export function ResortDashboard() {
   const topCustomers = useMemo(() => {
     return Array.from(
       bookings.reduce((grouped, booking) => {
-        const name = booking.accommodation_snapshot?.name ?? 'Accommodation';
+        const name = booking.customer_name ?? 'Guest';
         const current = grouped.get(name) ?? { bookings: 0, revenue: 0 };
         grouped.set(name, {
           bookings: current.bookings + 1,
           revenue: current.revenue + Number(booking.total || 0),
         });
-      return grouped;
+        return grouped;
       }, new Map<string, { bookings: number; revenue: number }>()).entries()
     ).map((entry) => {
       const [name, metrics] = entry as [string, { bookings: number; revenue: number }];
@@ -337,7 +369,7 @@ export function ResortDashboard() {
               className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center justify-center gap-2"
             >
               <Hotel className="h-4 w-4" />
-              Manage Profile
+              Manage Resort
             </Link>
             <button
               onClick={() => {
@@ -567,6 +599,121 @@ export function ResortDashboard() {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* Incoming Bookings */}
+      <div className="mt-8 bg-white border-2 border-primary/20 rounded-lg p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-primary" />
+            Incoming Bookings
+          </h3>
+          <div className="flex items-center gap-3">
+            <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm font-medium">
+              {bookings.filter((b: any) => b.status === 'pending').length} pending
+            </span>
+            <Link
+              to="/resort/profile"
+              className="text-sm text-primary hover:underline"
+            >
+              View all →
+            </Link>
+          </div>
+        </div>
+
+        {bookings.filter((b: any) => ['pending', 'confirmed', 'checked-in'].includes(b.status)).length === 0 ? (
+          <div className="text-center py-8">
+            <Users className="h-12 w-12 mx-auto text-gray-300 mb-3" />
+            <p className="text-muted-foreground">No active bookings</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {bookings
+              .filter((b: any) => ['pending', 'confirmed', 'checked-in'].includes(b.status))
+              .slice(0, 5)
+              .map((booking: any) => {
+                // Decode HTML entities in accommodation name
+                const accomName = (booking.accommodation_snapshot?.name ?? 'Accommodation')
+                  .replace(/&amp;/g, '&')
+                  .replace(/&lt;/g, '<')
+                  .replace(/&gt;/g, '>')
+                  .replace(/&quot;/g, '"');
+
+                // Online payment pending = waiting for receipt verification, not manual confirm
+                const isOnlinePaymentPending =
+                  booking.status === 'pending' && booking.payment_method === 'online';
+
+                return (
+                  <div
+                    key={booking.id}
+                    className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-lg border-2 ${
+                      booking.status === 'pending'
+                        ? 'border-orange-200 bg-orange-50'
+                        : booking.status === 'confirmed'
+                        ? 'border-green-200 bg-green-50'
+                        : 'border-blue-200 bg-blue-50'
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-mono text-xs text-muted-foreground">
+                          BKG-{String(booking.id).padStart(3, '0')}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                            booking.status === 'pending'
+                              ? 'bg-orange-200 text-orange-800'
+                              : booking.status === 'confirmed'
+                              ? 'bg-green-200 text-green-800'
+                              : 'bg-blue-200 text-blue-800'
+                          }`}
+                        >
+                          {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                        </span>
+                        {booking.payment_method && (
+                          <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded uppercase">
+                            {booking.payment_method === 'online' ? '💳 Online' : booking.payment_method === 'cod' ? '💵 COD' : '🏨 OTC'}
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-semibold truncate">
+                        {booking.customer_name ?? 'Guest'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {accomName} •{' '}
+                        {booking.check_in
+                          ? new Date(booking.check_in).toLocaleDateString()
+                          : '—'}{' '}
+                        →{' '}
+                        {booking.check_out
+                          ? new Date(booking.check_out).toLocaleDateString()
+                          : '—'}
+                      </p>
+                      <p className="text-sm font-medium text-primary">
+                        ₱{Number(booking.total || 0).toLocaleString()}
+                      </p>
+                    </div>
+                    {isOnlinePaymentPending ? (
+                      <div className="text-xs text-orange-700 bg-orange-100 border border-orange-200 px-3 py-2 rounded-lg text-center whitespace-nowrap">
+                        ⏳ Verify receipt first
+                        <br />
+                        <Link to="/resort/profile" className="underline font-medium">
+                          Go to Manage Resort
+                        </Link>
+                      </div>
+                    ) : bookingStatusFlow[booking.status] ? (
+                      <button
+                        onClick={() => handleUpdateBookingStatus(booking.id)}
+                        className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm whitespace-nowrap"
+                      >
+                        {bookingStatusLabels[booking.status]}
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+          </div>
+        )}
       </div>
 
       {/* Events Management */}
