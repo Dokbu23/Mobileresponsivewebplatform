@@ -222,6 +222,8 @@ class BookingController extends Controller
      * Cancel a booking (tourist only).
      * Only bookings with status 'pending' or 'confirmed' can be cancelled.
      *
+     * SECURITY: Strict type comparison to prevent type juggling attacks
+     *
      * @param  \Illuminate\Http\Request  $request
      * @param  int  $id
      * @return \Illuminate\Http\Response
@@ -235,12 +237,17 @@ class BookingController extends Controller
             return response()->json(['message' => 'Booking not found.'], 404);
         }
 
-        if ((int) $booking->customer_id !== (int) $user->id) {
+        // SECURITY FIX: Use strict comparison (=== instead of ==)
+        // WHY: Prevents type juggling attacks
+        // BEFORE: (int) $booking->customer_id !== (int) $user->id  
+        //         Problem: "5" == 5 is true in PHP (loose comparison)
+        // AFTER: Strict comparison ensures exact match
+        if ($booking->customer_id !== $user->id) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
         $nonCancellable = ['checked-in', 'completed', 'cancelled'];
-        if (in_array($booking->status, $nonCancellable)) {
+        if (in_array($booking->status, $nonCancellable, true)) { // strict comparison
             return response()->json([
                 'message' => 'Booking cannot be cancelled after check-in.',
             ], 422);

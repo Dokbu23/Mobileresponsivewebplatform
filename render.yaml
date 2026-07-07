@@ -1,0 +1,107 @@
+services:
+  # Backend API (Laravel)
+  - type: web
+    name: disc-mansalay-api
+    env: php
+    region: singapore
+    plan: free
+    buildCommand: cd backend && chmod +x build.sh && ./build.sh
+    startCommand: cd backend && php artisan serve --host=0.0.0.0 --port=$PORT
+    healthCheckPath: /api/public/stats
+    envVars:
+      - key: APP_NAME
+        value: DiscoverMansalay
+      - key: APP_ENV
+        value: production
+      - key: APP_KEY
+        generateValue: true
+      - key: APP_DEBUG
+        value: false
+      - key: APP_URL
+        value: https://disc-mansalay-api.onrender.com
+      - key: LOG_CHANNEL
+        value: errorlog
+      - key: LOG_LEVEL
+        value: error
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_HOST
+        fromDatabase:
+          name: disc-mansalay-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: disc-mansalay-db
+          property: port
+      - key: DB_DATABASE
+        fromDatabase:
+          name: disc-mansalay-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: disc-mansalay-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: disc-mansalay-db
+          property: password
+      - key: CACHE_DRIVER
+        value: file
+      - key: QUEUE_CONNECTION
+        value: sync
+      - key: SESSION_DRIVER
+        value: file
+      - key: SESSION_LIFETIME
+        value: 120
+      - key: BROADCAST_DRIVER
+        value: log
+      # JWT Configuration
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_TTL
+        value: 1440
+      - key: JWT_REFRESH_TTL
+        value: 20160
+      - key: JWT_ALGO
+        value: HS256
+      # CORS Configuration
+      - key: FRONTEND_URL
+        value: https://disc-mansalay.onrender.com
+      # Mail Configuration (update with your Gmail credentials)
+      - key: MAIL_MAILER
+        value: smtp
+      - key: MAIL_HOST
+        value: smtp.gmail.com
+      - key: MAIL_PORT
+        value: 587
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_ENCRYPTION
+        value: tls
+      - key: MAIL_FROM_ADDRESS
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: DiscoverMansalay
+
+  # PostgreSQL Database
+  - type: pserv
+    name: disc-mansalay-db
+    region: singapore
+    plan: free
+    ipAllowList: []
+
+  # Frontend (React/Vite)
+  - type: web
+    name: disc-mansalay-frontend
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: cd .. && npm install && npm run build
+    startCommand: cd .. && npm run preview -- --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: VITE_API_URL
+        value: https://disc-mansalay-api.onrender.com/api
+      - key: NODE_ENV
+        value: production

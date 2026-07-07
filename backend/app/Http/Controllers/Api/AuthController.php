@@ -12,6 +12,15 @@ use Firebase\JWT\Key;
 
 class AuthController extends Controller
 {
+    /**
+     * SECURITY: Login with improved JWT token generation
+     * 
+     * IMPROVEMENTS:
+     * 1. Uses JWT_SECRET (not APP_KEY)
+     * 2. Configurable token expiration (JWT_TTL)
+     * 3. Adds issued_at timestamp
+     * 4. Validates user is active
+     */
     public function login(Request $request)
     {
         \Log::info('Login attempt', [
@@ -41,6 +50,13 @@ class AuthController extends Controller
             ], 401);
         }
 
+        // SECURITY: Check if user account is active
+        if (!$user->is_active) {
+            return response()->json([
+                'message' => 'Your account has been deactivated. Please contact support.',
+            ], 403);
+        }
+
         // Check if email is verified (for tourists, resort, and enterprise)
         if (in_array($user->role, ['tourist', 'resort', 'enterprise']) && !$user->email_verified_at) {
             \Log::warning('Login failed - Email not verified', [
@@ -56,16 +72,19 @@ class AuthController extends Controller
             ], 403);
         }
 
-        // Generate JWT token
+        // SECURITY FIX: Use JWT_SECRET and configurable TTL
+        $ttl = config('jwt.ttl', 1440) * 60; // Convert minutes to seconds
+        $issuedAt = time();
+        
         $payload = [
             'user_id' => $user->id,
             'email' => $user->email,
             'role' => $user->role,
-            'iat' => time(),
-            'exp' => time() + (24 * 60 * 60), // 24 hours
+            'iat' => $issuedAt,
+            'exp' => $issuedAt + $ttl,
         ];
 
-        $token = JWT::encode($payload, config('app.key'), 'HS256');
+        $token = JWT::encode($payload, config('jwt.secret'), config('jwt.algo', 'HS256'));
 
         \Log::info('Login successful', [
             'user_id' => $user->id,
@@ -84,14 +103,46 @@ class AuthController extends Controller
                 'subscription_status' => $user->subscription_status,
             ],
             'token' => $token,
-            'expires_in' => 24 * 60 * 60, // 24 hours in seconds
+            'expires_in' => $ttl,
         ]);
     }
 
+    /**
+     * SECURITY: Logout with token blacklist
+     * 
+     * BEFORE: JWT logout did nothing (tokens stayed valid)
+     * AFTER: Add token to blacklist so it can't be reused
+     */
     public function logout(Request $request)
     {
-        // For JWT, we can't really "logout" server-side without a blacklist
-        // The frontend should just remove the token
+        // Get token from request
+        $token = $request->attributes->get('jwt_token') 
+                 ?? $request->bearerToken() 
+                 ?? $request->header('X-Auth-Token');
+        
+        if ($token) {
+            try {
+                // Decode to get expiration time
+                $decoded = JWT::decode($token, new Key(config('jwt.secret'), config('jwt.algo', 'HS256')));
+                $expiresAt = isset($decoded->exp) ? date('Y-m-d H:i:s', $decoded->exp) : now()->addDays(14);
+                
+                // Add to blacklist
+                \App\Models\TokenBlacklist::add(
+                    $token, 
+                    $request->user()->id ?? null,
+                    $expiresAt,
+                    'logout'
+                );
+                
+                \Log::info('User logged out', [
+                    'user_id' => $request->user()->id ?? null,
+                    'token_blacklisted' => true,
+                ]);
+            } catch (\Exception $e) {
+                \Log::warning('Logout token blacklist failed', ['error' => $e->getMessage()]);
+            }
+        }
+        
         return response()->json([
             'message' => 'Logged out successfully'
         ]);
@@ -111,24 +162,63 @@ class AuthController extends Controller
         ]);
     }
 
+    /**
+     * SECURITY: Token refresh with improved security
+     * 
+     * IMPROVEMENTS:
+     * 1. Uses JWT_SECRET
+     * 2. Validates user is still active
+     * 3. Blacklists old token
+     */
     public function refresh(Request $request)
     {
         $user = $request->user();
         
+        // SECURITY: Validate user is still active
+        if (!$user->is_active) {
+            return response()->json([
+                'message' => 'Your account has been deactivated.',
+            ], 403);
+        }
+
+        // Blacklist the old token
+        $oldToken = $request->attributes->get('jwt_token') 
+                   ?? $request->bearerToken() 
+                   ?? $request->header('X-Auth-Token');
+        
+        if ($oldToken) {
+            try {
+                $decoded = JWT::decode($oldToken, new Key(config('jwt.secret'), config('jwt.algo', 'HS256')));
+                $expiresAt = isset($decoded->exp) ? date('Y-m-d H:i:s', $decoded->exp) : now()->addDays(14);
+                
+                \App\Models\TokenBlacklist::add(
+                    $oldToken, 
+                    $user->id,
+                    $expiresAt,
+                    'refresh'
+                );
+            } catch (\Exception $e) {
+                \Log::warning('Token refresh blacklist failed', ['error' => $e->getMessage()]);
+            }
+        }
+
         // Generate new JWT token
+        $ttl = config('jwt.ttl', 1440) * 60; // Convert minutes to seconds
+        $issuedAt = time();
+        
         $payload = [
             'user_id' => $user->id,
             'email' => $user->email,
             'role' => $user->role,
-            'iat' => time(),
-            'exp' => time() + (24 * 60 * 60), // 24 hours
+            'iat' => $issuedAt,
+            'exp' => $issuedAt + $ttl,
         ];
 
-        $token = JWT::encode($payload, config('app.key'), 'HS256');
+        $token = JWT::encode($payload, config('jwt.secret'), config('jwt.algo', 'HS256'));
 
         return response()->json([
             'token' => $token,
-            'expires_in' => 24 * 60 * 60,
+            'expires_in' => $ttl,
         ]);
     }
 
@@ -162,21 +252,26 @@ class AuthController extends Controller
             'category' => $validated['category'] ?? null,
         ], static fn ($value) => $value !== null && $value !== '');
 
-        // Create user with pending status for business accounts
+        // SECURITY FIX: Create user with safe fields only (mass assignment protection)
+        // Sensitive fields (role, listing_status, subscription_status) are now guarded
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
-            'role' => $validated['role'],
-            'listing_status' => in_array($validated['role'], ['resort', 'enterprise']) ? 'pending' : 'approved',
-            'subscription_status' => in_array($validated['role'], ['resort', 'enterprise']) ? 'unpaid' : 'paid',
-            'is_active' => true,
             'phone' => $validated['phone'] ?? null,
             'address' => $validated['address'] ?? null,
             'barangay' => $validated['barangay'] ?? null,
             'description' => $validated['description'] ?? null,
             'registration_details' => empty($registrationDetails) ? null : $registrationDetails,
         ]);
+
+        // SECURITY: Explicitly set protected fields (cannot be mass assigned)
+        // This prevents privilege escalation attacks
+        $user->role = $validated['role'];
+        $user->listing_status = in_array($validated['role'], ['resort', 'enterprise']) ? 'pending' : 'approved';
+        $user->subscription_status = in_array($validated['role'], ['resort', 'enterprise']) ? 'unpaid' : 'paid';
+        $user->is_active = true;
+        $user->save();
 
         // Notify admins of new registration (fire-and-forget)
         try {

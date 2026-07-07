@@ -12,19 +12,79 @@ class User extends Authenticatable
     use HasFactory, Notifiable;
 
     /**
-     * The attributes that are mass assignable.
+     * SECURITY: Mass Assignment Protection
+     * 
+     * WHY: Kung lahat ng fields ay fillable, puwedeng mag-inject ng data ang attacker
+     * 
+     * EXAMPLE ATTACK:
+     * POST /api/register
+     * {
+     *   "email": "hacker@evil.com",
+     *   "role": "admin",  // ⚠️ Attacker becomes admin!
+     *   "subscription_status": "paid"  // ⚠️ Free subscription!
+     * }
+     * 
+     * FIX: Only allow safe fields in $fillable
+     *      Sensitive fields should be set explicitly in code
+     */
+    
+    /**
+     * The attributes that are mass assignable (SAFE fields only)
      *
      * @var array
      */
     protected $fillable = [
-        'name', 'email', 'password', 'role', 'listing_status', 'is_active', 'payment_details',
-        'subscription_status', 'subscription_paid_at', 'subscription_expires_at', 'subscription_amount',
-        'phone', 'address', 'barangay', 'description', 'registration_details', 'email_verified_at',
-        'resort_name', 'resort_description', 'resort_price_per_night', 'resort_images',
-        'resort_amenities', 'resort_facilities', 'resort_policies', 'resort_is_setup',
-        'store_name', 'store_description', 'store_logo', 'store_banner', 'store_is_setup',
+        // Basic user info (safe to fill)
+        'name', 
+        'email', 
+        'password',
+        'phone', 
+        'address', 
+        'barangay', 
+        'description',
         'avatar',
-        'latitude', 'longitude',
+        'latitude', 
+        'longitude',
+        
+        // Registration details (read-only data for admin review)
+        'registration_details',
+        
+        // Resort/Store profile data (owners manage their own)
+        'resort_name', 
+        'resort_description', 
+        'resort_price_per_night', 
+        'resort_images',
+        'resort_amenities', 
+        'resort_facilities', 
+        'resort_policies', 
+        'resort_is_setup',
+        'store_name', 
+        'store_description', 
+        'store_logo', 
+        'store_banner', 
+        'store_is_setup',
+    ];
+
+    /**
+     * SECURITY: Guarded fields - CANNOT be mass assigned
+     * 
+     * These fields should ONLY be set by admins or system logic
+     * NOT by user input
+     *
+     * @var array
+     */
+    protected $guarded = [
+        'id',
+        'role',                      // ⚠️ Only admins can change roles
+        'listing_status',            // ⚠️ Only admins can approve listings
+        'is_active',                 // ⚠️ Only admins can activate/deactivate
+        'subscription_status',       // ⚠️ Only system can verify subscription
+        'subscription_paid_at',      // ⚠️ Set by payment verification
+        'subscription_expires_at',   // ⚠️ Set by payment verification
+        'subscription_amount',       // ⚠️ Set by payment verification
+        'payment_details',           // ⚠️ Only owner can update via dedicated endpoint
+        'email_verified_at',         // ⚠️ Set by email verification process
+        'remember_token',            // ⚠️ Laravel internal
     ];
 
     /**

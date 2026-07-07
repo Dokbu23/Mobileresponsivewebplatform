@@ -8,6 +8,57 @@ use Illuminate\Http\Request;
 class CorsMiddleware
 {
     /**
+     * SECURITY: Lista ng allowed origins (domains na puwedeng tumawag sa API)
+     * 
+     * WHY: Protektado tayo sa Cross-Site Request Forgery (CSRF) attacks
+     * - Kapag may wildcard (*), kahit evil-site.com puwedeng kumuha ng data
+     * - With whitelist, ONLY trusted domains ang makakagamit ng API
+     * 
+     * HOW TO UPDATE:
+     * 1. Development: Add localhost:3000, localhost:5173, etc.
+     * 2. Production: Add your actual domain (e.g., discovermansalay.com)
+     * 3. Render: Add your-app.onrender.com
+     * 4. Staging: Add staging domain kung meron
+     */
+    protected function getAllowedOrigins()
+    {
+        return [
+            // Development URLs
+            'http://localhost:3000',
+            'http://localhost:5173',
+            'http://127.0.0.1:3000',
+            'http://127.0.0.1:5173',
+            
+            // Production URLs (update mo ito with your actual domain)
+            'https://discovermansalay.com',
+            'https://www.discovermansalay.com',
+            
+            // Render URLs (update with your actual Render subdomain)
+            'https://disc-mansalay.onrender.com',
+            'https://disc-mansalay-frontend.onrender.com',
+            
+            // Environment variable override (most flexible)
+            env('FRONTEND_URL', 'http://localhost:3000'),
+        ];
+    }
+
+    /**
+     * Check kung allowed ang origin
+     * 
+     * @param  string|null  $origin
+     * @return bool
+     */
+    protected function isOriginAllowed($origin)
+    {
+        if (!$origin) {
+            return false;
+        }
+
+        $allowedOrigins = $this->getAllowedOrigins();
+        return in_array($origin, $allowedOrigins, true);
+    }
+
+    /**
      * Handle an incoming request.
      *
      * @param  \Illuminate\Http\Request  $request
@@ -16,23 +67,48 @@ class CorsMiddleware
      */
     public function handle(Request $request, Closure $next)
     {
+        // Get the origin from request header
+        $origin = $request->header('Origin');
+
         // Handle preflight OPTIONS request
         if ($request->isMethod('OPTIONS')) {
-            return response()->json([], 200)
-                ->header('Access-Control-Allow-Origin', '*')
-                ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-                ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Auth-Token')
-                ->header('Access-Control-Max-Age', '86400'); // 24 hours
+            $response = response()->json([], 200);
+            
+            // SECURITY: Only add CORS headers if origin is allowed
+            if ($this->isOriginAllowed($origin)) {
+                $response
+                    ->header('Access-Control-Allow-Origin', $origin)
+                    ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+                    ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Auth-Token')
+                    ->header('Access-Control-Allow-Credentials', 'true')
+                    ->header('Access-Control-Max-Age', '86400'); // 24 hours
+            }
+            
+            return $response;
         }
 
         // Handle actual request
         $response = $next($request);
 
-        // Add CORS headers to response
-        $response->headers->set('Access-Control-Allow-Origin', '*');
-        $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-        $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Auth-Token');
-        $response->headers->set('Access-Control-Expose-Headers', 'Authorization');
+        // SECURITY: Only add CORS headers if origin is allowed
+        if ($this->isOriginAllowed($origin)) {
+            $response->headers->set('Access-Control-Allow-Origin', $origin);
+            $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+            $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Auth-Token');
+            $response->headers->set('Access-Control-Allow-Credentials', 'true');
+            $response->headers->set('Access-Control-Expose-Headers', 'Authorization');
+        }
+
+        // SECURITY: Add additional security headers (protect against common attacks)
+        $response->headers->set('X-Content-Type-Options', 'nosniff'); // Prevents MIME type sniffing
+        $response->headers->set('X-Frame-Options', 'DENY'); // Prevents clickjacking
+        $response->headers->set('X-XSS-Protection', '1; mode=block'); // Enables XSS filter
+        $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin'); // Controls referrer info
+
+        // SECURITY: Force HTTPS in production
+        if (config('app.env') === 'production') {
+            $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+        }
 
         return $response;
     }

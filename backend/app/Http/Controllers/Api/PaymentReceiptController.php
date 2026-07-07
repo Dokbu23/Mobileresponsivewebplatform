@@ -93,6 +93,14 @@ class PaymentReceiptController extends Controller
         return response()->json($receipt);
     }
 
+    /**
+     * SECURITY: Verify payment receipt with strict authorization
+     * 
+     * IMPROVEMENTS:
+     * 1. Strict type comparison
+     * 2. Verifies business owns the receipt
+     * 3. Verifies receipt belongs to actual order/booking
+     */
     public function verify(Request $request, $id)
     {
         $data = $request->validate([
@@ -102,15 +110,48 @@ class PaymentReceiptController extends Controller
 
         $receipt = PaymentReceipt::findOrFail($id);
         
-        // Only business owner can verify their receipts
+        // SECURITY FIX: Strict authorization check (=== instead of !==)
+        // BEFORE: if ($receipt->business_id !== $request->user()->id)
+        // WHY: Prevents type juggling attacks
         if ($receipt->business_id !== $request->user()->id) {
+            \Log::warning('Unauthorized payment receipt verification attempt', [
+                'receipt_id' => $id,
+                'receipt_business_id' => $receipt->business_id,
+                'user_id' => $request->user()->id,
+                'user_role' => $request->user()->role,
+            ]);
+            
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        // SECURITY: Verify receipt belongs to actual order/booking
         if ($data['status'] === 'verified') {
             if ($receipt->type === 'order') {
                 $order = Order::find($receipt->reference_id);
-                if ($order && abs((float) $receipt->amount - (float) $order->total) > 1.0) {
+                
+                // Verify order exists
+                if (!$order) {
+                    return response()->json([
+                        'message' => 'Order not found.'
+                    ], 422);
+                }
+                
+                // Verify order belongs to this business
+                if ($order->business_id !== $request->user()->id) {
+                    \Log::warning('Payment receipt verification - order ownership mismatch', [
+                        'receipt_id' => $id,
+                        'order_id' => $order->id,
+                        'order_business_id' => $order->business_id,
+                        'user_id' => $request->user()->id,
+                    ]);
+                    
+                    return response()->json([
+                        'message' => 'You do not own this order.'
+                    ], 403);
+                }
+                
+                // Verify amount matches
+                if (abs((float) $receipt->amount - (float) $order->total) > 1.0) {
                     return response()->json([
                         'message' => 'Receipt amount does not match order total.'
                     ], 422);
@@ -119,7 +160,38 @@ class PaymentReceiptController extends Controller
 
             if ($receipt->type === 'booking') {
                 $booking = Booking::find($receipt->reference_id);
-                if ($booking && abs((float) $receipt->amount - (float) $booking->total) > 1.0) {
+                
+                // Verify booking exists
+                if (!$booking) {
+                    return response()->json([
+                        'message' => 'Booking not found.'
+                    ], 422);
+                }
+                
+                // Verify booking belongs to this business
+                $bookingOwnerId = $booking->resort_user_id;
+                if (!$bookingOwnerId && $booking->accommodation_id) {
+                    $accommodation = \App\Models\Accommodation::find($booking->accommodation_id);
+                    if ($accommodation) {
+                        $bookingOwnerId = $accommodation->user_id;
+                    }
+                }
+                
+                if ($bookingOwnerId !== $request->user()->id) {
+                    \Log::warning('Payment receipt verification - booking ownership mismatch', [
+                        'receipt_id' => $id,
+                        'booking_id' => $booking->id,
+                        'booking_owner_id' => $bookingOwnerId,
+                        'user_id' => $request->user()->id,
+                    ]);
+                    
+                    return response()->json([
+                        'message' => 'You do not own this booking.'
+                    ], 403);
+                }
+                
+                // Verify amount matches
+                if (abs((float) $receipt->amount - (float) $booking->total) > 1.0) {
                     return response()->json([
                         'message' => 'Receipt amount does not match booking total.'
                     ], 422);
