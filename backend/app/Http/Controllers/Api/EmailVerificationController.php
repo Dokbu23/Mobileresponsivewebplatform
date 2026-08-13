@@ -124,17 +124,15 @@ class EmailVerificationController extends Controller
         // Mark code as used
         $verificationCode->markAsUsed();
 
-        // Mark user email as verified
-        $updated = $user->update([
+        // Mark user email as verified (forceFill bypasses $fillable protection)
+        $user->forceFill([
             'email_verified_at' => Carbon::now(),
-        ]);
+        ])->save();
 
         // Log the update result
         \Log::info('Email verification update', [
             'email' => $user->email,
-            'update_result' => $updated ? 'success' : 'failed',
-            'email_verified_at_before' => $user->getOriginal('email_verified_at'),
-            'email_verified_at_after' => $user->fresh()->email_verified_at,
+            'email_verified_at' => $user->fresh()->email_verified_at,
         ]);
 
         return response()->json([

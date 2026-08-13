@@ -30,8 +30,6 @@ function buildMockContext(unreadCount: number) {
     markAllAsRead: vi.fn(),
     deleteNotification: vi.fn(),
     setChatOpen: vi.fn(),
-    showOrderStatusNotification: vi.fn(),
-    showOrderPlacedNotification: vi.fn(),
   };
 }
 

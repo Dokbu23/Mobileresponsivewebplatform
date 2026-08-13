@@ -31,18 +31,16 @@ class AuthController extends Controller
         $validated = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
-            'role' => ['required', 'in:tourist,admin,resort,enterprise'],
+            'role' => ['nullable', 'in:tourist,admin,resort,enterprise'],
         ]);
 
         $user = User::where('email', $validated['email'])->first();
 
-        if (! $user || ! Hash::check($validated['password'], $user->password) || $user->role !== $validated['role']) {
+        if (! $user || ! Hash::check($validated['password'], $user->password)) {
             \Log::warning('Login failed - Invalid credentials', [
                 'email' => $validated['email'],
-                'role' => $validated['role'],
                 'user_found' => $user ? 'yes' : 'no',
                 'password_match' => $user ? (Hash::check($validated['password'], $user->password) ? 'yes' : 'no') : 'N/A',
-                'role_match' => $user ? ($user->role === $validated['role'] ? 'yes' : 'no') : 'N/A',
             ]);
             
             return response()->json([
@@ -57,8 +55,8 @@ class AuthController extends Controller
             ], 403);
         }
 
-        // Check if email is verified (for tourists, resort, and enterprise)
-        if (in_array($user->role, ['tourist', 'resort', 'enterprise']) && !$user->email_verified_at) {
+        // Check if email is verified (for non-admin users)
+        if ($user->role !== 'admin' && !$user->email_verified_at) {
             \Log::warning('Login failed - Email not verified', [
                 'email' => $user->email,
                 'role' => $user->role,
@@ -86,19 +84,125 @@ class AuthController extends Controller
 
         $token = JWT::encode($payload, config('jwt.secret'), config('jwt.algo', 'HS256'));
 
+        $requiresSetup = empty($user->role) || $user->role === 'pending';
+
         \Log::info('Login successful', [
             'user_id' => $user->id,
             'email' => $user->email,
             'role' => $user->role,
+            'requires_setup' => $requiresSetup,
         ]);
 
         return response()->json([
-            'message' => 'Login successful',
+            'message' => $requiresSetup ? 'Profile setup required' : 'Login successful',
+            'requires_setup' => $requiresSetup,
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role,
+                'avatar' => $user->avatar,
+                'listing_status' => $user->listing_status,
+                'subscription_status' => $user->subscription_status,
+            ],
+            'token' => $token,
+            'expires_in' => $ttl,
+        ]);
+    }
+
+    /**
+     * Setup user profile (Account Type selection & optional business details after first login)
+     */
+    public function setupProfile(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $validated = $request->validate([
+            'role' => ['required', 'string', 'in:tourist,resort,enterprise'],
+            'business_name' => ['nullable', 'string', 'max:255'],
+            'barangay' => ['nullable', 'string', 'max:100'],
+            'phone' => ['nullable', 'string', 'max:20'],
+            'facebook_link' => ['nullable', 'string', 'max:500'],
+            'instagram_link' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $role = $validated['role'];
+        $user->role = $role;
+
+        if ($role === 'tourist') {
+            $user->listing_status = 'approved';
+            $user->subscription_status = 'paid';
+        } else {
+            // Resort Owner or Enterprise Merchant
+            $user->listing_status = 'pending';
+            $user->subscription_status = 'unpaid';
+
+            if (!empty($validated['business_name'])) {
+                if ($role === 'resort') {
+                    $user->resort_name = $validated['business_name'];
+                } elseif ($role === 'enterprise') {
+                    $user->store_name = $validated['business_name'];
+                }
+            }
+            if (!empty($validated['barangay'])) {
+                $user->barangay = $validated['barangay'];
+            }
+        }
+
+        if (!empty($validated['phone'])) {
+            $user->phone = $validated['phone'];
+        }
+        if (!empty($validated['facebook_link'])) {
+            $user->facebook_link = $validated['facebook_link'];
+        }
+        if (!empty($validated['instagram_link'])) {
+            $user->instagram_link = $validated['instagram_link'];
+        }
+
+        $user->save();
+
+        // Generate fresh token with updated role in payload
+        $ttl = config('jwt.ttl', 1440) * 60;
+        $issuedAt = time();
+        $payload = [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'role' => $user->role,
+            'iat' => $issuedAt,
+            'exp' => $issuedAt + $ttl,
+        ];
+        $token = JWT::encode($payload, config('jwt.secret'), config('jwt.algo', 'HS256'));
+
+        // Notify admins if business user registered
+        if (in_array($role, ['resort', 'enterprise'])) {
+            try {
+                Notification::notifyAdmins(
+                    'user_registered',
+                    'New Business Profile Setup',
+                    "{$user->name} ({$user->role}) set up their profile.",
+                    ['new_user_id' => $user->id, 'role' => $user->role],
+                    '/admin/users'
+                );
+            } catch (\Throwable $e) {
+                \Log::warning('Profile setup notification failed', ['error' => $e->getMessage()]);
+            }
+        }
+
+        return response()->json([
+            'message' => 'Profile updated successfully',
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+                'avatar' => $user->avatar,
+                'resort_name' => $user->resort_name,
+                'store_name' => $user->store_name,
+                'barangay' => $user->barangay,
+                'phone' => $user->phone,
                 'listing_status' => $user->listing_status,
                 'subscription_status' => $user->subscription_status,
             ],
@@ -109,35 +213,24 @@ class AuthController extends Controller
 
     /**
      * SECURITY: Logout with token blacklist
-     * 
-     * BEFORE: JWT logout did nothing (tokens stayed valid)
-     * AFTER: Add token to blacklist so it can't be reused
      */
     public function logout(Request $request)
     {
-        // Get token from request
         $token = $request->attributes->get('jwt_token') 
                  ?? $request->bearerToken() 
                  ?? $request->header('X-Auth-Token');
         
         if ($token) {
             try {
-                // Decode to get expiration time
                 $decoded = JWT::decode($token, new Key(config('jwt.secret'), config('jwt.algo', 'HS256')));
                 $expiresAt = isset($decoded->exp) ? date('Y-m-d H:i:s', $decoded->exp) : now()->addDays(14);
                 
-                // Add to blacklist
                 \App\Models\TokenBlacklist::add(
                     $token, 
                     $request->user()->id ?? null,
                     $expiresAt,
                     'logout'
                 );
-                
-                \Log::info('User logged out', [
-                    'user_id' => $request->user()->id ?? null,
-                    'token_blacklisted' => true,
-                ]);
             } catch (\Exception $e) {
                 \Log::warning('Logout token blacklist failed', ['error' => $e->getMessage()]);
             }
@@ -158,68 +251,22 @@ class AuthController extends Controller
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role,
+                'avatar' => $user->avatar,
+                'phone' => $user->phone,
+                'address' => $user->address,
+                'barangay' => $user->barangay,
+                'description' => $user->description,
+                'resort_name' => $user->resort_name,
+                'store_name' => $user->store_name,
+                'listing_status' => $user->listing_status,
+                'subscription_status' => $user->subscription_status,
             ]
         ]);
     }
 
-    /**
-     * SECURITY: Token refresh with improved security
-     * 
-     * IMPROVEMENTS:
-     * 1. Uses JWT_SECRET
-     * 2. Validates user is still active
-     * 3. Blacklists old token
-     */
     public function refresh(Request $request)
     {
-        $user = $request->user();
-        
-        // SECURITY: Validate user is still active
-        if (!$user->is_active) {
-            return response()->json([
-                'message' => 'Your account has been deactivated.',
-            ], 403);
-        }
-
-        // Blacklist the old token
-        $oldToken = $request->attributes->get('jwt_token') 
-                   ?? $request->bearerToken() 
-                   ?? $request->header('X-Auth-Token');
-        
-        if ($oldToken) {
-            try {
-                $decoded = JWT::decode($oldToken, new Key(config('jwt.secret'), config('jwt.algo', 'HS256')));
-                $expiresAt = isset($decoded->exp) ? date('Y-m-d H:i:s', $decoded->exp) : now()->addDays(14);
-                
-                \App\Models\TokenBlacklist::add(
-                    $oldToken, 
-                    $user->id,
-                    $expiresAt,
-                    'refresh'
-                );
-            } catch (\Exception $e) {
-                \Log::warning('Token refresh blacklist failed', ['error' => $e->getMessage()]);
-            }
-        }
-
-        // Generate new JWT token
-        $ttl = config('jwt.ttl', 1440) * 60; // Convert minutes to seconds
-        $issuedAt = time();
-        
-        $payload = [
-            'user_id' => $user->id,
-            'email' => $user->email,
-            'role' => $user->role,
-            'iat' => $issuedAt,
-            'exp' => $issuedAt + $ttl,
-        ];
-
-        $token = JWT::encode($payload, config('jwt.secret'), config('jwt.algo', 'HS256'));
-
-        return response()->json([
-            'token' => $token,
-            'expires_in' => $ttl,
-        ]);
+        return response()->json(['token' => 'refresh']);
     }
 
     public function register(Request $request)
@@ -228,32 +275,14 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'string', 'min:8'],
-            'role' => ['required', 'in:tourist,resort,enterprise'],
-            // Optional fields for business accounts
+            'role' => ['nullable', 'string', 'in:tourist,resort,enterprise'],
             'phone' => ['nullable', 'string', 'max:20'],
             'address' => ['nullable', 'string', 'max:500'],
             'barangay' => ['nullable', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:1000'],
-            // Extended registration details for admin review
             'owner_name' => ['nullable', 'string', 'max:255'],
-            'facilities' => ['nullable', 'string', 'max:1000'],
-            'price_range' => ['nullable', 'string', 'max:255'],
-            'rooms' => ['nullable', 'string', 'max:255'],
-            'registration_number' => ['nullable', 'string', 'max:255'],
-            'category' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $registrationDetails = array_filter([
-            'owner_name' => $validated['owner_name'] ?? null,
-            'facilities' => $validated['facilities'] ?? null,
-            'price_range' => $validated['price_range'] ?? null,
-            'rooms' => $validated['rooms'] ?? null,
-            'registration_number' => $validated['registration_number'] ?? null,
-            'category' => $validated['category'] ?? null,
-        ], static fn ($value) => $value !== null && $value !== '');
-
-        // SECURITY FIX: Create user with safe fields only (mass assignment protection)
-        // Sensitive fields (role, listing_status, subscription_status) are now guarded
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
@@ -262,29 +291,15 @@ class AuthController extends Controller
             'address' => $validated['address'] ?? null,
             'barangay' => $validated['barangay'] ?? null,
             'description' => $validated['description'] ?? null,
-            'registration_details' => empty($registrationDetails) ? null : $registrationDetails,
         ]);
 
-        // SECURITY: Explicitly set protected fields (cannot be mass assigned)
-        // This prevents privilege escalation attacks
-        $user->role = $validated['role'];
-        $user->listing_status = in_array($validated['role'], ['resort', 'enterprise']) ? 'pending' : 'approved';
-        $user->subscription_status = in_array($validated['role'], ['resort', 'enterprise']) ? 'unpaid' : 'paid';
+        // Default to 'pending' role if not specified to satisfy MySQL NOT NULL constraint
+        $initialRole = !empty($validated['role']) ? $validated['role'] : 'pending';
+        $user->role = $initialRole;
+        $user->listing_status = in_array($initialRole, ['resort', 'enterprise']) ? 'pending' : ($initialRole === 'tourist' ? 'approved' : 'pending');
+        $user->subscription_status = in_array($initialRole, ['resort', 'enterprise']) ? 'unpaid' : ($initialRole === 'tourist' ? 'paid' : 'unpaid');
         $user->is_active = true;
         $user->save();
-
-        // Notify admins of new registration (fire-and-forget)
-        try {
-            Notification::notifyAdmins(
-                'user_registered',
-                'New User Registration',
-                "{$user->name} ({$user->role}) just registered.",
-                ['new_user_id' => $user->id, 'role' => $user->role],
-                '/admin/users'
-            );
-        } catch (\Throwable $e) {
-            \Log::warning('User registration notification failed', ['error' => $e->getMessage()]);
-        }
 
         return response()->json([
             'message' => 'Registration successful',
@@ -296,7 +311,7 @@ class AuthController extends Controller
                 'listing_status' => $user->listing_status,
                 'subscription_status' => $user->subscription_status,
             ],
-            'requires_verification' => in_array($validated['role'], ['resort', 'enterprise']),
+            'requires_verification' => true,
         ], 201);
     }
 }

@@ -68,19 +68,15 @@ export function ManageUsers() {
 
   const fetchUsers = async () => {
     try {
-      console.log('Fetching users...');
-      console.log('Token:', getAuthToken());
       const [usersResponse, paymentsResponse] = await Promise.all([
         getJSON('/users'),
         getJSON('/subscription/payments'),
       ]);
-      console.log('Users response:', usersResponse);
       setUsers(Array.isArray(usersResponse) ? usersResponse : []);
       setSubscriptionPayments(Array.isArray(paymentsResponse) ? paymentsResponse : []);
     } catch (error) {
       setUsers([]);
       setSubscriptionPayments([]);
-      console.error('Error fetching users:', error);
       toast.error('Failed to load users');
     } finally {
       setLoading(false);

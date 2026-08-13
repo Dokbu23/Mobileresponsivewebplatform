@@ -56,8 +56,8 @@ export function EnterpriseDashboard() {
         const statusResponse = await getJSON('/subscription/status');
         setSubscriptionStatus(statusResponse);
         
-        // Show modal if unpaid or pending
-        if (statusResponse.subscription_status === 'unpaid') {
+        // Show modal if subscription is not paid or active
+        if (statusResponse.subscription_status !== 'paid' && statusResponse.subscription_status !== 'active') {
           setShowSubscriptionModal(true);
         }
       } catch (error) {
@@ -370,7 +370,7 @@ export function EnterpriseDashboard() {
               }`}>
                 {subscriptionStatus.subscription_status === 'pending'
                   ? 'Your payment is being reviewed by admin. You\'ll get full access once verified.'
-                  : 'Subscribe now for ₱50/year to unlock all features and start managing your products.'}
+                  : `Subscribe now for ₱${(subscriptionStatus.subscription_amount ?? 50).toLocaleString()}/year to unlock all features and start managing your products.`}
               </p>
             </div>
             {subscriptionStatus.subscription_status === 'unpaid' && (

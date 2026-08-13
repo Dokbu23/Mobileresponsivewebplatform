@@ -1,17 +1,32 @@
 # Ignore these files when building Docker image
 .env
-.env.*
+.env.backup
+.env.testing
 .git
 .gitignore
+.gitattributes
 node_modules
 npm-debug.log
 yarn-error.log
 .phpunit.result.cache
-storage/logs/*
-storage/framework/cache/*
+storage/logs/*.log
+storage/framework/cache/data/*
 storage/framework/sessions/*
 storage/framework/views/*
-vendor
 tests
 .editorconfig
 README.md
+.styleci.yml
+
+# Keep these files (important!)
+!composer.json
+!composer.lock
+!artisan
+!public/
+!app/
+!config/
+!database/
+!resources/
+!routes/
+!storage/.gitignore
+!bootstrap/

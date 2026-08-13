@@ -28,9 +28,7 @@ interface NotificationContextType {
   markAllAsRead: () => Promise<void>;
   deleteNotification: (id: number) => Promise<void>;
   setChatOpen: (receiverId: number | null) => void;
-  // Backward-compatible client-side toast helpers (used across the app)
-  showOrderStatusNotification: (orderId: string, oldStatus: string, newStatus: string) => void;
-  showOrderPlacedNotification: (orderId: string, businessName: string) => void;
+  // Note: Order notification functions removed - this is now a display-only platform
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -55,12 +53,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const initializedRef = useRef(false);
 
   const refresh = useCallback(async () => {
-    // Only fetch if there's an auth token
-    if (!getAuthToken()) {
+    const token = getAuthToken();
+    const userType = localStorage.getItem('discover-mansalay:userType');
+    const userStr = localStorage.getItem('discover-mansalay:user') || localStorage.getItem('discover-mansalay:currentUser');
+
+    // Only fetch if there's an auth token AND the user is logged in
+    if (!token || !userType || !userStr) {
       setNotifications([]);
       setUnreadCount(0);
       prevUnreadRef.current = 0;
       prevTopIdRef.current = null;
+      initializedRef.current = false;
       return;
     }
 
@@ -75,9 +78,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       if (initializedRef.current && topId !== null && prevTopIdRef.current !== topId && nextUnread > prevUnreadRef.current) {
         const latest = list[0];
         if (latest) {
-          if (latest.type === 'message_received') {
+          const isUserRegistration = latest.type === 'user_registered' || (latest.title && latest.title.toLowerCase().includes('user registration'));
+
+          // Admin notification rule: ONLY show user registration toasts if logged in as ADMIN
+          if (isUserRegistration) {
+            if (userType === 'admin') {
+              toast.info(latest.title, {
+                description: latest.message,
+              });
+            }
+          } else if (latest.type === 'message_received') {
             const senderId = latest.data?.sender_id ?? null;
-            // Suppress toast if ChatModal is open for this sender's conversation
             if (senderId !== null && senderId === openChatReceiverIdRef.current) {
               // suppress — user is already viewing this conversation
             } else {
@@ -98,9 +109,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       prevUnreadRef.current = nextUnread;
       prevTopIdRef.current = topId;
       initializedRef.current = true;
-    } catch (error) {
-      // Silent fail — keep previous state
-      console.warn('Failed to refresh notifications:', error);
+    } catch (error: any) {
+      // Silent fail — reset state if unauthenticated, avoid noise in console
+      if (error?.message === 'Authentication required' || !getAuthToken()) {
+        setNotifications([]);
+        setUnreadCount(0);
+        prevUnreadRef.current = 0;
+        prevTopIdRef.current = null;
+        initializedRef.current = false;
+      } else {
+        console.warn('Failed to refresh notifications:', error);
+      }
     } finally {
       setLoading(false);
     }
@@ -173,35 +192,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     setOpenChatReceiverId(receiverId);
   }, []);
 
-  // -------------------------------------------------------------------------
-  // Backward-compatible helpers that show a local toast only.
-  // Real persistence now happens server-side via backend triggers.
-  // -------------------------------------------------------------------------
-
-  const showOrderStatusNotification = useCallback(
-    (orderId: string, _oldStatus: string, newStatus: string) => {
-      const statusEmojis: Record<string, string> = {
-        pending: '⏳',
-        confirmed: '✅',
-        shipped: '🚚',
-        delivered: '📦',
-      };
-      const emoji = statusEmojis[newStatus] ?? '🔔';
-      toast.info(`${emoji} Order #${orderId} ${newStatus}`, {
-        description: `Order status is now ${newStatus}.`,
-      });
-    },
-    []
-  );
-
-  const showOrderPlacedNotification = useCallback(
-    (orderId: string, _businessName: string) => {
-      toast.success('🛍️ New Order Received', {
-        description: `Order #${orderId} has been placed by a customer.`,
-      });
-    },
-    []
-  );
+  // Note: Order notification functions removed - this is now a display-only platform
 
   return (
     <NotificationContext.Provider
@@ -214,8 +205,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         markAllAsRead,
         deleteNotification,
         setChatOpen,
-        showOrderStatusNotification,
-        showOrderPlacedNotification,
       }}
     >
       {children}
@@ -223,10 +212,18 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   );
 }
 
+const defaultContext: NotificationContextType = {
+  notifications: [],
+  unreadCount: 0,
+  loading: false,
+  refresh: async () => {},
+  markAsRead: async () => {},
+  markAllAsRead: async () => {},
+  deleteNotification: async () => {},
+  setChatOpen: () => {},
+};
+
 export function useNotifications() {
   const context = useContext(NotificationContext);
-  if (context === undefined) {
-    throw new Error('useNotifications must be used within a NotificationProvider');
-  }
-  return context;
+  return context ?? defaultContext;
 }

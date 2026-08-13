@@ -17,12 +17,19 @@ class AccommodationController extends Controller
     {
         $user = $request->user();
 
-        // Resort owner: only their own accommodations
-        if ($user && $user->role === 'resort') {
-            $query = \App\Models\Accommodation::where('user_id', $user->id);
-        } else {
-            // Public / admin: all accommodations with owner info
-            $query = \App\Models\Accommodation::with('owner:id,name,email,phone,description,listing_status');
+        $query = \App\Models\Accommodation::with('owner:id,name,email,phone,description,listing_status');
+        // Public / non-admin: only show accommodations from admin OR approved & paid resort accounts
+        if (!$user || $user->role !== 'admin') {
+            $query->where(function($q) {
+                $q->whereNull('user_id')
+                  ->orWhereHas('owner', function($userQuery) {
+                      $userQuery->where('role', 'admin')
+                                ->orWhere(function($bq) {
+                                    $bq->where('listing_status', 'approved')
+                                       ->whereIn('subscription_status', ['paid', 'active']);
+                                });
+                  });
+            });
         }
 
         $search = $request->input('search');
@@ -34,19 +41,16 @@ class AccommodationController extends Controller
             });
         }
 
-        // Resort owner view: return only their accommodations
-        if ($user && $user->role === 'resort') {
-            return response()->json($query->get());
-        }
-
         $staticAccommodations = $query->get()->map(function ($item) {
             $item->type = 'static';
             return $item;
         });
 
+        // Resort profiles query (only approved & paid resorts)
         $resortQuery = \App\Models\User::where('role', 'resort')
             ->where('resort_is_setup', true)
-            ->where('listing_status', 'approved');
+            ->where('listing_status', 'approved')
+            ->whereIn('subscription_status', ['paid', 'active']);
 
         if ($search !== null && $search !== '') {
             $resortQuery->where(function($q) use ($search) {
@@ -72,9 +76,11 @@ class AccommodationController extends Controller
                 'availability' => (object) [],
                 'user_id' => $user->id,
                 'is_registered' => true,
-                'type' => 'resort_profile',
+                'type' => 'Beach Resort',
+                'category' => 'Beach Resort',
                 'latitude' => $user->latitude,
                 'longitude' => $user->longitude,
+                'video' => $user->video ?? $user->video_url ?? null,
             ];
         });
 
@@ -91,12 +97,30 @@ class AccommodationController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'name'           => 'required|string|max:255',
-            'description'    => 'nullable|string',
-            'price_per_night'=> 'required|numeric',
-            'image'          => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
-            'availability'   => 'nullable',
+            'name'            => 'required|string|max:255',
+            'description'     => 'nullable|string',
+            'full_description'=> 'nullable|string',
+            'location'        => 'nullable|string|max:255',
+            'category'        => 'nullable|string|max:255',
+            'type'            => 'nullable|string|max:255',
+            'operating_hours' => 'nullable|string|max:255',
+            'contact_number'  => 'nullable|string|max:255',
+            'facebook'        => 'nullable|string|max:255',
+            'instagram'       => 'nullable|string|max:255',
+            'website'         => 'nullable|string|max:255',
+            'price_per_night' => 'nullable|numeric',
+            'price'           => 'nullable|numeric',
+            'image'           => 'nullable',
+            'video'           => 'nullable',
+            'availability'    => 'nullable',
         ]);
+
+        if (!isset($data['price_per_night']) && isset($data['price'])) {
+            $data['price_per_night'] = $data['price'];
+        }
+        if (!isset($data['price_per_night'])) {
+            $data['price_per_night'] = 0;
+        }
 
         if (isset($data['availability']) && is_string($data['availability'])) {
             $decoded = json_decode($data['availability'], true);
@@ -107,14 +131,44 @@ class AccommodationController extends Controller
 
         $user = $request->user();
 
-        // Handle image upload
+        // Handle image / multiple images upload
+        $imagePaths = [];
+        if ($request->hasFile('images')) {
+            foreach ((array) $request->file('images') as $file) {
+                if ($file) {
+                    $fileName = time() . '_' . rand(1000, 9999) . '_' . $file->getClientOriginalName();
+                    $file->storeAs('public/accommodations', $fileName);
+                    $imagePaths[] = '/storage/accommodations/' . $fileName;
+                }
+            }
+        }
         if ($request->hasFile('image')) {
             $image = $request->file('image');
             $imageName = time() . '_' . $image->getClientOriginalName();
             $image->storeAs('public/accommodations', $imageName);
-            $data['image'] = '/storage/accommodations/' . $imageName;
-        } else {
-            $data['image'] = $request->input('image', '');
+            $singlePath = '/storage/accommodations/' . $imageName;
+            if (!in_array($singlePath, $imagePaths)) {
+                array_unshift($imagePaths, $singlePath);
+            }
+            $data['image'] = $singlePath;
+        } elseif (!empty($imagePaths)) {
+            $data['image'] = $imagePaths[0];
+        } elseif (is_string($request->input('image'))) {
+            $data['image'] = $request->input('image');
+        }
+
+        if (!empty($imagePaths)) {
+            $data['images'] = $imagePaths;
+        }
+
+        // Handle video upload
+        if ($request->hasFile('video')) {
+            $video = $request->file('video');
+            $videoName = time() . '_' . $video->getClientOriginalName();
+            $video->storeAs('public/accommodations/videos', $videoName);
+            $data['video'] = '/storage/accommodations/videos/' . $videoName;
+        } elseif (is_string($request->input('video'))) {
+            $data['video'] = $request->input('video');
         }
 
         // Resort owner creates a registered listing; admin creates a static listing
@@ -142,12 +196,28 @@ class AccommodationController extends Controller
     public function update(Request $request, int $id)
     {
         $data = $request->validate([
-            'name'           => 'required|string|max:255',
-            'description'    => 'nullable|string',
-            'price_per_night'=> 'required|numeric',
-            'image'          => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
-            'availability'   => 'nullable',
+            'name'            => 'sometimes|required|string|max:255',
+            'description'     => 'sometimes|nullable|string',
+            'full_description'=> 'sometimes|nullable|string',
+            'location'        => 'sometimes|nullable|string|max:255',
+            'category'        => 'sometimes|nullable|string|max:255',
+            'type'            => 'sometimes|nullable|string|max:255',
+            'operating_hours' => 'sometimes|nullable|string|max:255',
+            'contact_number'  => 'sometimes|nullable|string|max:255',
+            'facebook'        => 'sometimes|nullable|string|max:255',
+            'instagram'       => 'sometimes|nullable|string|max:255',
+            'website'         => 'sometimes|nullable|string|max:255',
+            'price_per_night' => 'sometimes|nullable|numeric',
+            'price'           => 'sometimes|nullable|numeric',
+            'image'           => 'sometimes|nullable',
+            'images'          => 'sometimes|nullable',
+            'video'           => 'sometimes|nullable',
+            'availability'    => 'sometimes|nullable',
         ]);
+
+        if (isset($data['price']) && !isset($data['price_per_night'])) {
+            $data['price_per_night'] = $data['price'];
+        }
 
         if (isset($data['availability']) && is_string($data['availability'])) {
             $decoded = json_decode($data['availability'], true);
@@ -158,13 +228,38 @@ class AccommodationController extends Controller
 
         $accommodation = \App\Models\Accommodation::findOrFail($id);
 
+        $imagePaths = [];
+        if ($request->hasFile('images')) {
+            foreach ((array) $request->file('images') as $file) {
+                if ($file) {
+                    $fileName = time() . '_' . rand(1000, 9999) . '_' . $file->getClientOriginalName();
+                    $file->storeAs('public/accommodations', $fileName);
+                    $imagePaths[] = '/storage/accommodations/' . $fileName;
+                }
+            }
+        }
         if ($request->hasFile('image')) {
             $image = $request->file('image');
             $imageName = time() . '_' . $image->getClientOriginalName();
             $image->storeAs('public/accommodations', $imageName);
-            $data['image'] = '/storage/accommodations/' . $imageName;
-        } else {
-            unset($data['image']);
+            $singlePath = '/storage/accommodations/' . $imageName;
+            if (!in_array($singlePath, $imagePaths)) {
+                array_unshift($imagePaths, $singlePath);
+            }
+            $data['image'] = $singlePath;
+        } elseif (!empty($imagePaths)) {
+            $data['image'] = $imagePaths[0];
+        }
+
+        if (!empty($imagePaths)) {
+            $data['images'] = $imagePaths;
+        }
+
+        if ($request->hasFile('video')) {
+            $video = $request->file('video');
+            $videoName = time() . '_' . $video->getClientOriginalName();
+            $video->storeAs('public/accommodations/videos', $videoName);
+            $data['video'] = '/storage/accommodations/videos/' . $videoName;
         }
 
         $accommodation->update($data);

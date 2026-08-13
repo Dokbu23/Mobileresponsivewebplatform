@@ -1,6 +1,11 @@
-import { createBrowserRouter, Navigate } from "react-router";
+import { createBrowserRouter, useNavigate } from "react-router";
+import { useEffect } from "react";
+
+
 import { RootLayout } from "./layouts/RootLayout";
 import { RoleSelection } from "./pages/RoleSelection";
+import { UnifiedLogin } from "./pages/UnifiedLogin";
+import { UnifiedRegister } from "./pages/UnifiedRegister";
 import { TouristLogin } from "./pages/tourist/TouristLogin";
 import { TouristRegistration } from "./pages/tourist/TouristRegistration";
 import { EmailVerification } from "./pages/tourist/EmailVerification";
@@ -12,14 +17,12 @@ import { Attractions } from "./pages/tourist/Attractions";
 import { Events } from "./pages/tourist/Events";
 import { Products } from "./pages/tourist/Products";
 import { Accommodations } from "./pages/tourist/Accommodations";
-import { Cart } from "./pages/tourist/Cart";
-import { Checkout } from "./pages/tourist/Checkout";
-import { OrderStatus } from "./pages/tourist/OrderStatus";
 import { Settings } from "./pages/tourist/Settings";
-import { ShippingAddresses } from "./pages/tourist/ShippingAddresses";
 import { BusinessProfile } from "./pages/tourist/BusinessProfile";
 import { MapExplore } from "./pages/tourist/MapExplore";
-import { Messages } from "./pages/Messages";
+import { Itinerary } from "./pages/tourist/Itinerary";
+import { Wishlist } from "./pages/tourist/Wishlist";
+
 import { AdminLogin } from "./pages/admin/AdminLogin";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { ManageListings } from "./pages/admin/ManageListings";
@@ -36,16 +39,48 @@ import { EnterpriseLogin } from "./pages/enterprise/EnterpriseLogin";
 import { EnterpriseRegistration } from "./pages/enterprise/EnterpriseRegistration";
 import { EnterpriseDashboard } from "./pages/enterprise/EnterpriseDashboard";
 import { EnterpriseProfile } from "./pages/enterprise/EnterpriseProfile";
-import { ManageOrders as EnterpriseManageOrders } from "./pages/enterprise/ManageOrders";
 import { EnterpriseProfileSetup } from "./pages/enterprise/EnterpriseProfileSetup";
+import { ManageOrders as EnterpriseManageOrders } from "./pages/enterprise/ManageOrders";
+import { ManageOrders as AdminManageOrders } from "./pages/admin/ManageOrders";
+
+function SmartRedirect() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const userType = window.localStorage.getItem('discover-mansalay:userType');
+    switch (userType) {
+      case 'resort':
+        navigate('/resort/dashboard', { replace: true });
+        break;
+      case 'enterprise':
+        navigate('/enterprise/dashboard', { replace: true });
+        break;
+      case 'admin':
+        navigate('/admin/dashboard', { replace: true });
+        break;
+      default:
+        navigate('/dashboard', { replace: true });
+        break;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return null;
+}
+
+import { AdminContent } from "./pages/admin/AdminContent";
+import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
 
 export const router = createBrowserRouter([
   {
     path: "/",
     Component: RootLayout,
+    ErrorBoundary: RouteErrorBoundary,
     children: [
-      { index: true, element: <Navigate to="/dashboard" replace /> },
+      { index: true, Component: SmartRedirect },
       { path: "dashboard", Component: Dashboard },
+      { path: "login", Component: UnifiedLogin },
+      { path: "register", Component: UnifiedRegister },
       { path: "select-role", Component: RoleSelection },
       { path: "forgot-password", Component: ForgotPassword },
       { path: "reset-password", Component: ResetPassword },
@@ -58,18 +93,17 @@ export const router = createBrowserRouter([
       { path: "products", Component: Products },
       { path: "accommodations", Component: Accommodations },
       { path: "map", Component: MapExplore },
-      { path: "cart", Component: Cart },
-      { path: "checkout", Component: Checkout },
-      { path: "status", Component: OrderStatus },
+      { path: "itinerary", Component: Itinerary },
       { path: "settings", Component: Settings },
-      { path: "settings/shipping", Component: ShippingAddresses },
-      { path: "shipping-addresses", Component: ShippingAddresses },
-      { path: "messages", Component: Messages },
+      { path: "wishlist", Component: Wishlist },
+
+      // Note: Cart, checkout, shipping addresses removed - this is now a display-only platform
       // Public business profile pages for registered businesses
       { path: "business/:type/:userId", Component: BusinessProfile },
       { path: "admin/login", Component: AdminLogin },
       { path: "admin/dashboard", Component: AdminDashboard },
-      { path: "admin/listings", Component: ManageListings },
+      { path: "admin/publish", Component: AdminContent },
+      { path: "admin/listings", Component: AdminContent },
       { path: "admin/events", Component: ManageEvents },
       { path: "admin/users", Component: ManageUsers },
       { path: "admin/subscriptions", Component: ManageSubscriptions },
@@ -86,6 +120,7 @@ export const router = createBrowserRouter([
       { path: "enterprise/dashboard", Component: EnterpriseDashboard },
       { path: "enterprise/profile", Component: EnterpriseProfile },
       { path: "enterprise/profile/setup", Component: EnterpriseProfileSetup },
+      { path: "admin/orders", Component: AdminManageOrders },
       { path: "enterprise/orders", Component: EnterpriseManageOrders },
     ],
   },

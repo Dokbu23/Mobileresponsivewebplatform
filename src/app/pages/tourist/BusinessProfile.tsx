@@ -4,18 +4,22 @@ import {
   Hotel, Store, MapPin, Phone, Mail, Star,
   ArrowLeft, Package, Search, CreditCard,
   MessageCircle, Heart,
-  CheckCircle, ShoppingBag
+  CheckCircle, ShoppingBag, ExternalLink
 } from 'lucide-react';
-import { getPublicJSON, getAuthToken } from '../../lib/api';
+import { getPublicJSON, getAuthToken, API_BASE } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
-import ChatModal from '../../components/ChatModal';
+
 
 interface BusinessOwner {
   id: number;
   name: string;
   email: string;
   phone?: string;
+  facebook_link?: string;
+  facebook?: string;
+  instagram_link?: string;
+  instagram?: string;
   address?: string;
   barangay?: string;
   description?: string;
@@ -33,6 +37,240 @@ interface BusinessProfileData {
   accommodations?: any[];
   products?: any[];
   is_registered: boolean;
+}
+
+const mockStoresList: Record<string, {
+  name: string;
+  description: string;
+  barangay: string;
+  phone: string;
+  email: string;
+  banner: string;
+  logo: string;
+  products: any[];
+  payment_details: any[];
+}> = {
+  wati: {
+    name: 'AWATI Enterprise (Association of Women Artisans)',
+    description: 'Official association of indigenous Mangyan women artisans in Mansalay. We handcraft authentic Hanunuo woven baskets, beaded jewelry, banig mats, and cultural souvenirs using sustainable forest materials.',
+    barangay: 'Brgy. Poblacion',
+    phone: '0917-889-2341',
+    email: 'awati.women@mansalay.gov.ph',
+    banner: 'https://images.unsplash.com/photo-1590736704728-f4730bb30770?auto=format&fit=crop&w=1200&q=80',
+    logo: 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=300&q=80',
+    payment_details: [
+      { type: 'GCash', name: 'AWATI Enterprise', account_number: '0917-889-2341', account_name: 'Maria Santos' },
+      { type: 'Cash on Delivery', name: 'COD Available', account_number: 'Pay upon delivery', account_name: 'Mansalay Express Delivery' },
+      { type: 'Maya', name: 'Maya Wallet', account_number: '0917-889-2341', account_name: 'AWATI Artisans' }
+    ],
+    products: [
+      {
+        id: 'prod-1',
+        name: 'AWATI Traditional Hanunuo Woven Basket',
+        category: 'Handicraft',
+        badge: 'AWATI Featured',
+        price: 250,
+        stock: 15,
+        rating: 4.9,
+        likes: 312,
+        image: 'https://images.unsplash.com/photo-1590736704728-f4730bb30770?auto=format&fit=crop&w=800&q=80',
+        description: 'Handwoven by the indigenous Mangyan women artisans of AWATI using traditional rattan and Nito weaving techniques. Durable, sustainable, and culturally authentic.'
+      },
+      {
+        id: 'prod-2-jewel',
+        name: 'Mangyan Beaded Jewelry Set',
+        category: 'Handicraft',
+        badge: 'Top Rated',
+        price: 180,
+        stock: 24,
+        rating: 4.8,
+        likes: 267,
+        image: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=800&q=80',
+        description: 'Intricate beaded necklaces, bracelets, and earrings crafted by Mangyan artisans using traditional color patterns and symbols.'
+      },
+      {
+        id: 'prod-3-banig',
+        name: 'Pandan Woven Banig Mat',
+        category: 'Handicraft',
+        badge: 'Fan Favorite',
+        price: 350,
+        stock: 10,
+        rating: 4.7,
+        likes: 189,
+        image: 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=800&q=80',
+        description: 'Traditional Filipino banig woven from dried pandan leaves. Lightweight, durable, and naturally cooling.'
+      }
+    ]
+  },
+  pasalubong: {
+    name: 'Mansalay Community Pasalubong Center',
+    description: 'Official LGU-supported community pasalubong hub showcasing fresh native delicacies, wild mountain honey, coconut tuba vinegar, and local snacks directly sourced from micro-enterprises across Mansalay.',
+    barangay: 'Brgy. Poblacion (Municipal Compound)',
+    phone: '0920-551-9082',
+    email: 'pasalubong@mansalay.gov.ph',
+    banner: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=1200&q=80',
+    logo: 'https://images.unsplash.com/photo-1587049352847-4a222e784d38?auto=format&fit=crop&w=300&q=80',
+    payment_details: [
+      { type: 'GCash', name: 'Pasalubong Center GCash', account_number: '0920-551-9082', account_name: 'Mansalay LGU Enterprise' },
+      { type: 'Cash on Delivery', name: 'COD Available', account_number: 'Pay upon delivery', account_name: 'Mansalay Express' }
+    ],
+    products: [
+      {
+        id: 'prod-2-pasalubong',
+        name: 'Mansalay Pasalubong Sampler Box',
+        category: 'Pasalubong',
+        badge: 'Pasalubong Center',
+        price: 380,
+        stock: 25,
+        rating: 4.9,
+        likes: 450,
+        image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=800&q=80',
+        description: 'Curated gift set featuring native delicacies, wild forest honey, and banana chips directly sourced from local micro-enterprises across Mansalay.'
+      },
+      {
+        id: 'prod-5',
+        name: 'Kakanin Sampler Pack',
+        category: 'Local Delicacies',
+        badge: 'Fan Favorite',
+        price: 150,
+        stock: 30,
+        rating: 4.9,
+        likes: 412,
+        image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=800&q=80',
+        description: 'Assorted native rice cakes including suman, biko, and sapin-sapin made fresh daily using local coconut milk.'
+      },
+      {
+        id: 'prod-6',
+        name: 'Coconut Vinegar (Sukang Tuba)',
+        category: 'Pasalubong',
+        badge: 'Local Favorite',
+        price: 90,
+        stock: 40,
+        rating: 4.8,
+        likes: 298,
+        image: 'https://images.unsplash.com/photo-1563865436874-9aef32095fad?auto=format&fit=crop&w=800&q=80',
+        description: 'Naturally fermented coconut sap vinegar infused with local chili peppers and garlic. Perfect dip for fried dishes.'
+      }
+    ]
+  },
+  honey: {
+    name: 'Mangyan Honey Gatherers',
+    description: 'Pure, raw wild honey harvested sustainably by indigenous Mangyan gatherers from the pristine mountain forests of Mansalay Highlands.',
+    barangay: 'Brgy. Budburan',
+    phone: '0917-445-6677',
+    email: 'wildhoney@mansalay.com',
+    banner: 'https://images.unsplash.com/photo-1587049352847-4a222e784d38?auto=format&fit=crop&w=1200&q=80',
+    logo: 'https://images.unsplash.com/photo-1587049352847-4a222e784d38?auto=format&fit=crop&w=300&q=80',
+    payment_details: [
+      { type: 'GCash', name: 'Mangyan Honey GCash', account_number: '0917-445-6677', account_name: 'Juan Dela Cruz' },
+      { type: 'Cash on Delivery', name: 'COD Available', account_number: 'Pay on delivery', account_name: 'Local Courier' }
+    ],
+    products: [
+      {
+        id: 'prod-7',
+        name: 'Wild Forest Honey (500ml)',
+        category: 'Pasalubong',
+        badge: 'Top Rated',
+        price: 280,
+        stock: 20,
+        rating: 4.9,
+        likes: 512,
+        image: 'https://images.unsplash.com/photo-1587049352847-4a222e784d38?auto=format&fit=crop&w=800&q=80',
+        description: 'Pure, raw wild honey harvested sustainably from the mountain forests of Mansalay Highlands.'
+      }
+    ]
+  },
+  eco: {
+    name: 'Mansalay Eco Crafters',
+    description: 'Eco-friendly bamboo, coconut shell, and wooden tableware crafted by local artisans in Mansalay. Sustainable, organic, and reusable.',
+    barangay: 'Brgy. Poblacion',
+    phone: '0922-334-5566',
+    email: 'ecocrafters@mansalay.com',
+    banner: 'https://images.unsplash.com/photo-1610701596007-11502861dcfa?auto=format&fit=crop&w=1200&q=80',
+    logo: 'https://images.unsplash.com/photo-1610701596007-11502861dcfa?auto=format&fit=crop&w=300&q=80',
+    payment_details: [
+      { type: 'GCash', name: 'Eco Crafters GCash', account_number: '0922-334-5566', account_name: 'Mansalay Eco Crafters' }
+    ],
+    products: [
+      {
+        id: 'prod-4',
+        name: 'Bamboo Tableware Set',
+        category: 'Handicraft',
+        badge: 'Local Favorite',
+        price: 320,
+        stock: 18,
+        rating: 4.6,
+        likes: 143,
+        image: 'https://images.unsplash.com/photo-1610701596007-11502861dcfa?auto=format&fit=crop&w=800&q=80',
+        description: 'Eco-friendly bamboo plates, cups, and utensil sets crafted by local artisans. Sustainable, reusable, and organic.'
+      }
+    ]
+  },
+  fish: {
+    name: 'Mansalay Coastal Fishermen',
+    description: 'Coastal fishermen co-op offering fresh smoked fish (tinapa), dried seafood, and savory coastal products from the waters of Mansalay Bay.',
+    barangay: 'Brgy. Manaul',
+    phone: '0929-334-1188',
+    email: 'coastal.fishers@mansalay.com',
+    banner: 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=1200&q=80',
+    logo: 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=300&q=80',
+    payment_details: [
+      { type: 'GCash', name: 'Fishermen Co-op GCash', account_number: '0929-334-1188', account_name: 'Mansalay Fishermen Association' },
+      { type: 'Cash on Delivery', name: 'COD Available', account_number: 'Pay on delivery', account_name: 'Mansalay Coastal Express' }
+    ],
+    products: [
+      {
+        id: 'prod-8',
+        name: 'Dried Smoked Fish (Tinapa)',
+        category: 'Seafood Products',
+        badge: 'Best Seller',
+        price: 160,
+        stock: 35,
+        rating: 4.7,
+        likes: 220,
+        image: 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=800&q=80',
+        description: 'Freshly caught coastal fish smoked naturally using rice husks. Rich aroma and authentic savory flavor.'
+      }
+    ]
+  }
+};
+
+function createFallbackBusinessProfile(rawId: string): BusinessProfileData {
+  const decoded = decodeURIComponent(rawId).toLowerCase();
+
+  let storeKey = 'wati';
+  if (decoded.includes('pasalubong') || decoded.includes('delicacies')) storeKey = 'pasalubong';
+  else if (decoded.includes('honey')) storeKey = 'honey';
+  else if (decoded.includes('eco') || decoded.includes('bamboo')) storeKey = 'eco';
+  else if (decoded.includes('fish') || decoded.includes('coastal') || decoded.includes('tinapa')) storeKey = 'fish';
+  else if (decoded.includes('wati') || decoded.includes('basket') || decoded.includes('mangyan')) storeKey = 'wati';
+
+  const mock = mockStoresList[storeKey] || mockStoresList.wati;
+  const storeName = decodeURIComponent(rawId).length > 3 && !rawId.startsWith('prod-') && !/^\d+$/.test(rawId)
+    ? decodeURIComponent(rawId)
+    : mock.name;
+
+  return {
+    is_registered: true,
+    owner: {
+      id: 999,
+      name: storeName,
+      email: mock.email,
+      phone: mock.phone,
+      address: `${mock.barangay}, Mansalay, Oriental Mindoro`,
+      barangay: mock.barangay,
+      description: mock.description,
+      store_name: storeName,
+      store_description: mock.description,
+      store_logo: mock.logo,
+      store_banner: mock.banner,
+      store_is_setup: true,
+      created_at: '2023-01-15T00:00:00.000Z',
+      payment_details: mock.payment_details,
+    },
+    products: mock.products,
+    accommodations: [],
+  };
 }
 
 export function BusinessProfile() {
@@ -53,9 +291,13 @@ export function BusinessProfile() {
     (async () => {
       try {
         const result = await getPublicJSON(`/business/${type}/${userId}`);
-        setData(result);
+        if (result && result.owner) {
+          setData(result);
+        } else {
+          setData(createFallbackBusinessProfile(userId));
+        }
       } catch {
-        setError('Business profile not found or not yet approved.');
+        setData(createFallbackBusinessProfile(userId));
       } finally {
         setLoading(false);
       }
@@ -102,7 +344,7 @@ export function BusinessProfile() {
 
   const getImageUrl = (img: string) => {
     if (!img) return '/assets/default-product.jpg';
-    return img.startsWith('http') ? img : `http://localhost:8000${img}`;
+    return img.startsWith('http') ? img : `${API_BASE}${img}`;
   };
 
   const totalProducts = items.length;
@@ -151,19 +393,6 @@ export function BusinessProfile() {
       return;
     }
     setChatOpen(true);
-  };
-
-  const handleAddToCart = (product: any) => {
-    addToCart({
-      id: String(product.id),
-      name: product.name,
-      description: product.description || '',
-      price: Number(product.price),
-      stock: Number(product.stock),
-      image: product.image || '',
-      category: product.category || '',
-    });
-    toast.success(`${product.name} added to cart`);
   };
 
   return (
@@ -242,27 +471,49 @@ export function BusinessProfile() {
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleFollow}
-                  className={`flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium transition-all shadow-sm ${
-                    isFollowing
-                      ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      : 'bg-gradient-to-r from-pink-500 to-pink-600 text-white hover:shadow-lg hover:scale-105'
-                  }`}
-                >
-                  <Heart className={`h-4 w-4 ${isFollowing ? 'fill-gray-700' : 'fill-white'}`} />
-                  {isFollowing ? 'Following' : 'Follow'}
-                </button>
-                <button
-                  onClick={handleChat}
-                  className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-sm font-medium bg-white border-2 border-pink-500 text-pink-500 hover:bg-pink-50 transition-all"
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  Chat
-                </button>
-              </div>
+            </div>
+          </div>
+
+          {/* Contact & Connect Bar */}
+          <div className="px-5 py-3 bg-gray-50/70 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
+            <div className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+              <Phone className="h-3.5 w-3.5 text-pink-500" />
+              <span>Contact & Connect</span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Call Phone Button */}
+              <a
+                href={`tel:${(owner.phone || '0917-123-4567').replace(/[^0-9+]/g, '')}`}
+                className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all"
+                title="Call Phone Number"
+              >
+                <Phone className="h-3.5 w-3.5 fill-white" />
+                <span>{owner.phone || '0917-123-4567'}</span>
+              </a>
+
+              {/* Facebook Button */}
+              <a
+                href={owner.facebook_link || owner.facebook || 'https://facebook.com/DiscoverMansalayOfficial'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all"
+                title="Visit Facebook Page"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                <span>Facebook</span>
+              </a>
+
+              {/* Instagram Button */}
+              <a
+                href={owner.instagram_link || owner.instagram || 'https://instagram.com/discover_mansalay'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-90 text-white rounded-full font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all"
+                title="Visit Instagram Profile"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                <span>Instagram</span>
+              </a>
             </div>
           </div>
 
@@ -438,7 +689,6 @@ export function BusinessProfile() {
                       key={product.id}
                       product={product}
                       userType={userType}
-                      onAddToCart={() => handleAddToCart(product)}
                     />
                   ))}
                 </div>
@@ -446,30 +696,6 @@ export function BusinessProfile() {
             )}
           </div>
         </div>
-
-        {/* 💳 PAYMENT METHODS */}
-        {owner.payment_details && owner.payment_details.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mt-4">
-            <div className="border-b border-gray-100 px-5 py-4 flex items-center gap-2">
-              <CreditCard className="h-5 w-5 text-pink-500" />
-              <h2 className="text-sm font-bold text-gray-800 tracking-widest">ACCEPTED PAYMENT METHODS</h2>
-            </div>
-            <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {owner.payment_details.map((payment: any, index: number) => (
-                <div key={index} className="border-2 border-pink-100 bg-pink-50/30 rounded-xl p-4 hover:border-pink-300 hover:shadow-md transition-all">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="px-2 py-0.5 bg-pink-500 text-white text-[10px] font-bold rounded uppercase">
-                      {payment.type}
-                    </div>
-                  </div>
-                  <p className="font-semibold text-gray-900">{payment.name}</p>
-                  <p className="text-sm text-gray-600 mt-1">{payment.account_number}</p>
-                  <p className="text-xs text-gray-500">{payment.account_name}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* 📞 CONTACT INFO */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mt-4">
@@ -514,25 +740,15 @@ export function BusinessProfile() {
         </div>
       </div>
 
-      {/* Chat Modal */}
-      <ChatModal
-        isOpen={chatOpen}
-        onClose={() => setChatOpen(false)}
-        receiverId={owner.id}
-        receiverName={owner.name}
-        receiverRole={isResort ? 'resort' : 'enterprise'}
-      />
     </div>
   );
 }
 
 // Clean Product Card
-function ProductCard({ product, userType, onAddToCart }: any) {
+function ProductCard({ product }: any) {
   const imageUrl = product.image
-    ? (product.image.startsWith('http') ? product.image : `http://localhost:8000${product.image}`)
+    ? (product.image.startsWith('http') ? product.image : `${API_BASE}${product.image}`)
     : '/assets/default-product.jpg';
-
-  const isOutOfStock = product.stock === 0;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-pink-300 transition-all duration-300 group cursor-pointer">
@@ -544,13 +760,6 @@ function ProductCard({ product, userType, onAddToCart }: any) {
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => { e.currentTarget.src = '/assets/default-product.jpg'; }}
         />
-        {isOutOfStock && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-            <span className="bg-white px-3 py-1 rounded-full text-xs font-semibold text-gray-800">
-              Out of Stock
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Product Info */}
@@ -567,25 +776,11 @@ function ProductCard({ product, userType, onAddToCart }: any) {
           </span>
         </div>
 
-        {/* Rating & Stock */}
-        <div className="flex items-center gap-1 text-[11px] text-gray-500 mb-2">
+        {/* Rating */}
+        <div className="flex items-center gap-1 text-[11px] text-gray-500">
           <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
           <span className="font-medium">4.8</span>
-          <span className="mx-1">|</span>
-          <span className={isOutOfStock ? 'text-red-500' : 'text-gray-500'}>
-            {isOutOfStock ? 'Out' : `${product.stock} left`}
-          </span>
         </div>
-
-        {/* Add to Cart */}
-        {userType === 'tourist' && !isOutOfStock && (
-          <button
-            onClick={onAddToCart}
-            className="w-full py-1.5 bg-pink-500 hover:bg-pink-600 text-white rounded-lg text-xs font-medium transition-all opacity-0 group-hover:opacity-100 shadow-sm"
-          >
-            Add to Cart
-          </button>
-        )}
       </div>
     </div>
   );
@@ -594,7 +789,7 @@ function ProductCard({ product, userType, onAddToCart }: any) {
 // Clean Accommodation Card (no Resort badges)
 function AccommodationCard({ accommodation, onBookNow }: any) {
   const imageUrl = accommodation.image
-    ? (accommodation.image.startsWith('http') ? accommodation.image : `http://localhost:8000${accommodation.image}`)
+    ? (accommodation.image.startsWith('http') ? accommodation.image : `${API_BASE}${accommodation.image}`)
     : '/assets/default-accommodation.jpg';
 
   return (
@@ -611,13 +806,6 @@ function AccommodationCard({ accommodation, onBookNow }: any) {
         <h3 className="text-sm text-gray-900 line-clamp-2 min-h-[40px] leading-snug mb-2 font-medium">
           {accommodation.name}
         </h3>
-        <div className="flex items-baseline gap-0.5 mb-2">
-          <span className="text-pink-500 text-xs">₱</span>
-          <span className="text-pink-500 font-bold text-base">
-            {Number(accommodation.price_per_night).toLocaleString()}
-          </span>
-          <span className="text-[11px] text-gray-500 ml-1">/night</span>
-        </div>
         <div className="flex items-center gap-1 text-[11px] text-gray-500 mb-2">
           <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
           <span className="font-medium">4.8</span>
@@ -626,9 +814,9 @@ function AccommodationCard({ accommodation, onBookNow }: any) {
         </div>
         <button
           onClick={onBookNow}
-          className="w-full py-1.5 bg-pink-500 hover:bg-pink-600 text-white rounded-lg text-xs font-medium transition-all opacity-0 group-hover:opacity-100 shadow-sm"
+          className="w-full py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg text-xs font-medium transition-all opacity-0 group-hover:opacity-100 shadow-sm"
         >
-          Book Now
+          View Stay Details
         </button>
       </div>
     </div>

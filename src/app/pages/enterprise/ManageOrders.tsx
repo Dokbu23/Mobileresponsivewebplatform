@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Package, Clock, CheckCircle, Truck, Phone, MapPin, User, Calendar, CreditCard, Building2, DollarSign } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { useNotifications } from '../../context/NotificationContext';
 import { toast } from 'sonner';
 import { getJSON, patchJSON } from '../../lib/api';
 import { showSuccessAlert, showConfirmAlert } from '../../lib/sweetAlert';
@@ -49,7 +48,6 @@ export function ManageOrders() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const { userType } = useApp();
-  const { showOrderPlacedNotification } = useNotifications();
 
   useEffect(() => {
     if (userType !== 'enterprise') {
@@ -61,14 +59,9 @@ export function ManageOrders() {
 
   const fetchOrders = async () => {
     try {
-      console.log('Fetching orders for enterprise user...');
-      console.log('Current user type:', userType);
       const response = await getJSON('/orders/my');
-      console.log('Orders response:', response);
-      console.log('Orders count:', response?.length || 0);
       setOrders(response || []);
     } catch (error) {
-      console.error('Error fetching orders:', error);
       toast.error('Failed to load orders');
     } finally {
       setLoading(false);

@@ -1,4 +1,11 @@
-export const API_BASE = 'http://localhost:8000';
+export const API_BASE = ((import.meta as any).env?.VITE_API_BASE as string | undefined) || 'http://localhost:8000';
+
+export function getStorageUrl(path: string | null | undefined): string {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_BASE}${cleanPath}`;
+}
 
 // Token management
 export function getAuthToken(): string | null {
@@ -8,11 +15,73 @@ export function getAuthToken(): string | null {
 export function setAuthToken(token: string): void {
   localStorage.setItem('discover-mansalay:token', token);
   localStorage.setItem('token', token); // For backward compatibility
+  // Save when the token was issued so handleUnauthorized can detect fresh logins
+  localStorage.setItem('discover-mansalay:tokenSetAt', Date.now().toString());
 }
 
 export function removeAuthToken(): void {
   localStorage.removeItem('discover-mansalay:token');
   localStorage.removeItem('token');
+  localStorage.removeItem('discover-mansalay:tokenSetAt');
+}
+
+export function getCurrentUserRole(): 'admin' | 'resort' | 'enterprise' | 'tourist' {
+  const isAdmin = localStorage.getItem('discover-mansalay:isAdmin') === 'true';
+  if (isAdmin) return 'admin';
+
+  const userType = localStorage.getItem('discover-mansalay:userType') || localStorage.getItem('userType');
+  if (userType && userType.toLowerCase() === 'admin') return 'admin';
+
+  const userStr = localStorage.getItem('discover-mansalay:currentUser') || localStorage.getItem('user');
+  if (userStr) {
+    try {
+      const u = JSON.parse(userStr);
+      if (u) {
+        if (u.role === 'admin' || u.is_admin || u.user_type === 'admin') return 'admin';
+        if (u.role) return u.role.toLowerCase();
+      }
+    } catch {}
+  }
+  if (userType) {
+    const lowered = userType.toLowerCase();
+    if (lowered === 'admin' || lowered === 'resort' || lowered === 'enterprise') {
+      return lowered as any;
+    }
+  }
+  return 'tourist';
+}
+
+// Clears all auth data and redirects to the correct login page based on role.
+// If a 401 fires within 15 seconds of login, the token is fresh — this is a
+// backend/race-condition issue, not a session expiry.  In that case we clear
+// the bad data but do NOT redirect so the dashboard catch-blocks can handle it.
+function handleUnauthorized(): void {
+  const tokenSetAt = localStorage.getItem('discover-mansalay:tokenSetAt');
+  const isJustLoggedIn = tokenSetAt && (Date.now() - parseInt(tokenSetAt, 10)) < 15_000;
+
+  const userType = localStorage.getItem('discover-mansalay:userType');
+  removeAuthToken();
+  localStorage.removeItem('discover-mansalay:userType');
+  localStorage.removeItem('discover-mansalay:isAdmin');
+  localStorage.removeItem('discover-mansalay:currentUser');
+
+  // Fresh login — don't redirect. The component's catch block will handle it.
+  if (isJustLoggedIn) return;
+
+  switch (userType) {
+    case 'resort':
+      window.location.href = '/resort/login';
+      break;
+    case 'enterprise':
+      window.location.href = '/enterprise/login';
+      break;
+    case 'admin':
+      window.location.href = '/admin/login';
+      break;
+    default:
+      window.location.href = '/tourist/login';
+      break;
+  }
 }
 
 // Create headers with authentication
@@ -44,22 +113,13 @@ export async function getPublicJSON(path: string) {
 
 // Authenticated API calls
 export async function getJSON(path: string) {
-  console.log('GET request to:', `${API_BASE}/api${path}`);
-  
-  const token = getAuthToken();
-  console.log('Auth token:', token ? 'Present' : 'Missing');
-  
   const res = await fetch(`${API_BASE}/api${path}`, {
     headers: createHeaders(),
   });
   
-  console.log('Response status:', res.status);
-  
   if (res.status === 401) {
-    // Token expired or invalid - redirect to login
     console.error('401 Unauthorized - Token expired or invalid');
-    removeAuthToken();
-    window.location.href = '/select-role';
+    handleUnauthorized();
     throw new Error('Authentication required');
   }
   
@@ -69,58 +129,28 @@ export async function getJSON(path: string) {
     throw new Error(`API error: ${res.status}`);
   }
   
-  const data = await res.json();
-  console.log('Response data:', data);
-  return data;
+  return res.json();
 }
 
 export async function postJSON(path: string, body: unknown, requireAuth: boolean = true) {
-  console.log('POST request to:', `${API_BASE}/api${path}`);
-  console.log('Request body:', body);
-  
-  const token = getAuthToken();
-  console.log('Auth token:', token ? 'Present' : 'Missing');
-
   const isFormData = body instanceof FormData;
-  if (isFormData) {
-    try {
-      const fd = body as FormData;
-      for (const pair of fd.entries()) {
-        const key = pair[0];
-        const value: any = pair[1];
-        if (typeof File !== 'undefined' && value instanceof File) {
-          console.log('FormData entry:', key, 'File ->', value.name, value.type, `${value.size} bytes`);
-        } else {
-          console.log('FormData entry:', key, value);
-        }
-      }
-    } catch (e) {
-      console.warn('Could not iterate FormData entries', e);
-    }
-  }
   
   const res = await fetch(`${API_BASE}/api${path}`, {
     method: 'POST',
     headers: createHeaders(requireAuth, isFormData),
-    body: isFormData ? body : JSON.stringify(body),
+    body: isFormData ? (body as FormData) : JSON.stringify(body),
   });
 
-  console.log('Response status:', res.status);
-  console.log('Response headers:', Object.fromEntries(res.headers.entries()));
-
   const data = await res.json().catch(() => null);
-  console.log('Response data:', data);
 
   if (res.status === 401 && requireAuth) {
     console.error('401 Unauthorized - Token expired or invalid');
-    removeAuthToken();
-    window.location.href = '/select-role';
+    handleUnauthorized();
     throw new Error('Authentication required');
   }
 
   if (!res.ok) {
     const errorMessage = data?.message || data?.error || `HTTP ${res.status}: ${res.statusText}`;
-    console.error('API Error:', errorMessage);
     if (data?.errors) {
       console.error('Validation errors:', data.errors);
     }
@@ -153,28 +183,17 @@ export async function postJSON(path: string, body: unknown, requireAuth: boolean
 }
 
 export async function patchJSON(path: string, body: unknown) {
-  console.log('PATCH request to:', `${API_BASE}/api${path}`);
-  console.log('Request body:', body);
-  
-  const token = getAuthToken();
-  console.log('Auth token:', token ? 'Present' : 'Missing');
-  
   const res = await fetch(`${API_BASE}/api${path}`, {
     method: 'PATCH',
     headers: createHeaders(),
     body: JSON.stringify(body),
   });
 
-  console.log('Response status:', res.status);
-  console.log('Response headers:', Object.fromEntries(res.headers.entries()));
-
   const data = await res.json().catch(() => null);
-  console.log('Response data:', data);
 
   if (res.status === 401) {
     console.error('401 Unauthorized - Token expired or invalid');
-    removeAuthToken();
-    window.location.href = '/select-role';
+    handleUnauthorized();
     throw new Error('Authentication required');
   }
 
@@ -196,8 +215,7 @@ export async function putJSON(path: string, body: unknown) {
 
   if (res.status === 401) {
     console.error('401 Unauthorized - Token expired or invalid');
-    removeAuthToken();
-    window.location.href = '/select-role';
+    handleUnauthorized();
     throw new Error('Authentication required');
   }
 
@@ -218,8 +236,7 @@ export async function deleteJSON(path: string) {
 
   if (res.status === 401) {
     console.error('401 Unauthorized - Token expired or invalid');
-    removeAuthToken();
-    window.location.href = '/select-role';
+    handleUnauthorized();
     throw new Error('Authentication required');
   }
 
@@ -243,8 +260,7 @@ export async function uploadPaymentReceipt(formData: FormData) {
 
   if (res.status === 401) {
     console.error('401 Unauthorized - Token expired or invalid');
-    removeAuthToken();
-    window.location.href = '/select-role';
+    handleUnauthorized();
     throw new Error('Authentication required');
   }
 
@@ -323,42 +339,61 @@ export interface PaymentMethodInput {
 
 // Admin: Get payment settings (subscription amount)
 export async function getAdminPaymentSettings(): Promise<PaymentSettings> {
-  return await getJSON('/admin/payment-settings');
+  return await getJSON('/payment-settings');
 }
 
 // Admin: Update subscription amount
-export async function updateAdminPaymentSettings(amount: number): Promise<{ message: string; subscription_amount: number }> {
-  return await putJSON('/admin/payment-settings', { subscription_amount: amount });
+export async function updatePaymentSettings(subscriptionAmount: number) {
+  return await putJSON('/payment-settings', { subscription_amount: subscriptionAmount });
 }
+export const updateAdminPaymentSettings = updatePaymentSettings;
 
 // Admin: Get all payment methods
 export async function getAdminPaymentMethods(): Promise<PaymentMethod[]> {
-  return await getJSON('/admin/payment-methods');
+  return await getJSON('/payment-methods');
 }
 
 // Admin: Create payment method
 export async function createPaymentMethod(data: PaymentMethodInput): Promise<{ message: string; payment_method: PaymentMethod }> {
-  return await postJSON('/admin/payment-methods', data);
+  return await postJSON('/payment-methods', data);
 }
 
 // Admin: Update payment method
 export async function updatePaymentMethod(id: number, data: Partial<PaymentMethodInput>): Promise<{ message: string; payment_method: PaymentMethod }> {
-  return await putJSON(`/admin/payment-methods/${id}`, data);
+  return await putJSON(`/payment-methods/${id}`, data);
 }
 
 // Admin: Delete payment method
 export async function deletePaymentMethod(id: number): Promise<{ message: string }> {
-  return await deleteJSON(`/admin/payment-methods/${id}`);
+  return await deleteJSON(`/payment-methods/${id}`);
 }
 
 // Admin: Toggle payment method enabled status
 export async function togglePaymentMethod(id: number): Promise<{ message: string; payment_method: PaymentMethod }> {
-  return await patchJSON(`/admin/payment-methods/${id}/toggle`, {});
+  return await patchJSON(`/payment-methods/${id}/toggle`, {});
 }
 
 // Public: Get payment settings for users (enterprise/resort)
 export async function getPublicPaymentSettings(): Promise<PublicPaymentSettings> {
   return await getJSON('/subscription/settings');
+}
+
+// Landmark API Functions
+export async function getPublicLandmarks() {
+  return await getPublicJSON('/landmarks');
+}
+
+export async function createLandmark(data: {
+  name: string;
+  type: 'resort' | 'enterprise' | 'attraction';
+  category?: string;
+  description?: string;
+  address?: string;
+  latitude: number;
+  longitude: number;
+  image?: string;
+}) {
+  return await postJSON('/public/landmarks', data, false);
 }
 
 
@@ -459,4 +494,104 @@ export async function markAllNotificationsAsRead() {
 
 export async function deleteNotification(id: number) {
   return deleteJSON(`/notifications/${id}`);
+}
+
+// ============================================================================
+// OSRM Real Road Routing & Mansalay Polygon Geofence API
+// ============================================================================
+
+export const OSRM_BASE_URL = (import.meta as any).env?.VITE_OSRM_API_URL || 'https://router.project-osrm.org';
+
+/**
+ * Official 2D Boundary Polygon Vertices for Mansalay, Oriental Mindoro
+ * Format: [Latitude, Longitude]
+ */
+export const MANSALAY_POLYGON_VERTICES: [number, number][] = [
+  [12.6150, 121.3250],
+  [12.6180, 121.4100],
+  [12.5950, 121.4850],
+  [12.5650, 121.5250],
+  [12.5100, 121.5450],
+  [12.4450, 121.5200],
+  [12.4250, 121.4650],
+  [12.4220, 121.3900],
+  [12.4500, 121.3300],
+  [12.5300, 121.3180],
+  [12.6150, 121.3250],
+];
+
+/**
+ * Client-Side Point-in-Polygon Check (Ray-Casting Algorithm)
+ */
+export function isPointInMansalayPolygon(lat: number, lng: number): boolean {
+  const polygon = MANSALAY_POLYGON_VERTICES;
+  const numVertices = polygon.length;
+  let inside = false;
+
+  for (let i = 0, j = numVertices - 1; i < numVertices; j = i++) {
+    const xi = polygon[i][0];
+    const yi = polygon[i][1];
+    const xj = polygon[j][0];
+    const yj = polygon[j][1];
+
+    const intersect = ((yi > lng) !== (yj > lng)) &&
+      (lat < ((xj - xi) * (lng - yi)) / (yj - yi + 1e-12) + xi);
+
+    if (intersect) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+export interface OSRMRouteResponse {
+  code: string;
+  routes: Array<{
+    distance: number; // meters
+    duration: number; // seconds
+    geometry: {
+      coordinates: [number, number][]; // [lng, lat] format from GeoJSON
+      type: string;
+    };
+    legs: Array<{
+      distance: number;
+      duration: number;
+      summary: string;
+      steps: Array<{
+        distance: number;
+        duration: number;
+        name: string;
+        maneuver: {
+          type: string;
+          modifier?: string;
+          location: [number, number];
+        };
+      }>;
+    }>;
+  }>;
+}
+
+export async function getOSRMRoute(
+  startLat: number,
+  startLng: number,
+  endLat: number,
+  endLng: number
+): Promise<OSRMRouteResponse | null> {
+  try {
+    const url = `${OSRM_BASE_URL}/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson&steps=true`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn('OSRM routing request failed:', res.statusText);
+      return null;
+    }
+    const data: OSRMRouteResponse = await res.json();
+    if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.error('OSRM route fetch error:', err);
+    return null;
+  }
 }

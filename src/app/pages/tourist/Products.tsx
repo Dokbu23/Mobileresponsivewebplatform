@@ -1,551 +1,554 @@
 import { useState, useEffect, useMemo } from 'react';
-import {
-  ShoppingCart,
-  Package,
-  X,
-  Plus,
-  Minus,
-  Store,
-  Star,
-} from 'lucide-react';
-import { useApp, Product } from '../../context/AppContext';
-import { useNavigate, Link } from 'react-router';
-import { toast } from 'sonner';
-import { getPublicJSON } from '../../lib/api';
-import { SearchBar } from '../../components/SearchBar';
-import { FilterButton } from '../../components/FilterButton';
-import { FilterSidebar } from '../../components/FilterSidebar';
-import { FilterChips } from '../../components/FilterChips';
-import { useSearchAndFilter } from '../../hooks/useSearchAndFilter';
-import ChatModal from '../../components/ChatModal';
+import { useNavigate } from 'react-router';
+import { Store, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, MessageSquare, Facebook, Navigation, MapPin, ExternalLink, Lock, Filter, ChevronDown } from 'lucide-react';
+import { API_BASE, getPublicJSON } from '../../lib/api';
+import { useApp } from '../../context/AppContext';
+import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
+import { ShareModal } from '../../components/ShareModal';
 
-interface ProductDetailModalProps {
-  product: Product | null;
-  isOpen: boolean;
-  onClose: () => void;
-  onAddToCart: (product: Product, quantity: number, selectedVariation?: any) => void;
-  userType: string | null;
-}
-
-function ProductDetailModal({
-  product,
-  isOpen,
-  onClose,
-  onAddToCart,
-  userType,
-}: ProductDetailModalProps) {
-  const { addToCart, clearCart } = useApp();
-  const navigate = useNavigate();
-
-  const [quantity, setQuantity] = useState(1);
-  const [selectedVariations, setSelectedVariations] = useState<Record<string, string>>({});
-  const [chatOpen, setChatOpen] = useState(false);
-  const [reviews, setReviews] = useState<any[]>([]);
-
-  useEffect(() => {
-    if (isOpen && product) {
-      setQuantity(1);
-      setSelectedVariations({});
-      setChatOpen(false);
-    }
-  }, [isOpen, product]);
-
-  useEffect(() => {
-    if (!product) return;
-    const productNumericId = (product as any)._numericId ?? product.id;
-    getPublicJSON(`/products/${productNumericId}/reviews`)
-      .then((data: any) => {
-        setReviews(Array.isArray(data) ? data : data?.reviews ?? []);
-      })
-      .catch(() => setReviews([]));
-  }, [product]);
-
-  if (!isOpen || !product) return null;
-
-  const variations: any[] = Array.isArray((product as any).variations)
-    ? (product as any).variations
-    : [];
-  const hasVariations = variations.length > 0;
-
-  const variationGroups: Record<string, any[]> = {};
-  for (const v of variations) {
-    const key = v.name ?? 'Option';
-    if (!variationGroups[key]) variationGroups[key] = [];
-    variationGroups[key].push(v);
-  }
-  const variationNames = Object.keys(variationGroups);
-
-  const allVariationsSelected =
-    !hasVariations || variationNames.every((n) => !!selectedVariations[n]);
-
-  const activeVariation = hasVariations && allVariationsSelected
-    ? (variations.find((v) =>
-        variationNames.every((n) => selectedVariations[n] === v.value || v.name === n)
-      ) ?? null)
-    : null;
-
-  const effectivePrice: number =
-    activeVariation?.price != null ? Number(activeVariation.price) : product.price;
-  const effectiveStock: number =
-    activeVariation?.stock != null ? Number(activeVariation.stock) : product.stock;
-
-  const isStaticListing = !(product as any).is_registered && !(product as any).user_id;
-  const owner: any = (product as any).owner ?? null;
-  const sellerId: number | null = owner?.id ?? (product as any).user_id ?? null;
-  const sellerName: string = owner?.name ?? owner?.store_name ?? 'Seller';
-  const sellerRole: 'enterprise' | 'resort' = owner?.role === 'resort' ? 'resort' : 'enterprise';
-
-  function buildVariationPayload() {
-    if (!hasVariations) return undefined;
-    return {
-      id: activeVariation?.id,
-      name: variationNames.join(' / '),
-      value: variationNames.map((n) => selectedVariations[n]).join(' / '),
-      price: activeVariation?.price ?? null,
-    };
-  }
-
-  function validateBeforeAction(): boolean {
-    if (!userType) {
-      toast.error('Please login to continue.');
-      navigate('/select-role');
-      onClose();
-      return false;
-    }
-    if (userType !== 'tourist') {
-      toast.error('Only tourists can order products.');
-      return false;
-    }
-    if (isStaticListing) {
-      toast.error('Contact the seller directly for this product.');
-      return false;
-    }
-    if (hasVariations && !allVariationsSelected) {
-      const missing = variationNames.find((n) => !selectedVariations[n]);
-      toast.error(`Pakipili muna ang ${missing}.`);
-      return false;
-    }
-    if (effectiveStock <= 0) {
-      toast.error('This product is out of stock.');
-      return false;
-    }
-    return true;
-  }
-
-  const handleBuyNow = () => {
-    if (!validateBeforeAction()) return;
-    const variationPayload = buildVariationPayload();
-    const productForCart: Product = { ...product, price: effectivePrice, stock: effectiveStock };
-    clearCart();
-    addToCart(productForCart, quantity, variationPayload);
-    onClose();
-    navigate('/checkout');
-  };
-
-  const handleAddToCart = () => {
-    if (!validateBeforeAction()) return;
-    const variationPayload = buildVariationPayload();
-    const productForCart: Product = { ...product, price: effectivePrice, stock: effectiveStock };
-    onAddToCart(productForCart, quantity, variationPayload);
-    onClose();
-    setQuantity(1);
-    setSelectedVariations({});
-  };
-
-  const avgRating =
-    reviews.length > 0
-      ? reviews.reduce((sum: number, r: any) => sum + Number(r.rating ?? 0), 0) / reviews.length
-      : null;
-
-  return (
-    <>
-      <div
-        className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4"
-        onClick={onClose}
-      >
-        <div
-          className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl max-h-[92vh] overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="sticky top-0 z-10 flex justify-end p-3 bg-white/80 backdrop-blur-sm">
-            <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 transition-colors" aria-label="Close">
-              <X className="h-5 w-5 text-gray-600" />
-            </button>
-          </div>
-
-          <div className="px-5 pb-8 -mt-2 space-y-5">
-            {/* Product image */}
-            <div className="relative aspect-square sm:aspect-video w-full rounded-xl overflow-hidden bg-gray-100">
-              <img
-                src={product.image}
-                alt={product.name}
-                className="w-full h-full object-cover"
-                onError={(e) => { e.currentTarget.src = '/assets/default-product.jpg'; }}
-              />
-              {(product as any).variations?.length > 0 && (
-                <div className="absolute top-3 left-3 bg-pink-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow">
-                  Variations Available
-                </div>
-              )}
-            </div>
-
-            {/* Name + price */}
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 leading-snug">{product.name}</h2>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-pink-500 text-sm">₱</span>
-                <span className="text-pink-500 text-2xl font-bold">{effectivePrice.toLocaleString()}</span>
-              </div>
-              {avgRating !== null && (
-                <div className="flex items-center gap-1 mt-1">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <Star key={s} className={`h-4 w-4 ${s <= Math.round(avgRating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
-                  ))}
-                  <span className="text-xs text-gray-500 ml-1">{avgRating.toFixed(1)} ({reviews.length} review{reviews.length !== 1 ? 's' : ''})</span>
-                </div>
-              )}
-            </div>
-
-            {/* Stock */}
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500">Stock:</span>
-              <span className={effectiveStock <= 0 ? 'text-red-500 font-medium' : effectiveStock <= 5 ? 'text-orange-500 font-medium' : 'text-green-600 font-medium'}>
-                {effectiveStock <= 0 ? 'Out of Stock' : `${effectiveStock} available`}
-              </span>
-            </div>
-
-            {/* Description */}
-            {product.description && (
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-1">Description</h3>
-                <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{product.description}</p>
-              </div>
-            )}
-
-            {/* Variation selector */}
-            {hasVariations && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-gray-700">Select Variation</h3>
-                {variationNames.map((groupName) => (
-                  <div key={groupName} className="flex items-start gap-4 text-sm">
-                    <span className="text-gray-500 w-20 pt-2 shrink-0">{groupName}</span>
-                    <div className="flex-1 flex flex-wrap gap-2">
-                      {variationGroups[groupName].map((option: any) => {
-                        const isSelected = selectedVariations[groupName] === option.value;
-                        const outOfStock = Number(option.stock) <= 0;
-                        return (
-                          <button
-                            key={option.id ?? `${option.name}-${option.value}`}
-                            type="button"
-                            disabled={outOfStock}
-                            onClick={() => {
-                              setSelectedVariations((prev) => ({ ...prev, [groupName]: option.value }));
-                              setQuantity(1);
-                            }}
-                            className={`px-4 py-2 rounded border text-sm min-w-[4rem] transition-colors ${
-                              outOfStock
-                                ? 'bg-gray-50 text-gray-400 border-gray-200 opacity-50 cursor-not-allowed line-through'
-                                : isSelected
-                                ? 'bg-pink-50 text-pink-600 border-pink-500 font-medium'
-                                : 'bg-white text-gray-700 border-gray-300 hover:border-pink-500 hover:text-pink-500'
-                            }`}
-                          >
-                            {option.value}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Quantity selector */}
-            <div className="flex items-center gap-4">
-              <span className="text-sm font-semibold text-gray-700">Quantity</span>
-              <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
-                <button type="button" onClick={() => setQuantity((q) => Math.max(1, q - 1))} disabled={quantity <= 1} className="px-3 py-2 hover:bg-gray-100 transition-colors disabled:opacity-40" aria-label="Decrease">
-                  <Minus className="h-4 w-4" />
-                </button>
-                <span className="px-4 py-2 text-sm font-medium min-w-[3rem] text-center">{quantity}</span>
-                <button type="button" onClick={() => setQuantity((q) => Math.min(effectiveStock, q + 1))} disabled={quantity >= effectiveStock || effectiveStock <= 0} className="px-3 py-2 hover:bg-gray-100 transition-colors disabled:opacity-40" aria-label="Increase">
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Seller info */}
-            {owner && (
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-pink-100 rounded-full flex items-center justify-center">
-                    <Store className="h-5 w-5 text-pink-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{sellerName}</p>
-                    <p className="text-xs text-gray-500 capitalize">{sellerRole} seller</p>
-                  </div>
-                </div>
-                {userType === 'tourist' && sellerId && (
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => setChatOpen(true)} className="text-xs px-3 py-1.5 border border-pink-500 text-pink-500 rounded-lg hover:bg-pink-50 transition-colors">
-                      Chat
-                    </button>
-                    {(product as any).user_id && (product as any).is_registered && (
-                      <Link
-                        to={`/business/enterprise/${(product as any).user_id}`}
-                        onClick={onClose}
-                        className="text-xs px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1"
-                      >
-                        <Store className="h-3 w-3" />
-                        View Shop
-                      </Link>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Static listing notice */}
-            {isStaticListing && (
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-sm text-yellow-800">
-                This product is managed by the admin. Please contact the seller directly to purchase.
-              </div>
-            )}
-
-            {/* Action buttons */}
-            {!isStaticListing && userType === 'tourist' && (
-              <div className="flex gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={handleAddToCart}
-                  disabled={hasVariations && !allVariationsSelected}
-                  className="flex-1 px-6 py-3 bg-pink-50 text-pink-500 border border-pink-500 rounded-lg hover:bg-pink-100 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ShoppingCart className="h-5 w-5" />
-                  Add to Cart
-                </button>
-                <button
-                  type="button"
-                  onClick={handleBuyNow}
-                  disabled={hasVariations && !allVariationsSelected}
-                  className="flex-1 px-6 py-3 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Buy Now
-                </button>
-              </div>
-            )}
-
-            {/* Login prompt */}
-            {!userType && (
-              <div className="text-center pt-1">
-                <p className="text-sm text-gray-500 mb-2">You need to be logged in to purchase.</p>
-                <Link to="/select-role" onClick={onClose} className="inline-flex items-center gap-2 px-5 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm font-medium">
-                  Login to Continue
-                </Link>
-              </div>
-            )}
-
-            {/* Reviews */}
-            {reviews.length > 0 && (
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Customer Reviews ({reviews.length})</h3>
-                <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
-                  {reviews.map((r: any, idx: number) => (
-                    <div key={r.id ?? idx} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="flex">
-                          {[1, 2, 3, 4, 5].map((s) => (
-                            <Star key={s} className={`h-3.5 w-3.5 ${s <= Number(r.rating) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}`} />
-                          ))}
-                        </div>
-                        <span className="text-xs text-gray-500 font-medium">{r.user?.name ?? 'Tourist'}</span>
-                      </div>
-                      {r.comment && <p className="text-xs text-gray-600 leading-relaxed">{r.comment}</p>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {chatOpen && sellerId && (
-        <ChatModal isOpen={chatOpen} onClose={() => setChatOpen(false)} receiverId={sellerId} receiverName={sellerName} receiverRole={sellerRole} />
-      )}
-    </>
-  );
+interface ProductItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  stock: number;
+  image: string;
+  images?: string[];
+  category: string;
+  badge?: string;
+  rating?: number;
+  likes?: number;
+  sellerName?: string;
+  user_id?: number | null;
+  is_registered?: boolean;
+  owner?: any;
+  variations?: any[];
 }
 
 export function Products() {
-  const { addToCart, userType } = useApp();
   const navigate = useNavigate();
+  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist } = useApp();
+  const isLoggedIn = Boolean(userType && currentUser);
 
-  const [items, setItems] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [items, setItems] = useState<ProductItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<ProductItem | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [savedProductIds, setSavedProductIds] = useState<string[]>([]);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [selectedStoreFilter, setSelectedStoreFilter] = useState<string | null>(null);
+  const [shareData, setShareData] = useState<{ title: string; description?: string; image?: string; category?: string } | null>(null);
 
-  const { filters, queryParams, updateFilter, clearAllFilters, activeFilterCount } = useSearchAndFilter();
+  const handleStoreClick = (sellerName?: string, userId?: number | string | null, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (selectedProduct) setSelectedProduct(null);
 
-  const categories = useMemo(() => {
-    return Array.from(new Set(items.map((p) => p.category).filter(Boolean))).sort() as string[];
-  }, [items]);
+    const targetParam = userId ? String(userId) : encodeURIComponent(sellerName || 'Store');
+    navigate(`/business/enterprise/${targetParam}`);
+  };
 
-  const filteredProducts = useMemo(() => {
-    if (!filters.category) return items;
-    return items.filter((p) => p.category === filters.category);
-  }, [items, filters.category]);
-
-  useEffect(() => {
-    let cancelled = false;
+  const loadProducts = async () => {
     setLoading(true);
+    try {
+      const data = await getPublicJSON('/products').catch(() => []);
+      const raw = Array.isArray(data) ? data : data?.data ?? data?.products ?? [];
 
-    getPublicJSON('/products' + queryParams)
-      .then((data: any) => {
-        if (cancelled) return;
-        const raw: any[] = Array.isArray(data) ? data : data?.data ?? data?.products ?? [];
-        const mapped: Product[] = raw.map((p: any) => ({
+      let customProducts: any[] = [];
+      try {
+        const stored = localStorage.getItem('discover-mansalay:custom_products');
+        if (stored) customProducts = JSON.parse(stored);
+      } catch {}
+
+      let deletedIds = new Set<string>();
+      try {
+        const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
+        if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
+      } catch {}
+
+      const allRaw = [...raw].filter((i: any) => !deletedIds.has(String(i.id)));
+      const existingIds = new Set(allRaw.map((r: any) => String(r.id)));
+      customProducts.forEach((cp: any) => {
+        if (!existingIds.has(String(cp.id)) && !deletedIds.has(String(cp.id))) {
+          allRaw.unshift(cp);
+        }
+      });
+
+      const mapped = allRaw.map((p: any, idx: number) => {
+        let parsedImages: string[] = [];
+        if (Array.isArray(p.images)) {
+          parsedImages = p.images.map((img: any) => String(img).startsWith('http') ? img : `${API_BASE}${img}`);
+        } else if (typeof p.images === 'string' && p.images.trim()) {
+          try {
+            const arr = JSON.parse(p.images);
+            if (Array.isArray(arr)) {
+              parsedImages = arr.map((img: any) => String(img).startsWith('http') ? img : `${API_BASE}${img}`);
+            }
+          } catch {}
+        }
+        const mainImg = p.image
+          ? (String(p.image).startsWith('http') ? p.image : `${API_BASE}${p.image}`)
+          : '';
+        if (parsedImages.length === 0 && mainImg) {
+          parsedImages = [mainImg];
+        }
+
+        return {
           id: String(p.id),
-          _numericId: p.id,
           name: p.name ?? 'Product',
           description: p.description ?? '',
           price: Number(p.price ?? 0),
           stock: Number(p.stock ?? 0),
-          image: p.image
-            ? p.image.startsWith('http') ? p.image : `http://localhost:8000${p.image}`
-            : '/assets/default-product.jpg',
+          image: mainImg,
+          images: parsedImages,
           category: p.category ?? 'General',
-          user_id: p.user_id ?? null,
-          is_registered: p.is_registered ?? false,
-          owner: p.owner ?? null,
-          variations: Array.isArray(p.variations) ? p.variations : [],
-        } as any));
-        setItems(mapped);
-      })
-      .catch(() => { if (!cancelled) setItems([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-
-    return () => { cancelled = true; };
-  }, [queryParams]);
-
-  const handleProductClick = (product: Product) => {
-    setSelectedProduct(product);
-    setIsModalOpen(true);
-  };
-
-  const handleAddToCart = async (product: Product, quantity: number = 1, selectedVariation?: any) => {
-    if (!userType || userType !== 'tourist') return;
-    if (!(product as any).is_registered && !(product as any).user_id) {
-      toast.error('This product is not available for online purchase.');
-      return;
+          badge: p.badge || (idx % 2 === 0 ? 'Best Seller' : 'Top Rated'),
+          rating: p.rating || 4.8,
+          likes: p.likes || 0,
+          sellerName: p.owner?.name ?? p.owner?.store_name ?? p.seller_name ?? 'Mansalay Artisan Co-op',
+          user_id: p.user_id,
+          is_registered: p.is_registered,
+        };
+      });
+      setItems(mapped);
+    } catch (err) {
+      console.error('Error fetching real products:', err);
+      setItems([]);
+    } finally {
+      setLoading(false);
     }
-    const variationLabel = selectedVariation ? ` (${selectedVariation.value})` : '';
-    addToCart(product, quantity, selectedVariation);
-    toast.success(`${product.name}${variationLabel} added to cart!`);
   };
+
+  useEffect(() => {
+    loadProducts();
+    window.addEventListener('contentUpdated', loadProducts);
+    window.addEventListener('storage', loadProducts);
+    return () => {
+      window.removeEventListener('contentUpdated', loadProducts);
+      window.removeEventListener('storage', loadProducts);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isLoggedIn && currentUser?.id) {
+      const stored = localStorage.getItem(`discover-mansalay:saved-products:${currentUser.id}`);
+      if (stored) {
+        try {
+          setSavedProductIds(JSON.parse(stored));
+        } catch {
+          setSavedProductIds([]);
+        }
+      }
+    } else {
+      setSavedProductIds([]);
+    }
+  }, [isLoggedIn, currentUser?.id]);
+
+  useEffect(() => {
+    if (isLoggedIn && currentUser?.id) {
+      localStorage.setItem(
+        `discover-mansalay:saved-products:${currentUser.id}`,
+        JSON.stringify(savedProductIds)
+      );
+    }
+  }, [savedProductIds, isLoggedIn, currentUser?.id]);
+
+  const toggleSaveProduct = (product: ProductItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (isInWishlist(product.id, 'product')) {
+      removeFromWishlist(product.id, 'product');
+    } else {
+      addToWishlist({
+        id: product.id,
+        type: 'product',
+        title: product.name,
+        image: product.image,
+        category: product.category,
+        price: product.price,
+      });
+    }
+  };
+
+  const productCategories = useMemo(() => {
+    const cats = Array.from(new Set(items.map(p => p.category).filter((c): c is string => Boolean(c))));
+    return cats.filter(c => c && c.toLowerCase() !== 'static' && c.trim() !== '');
+  }, [items]);
+
+  const filteredProducts = items.filter(p => {
+    const matchesStore = !selectedStoreFilter || 
+      (p.sellerName && p.sellerName.toLowerCase().includes(selectedStoreFilter.toLowerCase()));
+
+    const matchesSearch = !searchQuery || 
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.category && p.category.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (p.sellerName && p.sellerName.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const matchesCategory = categoryFilter === 'All' || categoryFilter === 'All Categories' || categoryFilter === 'All Products' ||
+      (p.category && p.category.toLowerCase().trim() === categoryFilter.toLowerCase().trim());
+
+    return matchesStore && matchesSearch && matchesCategory;
+  });
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Local Products</h1>
-        <p className="text-gray-500">Shop authentic Mansalay products</p>
-      </div>
+    <div className="min-h-screen bg-gray-50/40 pb-16 font-sans">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
 
-      <div className="mb-6 flex gap-3">
-        <SearchBar value={filters.search} onChange={(value) => updateFilter({ search: value })} placeholder="Search products..." className="flex-1" />
-        <FilterButton onClick={() => setIsSidebarOpen(!isSidebarOpen)} activeFilterCount={activeFilterCount} isOpen={isSidebarOpen} />
-      </div>
+        {/* ── HEADER TITLE & SEARCH ── */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-8 bg-pink-500 rounded-full" />
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">Products</h1>
+            </div>
+            <p className="text-xs sm:text-sm text-gray-500 mt-1 font-medium pl-4.5">
+              Shop authentic Mansalay handicrafts, delicacies, pasalubong, and community-made goods
+            </p>
+          </div>
 
-      <FilterChips filters={filters} onRemoveFilter={(key) => updateFilter({ [key]: '' })} />
+          {/* Search Pill Input & Filter Select Dropdown */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search products, sellers, or tags..."
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-pink-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-full text-xs font-medium placeholder:text-gray-400 shadow-2xs outline-none transition-all"
+              />
+            </div>
 
-      <FilterSidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        filters={filters}
-        onFilterChange={updateFilter}
-        onClearFilters={() => { clearAllFilters(); setIsSidebarOpen(false); }}
-        availableBarangays={[]}
-        availableCategories={categories}
-        showBarangayFilter={false}
-        showDateFilters={false}
-        showCategoryFilter={true}
-      />
+            <div className="relative w-full sm:w-48">
+              <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-pink-500 pointer-events-none" />
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="w-full pl-9 pr-8 py-2.5 bg-white border border-pink-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-full text-xs font-semibold text-gray-700 shadow-2xs outline-none transition-all cursor-pointer appearance-none"
+              >
+                <option value="All">All Categories</option>
+                {productCategories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            </div>
+          </div>
+        </div>
 
-      {loading && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {Array.from({ length: 10 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-200 overflow-hidden animate-pulse">
-              <div className="aspect-square bg-gray-200" />
-              <div className="p-3 space-y-2">
-                <div className="h-4 bg-gray-200 rounded w-3/4" />
-                <div className="h-4 bg-gray-200 rounded w-1/2" />
+        {/* ── ACTIVE STORE FILTER BANNER ── */}
+        {selectedStoreFilter && (
+          <div className="mb-6 p-4 bg-pink-50/90 border border-pink-200 rounded-2xl flex items-center justify-between shadow-xs animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-pink-500 text-white rounded-full flex items-center justify-center font-bold text-xs shadow-xs">
+                <Store className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-pink-600 uppercase tracking-wider">Filtered by Store</p>
+                <h4 className="text-sm font-extrabold text-gray-900">{selectedStoreFilter}</h4>
               </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      {!loading && filteredProducts.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {filteredProducts.map((product) => (
-            <div
-              key={product.id}
-              onClick={() => handleProductClick(product)}
-              className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-pink-300 transition-all cursor-pointer"
+            <button
+              onClick={() => setSelectedStoreFilter(null)}
+              className="px-3.5 py-1.5 bg-white hover:bg-pink-100 border border-pink-300 rounded-full text-xs font-bold text-pink-700 transition-colors flex items-center gap-1 shadow-2xs"
             >
-              <div className="relative aspect-square bg-gray-100 overflow-hidden">
-                <img
-                  src={product.image}
-                  alt={product.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  onError={(e) => { e.currentTarget.src = '/assets/default-product.jpg'; }}
-                />
-                {product.stock === 0 && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <span className="bg-white px-3 py-1 rounded-full text-xs font-semibold text-gray-800">Out of Stock</span>
+              <X className="h-3.5 w-3.5 text-pink-500" />
+              <span>Show All Stores</span>
+            </button>
+          </div>
+        )}
+
+        {/* ── COUNT SUBHEADER ── */}
+        <div className="flex items-center justify-between text-xs text-gray-500 font-medium mb-4">
+          <p>Showing <span className="text-gray-900 font-bold">{filteredProducts.length}</span> products</p>
+          <p className="hidden sm:block text-gray-400">Click any product for details & seller contact</p>
+        </div>
+
+        {/* ── PRODUCT CARDS GRID (4 COLUMNS) ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {filteredProducts.map(product => {
+            const isSaved = savedProductIds.includes(product.id);
+            return (
+              <div
+                key={product.id}
+                onClick={() => setSelectedProduct(product)}
+                className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-xs hover:shadow-xl transition-all cursor-pointer group flex flex-col justify-between"
+              >
+                {/* Top Image Box */}
+                <div className="relative h-60 bg-gray-900 overflow-hidden">
+                  <AutoSwipeCarousel
+                    images={product.images && product.images.length > 0 ? product.images : [product.image]}
+                    alt={product.name}
+                    className="w-full h-full"
+                    intervalMs={3500}
+                  />
+
+                  {/* Top Left Badge */}
+                  {product.badge && (
+                    <span className="absolute top-3 left-3 px-3 py-1 bg-pink-500 text-white text-[10px] font-bold rounded-full shadow-xs">
+                      {product.badge}
+                    </span>
+                  )}
+
+                  {/* Top Right Wishlist & Share */}
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShareData({
+                          title: product.name,
+                          description: product.description,
+                          image: product.image,
+                          category: product.category || 'Product',
+                        });
+                      }}
+                      className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors hover:scale-110"
+                      title="Share product"
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => toggleSaveProduct(product, e)}
+                      className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
+                    >
+                      <Heart className={`h-3.5 w-3.5 ${isInWishlist(product.id, 'product') ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
+                    </button>
                   </div>
-                )}
-                {(product as any).variations?.length > 0 && (
-                  <div className="absolute top-2 left-2 bg-pink-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    Variations
+
+                  {/* Dark Overlay Rating & Likes */}
+                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-[11px] font-bold">
+                    <div className="flex items-center gap-1 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full">
+                      <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                      <span>{product.rating || '4.8'}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-white/90">
+                      <Heart className="h-3 w-3 fill-pink-500 text-pink-500" />
+                      <span>{product.likes || 189}</span>
+                    </div>
                   </div>
-                )}
-              </div>
-              <div className="p-3">
-                <h3 className="text-sm text-gray-900 line-clamp-2 min-h-[40px] leading-snug mb-2 font-medium">{product.name}</h3>
-                <div className="flex items-baseline gap-0.5 mb-2">
-                  <span className="text-pink-500 text-xs">₱</span>
-                  <span className="text-pink-500 font-bold text-base">{Number(product.price).toLocaleString()}</span>
                 </div>
-                <div className="flex items-center gap-1 text-[11px]">
-                  <span className={product.stock === 0 ? 'text-red-500' : 'text-gray-500'}>
-                    {product.stock === 0 ? 'Out of Stock' : `${product.stock} left`}
+
+                {/* Content Below Image */}
+                <div className="p-4 flex-1 flex flex-col justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-gray-400">{product.category}</p>
+                    <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-0.5">{product.name}</h3>
+                    <p className="text-pink-500 font-extrabold text-sm mt-1">
+                      ₱{Number(product.price).toLocaleString()}
+                    </p>
+                    <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 min-h-[32px]">{product.description}</p>
+                  </div>
+
+                  <div
+                    onClick={(e) => handleStoreClick(product.sellerName, product.user_id, e)}
+                    className="flex items-center gap-1.5 text-[11px] text-pink-600 hover:text-pink-700 font-semibold mt-4 pt-3 border-t border-gray-100 group/store cursor-pointer transition-colors"
+                    title={`Click to view all products from ${product.sellerName || 'this store'}`}
+                  >
+                    <Store className="h-3.5 w-3.5 text-pink-500 group-hover/store:scale-110 transition-transform flex-shrink-0" />
+                    <span className="truncate group-hover/store:underline">{product.sellerName || 'Mansalay Artisan Store'}</span>
+                    <ExternalLink className="h-2.5 w-2.5 opacity-60 ml-auto flex-shrink-0 group-hover/store:opacity-100 text-pink-500" />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── PRODUCT DETAIL MODAL (Exact FIGMA Screenshot 2 Design) ── */}
+      {selectedProduct && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setSelectedProduct(null)}
+        >
+          <div
+            className="bg-white rounded-3xl overflow-hidden max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Image Slider Header */}
+            <div className="relative h-64 bg-gray-900 flex-shrink-0">
+              <AutoSwipeCarousel
+                images={selectedProduct.images && selectedProduct.images.length > 0 ? selectedProduct.images : [selectedProduct.image]}
+                alt={selectedProduct.name}
+                className="w-full h-full"
+                intervalMs={3000}
+                showDots={true}
+                showArrows={true}
+              />
+
+              <button
+                onClick={() => setSelectedProduct(null)}
+                className="absolute top-4 right-4 w-8 h-8 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all z-20"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              {selectedProduct.badge && (
+                <span className="absolute top-4 left-4 px-3 py-1 bg-pink-500 text-white text-xs font-bold rounded-full uppercase">
+                  {selectedProduct.badge}
+                </span>
+              )}
+
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-white"></span>
+                <span className="w-2 h-2 rounded-full bg-white/50"></span>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-xl font-extrabold text-gray-900">{selectedProduct.name}</h2>
+                  <p className="text-pink-500 text-lg font-black mt-0.5">
+                    ₱{Number(selectedProduct.price).toLocaleString()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setShareData({
+                        title: selectedProduct.name,
+                        description: selectedProduct.description,
+                        image: selectedProduct.image,
+                        category: selectedProduct.category || 'Product',
+                      });
+                    }}
+                    className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-pink-50 hover:text-pink-600 transition-colors"
+                    title="Share product"
+                  >
+                    <Share2 className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => toggleSaveProduct(selectedProduct)} className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-pink-50"><Heart className={`h-4 w-4 ${isInWishlist(selectedProduct.id, 'product') ? 'fill-pink-500 text-pink-500' : ''}`} /></button>
+                </div>
+              </div>
+
+              {/* Sub-info bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 p-3 rounded-2xl border border-gray-100 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 font-bold text-amber-500">
+                    <Star className="h-3.5 w-3.5 fill-amber-400" /> {selectedProduct.rating || '4.8'}
                   </span>
+                  <span className="text-gray-400">({selectedProduct.likes || 267} saves)</span>
+                  <span>•</span>
+                  <button
+                    onClick={(e) => handleStoreClick(selectedProduct.sellerName, selectedProduct.user_id, e)}
+                    className="font-bold text-pink-600 hover:text-pink-800 flex items-center gap-1 cursor-pointer transition-colors group/modalstore"
+                    title={`Click to view all products from ${selectedProduct.sellerName || 'this store'}`}
+                  >
+                    <Store className="h-3.5 w-3.5 text-pink-500 group-hover/modalstore:scale-110 transition-transform" />
+                    <span className="underline decoration-pink-300 underline-offset-2 group-hover/modalstore:decoration-pink-600">
+                      {selectedProduct.sellerName || 'Mansalay Seller'}
+                    </span>
+                    <ExternalLink className="h-3 w-3 opacity-60 group-hover/modalstore:opacity-100" />
+                  </button>
+                </div>
+                <button
+                  onClick={() => {
+                    const query = encodeURIComponent(`${selectedProduct.sellerName || selectedProduct.name} Mansalay Oriental Mindoro`);
+                    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+                  }}
+                  className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1"
+                >
+                  <Navigation className="h-3 w-3" />
+                  <span>Directions</span>
+                </button>
+              </div>
+
+              {/* Description */}
+              <p className="text-xs text-gray-600 leading-relaxed font-normal">
+                {selectedProduct.description}
+              </p>
+
+              {/* Tags */}
+              <div className="flex flex-wrap gap-2">
+                {['Beaded', 'Jewelry', 'Handmade', 'Cultural'].map((tag, i) => (
+                  <span key={i} className="px-3 py-1 bg-pink-50 text-pink-600 rounded-full text-[11px] font-semibold border border-pink-100">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+
+              {/* Contact Seller Box */}
+              <div className="bg-pink-50/50 border border-pink-100 p-4 rounded-2xl text-center space-y-3">
+                <div>
+                  <h4 className="text-xs font-extrabold text-gray-900">Interested? Contact the seller to order</h4>
+                  <p className="text-[11px] text-gray-500 mt-0.5">No online checkout — reach out directly via your preferred channel below.</p>
+                </div>
+                <div className="flex items-center justify-center gap-2">
+                  <a href="tel:09123456789" className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5">
+                    <Phone className="h-3.5 w-3.5" /> Call
+                  </a>
+                  <a href="https://facebook.com" target="_blank" rel="noreferrer" className="px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5">
+                    <Facebook className="h-3.5 w-3.5" /> Facebook
+                  </a>
                 </div>
               </div>
             </div>
-          ))}
+          </div>
         </div>
       )}
 
-      {!loading && filteredProducts.length === 0 && (
-        <div className="text-center py-16">
-          <Package className="h-16 w-16 mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500 text-lg font-medium">No products found</p>
-          <p className="text-gray-400 text-sm mt-1">Try adjusting your search or filters</p>
+      {/* ── GUEST LOGIN REQUIRED MODAL ── */}
+      {showLoginModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setShowLoginModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center space-y-4 animate-in zoom-in-95 duration-200 relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowLoginModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="w-14 h-14 bg-pink-50 text-pink-500 rounded-full flex items-center justify-center mx-auto shadow-inner">
+              <Heart className="h-7 w-7 fill-pink-500/20 text-pink-500" />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-extrabold text-gray-900">Login Required</h3>
+              <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                You are currently in guest mode. Please log in or register to save products to your wishlist.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setShowLoginModal(false);
+                  navigate('/select-role');
+                }}
+                className="w-full py-2.5 px-4 bg-pink-500 hover:bg-pink-600 text-white font-bold text-xs rounded-full shadow-md shadow-pink-500/20 transition-all"
+              >
+                Log In / Register
+              </button>
+              <button
+                onClick={() => setShowLoginModal(false)}
+                className="w-full py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs rounded-full transition-all"
+              >
+                Continue as Guest
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      <ProductDetailModal
-        product={selectedProduct}
-        isOpen={isModalOpen}
-        onClose={() => { setIsModalOpen(false); setSelectedProduct(null); }}
-        onAddToCart={handleAddToCart}
-        userType={userType}
-      />
+      {/* ── SOCIAL SHARE MODAL ── */}
+      {shareData && (
+        <ShareModal
+          isOpen={!!shareData}
+          onClose={() => setShareData(null)}
+          title={shareData.title}
+          description={shareData.description}
+          image={shareData.image}
+          category={shareData.category}
+        />
+      )}
     </div>
   );
 }

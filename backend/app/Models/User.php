@@ -37,6 +37,7 @@ class User extends Authenticatable
         // Basic user info (safe to fill)
         'name', 
         'email', 
+        'email_verified_at',
         'password',
         'phone', 
         'address', 
@@ -63,6 +64,8 @@ class User extends Authenticatable
         'store_logo', 
         'store_banner', 
         'store_is_setup',
+        'facebook_link',
+        'instagram_link',
     ];
 
     /**
@@ -103,6 +106,8 @@ class User extends Authenticatable
      */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'subscription_paid_at' => 'datetime',
+        'subscription_expires_at' => 'datetime',
         'is_active' => 'boolean',
         'payment_details' => 'array',
         'registration_details' => 'array',
@@ -110,6 +115,7 @@ class User extends Authenticatable
         'resort_amenities' => 'array',
         'resort_is_setup' => 'boolean',
         'store_is_setup'  => 'boolean',
+        'resort_price_per_night' => 'float',
     ];
 
     /**

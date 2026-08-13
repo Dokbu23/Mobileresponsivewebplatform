@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Search, Filter, Plus, Edit2, Trash2, X, Upload, Image as ImageIcon } from 'lucide-react';
-import { getJSON, postJSON, deleteJSON } from '../../lib/api';
+import { getJSON, postJSON, deleteJSON, API_BASE } from '../../lib/api';
 import { showSuccessAlert, showConfirmDialog } from '../../lib/sweetAlert';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
@@ -194,7 +194,7 @@ export function ManageEvents() {
     if (decodedPath.startsWith('/assets')) {
       return `http://localhost:5173${decodedPath}`;
     }
-    return `http://localhost:8000${decodedPath}`;
+    return `${API_BASE}${decodedPath}`;
   };
 
   const filteredEvents = events.filter(event => {

@@ -1,10 +1,17 @@
 import { Outlet } from "react-router";
 import { Navbar } from "../components/Navbar";
 import { Footer } from "../components/Footer";
-import ChatWidget from "../components/ChatWidget";
 import { Toaster } from "sonner";
+import { useApp } from "../context/AppContext";
+import { ProfileSetupModal } from "../components/ProfileSetupModal";
+import ChatWidgetEnhanced from "../components/ChatWidgetEnhanced";
 
 export function RootLayout() {
+  const { currentUser, userType } = useApp();
+  const isProfileSetupRequired = Boolean(
+    currentUser && (currentUser.role === 'pending' || userType === 'pending')
+  );
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
@@ -13,7 +20,8 @@ export function RootLayout() {
       </main>
       <Footer />
       <Toaster position="top-right" richColors />
-      <ChatWidget />
+      <ProfileSetupModal isOpen={isProfileSetupRequired} />
+      <ChatWidgetEnhanced />
     </div>
   );
 }

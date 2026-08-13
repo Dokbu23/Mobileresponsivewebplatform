@@ -7,13 +7,17 @@ import { showSuccessAlert } from '../lib/sweetAlert';
 import { Link } from 'react-router';
 
 export function Profile() {
-  const { currentUser, userType } = useApp();
+  const { currentUser, userType, setCurrentUser } = useApp();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [form, setForm] = useState({
     name: '',
+    resort_name: '',
+    store_name: '',
     phone: '',
+    facebook_link: '',
+    instagram_link: '',
     address: '',
     barangay: '',
     description: '',
@@ -39,13 +43,19 @@ export function Profile() {
       setProfile(user);
       setForm({
         name: user.name ?? '',
+        resort_name: user.resort_name ?? '',
+        store_name: user.store_name ?? '',
         phone: user.phone ?? '',
+        facebook_link: user.facebook_link ?? '',
+        instagram_link: user.instagram_link ?? '',
         address: user.address ?? '',
         barangay: user.barangay ?? '',
         description: user.description ?? '',
       });
+      return user;
     } catch {
       toast.error('Failed to load profile');
+      return null;
     } finally {
       setLoading(false);
     }
@@ -72,7 +82,11 @@ export function Profile() {
         const token = getAuthToken();
         const formData = new FormData();
         formData.append('name', form.name.trim());
+        formData.append('resort_name', form.resort_name.trim());
+        formData.append('store_name', form.store_name.trim());
         formData.append('phone', form.phone.trim());
+        formData.append('facebook_link', form.facebook_link.trim());
+        formData.append('instagram_link', form.instagram_link.trim());
         formData.append('address', form.address.trim());
         formData.append('barangay', form.barangay.trim());
         formData.append('description', form.description.trim());
@@ -88,7 +102,11 @@ export function Profile() {
       } else {
         await patchJSON('/profile', {
           name: form.name.trim(),
+          resort_name: form.resort_name.trim(),
+          store_name: form.store_name.trim(),
           phone: form.phone.trim(),
+          facebook_link: form.facebook_link.trim(),
+          instagram_link: form.instagram_link.trim(),
           address: form.address.trim(),
           barangay: form.barangay.trim(),
           description: form.description.trim(),
@@ -96,8 +114,18 @@ export function Profile() {
       }
 
       await showSuccessAlert('Profile Updated!', 'Your profile has been saved.');
-      await fetchProfile();
+      const refreshed = await fetchProfile();
       setAvatarFile(null);
+      // Update currentUser in AppContext so Navbar reflects new avatar immediately
+      if (refreshed) {
+        setCurrentUser({
+          id: refreshed.id,
+          name: refreshed.name,
+          email: refreshed.email,
+          role: refreshed.role,
+          avatar: refreshed.avatar ?? null,
+        });
+      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to save profile');
     } finally {
@@ -224,6 +252,12 @@ export function Profile() {
 
             <div className="mb-1">
               <h2 className="text-xl font-bold">{profile?.name}</h2>
+              {profile?.resort_name && userType === 'resort' && (
+                <p className="text-sm font-semibold text-primary">{profile.resort_name}</p>
+              )}
+              {profile?.store_name && userType === 'enterprise' && (
+                <p className="text-sm font-semibold text-primary">{profile.store_name}</p>
+              )}
               <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${getRoleBadgeColor()}`}>
                 {userType}
               </span>
@@ -250,23 +284,56 @@ export function Profile() {
       <form onSubmit={handleSave} className="bg-white border-2 border-primary/20 rounded-lg p-6 space-y-4">
         <h3 className="font-semibold text-gray-800 mb-4">Edit Information</h3>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">
-            Full Name <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            value={form.name}
-            onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
-            className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-            required
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Full Name (Owner) <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. Juan Dela Cruz"
+              className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+              required
+            />
+          </div>
+
+          {userType === 'resort' && (
+            <div>
+              <label className="block text-sm font-medium mb-1 flex items-center gap-1">
+                <Hotel className="h-4 w-4 text-primary" /> Resort / Accommodation Name
+              </label>
+              <input
+                type="text"
+                value={form.resort_name}
+                onChange={(e) => setForm(f => ({ ...f, resort_name: e.target.value }))}
+                placeholder="e.g. Paradise Cove Beach Resort"
+                className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+              />
+            </div>
+          )}
+
+          {userType === 'enterprise' && (
+            <div>
+              <label className="block text-sm font-medium mb-1 flex items-center gap-1">
+                <Store className="h-4 w-4 text-primary" /> Store / Business Name
+              </label>
+              <input
+                type="text"
+                value={form.store_name}
+                onChange={(e) => setForm(f => ({ ...f, store_name: e.target.value }))}
+                placeholder="e.g. Mansalay Handicrafts & Weaving"
+                className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+              />
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1 flex items-center gap-1">
-              <Phone className="h-4 w-4" /> Phone
+              <Phone className="h-4 w-4" /> Phone Number (Call Direct)
             </label>
             <input
               type="text"
@@ -285,6 +352,33 @@ export function Profile() {
               value={form.barangay}
               onChange={(e) => setForm(f => ({ ...f, barangay: e.target.value }))}
               placeholder="e.g. Poblacion"
+              className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1 flex items-center gap-1">
+              <span className="font-bold text-blue-600">FB</span> Facebook Page URL / Link
+            </label>
+            <input
+              type="text"
+              value={form.facebook_link}
+              onChange={(e) => setForm(f => ({ ...f, facebook_link: e.target.value }))}
+              placeholder="e.g. facebook.com/yourbusiness"
+              className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1 flex items-center gap-1">
+              <span className="font-bold text-pink-600">IG</span> Instagram Profile URL / Link
+            </label>
+            <input
+              type="text"
+              value={form.instagram_link}
+              onChange={(e) => setForm(f => ({ ...f, instagram_link: e.target.value }))}
+              placeholder="e.g. instagram.com/yourbusiness"
               className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
             />
           </div>
@@ -395,12 +489,16 @@ export function Profile() {
         <div className="space-y-2">
           {userType === 'tourist' && (
             <>
-              <Link to="/status" className="flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-primary/5 transition-colors text-sm">
-                <span>My Orders & Bookings</span>
+              <Link to="/itinerary" className="flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-primary/5 transition-colors text-sm">
+                <span>My Trip Itineraries</span>
                 <span className="text-muted-foreground">→</span>
               </Link>
-              <Link to="/settings/shipping" className="flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-primary/5 transition-colors text-sm">
-                <span>Shipping Addresses</span>
+              <Link to="/attractions" className="flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-primary/5 transition-colors text-sm">
+                <span>Explore Tourist Attractions</span>
+                <span className="text-muted-foreground">→</span>
+              </Link>
+              <Link to="/products" className="flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-primary/5 transition-colors text-sm">
+                <span>Browse Local Products</span>
                 <span className="text-muted-foreground">→</span>
               </Link>
             </>
@@ -408,11 +506,7 @@ export function Profile() {
           {userType === 'enterprise' && (
             <>
               <Link to="/enterprise/profile" className="flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-primary/5 transition-colors text-sm">
-                <span>Manage Products</span>
-                <span className="text-muted-foreground">→</span>
-              </Link>
-              <Link to="/enterprise/orders" className="flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-primary/5 transition-colors text-sm">
-                <span>Manage Orders</span>
+                <span>Manage Promotional Products</span>
                 <span className="text-muted-foreground">→</span>
               </Link>
               <Link to="/enterprise/profile/setup" className="flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-primary/5 transition-colors text-sm">

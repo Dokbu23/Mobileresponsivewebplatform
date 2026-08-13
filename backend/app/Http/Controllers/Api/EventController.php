@@ -25,9 +25,19 @@ class EventController extends Controller
         elseif ($user && in_array($user->role, ['enterprise', 'resort'])) {
             $query = \App\Models\Event::where('user_id', $user->id);
         }
-        // Tourists/Public see all events
+        // Tourists/Public see events created by Admin OR approved & paid business accounts
         else {
-            $query = \App\Models\Event::query();
+            $query = \App\Models\Event::query()
+                ->where(function($q) {
+                    $q->whereNull('user_id')
+                      ->orWhereHas('creator', function($userQuery) {
+                          $userQuery->where('role', 'admin')
+                                    ->orWhere(function($bq) {
+                                        $bq->where('listing_status', 'approved')
+                                           ->whereIn('subscription_status', ['paid', 'active']);
+                                    });
+                      });
+                });
         }
 
         if ($request->has('search') && $request->input('search') !== '') {

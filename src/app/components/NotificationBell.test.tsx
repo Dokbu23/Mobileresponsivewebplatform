@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import { NotificationBell } from './NotificationBell';
 import type { ApiNotification } from '../lib/api';
 
@@ -23,8 +24,6 @@ function buildMockContext(unreadCount: number, notifications: ApiNotification[] 
     markAllAsRead: mockMarkAllAsRead,
     deleteNotification: mockDeleteNotification,
     setChatOpen: vi.fn(),
-    showOrderStatusNotification: vi.fn(),
-    showOrderPlacedNotification: vi.fn(),
   };
 }
 

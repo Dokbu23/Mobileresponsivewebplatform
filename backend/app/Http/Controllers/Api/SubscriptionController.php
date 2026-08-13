@@ -40,7 +40,7 @@ class SubscriptionController extends Controller
             'subscription_paid_at' => $user->subscription_paid_at,
             'subscription_expires_at' => $user->subscription_expires_at,
             'subscription_amount' => $user->subscription_amount,
-            'has_access' => $user->subscription_status === 'paid',
+            'has_access' => in_array($user->subscription_status, ['paid', 'active']),
             'store_is_setup' => (bool) $user->store_is_setup,
         ]);
     }
@@ -64,8 +64,8 @@ class SubscriptionController extends Controller
         if ($request->hasFile('receipt_image')) {
             $image = $request->file('receipt_image');
             $imageName = time() . '_' . $image->getClientOriginalName();
-            $image->storeAs('public/subscription_receipts', $imageName);
-            $data['receipt_image'] = '/storage/subscription_receipts/' . $imageName;
+            $path = $image->storeAs('subscription_receipts', $imageName, 'public');
+            $data['receipt_image'] = '/storage/' . $path;
         }
 
         $data['user_id'] = $user->id;
@@ -74,7 +74,8 @@ class SubscriptionController extends Controller
         $payment = SubscriptionPayment::create($data);
 
         // Update user status to pending
-        $user->update(['subscription_status' => 'pending']);
+        $user->subscription_status = 'pending';
+        $user->save();
 
         // Notify all admins of subscription payment submission
         try {
@@ -137,17 +138,18 @@ class SubscriptionController extends Controller
         ]);
 
         // If verified, update user subscription status and auto-approve listing
+        $targetUser = $payment->user;
         if ($data['status'] === 'verified') {
-            $payment->user->update([
-                'subscription_status' => 'paid',
-                'subscription_paid_at' => now(),
-                'subscription_expires_at' => now()->addYear(), // 1 year subscription
-                'subscription_amount' => $payment->amount,
-                'listing_status' => 'approved', // Auto-approve listing when payment is verified
-            ]);
+            $targetUser->subscription_status = 'paid';
+            $targetUser->subscription_paid_at = now();
+            $targetUser->subscription_expires_at = now()->addYear(); // 1 year subscription
+            $targetUser->subscription_amount = $payment->amount;
+            $targetUser->listing_status = 'approved'; // Auto-approve listing when payment is verified
+            $targetUser->save();
         } else {
             // If rejected, set back to unpaid
-            $payment->user->update(['subscription_status' => 'unpaid']);
+            $targetUser->subscription_status = 'unpaid';
+            $targetUser->save();
         }
 
         // Notify the business owner about the decision

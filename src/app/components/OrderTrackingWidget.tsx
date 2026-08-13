@@ -22,7 +22,7 @@ export function OrderTrackingWidget() {
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [lastOrderStatuses, setLastOrderStatuses] = useState<Record<string, string>>({});
-  const { showOrderStatusNotification } = useNotifications();
+  // Note: showOrderStatusNotification removed - this is now a display-only platform
 
   useEffect(() => {
     fetchOrders();
@@ -49,7 +49,7 @@ export function OrderTrackingWidget() {
           const lastStatus = lastOrderStatuses[orderId];
           
           if (lastStatus && lastStatus !== currentStatus) {
-            showOrderStatusNotification(orderId, lastStatus, currentStatus);
+            // Note: showOrderStatusNotification removed - this is now a display-only platform
             toast.success(`Order #${orderId} status updated to ${currentStatus}!`);
           }
         });

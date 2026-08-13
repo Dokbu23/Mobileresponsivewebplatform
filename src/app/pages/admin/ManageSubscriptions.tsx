@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { CreditCard, Search, Filter, Eye, CheckCircle, XCircle, Clock, DollarSign, User, Calendar, FileText } from 'lucide-react';
-import { getJSON, patchJSON } from '../../lib/api';
+import { CreditCard, Search, Filter, Eye, CheckCircle, XCircle, Clock, DollarSign, User, Calendar, FileText, Settings, Plus, Edit2, Trash2, Check, X } from 'lucide-react';
+import { getJSON, patchJSON, API_BASE, getStorageUrl, getPublicPaymentSettings, updatePaymentSettings, getAdminPaymentMethods, createPaymentMethod, updatePaymentMethod, togglePaymentMethod, deletePaymentMethod } from '../../lib/api';
 import { showSuccessAlert, showConfirmAlert } from '../../lib/sweetAlert';
 import { toast } from 'sonner';
 
@@ -31,6 +31,15 @@ interface SubscriptionPayment {
   };
 }
 
+interface PaymentMethod {
+  id: number;
+  name: string;
+  account_name: string;
+  account_number: string;
+  instructions: string | null;
+  enabled: boolean;
+}
+
 export function ManageSubscriptions() {
   const [payments, setPayments] = useState<SubscriptionPayment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,8 +48,28 @@ export function ManageSubscriptions() {
   const [selectedPayment, setSelectedPayment] = useState<SubscriptionPayment | null>(null);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
 
+  // Payment Settings Modal State
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [subscriptionAmount, setSubscriptionAmount] = useState<number>(50);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [loadingSettings, setLoadingSettings] = useState(false);
+  const [isSavingAmount, setIsSavingAmount] = useState(false);
+
+  // Edit / Create Payment Method Modal State
+  const [showMethodFormModal, setShowMethodFormModal] = useState(false);
+  const [editingMethod, setEditingMethod] = useState<PaymentMethod | null>(null);
+  const [methodFormData, setMethodFormData] = useState({
+    name: 'GCash',
+    account_name: '',
+    account_number: '',
+    instructions: '',
+    enabled: true,
+  });
+  const [isSavingMethod, setIsSavingMethod] = useState(false);
+
   useEffect(() => {
     fetchPayments();
+    fetchPaymentSettings();
   }, []);
 
   const fetchPayments = async () => {
@@ -53,6 +82,113 @@ export function ManageSubscriptions() {
       toast.error('Failed to load subscription payments');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPaymentSettings = async () => {
+    try {
+      setLoadingSettings(true);
+      const settings = await getPublicPaymentSettings();
+      setSubscriptionAmount(settings.subscription_amount);
+      const methods = await getAdminPaymentMethods();
+      setPaymentMethods(methods || []);
+    } catch (error) {
+      console.error('Error fetching payment settings:', error);
+    } finally {
+      setLoadingSettings(false);
+    }
+  };
+
+  const handleSaveSubscriptionAmount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (subscriptionAmount <= 0) {
+      toast.error('Subscription amount must be greater than 0');
+      return;
+    }
+    setIsSavingAmount(true);
+    try {
+      await updatePaymentSettings(subscriptionAmount);
+      toast.success('Subscription fee amount updated successfully!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update subscription fee amount');
+    } finally {
+      setIsSavingAmount(false);
+    }
+  };
+
+  const handleToggleMethod = async (id: number) => {
+    try {
+      await togglePaymentMethod(id);
+      toast.success('Payment method status updated!');
+      fetchPaymentSettings();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to toggle payment method status');
+    }
+  };
+
+  const handleDeleteMethod = async (method: PaymentMethod) => {
+    const confirm = await showConfirmAlert(
+      'Delete Payment Method?',
+      `Are you sure you want to delete ${method.name}?`,
+      'warning',
+      'Yes, delete'
+    );
+    if (confirm.isConfirmed) {
+      try {
+        await deletePaymentMethod(method.id);
+        toast.success('Payment method deleted!');
+        fetchPaymentSettings();
+      } catch (error: any) {
+        toast.error(error.message || 'Failed to delete payment method');
+      }
+    }
+  };
+
+  const handleOpenAddMethod = () => {
+    setEditingMethod(null);
+    setMethodFormData({
+      name: 'GCash',
+      account_name: '',
+      account_number: '',
+      instructions: 'Send payment via GCash and upload your receipt.',
+      enabled: true,
+    });
+    setShowMethodFormModal(true);
+  };
+
+  const handleOpenEditMethod = (method: PaymentMethod) => {
+    setEditingMethod(method);
+    setMethodFormData({
+      name: method.name,
+      account_name: method.account_name,
+      account_number: method.account_number,
+      instructions: method.instructions || '',
+      enabled: method.enabled,
+    });
+    setShowMethodFormModal(true);
+  };
+
+  const handleSaveMethod = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!methodFormData.name || !methodFormData.account_name || !methodFormData.account_number) {
+      toast.error('Please fill in all required payment method fields');
+      return;
+    }
+    setIsSavingMethod(true);
+    try {
+      if (editingMethod) {
+        await updatePaymentMethod(editingMethod.id, methodFormData);
+        toast.success('Payment method updated successfully!');
+      } else {
+        await createPaymentMethod(methodFormData);
+        toast.success('New payment method added successfully!');
+      }
+      setShowMethodFormModal(false);
+      fetchPaymentSettings();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save payment method');
+    } finally {
+      setIsSavingMethod(false);
     }
   };
 
@@ -183,11 +319,20 @@ export function ManageSubscriptions() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="mb-2">Manage Subscriptions</h1>
-        <p className="text-muted-foreground">
-          Review and verify subscription payments from enterprise and resort users
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+          <h1 className="mb-2">Manage Subscriptions</h1>
+          <p className="text-muted-foreground">
+            Review and verify subscription payments from enterprise and resort users
+          </p>
+        </div>
+        <button
+          onClick={() => setShowSettingsModal(true)}
+          className="px-5 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 shadow-sm"
+        >
+          <Settings className="h-5 w-5" />
+          Edit Fee & GCash Details
+        </button>
       </div>
 
       {/* Stats Cards */}
@@ -446,9 +591,9 @@ export function ManageSubscriptions() {
                   <h3 className="font-semibold mb-3">Receipt Image</h3>
                   <div className="border-2 border-primary/20 rounded-lg overflow-hidden">
                     <img
-                      src={`http://localhost:8000${selectedPayment.receipt_image}`}
+                      src={getStorageUrl(selectedPayment.receipt_image)}
                       alt="Payment Receipt"
-                      className="w-full h-auto"
+                      className="w-full h-auto max-h-[500px] object-contain mx-auto"
                     />
                   </div>
                 </div>
@@ -480,6 +625,276 @@ export function ManageSubscriptions() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Settings className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">Subscription & Payment Settings</h2>
+                  <p className="text-sm text-muted-foreground">Manage subscription fee amount and GCash account details</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-8">
+              {/* Section 1: Subscription Amount Setting */}
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-5">
+                <h3 className="font-semibold text-lg mb-2 flex items-center gap-2 text-primary">
+                  <DollarSign className="h-5 w-5" />
+                  Subscription Fee Amount
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Set the annual subscription fee required for Enterprise and Resort accounts.
+                </p>
+
+                <form onSubmit={handleSaveSubscriptionAmount} className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">₱</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="1"
+                      value={subscriptionAmount}
+                      onChange={(e) => setSubscriptionAmount(parseFloat(e.target.value) || 0)}
+                      className="w-full pl-8 pr-4 py-2.5 border-2 border-primary/20 rounded-lg font-bold text-lg focus:border-primary outline-none"
+                      placeholder="50.00"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isSavingAmount}
+                    className="px-6 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isSavingAmount ? 'Saving...' : 'Update Amount'}
+                  </button>
+                </form>
+              </div>
+
+              {/* Section 2: Payment Methods & GCash Details */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold text-lg flex items-center gap-2">
+                      <CreditCard className="h-5 w-5 text-primary" />
+                      Payment Methods & GCash Numbers
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Configure account names, GCash numbers, and payment instructions shown to users.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleOpenAddMethod}
+                    className="px-4 py-2 bg-primary/10 text-primary font-medium rounded-lg hover:bg-primary/20 transition-colors flex items-center gap-1.5 text-sm"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Method
+                  </button>
+                </div>
+
+                {loadingSettings ? (
+                  <p className="text-center py-6 text-muted-foreground">Loading payment methods...</p>
+                ) : paymentMethods.length === 0 ? (
+                  <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-xl">
+                    <p className="text-muted-foreground mb-3">No payment methods configured yet.</p>
+                    <button
+                      onClick={handleOpenAddMethod}
+                      className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg"
+                    >
+                      Add GCash Account
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {paymentMethods.map((method) => (
+                      <div
+                        key={method.id}
+                        className={`p-4 border-2 rounded-xl transition-all ${
+                          method.enabled ? 'border-primary/30 bg-white' : 'border-gray-200 bg-gray-50 opacity-60'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                          <div className="flex items-center gap-3">
+                            <span className="font-bold text-lg text-primary">{method.name}</span>
+                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                              method.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'
+                            }`}>
+                              {method.enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleToggleMethod(method.id)}
+                              className={`px-3 py-1 text-xs font-medium rounded-lg border transition-colors ${
+                                method.enabled
+                                  ? 'border-yellow-300 bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
+                                  : 'border-green-300 bg-green-50 text-green-700 hover:bg-green-100'
+                              }`}
+                            >
+                              {method.enabled ? 'Disable' : 'Enable'}
+                            </button>
+                            <button
+                              onClick={() => handleOpenEditMethod(method)}
+                              className="p-1.5 hover:bg-gray-100 text-blue-600 rounded-lg transition-colors"
+                              title="Edit Details"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteMethod(method)}
+                              className="p-1.5 hover:bg-gray-100 text-red-600 rounded-lg transition-colors"
+                              title="Delete Method"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm bg-gray-50 p-3 rounded-lg border border-gray-100">
+                          <div>
+                            <span className="text-muted-foreground">Account Name: </span>
+                            <span className="font-semibold">{method.account_name}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">GCash / Account No.: </span>
+                            <span className="font-semibold font-mono text-primary">{method.account_number}</span>
+                          </div>
+                          {method.instructions && (
+                            <div className="sm:col-span-2 mt-1 text-xs text-muted-foreground">
+                              <span>Instructions: </span>
+                              <span className="italic">{method.instructions}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 bg-gray-50 text-right">
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="px-6 py-2.5 bg-primary text-white rounded-lg hover:bg-primary/90 font-medium"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit / Create Payment Method Form Modal */}
+      {showMethodFormModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl max-w-md w-full shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-gray-200 flex items-center justify-between bg-primary/5">
+              <h3 className="font-bold text-lg text-primary">
+                {editingMethod ? 'Edit Payment Method' : 'Add New Payment Method'}
+              </h3>
+              <button
+                onClick={() => setShowMethodFormModal(false)}
+                className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMethod} className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Method Name *</label>
+                <input
+                  type="text"
+                  value={methodFormData.name}
+                  onChange={(e) => setMethodFormData({ ...methodFormData, name: e.target.value })}
+                  placeholder="e.g. GCash, Maya, Bank Transfer"
+                  className="w-full px-3.5 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Account / Receiver Name *</label>
+                <input
+                  type="text"
+                  value={methodFormData.account_name}
+                  onChange={(e) => setMethodFormData({ ...methodFormData, account_name: e.target.value })}
+                  placeholder="e.g. Mansalay Tourism Office / John Doe"
+                  className="w-full px-3.5 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">GCash / Account Number *</label>
+                <input
+                  type="text"
+                  value={methodFormData.account_number}
+                  onChange={(e) => setMethodFormData({ ...methodFormData, account_number: e.target.value })}
+                  placeholder="e.g. 09123456789"
+                  className="w-full px-3.5 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none font-mono"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Payment Instructions (Optional)</label>
+                <textarea
+                  value={methodFormData.instructions}
+                  onChange={(e) => setMethodFormData({ ...methodFormData, instructions: e.target.value })}
+                  placeholder="e.g. Send exact amount to GCash number above and upload screenshot receipt."
+                  rows={3}
+                  className="w-full px-3.5 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none resize-none text-sm"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="enableMethod"
+                  checked={methodFormData.enabled}
+                  onChange={(e) => setMethodFormData({ ...methodFormData, enabled: e.target.checked })}
+                  className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
+                />
+                <label htmlFor="enableMethod" className="text-sm font-medium cursor-pointer">
+                  Enable this payment method immediately
+                </label>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-gray-100">
+                <button
+                  type="submit"
+                  disabled={isSavingMethod}
+                  className="flex-1 px-4 py-2.5 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {isSavingMethod ? 'Saving...' : editingMethod ? 'Save Changes' : 'Create Method'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowMethodFormModal(false)}
+                  className="px-4 py-2.5 border border-gray-300 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

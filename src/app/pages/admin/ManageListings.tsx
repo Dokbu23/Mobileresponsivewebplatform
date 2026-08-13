@@ -1,19 +1,7 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Hotel, Store, Check, X, Clock, Package, Search, Filter, Plus, Pencil, Trash2, MapPin } from 'lucide-react';
 import { getJSON, patchJSON, deleteJSON, getLegacyJSON, API_BASE } from '../../lib/api';
 import { showSuccessAlert, showConfirmDialog } from '../../lib/sweetAlert';
-
-interface Listing {
-  id: string;
-  type: 'resort' | 'enterprise';
-  name: string;
-  owner: string;
-  email: string;
-  phone?: string;
-  description?: string;
-  status: 'pending' | 'approved' | 'rejected';
-  submittedDate: string;
-}
 
 interface Product {
   id: number;
@@ -60,6 +48,7 @@ interface Attraction {
   location: string | null;
   category: string | null;
   image: string | null;
+  video?: string | null;
   view_count: number;
   created_at: string;
 }
@@ -71,6 +60,7 @@ interface AttractionFormData {
   location: string;
   category: string;
   image: File | null;
+  video: File | null;
 }
 
 const emptyAttractionForm: AttractionFormData = {
@@ -80,6 +70,7 @@ const emptyAttractionForm: AttractionFormData = {
   location: '',
   category: '',
   image: null,
+  video: null,
 };
 
 const emptyProductForm: ProductFormData = {
@@ -99,16 +90,11 @@ const emptyAccommodationForm: AccommodationFormData = {
 };
 
 export function ManageListings() {
-  const [activeTab, setActiveTab] = useState<'businesses' | 'products' | 'accommodations' | 'attractions'>('businesses');
-  const [listings, setListings] = useState<Listing[]>([]);
+  const [activeTab, setActiveTab] = useState<'products' | 'accommodations' | 'attractions'>('products');
   const [products, setProducts] = useState<Product[]>([]);
   const [accommodations, setAccommodations] = useState<Accommodation[]>([]);
   const [attractions, setAttractions] = useState<Attraction[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Business filters
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
-  const [filterType, setFilterType] = useState<'all' | 'resort' | 'enterprise'>('all');
 
   // Shared search
   const [searchTerm, setSearchTerm] = useState('');
@@ -133,7 +119,6 @@ export function ManageListings() {
   const [attractionSaving, setAttractionSaving] = useState(false);
 
   useEffect(() => {
-    fetchListings();
     fetchProducts();
     fetchAccommodations();
     fetchAttractions();
@@ -144,32 +129,6 @@ export function ManageListings() {
     setSearchTerm('');
     setCategoryFilter('all');
   }, [activeTab]);
-
-  const fetchListings = async () => {
-    try {
-      const data = await getJSON('/listings');
-      const mapped = Array.isArray(data)
-        ? data
-            .filter((user: any) => user.role === 'resort' || user.role === 'enterprise')
-            .map((user: any) => ({
-              id: String(user.id),
-              type: user.role,
-              name: user.name ?? 'Business',
-              owner: user.name ?? 'Owner',
-              email: user.email ?? 'N/A',
-              phone: user.phone ?? 'N/A',
-              description: user.description ?? '',
-              status: user.listing_status ?? 'approved',
-              submittedDate: user.created_at ?? new Date().toISOString(),
-            }))
-        : [];
-      setListings(mapped);
-    } catch {
-      setListings([]);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const fetchProducts = async () => {
     try {
@@ -215,6 +174,7 @@ export function ManageListings() {
       location: attraction.location ?? '',
       category: attraction.category ?? '',
       image: null,
+      video: null,
     });
     setShowAttractionModal(true);
   };
@@ -232,6 +192,9 @@ export function ManageListings() {
       formData.append('category', attractionForm.category.trim());
       if (attractionForm.image) {
         formData.append('image', attractionForm.image);
+      }
+      if (attractionForm.video) {
+        formData.append('video', attractionForm.video);
       }
 
       if (editingAttraction) {
@@ -276,30 +239,6 @@ export function ManageListings() {
       await fetchAttractions();
     } catch (err: any) {
       alert(err?.message ?? 'Failed to delete attraction');
-    }
-  };
-
-  // ── Business handlers ──────────────────────────────────────────────────────
-
-  const handleApprove = async (id: string) => {
-    const listing = listings.find(l => l.id === id);
-    setListings(prev =>
-      prev.map(l => l.id === id ? { ...l, status: 'approved' as const } : l)
-    );
-    if (listing) {
-      await patchJSON(`/listings/${id}`, { status: 'approved' });
-      await showSuccessAlert('Listing Approved!', `${listing.name} has been approved successfully.`);
-    }
-  };
-
-  const handleReject = async (id: string) => {
-    const listing = listings.find(l => l.id === id);
-    setListings(prev =>
-      prev.map(l => l.id === id ? { ...l, status: 'rejected' as const } : l)
-    );
-    if (listing) {
-      await patchJSON(`/listings/${id}`, { status: 'rejected' });
-      await showSuccessAlert('Listing Rejected', `${listing.name} has been rejected.`);
     }
   };
 
@@ -459,12 +398,6 @@ export function ManageListings() {
 
   // ── Derived data ───────────────────────────────────────────────────────────
 
-  const filteredListings = listings.filter(listing => {
-    const statusMatch = filterStatus === 'all' || listing.status === filterStatus;
-    const typeMatch = filterType === 'all' || listing.type === filterType;
-    return statusMatch && typeMatch;
-  });
-
   const filteredProducts = products.filter(product => {
     const matchesSearch =
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -499,7 +432,7 @@ export function ManageListings() {
     if (imagePath.startsWith('http')) return imagePath;
     const decodedPath = decodeURIComponent(imagePath);
     if (decodedPath.startsWith('/assets')) return `http://localhost:5173${decodedPath}`;
-    return `http://localhost:8000${decodedPath}`;
+    return `${API_BASE}${decodedPath}`;
   };
 
   const formatPrice = (value: number | string | null | undefined) => {
@@ -540,21 +473,12 @@ export function ManageListings() {
       <div className="mb-8">
         <h1 className="mb-2">Manage Listings</h1>
         <p className="text-muted-foreground">
-          Review and manage businesses, products, and accommodations
+          Review and manage products, accommodations, and attractions
         </p>
       </div>
 
       {/* Tabs */}
       <div className="bg-white border-2 border-primary/20 rounded-lg p-2 mb-6 flex gap-2">
-        <button
-          onClick={() => setActiveTab('businesses')}
-          className={`flex-1 px-6 py-3 rounded-lg transition-all flex items-center justify-center gap-2 ${
-            activeTab === 'businesses' ? 'bg-primary text-white' : 'text-foreground hover:bg-primary/5'
-          }`}
-        >
-          <Store className="h-5 w-5" />
-          Businesses ({listings.length})
-        </button>
         <button
           onClick={() => setActiveTab('products')}
           className={`flex-1 px-6 py-3 rounded-lg transition-all flex items-center justify-center gap-2 ${
@@ -583,115 +507,6 @@ export function ManageListings() {
           Attractions ({attractions.length})
         </button>
       </div>
-
-      {/* ── BUSINESSES TAB ── */}
-      {activeTab === 'businesses' && (
-        <>
-          <div className="bg-white border-2 border-primary/20 rounded-lg p-4 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm mb-2">Filter by Status</label>
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value as any)}
-                  className="w-full px-4 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                >
-                  <option value="all">All Status</option>
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm mb-2">Filter by Type</label>
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value as any)}
-                  className="w-full px-4 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                >
-                  <option value="all">All Types</option>
-                  <option value="resort">Resorts</option>
-                  <option value="enterprise">Enterprises</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            {loading ? (
-              <div className="bg-white border-2 border-primary/20 rounded-lg p-12 text-center">
-                <p className="text-muted-foreground">Loading businesses...</p>
-              </div>
-            ) : filteredListings.length === 0 ? (
-              <div className="bg-white border-2 border-primary/20 rounded-lg p-12 text-center">
-                <p className="text-muted-foreground">No businesses found</p>
-              </div>
-            ) : (
-              filteredListings.map(listing => (
-                <div
-                  key={listing.id}
-                  className="bg-white border-2 border-primary/20 rounded-lg p-6 hover:border-primary transition-all"
-                >
-                  <div className="flex flex-col lg:flex-row gap-6">
-                    <div className="flex-shrink-0">
-                      <div className="w-16 h-16 bg-primary/10 rounded-lg flex items-center justify-center">
-                        {listing.type === 'resort' ? (
-                          <Hotel className="h-8 w-8 text-primary" />
-                        ) : (
-                          <Store className="h-8 w-8 text-primary" />
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
-                        <div>
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3>{listing.name}</h3>
-                            <span className="px-2 py-1 bg-primary/10 text-primary text-xs rounded">
-                              {listing.type === 'resort' ? 'Resort' : 'Enterprise'}
-                            </span>
-                          </div>
-                          <p className="text-sm text-muted-foreground mb-1">Owner: {listing.owner}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Submitted: {new Date(listing.submittedDate).toLocaleDateString()}
-                          </p>
-                        </div>
-                        {getStatusBadge(listing.status)}
-                      </div>
-                      <p className="text-sm text-muted-foreground mb-4">{listing.description}</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4 text-sm">
-                        <p>
-                          <span className="text-muted-foreground">Email:</span>{' '}
-                          <a href={`mailto:${listing.email}`} className="text-primary hover:underline">
-                            {listing.email}
-                          </a>
-                        </p>
-                        <p><span className="text-muted-foreground">Phone:</span> {listing.phone}</p>
-                      </div>
-                      {listing.status === 'pending' && (
-                        <div className="flex gap-3">
-                          <button
-                            onClick={() => handleApprove(listing.id)}
-                            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
-                          >
-                            <Check className="h-4 w-4" />Approve
-                          </button>
-                          <button
-                            onClick={() => handleReject(listing.id)}
-                            className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors inline-flex items-center gap-2"
-                          >
-                            <X className="h-4 w-4" />Reject
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </>
-      )}
 
       {/* ── PRODUCTS TAB ── */}
       {activeTab === 'products' && (
@@ -870,9 +685,6 @@ export function ManageListings() {
                   <div className="p-4">
                     <h3 className="text-lg font-medium mb-2">{accommodation.name}</h3>
                     <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{accommodation.description}</p>
-                    <p className="text-lg text-primary font-semibold mb-2">
-                      ₱{formatPrice(accommodation.price_per_night)} / night
-                    </p>
                     <p className="text-xs text-muted-foreground mb-3">
                       Added: {new Date(accommodation.created_at).toLocaleDateString()}
                     </p>
@@ -1268,6 +1080,17 @@ export function ManageListings() {
                   type="file"
                   accept="image/*"
                   onChange={(e) => setAttractionForm(f => ({ ...f, image: e.target.files?.[0] ?? null }))}
+                  className="w-full px-4 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Video / Virtual Tour Video {editingAttraction && <span className="text-muted-foreground text-xs">(leave blank to keep existing)</span>}
+                </label>
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={(e) => setAttractionForm(f => ({ ...f, video: e.target.files?.[0] ?? null }))}
                   className="w-full px-4 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm"
                 />
               </div>

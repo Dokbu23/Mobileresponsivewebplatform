@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Hotel, Plus, Edit, Calendar, DollarSign, Users, TrendingUp, BarChart3, ChevronDown, CreditCard, Eye, CheckCircle, XCircle, Upload, Image as ImageIcon, X, Trash2 } from 'lucide-react';
+import { Hotel, Plus, Edit, Calendar, DollarSign, Users, TrendingUp, BarChart3, ChevronDown, CreditCard, Eye, CheckCircle, XCircle, Upload, Image as ImageIcon, X, Trash2, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router';
 import { useApp } from '../../context/AppContext';
@@ -80,9 +80,11 @@ export function ResortProfile() {
     resort_amenities: [] as string[],
     resort_facilities: '',
     resort_policies: '',
+    video_url: '',
   });
   const [profileImages, setProfileImages] = useState<File[]>([]);
   const [profileImagePreviews, setProfileImagePreviews] = useState<string[]>([]);
+  const [profileVideoFile, setProfileVideoFile] = useState<File | null>(null);
   const [profileLocation, setProfileLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
@@ -268,6 +270,7 @@ export function ResortProfile() {
         resort_amenities: Array.isArray(profile?.resort_amenities) ? profile.resort_amenities : [],
         resort_facilities: profile?.resort_facilities ?? '',
         resort_policies: profile?.resort_policies ?? '',
+        video_url: profile?.video_url ?? profile?.video ?? '',
       });
 
       const images = Array.isArray(profile?.resort_images) ? profile.resort_images : [];
@@ -310,7 +313,11 @@ export function ResortProfile() {
       if (attractionForm.category.trim()) formData.append('category', attractionForm.category.trim());
       if (attractionForm.description.trim()) formData.append('description', attractionForm.description.trim());
       if (attractionForm.full_description.trim()) formData.append('full_description', attractionForm.full_description.trim());
-      if (attractionImageFile) formData.append('image', attractionImageFile);
+      if (attractionImageFile) {
+        formData.append('image', attractionImageFile);
+      } else if (resortProfile?.resort_images?.[0]) {
+        formData.append('image', resortProfile.resort_images[0]);
+      }
 
       await postJSON('/attractions', formData, true);
       toast.success('Resort added as attraction');
@@ -401,6 +408,12 @@ export function ResortProfile() {
       }
       if (profileForm.resort_policies.trim()) {
         formData.append('resort_policies', profileForm.resort_policies.trim());
+      }
+      if (profileForm.video_url.trim()) {
+        formData.append('video_url', profileForm.video_url.trim());
+      }
+      if (profileVideoFile) {
+        formData.append('video', profileVideoFile);
       }
 
       profileImages.forEach((image) => formData.append('images[]', image));
@@ -651,8 +664,7 @@ export function ResortProfile() {
         formData.append('_method', 'PUT');
       }
 
-      const baseUrl = 'http://localhost:8000';
-      const url = editingEventId ? `${baseUrl}/api/events/${editingEventId}` : `${baseUrl}/api/events`;
+      const url = editingEventId ? `${API_BASE}/api/events/${editingEventId}` : `${API_BASE}/api/events`;
       const method = 'POST';
 
       const token = getAuthToken();
@@ -730,12 +742,7 @@ export function ResortProfile() {
 
   const handleDeleteEvent = async (id: number) => {
     try {
-      await fetch(`http://localhost:8000/api/events/${id}`, { 
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${getAuthToken()}`,
-        },
-      });
+      await deleteJSON(`/events/${id}`);
       await showProductSuccess('deleted');
       
       // Refresh events list
@@ -767,7 +774,7 @@ export function ResortProfile() {
   const getEventImageUrl = (imagePath: string | null) => {
     if (!imagePath) return null;
     if (imagePath.startsWith('http')) return imagePath;
-    return `http://localhost:8000${imagePath}`;
+    return `${API_BASE}${imagePath}`;
   };
 
   if (loading) {
@@ -907,6 +914,37 @@ export function ResortProfile() {
                 onChange={(e) => setProfileForm((prev) => ({ ...prev, resort_policies: e.target.value }))}
                 className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none min-h-[120px]"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-800 mb-2 flex items-center gap-2">
+                <Play className="h-4 w-4 text-pink-500 fill-pink-500" />
+                Resort Virtual Tour Video (YouTube Link or Upload File)
+              </label>
+              <div className="space-y-3 bg-pink-50/50 p-4 rounded-xl border border-pink-100">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">YouTube Video URL / Link</label>
+                  <input
+                    type="text"
+                    value={profileForm.video_url}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, video_url: e.target.value }))}
+                    placeholder="e.g. https://www.youtube.com/watch?v=your-video-id"
+                    className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-xs bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Or Upload Video File (MP4, WebM)</label>
+                  <input
+                    type="file"
+                    accept="video/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setProfileVideoFile(file);
+                    }}
+                    className="w-full text-xs text-gray-600 border border-gray-200 rounded-lg p-2 bg-white"
+                  />
+                </div>
+              </div>
             </div>
 
             <div>
@@ -1561,7 +1599,7 @@ export function ResortProfile() {
                 <div className="flex flex-col md:flex-row gap-4">
                   <div className="flex-shrink-0">
                     <img
-                      src={`http://localhost:8000${receipt.receipt_image}`}
+                      src={`${API_BASE}${receipt.receipt_image}`}
                       alt="Payment receipt"
                       className="w-32 h-32 object-cover rounded-lg border-2 border-orange-100"
                       onError={(e) => { e.currentTarget.style.display = 'none'; }}
@@ -1612,132 +1650,7 @@ export function ResortProfile() {
         </div>
       )}
 
-      {/* Payment Details Management */}
-      <div className="bg-white border-2 border-primary/20 rounded-lg p-6 mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <CreditCard className="h-6 w-6 text-primary" />
-            <div>
-              <h2 className="text-xl font-bold">Payment Details</h2>
-              <p className="text-sm text-muted-foreground">Manage your payment methods for customer bookings</p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                setShowReceiptsModal(true);
-                fetchReceipts();
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
-            >
-              <Eye className="h-4 w-4" />
-              View Receipts ({receipts.length})
-            </button>
-            <button
-              onClick={() => setShowPaymentForm(!showPaymentForm)}
-              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Add Payment Method
-            </button>
-          </div>
-        </div>
 
-        {/* Payment Methods List */}
-        {paymentDetails.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-            {paymentDetails.map((payment, index) => (
-              <div key={index} className="border-2 border-primary/20 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-primary uppercase">{payment.type}</span>
-                  <button
-                    onClick={() => handleDeletePayment(index)}
-                    className="text-red-500 hover:text-red-700"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-                <p className="font-semibold">{payment.name}</p>
-                <p className="text-sm text-muted-foreground">{payment.account_number}</p>
-                <p className="text-sm text-muted-foreground">{payment.account_name}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Add Payment Form */}
-        {showPaymentForm && (
-          <div className="bg-primary/5 border-2 border-primary/20 rounded-lg p-6 mb-6">
-            <h3 className="text-lg font-semibold mb-4">Add Payment Method</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm mb-2">Payment Type *</label>
-                <select
-                  value={newPayment.type}
-                  onChange={(e) => setNewPayment({ ...newPayment, type: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                >
-                  <option value="gcash">GCash</option>
-                  <option value="paymaya">PayMaya</option>
-                  <option value="bank_account">Bank Account</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm mb-2">Display Name *</label>
-                <input
-                  type="text"
-                  value={newPayment.name}
-                  onChange={(e) => setNewPayment({ ...newPayment, name: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                  placeholder="e.g., My GCash, Business Account"
-                />
-              </div>
-              <div>
-                <label className="block text-sm mb-2">Account Number *</label>
-                <input
-                  type="text"
-                  value={newPayment.account_number}
-                  onChange={(e) => setNewPayment({ ...newPayment, account_number: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                  placeholder="09123456789 or Account Number"
-                />
-              </div>
-              <div>
-                <label className="block text-sm mb-2">Account Name *</label>
-                <input
-                  type="text"
-                  value={newPayment.account_name}
-                  onChange={(e) => setNewPayment({ ...newPayment, account_name: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                  placeholder="Juan Dela Cruz"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={() => setShowPaymentForm(false)}
-                className="px-4 py-2 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddPayment}
-                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-              >
-                Add Payment Method
-              </button>
-            </div>
-          </div>
-        )}
-
-        {paymentDetails.length === 0 && !showPaymentForm && (
-          <div className="text-center py-8 text-muted-foreground">
-            <CreditCard className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>No payment methods added yet</p>
-            <p className="text-sm">Add payment methods so customers can pay for bookings</p>
-          </div>
-        )}
-      </div>
 
 
       {/* Event Management */}
@@ -2017,86 +1930,7 @@ export function ResortProfile() {
         </div>
       </div>
 
-      {/* Bookings */}
-      <div className="bg-white border-2 border-primary/20 rounded-lg p-6">
-        <h2 className="mb-6">Recent Bookings</h2>
-        {bookingSummary.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            {bookingSummary.slice(0, 3).map(item => (
-              <div key={item.name} className="p-4 bg-primary/5 rounded-lg border border-primary/10">
-                <p className="text-sm text-muted-foreground">{item.name}</p>
-                <p className="text-2xl text-primary">{item.count}</p>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b-2 border-primary/20">
-                <th className="text-left pb-3">Booking ID</th>
-                <th className="text-left pb-3">Customer</th>
-                <th className="text-left pb-3">Accommodation</th>
-                <th className="text-left pb-3">Check-in</th>
-                <th className="text-left pb-3">Check-out</th>
-                <th className="text-left pb-3">Total</th>
-                <th className="text-left pb-3">Status</th>
-                <th className="text-left pb-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {bookings.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-muted-foreground">
-                    No bookings yet
-                  </td>
-                </tr>
-              ) : (
-                bookings.map((booking) => (
-                  <tr key={booking.id} className="border-b border-primary/10">
-                    <td className="py-4 font-mono text-sm">BKG-{String(booking.id).padStart(3, '0')}</td>
-                    <td className="py-4">
-                      <div>
-                        <p className="font-medium">{booking.customerName}</p>
-                        {booking.customerPhone && (
-                          <p className="text-xs text-muted-foreground">{booking.customerPhone}</p>
-                        )}
-                        {booking.customerEmail && (
-                          <p className="text-xs text-muted-foreground">{booking.customerEmail}</p>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-4">{booking.accommodation}</td>
-                    <td className="py-4">{new Date(booking.checkIn).toLocaleDateString()}</td>
-                    <td className="py-4">{new Date(booking.checkOut).toLocaleDateString()}</td>
-                    <td className="py-4">₱{booking.total.toLocaleString()}</td>
-                    <td className="py-4">
-                      <span className={getStatusBadge(booking.status)}>
-                        {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="py-4">
-                      {booking.paymentMethod === 'online' && booking.status === 'pending' ? (
-                        <span className="text-xs text-orange-700 bg-orange-100 border border-orange-200 px-2 py-1 rounded-lg">
-                          ⏳ Verify receipt above
-                        </span>
-                      ) : bookingStatusFlow[booking.status] ? (
-                        <button
-                          onClick={() => handleUpdateBookingStatus(booking.id)}
-                          className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-2 text-sm"
-                        >
-                          <ChevronDown className="h-4 w-4" />
-                          {bookingStatusLabels[booking.status]}
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+
 
       {/* Payment Receipts — inline, always visible */}
       {receipts.length > 0 && (
@@ -2147,13 +1981,13 @@ export function ResortProfile() {
                 </div>
                 <div className="p-4 flex flex-col md:flex-row gap-4">
                   <a
-                    href={`http://localhost:8000${receipt.receipt_image}`}
+                    href={`${API_BASE}${receipt.receipt_image}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex-shrink-0"
                   >
                     <img
-                      src={`http://localhost:8000${receipt.receipt_image}`}
+                      src={`${API_BASE}${receipt.receipt_image}`}
                       alt="Payment receipt"
                       className="w-40 h-40 object-cover rounded-lg border-2 border-primary/10 hover:opacity-90 transition-opacity cursor-zoom-in"
                     />

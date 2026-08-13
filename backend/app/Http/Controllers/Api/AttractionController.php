@@ -28,9 +28,19 @@ class AttractionController extends Controller
         elseif ($user && $user->role === 'resort') {
             $query = \App\Models\Attraction::where('user_id', $user->id);
         }
-        // Public/Tourists see all attractions
+        // Public/Tourists see attractions created by Admin OR approved & paid resort accounts
         else {
-            $query = \App\Models\Attraction::query();
+            $query = \App\Models\Attraction::query()
+                ->where(function($q) {
+                    $q->whereNull('user_id')
+                      ->orWhereHas('creator', function($userQuery) {
+                          $userQuery->where('role', 'admin')
+                                    ->orWhere(function($bq) {
+                                        $bq->where('listing_status', 'approved')
+                                           ->whereIn('subscription_status', ['paid', 'active']);
+                                    });
+                      });
+                });
         }
 
         // Apply search filter (case-insensitive search on name and description)
@@ -87,7 +97,8 @@ class AttractionController extends Controller
             'name' => 'required|string|max:255',
             'location' => 'nullable|string|max:255',
             'category' => 'nullable|string|max:255',
-            'image' => 'nullable|file|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max
+            'image' => 'nullable', // file upload or image URL string
+            'video' => 'nullable', // file or string URL
             'description' => 'nullable|string',
             'full_description' => 'nullable|string',
         ]);
@@ -99,7 +110,18 @@ class AttractionController extends Controller
                 $path = $file->store('attractions', 'public');
                 $data['image'] = '/storage/' . $path;
             } catch (\Exception $e) {
-                return response()->json(['error' => 'Failed to store file: ' . $e->getMessage()], 400);
+                return response()->json(['error' => 'Failed to store image file: ' . $e->getMessage()], 400);
+            }
+        }
+
+        // Handle video upload
+        if ($request->hasFile('video')) {
+            try {
+                $file = $request->file('video');
+                $path = $file->store('attractions/videos', 'public');
+                $data['video'] = '/storage/' . $path;
+            } catch (\Exception $e) {
+                return response()->json(['error' => 'Failed to store video file: ' . $e->getMessage()], 400);
             }
         }
 
@@ -164,6 +186,7 @@ class AttractionController extends Controller
             'location' => 'sometimes|nullable|string|max:255',
             'category' => 'sometimes|nullable|string|max:255',
             'image' => 'sometimes|nullable|file|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max
+            'video' => 'sometimes|nullable', // file or string URL
             'description' => 'sometimes|nullable|string',
             'full_description' => 'sometimes|nullable|string',
         ]);
@@ -175,7 +198,18 @@ class AttractionController extends Controller
                 $path = $file->store('attractions', 'public');
                 $data['image'] = '/storage/' . $path;
             } catch (\Exception $e) {
-                return response()->json(['error' => 'Failed to store file: ' . $e->getMessage()], 400);
+                return response()->json(['error' => 'Failed to store image file: ' . $e->getMessage()], 400);
+            }
+        }
+
+        // Handle video upload
+        if ($request->hasFile('video')) {
+            try {
+                $file = $request->file('video');
+                $path = $file->store('attractions/videos', 'public');
+                $data['video'] = '/storage/' . $path;
+            } catch (\Exception $e) {
+                return response()->json(['error' => 'Failed to store video file: ' . $e->getMessage()], 400);
             }
         }
 

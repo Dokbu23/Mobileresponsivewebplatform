@@ -204,7 +204,7 @@ class ResortProfileRoutesTest extends TestCase
                      'message' => 'Resort profile updated successfully'
                  ])
                  ->assertJsonPath('user.resort_name', 'Updated Resort Name')
-                 ->assertJsonPath('user.resort_price_per_night', 1500.00);
+                 ->assertJsonPath('user.resort_price_per_night', 1500);
     }
 
     /**

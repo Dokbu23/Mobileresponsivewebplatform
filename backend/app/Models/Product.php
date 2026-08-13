@@ -9,10 +9,11 @@ class Product extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name','description','price','stock','image','category','user_id','is_registered'];
+    protected $fillable = ['name','description','price','stock','image','images','category','user_id','is_registered'];
 
     protected $casts = [
         'is_registered' => 'boolean',
+        'images' => 'array',
     ];
 
     public function owner()

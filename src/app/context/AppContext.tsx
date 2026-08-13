@@ -66,6 +66,15 @@ export interface Booking {
   total: number;
 }
 
+export interface WishlistItem {
+  id: string | number;
+  type: 'attraction' | 'accommodation' | 'product' | 'event';
+  title: string;
+  image?: string;
+  category?: string;
+  price?: number;
+}
+
 interface AppContextType {
   cart: CartItem[];
   addToCart: (product: Product, quantity?: number, selectedVariation?: CartItem['selectedVariation']) => void;
@@ -78,15 +87,24 @@ interface AppContextType {
   addBooking: (booking: Omit<Booking, 'id'>) => void;
   isAdmin: boolean;
   setIsAdmin: (value: boolean) => void;
-  userType: 'tourist' | 'admin' | 'resort' | 'enterprise' | null;
-  setUserType: (type: 'tourist' | 'admin' | 'resort' | 'enterprise' | null) => void;
+  userType: 'tourist' | 'admin' | 'resort' | 'enterprise' | 'pending' | null;
+  setUserType: (type: 'tourist' | 'admin' | 'resort' | 'enterprise' | 'pending' | null) => void;
   currentUser: {
     id: number;
     name: string;
     email: string;
-    role: 'tourist' | 'admin' | 'resort' | 'enterprise';
+    role: 'tourist' | 'admin' | 'resort' | 'enterprise' | 'pending' | null;
+    avatar?: string | null;
+    phone?: string;
+    barangay?: string;
+    listing_status?: string;
+    subscription_status?: string;
   } | null;
   setCurrentUser: (user: AppContextType['currentUser']) => void;
+  wishlist: WishlistItem[];
+  addToWishlist: (item: WishlistItem) => void;
+  removeFromWishlist: (id: string | number, type: string) => void;
+  isInWishlist: (id: string | number, type: string) => boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -114,21 +132,32 @@ function readStoredCart(userType: string | null): CartItem[] {
   }
 }
 
+const WISHLIST_STORAGE_KEY = 'discover-mansalay:wishlist';
+
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [userType, setUserType] = useState<'tourist' | 'admin' | 'resort' | 'enterprise' | null>(() => {
+  const [userType, setUserType] = useState<'tourist' | 'admin' | 'resort' | 'enterprise' | 'pending' | null>(() => {
     if (typeof window === 'undefined') {
       return null;
     }
 
     const storedUserType = window.localStorage.getItem(USER_TYPE_STORAGE_KEY);
-    return storedUserType === 'tourist' || storedUserType === 'admin' || storedUserType === 'resort' || storedUserType === 'enterprise'
-      ? storedUserType
+    return storedUserType === 'tourist' || storedUserType === 'admin' || storedUserType === 'resort' || storedUserType === 'enterprise' || storedUserType === 'pending'
+      ? (storedUserType as 'tourist' | 'admin' | 'resort' | 'enterprise' | 'pending')
       : null;
   });
   
   const [cart, setCart] = useState<CartItem[]>(() => readStoredCart(userType));
   const [orders, setOrders] = useState<Order[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [wishlist, setWishlist] = useState<WishlistItem[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = window.localStorage.getItem(WISHLIST_STORAGE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isAdmin, setIsAdmin] = useState(() => {
     if (typeof window === 'undefined') {
       return false;
@@ -148,6 +177,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return null;
     }
   });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(wishlist));
+    }
+  }, [wishlist]);
 
   useEffect(() => {
     if (userType) {
@@ -184,72 +219,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [cart, userType]);
 
-  useEffect(() => {
-    // Only load orders and bookings for tourists
-    if (!userType || userType !== 'tourist') {
-      return;
-    }
-
-    let isMounted = true;
-
-    (async () => {
-      try {
-        const [ordersResponse, bookingsResponse] = await Promise.all([
-          getJSON('/orders/my'),
-          getJSON('/bookings/my'),
-        ]);
-
-        if (!isMounted) {
-          return;
-        }
-
-        setOrders(
-          Array.isArray(ordersResponse)
-            ? ordersResponse.map((order: any) => ({
-                id: String(order.id),
-                items: Array.isArray(order.items) ? order.items : [],
-                total: Number(order.total) || 0,
-                status: order.status,
-                paymentMethod: order.payment_method ?? order.paymentMethod ?? 'online',
-                date: order.created_at ?? order.date ?? new Date().toISOString(),
-              }))
-            : []
-        );
-
-        setBookings(
-          Array.isArray(bookingsResponse)
-            ? bookingsResponse.map((booking: any) => ({
-                id: String(booking.id),
-                accommodation: {
-                  id: String(booking.accommodation_snapshot?.id ?? booking.accommodation_id ?? booking.id),
-                  name: booking.accommodation_snapshot?.name ?? 'Accommodation',
-                  description: booking.accommodation_snapshot?.description ?? '',
-                  pricePerNight: Number(booking.accommodation_snapshot?.pricePerNight ?? booking.accommodation_snapshot?.price_per_night ?? 0),
-                  image: booking.accommodation_snapshot?.image ?? '',
-                  availability: booking.accommodation_snapshot?.availability ?? {},
-                },
-                checkIn: booking.check_in,
-                checkOut: booking.check_out,
-                status: booking.status,
-                paymentMethod: booking.payment_method ?? booking.paymentMethod ?? 'online',
-                total: Number(booking.total) || 0,
-              }))
-            : []
-        );
-      } catch {
-        if (!isMounted) {
-          return;
-        }
-
-        setOrders([]);
-        setBookings([]);
-      }
-    })();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [userType]);
+  // Note: Orders and bookings are no longer loaded from API since this is now a display-only platform
 
   const addToCart = (
     product: Product,
@@ -351,6 +321,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setBookings(prev => [...prev, newBooking]);
   };
 
+  const addToWishlist = (item: WishlistItem) => {
+    setWishlist(prev => {
+      if (prev.some(w => String(w.id) === String(item.id) && w.type === item.type)) {
+        return prev;
+      }
+      return [...prev, item];
+    });
+  };
+
+  const removeFromWishlist = (id: string | number, type: string) => {
+    setWishlist(prev => prev.filter(w => !(String(w.id) === String(id) && w.type === type)));
+  };
+
+  const isInWishlist = (id: string | number, type: string) => {
+    return wishlist.some(w => String(w.id) === String(id) && w.type === type);
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -369,6 +356,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setUserType,
         currentUser,
         setCurrentUser,
+        wishlist,
+        addToWishlist,
+        removeFromWishlist,
+        isInWishlist,
       }}
     >
       {children}

@@ -1,10 +1,10 @@
-# Use official PHP 8.1 with Apache
+# Use official PHP 8.1 with Apache (supports Laravel 8 and modern PHP features)
 FROM php:8.1-apache
 
 # Set working directory
 WORKDIR /var/www/html
 
-# Install system dependencies
+# Install system dependencies and PHP extensions
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -12,18 +12,37 @@ RUN apt-get update && apt-get install -y \
     libonig-dev \
     libxml2-dev \
     libpq-dev \
+    libzip-dev \
     zip \
     unzip \
-    && docker-php-ext-install pdo_pgsql pgsql mbstring exif pcntl bcmath gd
+    && docker-php-ext-configure gd \
+    && docker-php-ext-install pdo_pgsql pgsql mbstring exif pcntl bcmath gd zip \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Copy application files
+# Copy composer files first (better caching)
+COPY composer.json composer.lock ./
+
+# Install PHP dependencies with verbose output for debugging
+RUN composer install \
+    --no-dev \
+    --optimize-autoloader \
+    --no-interaction \
+    --prefer-dist \
+    --verbose \
+    --no-scripts \
+    && composer dump-autoload --optimize
+
+# Copy rest of application files
 COPY . .
 
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# Create required directories
+RUN mkdir -p storage/framework/{sessions,views,cache} \
+    && mkdir -p storage/logs \
+    && mkdir -p bootstrap/cache
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache && \

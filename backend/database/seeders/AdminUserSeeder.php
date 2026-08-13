@@ -24,12 +24,14 @@ class AdminUserSeeder extends Seeder
             return;
         }
 
-        User::create([
-            'name' => $name,
-            'email' => $email,
-            'password' => Hash::make($password),
-            'role' => 'admin',
-        ]);
+        $user = new User();
+        $user->name = $name;
+        $user->email = $email;
+        $user->password = Hash::make($password);
+        $user->role = 'admin';
+        $user->is_active = true;
+        $user->email_verified_at = now();
+        $user->save();
 
         $this->command->info("Admin user created: {$email} (password: {$password})");
     }

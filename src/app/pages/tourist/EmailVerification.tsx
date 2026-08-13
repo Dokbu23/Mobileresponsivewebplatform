@@ -27,11 +27,7 @@ export function EmailVerification() {
   };
 
   const getLoginPath = () => {
-    switch (role) {
-      case 'resort': return '/resort/login';
-      case 'enterprise': return '/enterprise/login';
-      default: return '/tourist/login';
-    }
+    return '/login';
   };
 
   const getRoleLabel = () => {

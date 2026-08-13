@@ -3,7 +3,7 @@ import { Store, Plus, Edit, Trash2, Package, DollarSign, ShoppingCart, TrendingU
 import { toast } from 'sonner';
 import { Link } from 'react-router';
 import { useApp } from '../../context/AppContext';
-import { getAuthToken, getJSON, getPublicJSON, postJSON, putJSON, patchJSON } from '../../lib/api';
+import { getAuthToken, getJSON, getPublicJSON, postJSON, putJSON, patchJSON, deleteJSON, API_BASE } from '../../lib/api';
 import { showPaymentMethodSuccess, showProductSuccess, showStatusUpdateSuccess } from '../../lib/sweetAlert';
 import { LocationPicker } from '../../components/LocationPicker';
 
@@ -206,10 +206,7 @@ export function EnterpriseProfile() {
 
   const handleDeletePromo = async (id: number) => {
     try {
-      await fetch(`http://localhost:8000/api/promo-codes/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${getAuthToken()}` },
-      });
+      await deleteJSON(`/promo-codes/${id}`);
       toast.success('Promo code deleted');
       await fetchPromoCodes();
     } catch { toast.error('Failed to delete'); }
@@ -232,7 +229,7 @@ export function EnterpriseProfile() {
           stock: Number(product.stock) || 0,
           category: product.category || '',
           image: product.image
-            ? (product.image.startsWith('http') ? product.image : `http://localhost:8000${product.image}`)
+            ? (product.image.startsWith('http') ? product.image : `${API_BASE}${product.image}`)
             : '',
           variations: Array.isArray(product.variations)
             ? product.variations.map((v: any) => ({
@@ -272,7 +269,6 @@ export function EnterpriseProfile() {
 
     try {
       const eventsResponse = await getJSON('/events/my');
-      console.log('Events response:', eventsResponse);
       setEvents(
         Array.isArray(eventsResponse)
           ? eventsResponse.map((event: any) => ({
@@ -387,15 +383,13 @@ export function EnterpriseProfile() {
             form.append('_method', 'PUT');
           }
 
-        const baseUrl = 'http://localhost:8000';
-        const url = editingProductId ? `${baseUrl}/api/products/${editingProductId}` : `${baseUrl}/api/products`;
+        const url = editingProductId ? `${API_BASE}/api/products/${editingProductId}` : `${API_BASE}/api/products`;
           const method = 'POST';  // Always POST when sending FormData (Laravel uses _method override)
 
         try {
           const token = getAuthToken();
           const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
           const res = await fetch(url, { method, headers, body: form });
-          console.log('Upload response:', { status: res.status, ok: res.ok, contentType: res.headers.get('content-type') });
           const contentType = res.headers.get('content-type');
           let errorMsg = `HTTP ${res.status}`;
 
@@ -490,13 +484,7 @@ export function EnterpriseProfile() {
 
   const handleDeleteProduct = async (id: string) => {
     try {
-      await fetch(`http://localhost:8000/api/products/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${getAuthToken()}`,
-          Accept: 'application/json',
-        },
-      });
+      await deleteJSON(`/products/${id}`);
       await showProductSuccess('deleted');
       await fetchData();
     } catch {
@@ -533,9 +521,7 @@ export function EnterpriseProfile() {
   // Payment Details Functions
   const fetchPaymentDetails = async () => {
     try {
-      console.log('Fetching payment details...');
       const response = await getJSON('/payment-details');
-      console.log('Payment details response:', response);
       setPaymentDetails(response.payment_details || []);
     } catch (error) {
       console.error('Error fetching payment details:', error);
@@ -549,12 +535,8 @@ export function EnterpriseProfile() {
     }
 
     try {
-      console.log('Adding payment method:', newPayment);
       const updatedPayments = [...paymentDetails, { ...newPayment }];
-      console.log('Sending payment details:', { payment_details: updatedPayments });
-      
-      const response = await patchJSON('/payment-details', { payment_details: updatedPayments });
-      console.log('Add payment response:', response);
+      await patchJSON('/payment-details', { payment_details: updatedPayments });
       
       setPaymentDetails(updatedPayments);
       setNewPayment({ type: 'gcash', name: '', account_number: '', account_name: '' });
@@ -607,9 +589,7 @@ export function EnterpriseProfile() {
 
   const testAuth = async () => {
     try {
-      console.log('Testing authentication...');
-      const response = await getJSON('/test-auth');
-      console.log('Auth test response:', response);
+      await getJSON('/test-auth');
     } catch (error) {
       console.error('Auth test error:', error);
     }
@@ -638,18 +618,14 @@ export function EnterpriseProfile() {
         formData.append('_method', 'PUT');
       }
 
-      const baseUrl = 'http://localhost:8000';
-      const url = editingEventId ? `${baseUrl}/api/events/${editingEventId}` : `${baseUrl}/api/events`;
+      const url = editingEventId ? `${API_BASE}/api/events/${editingEventId}` : `${API_BASE}/api/events`;
       const method = 'POST';
 
-      console.log('Creating event:', { url, method, hasImage: !!eventImageFile });
       const token = getAuthToken();
-      console.log('Auth token:', token ? 'Present' : 'Missing');
       const headers: HeadersInit = token
         ? { Authorization: `Bearer ${token}`, Accept: 'application/json' }
         : { Accept: 'application/json' };
       const res = await fetch(url, { method, headers, body: formData });
-      console.log('Event creation response:', { status: res.status, ok: res.ok });
 
       if (!res.ok) {
         const contentType = res.headers.get('content-type');
@@ -669,7 +645,6 @@ export function EnterpriseProfile() {
       }
 
       await showProductSuccess(editingEventId ? 'updated' : 'added', newEvent.name);
-      console.log('Event created successfully, fetching updated data...');
       await fetchData();
       setNewEvent({ name: '', location: '', category: '', date: '', time: '', capacity: '', description: '', full_description: '' });
       setEventImageFile(null);
@@ -701,12 +676,7 @@ export function EnterpriseProfile() {
 
   const handleDeleteEvent = async (id: number) => {
     try {
-      await fetch(`http://localhost:8000/api/events/${id}`, { 
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${getAuthToken()}`,
-        },
-      });
+      await deleteJSON(`/events/${id}`);
       await showProductSuccess('deleted');
       await fetchData();
     } catch {
@@ -717,7 +687,7 @@ export function EnterpriseProfile() {
   const getEventImageUrl = (imagePath: string | null) => {
     if (!imagePath) return null;
     if (imagePath.startsWith('http')) return imagePath;
-    return `http://localhost:8000${imagePath}`;
+    return `${API_BASE}${imagePath}`;
   };
 
   if (loading) {

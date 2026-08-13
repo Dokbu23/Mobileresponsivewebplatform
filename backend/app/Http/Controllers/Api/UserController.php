@@ -113,6 +113,8 @@ class UserController extends Controller
 
         $data = $request->validate([
             'name'        => 'required|string|max:255',
+            'resort_name' => 'nullable|string|max:255',
+            'store_name'  => 'nullable|string|max:255',
             'phone'       => 'nullable|string|max:20',
             'address'     => 'nullable|string|max:500',
             'barangay'    => 'nullable|string|max:100',
@@ -127,6 +129,8 @@ class UserController extends Controller
 
         $user->update(array_filter([
             'name'        => $data['name'],
+            'resort_name' => $data['resort_name'] ?? null,
+            'store_name'  => $data['store_name'] ?? null,
             'phone'       => $data['phone'] ?? null,
             'address'     => $data['address'] ?? null,
             'barangay'    => $data['barangay'] ?? null,

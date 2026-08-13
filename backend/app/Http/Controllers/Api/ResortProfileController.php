@@ -35,7 +35,11 @@ class ResortProfileController extends Controller
         }
 
         return response()->json([
+            'id' => $user->id,
             'user_id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'subscription_status' => $user->subscription_status,
             'resort_name' => $user->resort_name,
             'resort_description' => $user->resort_description,
             'resort_price_per_night' => $user->resort_price_per_night,
@@ -86,6 +90,7 @@ class ResortProfileController extends Controller
 
         return response()->json([
             'message' => 'Resort profile updated successfully',
+            'user' => $user->fresh(),
             'profile' => [
                 'user_id' => $user->id,
                 'resort_name' => $user->resort_name,

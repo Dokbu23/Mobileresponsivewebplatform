@@ -133,21 +133,13 @@ export function Messages() {
                 <Mail className="h-10 w-10 text-pink-500" />
               </div>
               <h3 className="font-semibold text-gray-900 mb-2">No messages yet</h3>
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="text-sm text-gray-500 mb-1">
                 {searchQuery
                   ? 'No conversations match your search'
                   : userType === 'tourist'
                   ? 'Start chatting with shops and resorts!'
                   : 'Customer messages will appear here'}
               </p>
-              {userType === 'tourist' && !searchQuery && (
-                <button
-                  onClick={() => navigate('/products')}
-                  className="px-6 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm"
-                >
-                  Browse Products
-                </button>
-              )}
             </div>
           ) : (
             <div className="divide-y divide-gray-100">

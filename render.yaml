@@ -2,11 +2,11 @@ services:
   # Backend API (Laravel)
   - type: web
     name: disc-mansalay-api
-    env: php
+    env: docker
     region: singapore
     plan: free
-    buildCommand: cd backend && chmod +x build.sh && ./build.sh
-    startCommand: cd backend && php artisan serve --host=0.0.0.0 --port=$PORT
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
     healthCheckPath: /api/public/stats
     envVars:
       - key: APP_NAME
@@ -86,8 +86,10 @@ services:
         value: DiscoverMansalay
 
   # PostgreSQL Database
-  - type: pserv
-    name: disc-mansalay-db
+databases:
+  - name: disc-mansalay-db
+    databaseName: discmansalay
+    user: discmansalay
     region: singapore
     plan: free
     ipAllowList: []

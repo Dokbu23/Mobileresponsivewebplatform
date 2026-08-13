@@ -1,862 +1,528 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router';
-import { Hotel, MapPin, Star, ChevronDown, ChevronUp, Calendar, CreditCard, Building2, LogIn, Upload, X, Truck, ExternalLink } from 'lucide-react';
-import { useApp, Accommodation } from '../../context/AppContext';
-import { toast } from 'sonner';
-import { getPublicJSON, postJSON, getJSON, API_BASE } from '../../lib/api';
-import { showTransactionSuccess } from '../../lib/sweetAlert';
-import { SearchBar } from '../../components/SearchBar';
-import { FilterButton } from '../../components/FilterButton';
-import { FilterSidebar } from '../../components/FilterSidebar';
-import { FilterChips } from '../../components/FilterChips';
-import { useSearchAndFilter } from '../../hooks/useSearchAndFilter';
-import { AvailabilityCalendar } from '../../components/AvailabilityCalendar';
+import { useNavigate } from 'react-router';
+import { Hotel, MapPin, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown } from 'lucide-react';
+import { API_BASE, getPublicJSON } from '../../lib/api';
+import { useApp } from '../../context/AppContext';
+import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
+import { ShareModal } from '../../components/ShareModal';
+
+interface AccommodationItem {
+  id: string;
+  name: string;
+  description?: string;
+  image: string;
+  images?: string[];
+  pricePerNight: number;
+  location?: string;
+  type?: string;
+  badge?: string;
+  rating?: number;
+  likes?: number;
+  user_id?: string | number;
+  is_registered?: boolean;
+  resort_amenities?: string[];
+  contact_number?: string;
+  website?: string;
+}
 
 export function Accommodations() {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [bookingModal, setBookingModal] = useState<string | null>(null);
-  const [checkIn, setCheckIn] = useState('');
-  const [checkOut, setCheckOut] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'online' | 'otc' | 'cod'>('online');
-  const { addBooking, userType, currentUser } = useApp();
   const navigate = useNavigate();
-  const [items, setItems] = useState<Accommodation[]>([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist } = useApp();
+  const isLoggedIn = Boolean(userType && currentUser);
 
-  // Payment-related state
-  const [businessPaymentDetails, setBusinessPaymentDetails] = useState<any[]>([]);
-  const [selectedPayment, setSelectedPayment] = useState<any>(null);
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
-  const [paymentReference, setPaymentReference] = useState('');
-  const [paymentNotes, setPaymentNotes] = useState('');
+  const [items, setItems] = useState<AccommodationItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedAcc, setSelectedAcc] = useState<AccommodationItem | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState('All');
+  const [savedAccIds, setSavedAccIds] = useState<string[]>([]);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [shareData, setShareData] = useState<{ title: string; description?: string; image?: string; category?: string } | null>(null);
 
-  // Room selection state
-  const [resortRooms, setResortRooms] = useState<any[]>([]);
-  const [selectedRoom, setSelectedRoom] = useState<any>(null);
+  const loadAccommodations = async () => {
+    setLoading(true);
+    try {
+      const [accRes, attrRes] = await Promise.all([
+        getPublicJSON('/accommodations').catch(() => []),
+        getPublicJSON('/attractions').catch(() => []),
+      ]);
+      const rawAcc = Array.isArray(accRes) ? accRes : accRes?.data ?? [];
+      const rawAttr = Array.isArray(attrRes) ? attrRes : attrRes?.data ?? [];
 
-  // Blocked dates state
-  const [blockedDates, setBlockedDates] = useState<string[]>([]);
-  const bookingAccommodation = useMemo(
-    () => items.find(item => item.id === bookingModal) ?? null,
-    [items, bookingModal]
-  );
+      const accAttractions = rawAttr.filter((a: any) =>
+        a.category === 'Accommodation' || a.category === 'Accommodations' || a.type === 'Accommodation' || a.type === 'Accommodations'
+      );
 
-  const bookingNights = useMemo(() => {
-    if (!checkIn || !checkOut) return 0;
-    const checkInDate = new Date(checkIn);
-    const checkOutDate = new Date(checkOut);
-    const diff = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
-    return diff > 0 ? diff : 0;
-  }, [checkIn, checkOut]);
-
-  const bookingTotal = bookingAccommodation && bookingNights > 0
-    ? (selectedRoom ? selectedRoom.price_per_night : bookingAccommodation.pricePerNight) * bookingNights
-    : 0;
-
-  // Initialize search and filter hook
-  const {
-    filters,
-    queryParams,
-    updateFilter,
-    clearAllFilters,
-    activeFilterCount,
-  } = useSearchAndFilter();
-
-  // Fetch accommodations with query parameters (backend only supports search)
-  useEffect(() => {
-    (async () => {
+      let customResorts: any[] = [];
       try {
-        const data = await getPublicJSON(`/accommodations${queryParams}`);
-        const mapped = data.map((d: any) => ({
-          ...d,
+        const stored = localStorage.getItem('discover-mansalay:custom_resorts');
+        if (stored) customResorts = JSON.parse(stored);
+      } catch { }
+
+      let customAttractions: any[] = [];
+      try {
+        const stored = localStorage.getItem('discover-mansalay:custom_attractions');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          customAttractions = parsed.filter((a: any) =>
+            a.category === 'Accommodation' || a.category === 'Accommodations' || a.type === 'Accommodation' || a.type === 'Accommodations'
+          );
+        }
+      } catch { }
+
+      let deletedIds = new Set<string>();
+      try {
+        const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
+        if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
+      } catch { }
+
+      const allRaw = [...rawAcc, ...accAttractions].filter(i => !deletedIds.has(String(i.id)));
+      const existingIds = new Set(allRaw.map(r => String(r.id)));
+      [...customResorts, ...customAttractions].forEach(cr => {
+        if (!existingIds.has(String(cr.id)) && !deletedIds.has(String(cr.id))) {
+          allRaw.unshift(cr);
+        }
+      });
+
+      const mapped = allRaw.map((d: any, idx: number) => {
+        let parsedImages: string[] = [];
+        if (Array.isArray(d.images)) {
+          parsedImages = d.images.map((img: any) => String(img).startsWith('http') ? img : `${API_BASE}${img}`);
+        } else if (typeof d.images === 'string' && d.images.trim()) {
+          try {
+            const arr = JSON.parse(d.images);
+            if (Array.isArray(arr)) {
+              parsedImages = arr.map((img: any) => String(img).startsWith('http') || String(img).startsWith('/assets') ? img : `${API_BASE}${img}`);
+            }
+          } catch { }
+        }
+        const mainImg = d.image
+          ? (String(d.image).startsWith('http') || String(d.image).startsWith('/assets') ? d.image : `${API_BASE}${d.image}`)
+          : '';
+        if (parsedImages.length === 0 && mainImg) {
+          parsedImages = [mainImg];
+        }
+
+        return {
           id: String(d.id),
-          pricePerNight: d.price_per_night ?? d.pricePerNight,
-          availability: d.availability ?? d.availability,
-          user_id: d.user_id,
-          is_registered: d.is_registered ?? false,
-          type: d.type ?? 'static',
-          resort_amenities: d.resort_amenities ?? [],
-          resort_facilities: d.resort_facilities ?? null,
-          resort_policies: d.resort_policies ?? null,
-          resort_images: d.resort_images ?? [],
-          image: d.image
-            ? (String(d.image).startsWith('http') ? d.image : `${API_BASE}${d.image}`)
-            : '',
-        }));
-        setItems(mapped);
-      } catch (e) {
-        setItems([]);
-      }
-    })();
-  }, [queryParams]);
+          name: d.name || d.resort_name || 'Accommodation',
+          description: d.description || '',
+          pricePerNight: Number(d.price_per_night ?? d.pricePerNight ?? d.price ?? 0),
+          location: d.location || 'Mansalay, Oriental Mindoro',
+          type: (d.type === 'resort_profile' || d.category === 'resort_profile') ? 'Beach Resort' : (d.category || d.type || 'Beach Resort'),
+          badge: d.badge || (idx % 2 === 0 ? 'Top Rated' : 'Eco-Friendly'),
+          rating: d.rating || 4.8,
+          likes: d.likes || 0,
+          image: mainImg,
+          images: parsedImages,
+          resort_amenities: Array.isArray(d.resort_amenities) ? d.resort_amenities : []
+        };
+      });
+      setItems(mapped);
+    } catch (err) {
+      console.error('Error fetching real accommodations:', err);
+      let customResorts: any[] = [];
+      try {
+        const stored = localStorage.getItem('discover-mansalay:custom_resorts');
+        if (stored) customResorts = JSON.parse(stored);
+      } catch { }
+      let customAttractions: any[] = [];
+      try {
+        const stored = localStorage.getItem('discover-mansalay:custom_attractions');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          customAttractions = parsed.filter((a: any) =>
+            a.category === 'Accommodation' || a.category === 'Accommodations' || a.type === 'Accommodation' || a.type === 'Accommodations'
+          );
+        }
+      } catch { }
+      const mapped = [...customResorts, ...customAttractions].map((d: any, idx: number) => {
+        const mainImg = d.image ? (String(d.image).startsWith('http') ? d.image : `${API_BASE}${d.image}`) : '';
+        const list = Array.isArray(d.images) && d.images.length > 0 ? d.images.map((img: any) => String(img).startsWith('http') ? img : `${API_BASE}${img}`) : (mainImg ? [mainImg] : []);
+        return {
+          id: String(d.id),
+          name: d.name || 'Accommodation',
+          description: d.description || '',
+          pricePerNight: Number(d.price_per_night ?? d.price ?? 0),
+          location: d.location || 'Mansalay, Oriental Mindoro',
+          type: d.category || d.type || 'Accommodation',
+          badge: 'Top Rated',
+          rating: 4.8,
+          likes: 0,
+          image: mainImg,
+          images: list,
+          resort_amenities: []
+        };
+      });
+      setItems(mapped);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Apply frontend date filtering using availability JSON field
-  const filteredAccommodations = useMemo(() => {
-    let filtered = items;
+  useEffect(() => {
+    loadAccommodations();
+    window.addEventListener('contentUpdated', loadAccommodations);
+    window.addEventListener('storage', loadAccommodations);
+    return () => {
+      window.removeEventListener('contentUpdated', loadAccommodations);
+      window.removeEventListener('storage', loadAccommodations);
+    };
+  }, []);
 
-    // Filter by month and year if specified
-    if (filters.month || filters.year) {
-      filtered = filtered.filter(accommodation => {
-        // Check if any availability date matches the selected month/year
-        const availabilityDates = Object.keys(accommodation.availability || {});
-        
-        return availabilityDates.some(dateStr => {
-          const date = new Date(dateStr);
-          const matchesMonth = !filters.month || (date.getMonth() + 1) === parseInt(filters.month);
-          const matchesYear = !filters.year || date.getFullYear() === parseInt(filters.year);
-          
-          return matchesMonth && matchesYear;
-        });
+  const toggleSaveAcc = (acc: AccommodationItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (isInWishlist(acc.id, 'accommodation')) {
+      removeFromWishlist(acc.id, 'accommodation');
+    } else {
+      addToWishlist({
+        id: acc.id,
+        type: 'accommodation',
+        title: acc.name,
+        image: acc.image,
+        category: acc.type,
+        price: acc.pricePerNight,
       });
     }
-
-    return filtered;
-  }, [items, filters.month, filters.year]);
-
-  // Handle filter removal from chips
-  const handleRemoveFilter = (filterKey: keyof typeof filters) => {
-    updateFilter({ [filterKey]: '' });
   };
 
-  // Handle clear all filters
-  const handleClearAllFilters = () => {
-    clearAllFilters();
-    setIsSidebarOpen(false);
-  };
+  const predefinedStaysCategories = [
+    'Beach Resort',
+    'Glamping',
+    'Farm Resort',
+    'Guesthouse',
+    'Hotel',
+  ];
 
-  const handleOpenBooking = (accommodationId: string) => {
-    if (!userType) {
-      toast.error('Please login to book accommodations');
-      navigate('/select-role');
-      return;
-    }
+  const typeCategories = useMemo(() => {
+    const types = Array.from(new Set([...predefinedStaysCategories, ...items.map(acc => acc.type).filter(Boolean)]));
+    return types.filter(t => t && t.toLowerCase() !== 'static' && t.toLowerCase() !== 'resort_profile' && t.trim() !== '');
+  }, [items]);
 
-    // Only tourists can book accommodations (enterprise and resort are business accounts)
-    if (userType !== 'tourist') {
-      toast.error('Only tourists can book accommodations. Business accounts are for management only.');
-      return;
-    }
+  const filteredAccommodations = items.filter(acc => {
+    const matchesSearch = !searchQuery ||
+      acc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (acc.type && acc.type.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (acc.location && acc.location.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (acc.description && acc.description.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    // Block booking for unregistered static listings
-    const accommodation = items.find(item => item.id === accommodationId);
-    if (accommodation && !accommodation.is_registered && !accommodation.user_id) {
-      toast.error('This accommodation is not available for online booking. Please contact them directly.');
-      return;
-    }
+    const matchesType = typeFilter === 'All' || typeFilter === 'All Stays' || acc.type === typeFilter;
 
-    // Fetch resort payment details when opening booking modal
-    fetchResortPaymentDetails(accommodationId);
-    setBookingModal(accommodationId);
-    setSelectedRoom(null);
-    setResortRooms([]);
-    setBlockedDates([]);
-  };
-
-  // Fetch resort payment details for advance payment
-  const fetchResortPaymentDetails = async (accommodationId: string) => {
-    try {
-      const accommodation = items.find(item => item.id === accommodationId);
-      if (accommodation?.user_id) {
-        // Fetch resort owner details
-        const resortResponse = await getJSON(`/business-users/${accommodation.user_id}`);
-        const paymentDetails = resortResponse.payment_details || [];
-        
-        // Add business_id to each payment method for receipt upload
-        const detailsWithBusinessId = paymentDetails.map((payment: any) => ({
-          ...payment,
-          business_id: accommodation.user_id
-        }));
-        
-        setBusinessPaymentDetails(detailsWithBusinessId);
-
-        // Fetch rooms for this resort
-        try {
-          const roomsResponse = await getPublicJSON(`/resort-rooms/${accommodation.user_id}`);
-          setResortRooms(Array.isArray(roomsResponse) ? roomsResponse : []);
-        } catch {
-          setResortRooms([]);
-        }
-
-        // Fetch blocked dates for this resort
-        try {
-          const blockedResponse = await getPublicJSON(`/resort-availability/${accommodation.user_id}`);
-          setBlockedDates(Array.isArray(blockedResponse) ? blockedResponse : []);
-        } catch {
-          setBlockedDates([]);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching resort payment details:', error);
-    }
-  };
-
-  const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        toast.error('File size must be less than 5MB');
-        return;
-      }
-      
-      setReceiptFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setReceiptPreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const removeReceipt = () => {
-    setReceiptFile(null);
-    setReceiptPreview(null);
-  };
-
-  const handleBookNow = async (accommodation: Accommodation) => {
-    if (!userType) {
-      toast.error('Please login to book accommodations');
-      navigate('/select-role');
-      return;
-    }
-
-    if (userType !== 'tourist') {
-      toast.error('Only tourists can book accommodations. Business accounts are for management only.');
-      return;
-    }
-
-    if (!checkIn || !checkOut) {
-      toast.error('Please select check-in and check-out dates');
-      return;
-    }
-
-    // Check if any date in the range is blocked
-    if (blockedDates.length > 0) {
-      const checkInDate = new Date(checkIn);
-      const checkOutDate = new Date(checkOut);
-      const blockedSet = new Set(blockedDates);
-      const current = new Date(checkInDate);
-      while (current < checkOutDate) {
-        const dateStr = current.toISOString().split('T')[0];
-        if (blockedSet.has(dateStr)) {
-          toast.error(`${dateStr} is not available. Please choose different dates.`);
-          return;
-        }
-        current.setDate(current.getDate() + 1);
-      }
-    }
-
-    // For online payment, validate receipt upload
-    if (paymentMethod === 'online') {
-      if (resortRooms.length === 0 && businessPaymentDetails.length === 0) {
-        // No payment details — allow booking without receipt (will be paid on arrival)
-      } else if (businessPaymentDetails.length === 0) {
-        toast.error('This resort has no payment methods set up. Please choose Cash on Arrival or Pay at Resort.');
-        return;
-      } else {
-        if (!selectedPayment) {
-          toast.error('Please select a payment account');
-          return;
-        }
-        if (!receiptFile) {
-          toast.error('Please upload your payment receipt screenshot');
-          return;
-        }
-        if (!paymentReference) {
-          toast.error('Please enter the transaction/reference number');
-          return;
-        }
-      }
-    }
-
-    const checkInDate = new Date(checkIn);
-    const checkOutDate = new Date(checkOut);
-    const nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (nights <= 0) {
-      toast.error('Check-out date must be after check-in date');
-      return;
-    }
-
-    const total = (selectedRoom ? selectedRoom.price_per_night : accommodation.pricePerNight) * nights;
-
-    try {
-      const booking = await postJSON('/bookings', {
-        accommodation_type: accommodation.type ?? 'static',
-        accommodation_id: accommodation.type === 'resort_profile' ? null : Number(accommodation.id),
-        resort_user_id: accommodation.type === 'resort_profile' ? accommodation.user_id : null,
-        accommodation_snapshot: {
-          ...accommodation,
-          selected_room: selectedRoom ?? null,
-          pricePerNight: selectedRoom ? selectedRoom.price_per_night : accommodation.pricePerNight,
-        },
-        check_in: checkIn,
-        check_out: checkOut,
-        payment_method: paymentMethod,
-        total,
-        user_role: userType,
-        user_id: currentUser?.id,
-      });
-
-      // If online payment, upload receipt
-      if (paymentMethod === 'online' && receiptFile && selectedPayment) {
-        const formData = new FormData();
-        formData.append('type', 'booking');
-        formData.append('reference_id', booking.id.toString());
-        formData.append('business_id', selectedPayment.business_id.toString());
-        formData.append('receipt_image', receiptFile);
-        formData.append('amount', total.toString());
-        formData.append('payment_method', selectedPayment.type);
-        formData.append('payment_reference', paymentReference);
-        formData.append('notes', paymentNotes);
-
-        const token = localStorage.getItem('discover-mansalay:token');
-        const receiptRes = await fetch(`${API_BASE}/api/payment-receipts`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-          body: formData,
-        });
-
-        if (!receiptRes.ok) {
-          // Booking was created but receipt upload failed — warn but don't block
-          const errData = await receiptRes.json().catch(() => ({}));
-          toast.error(`Booking created but receipt upload failed: ${errData.message ?? 'Please contact the resort.'}`);
-        }
-      }
-
-      addBooking({
-        accommodation,
-        checkIn,
-        checkOut,
-        status: booking.status ?? 'pending',
-        paymentMethod,
-        total,
-      });
-
-      const result = await showTransactionSuccess('booking');
-      setBookingModal(null);
-      setCheckIn('');
-      setCheckOut('');
-      setSelectedPayment(null);
-      setReceiptFile(null);
-      setReceiptPreview(null);
-      setPaymentReference('');
-      setPaymentNotes('');
-      setSelectedRoom(null);
-      setResortRooms([]);
-      setBlockedDates([]);      
-      if (result.isConfirmed) {
-        navigate('/status');
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create booking');
-    }
-  };
-
-  const getAvailabilityColor = (status: string) => {
-    switch (status) {
-      case 'available':
-        return 'bg-green-100 text-green-700';
-      case 'booked':
-        return 'bg-orange-100 text-orange-700';
-      case 'full':
-        return 'bg-red-100 text-red-700';
-      default:
-        return 'bg-gray-100 text-gray-700';
-    }
-  };
+    return matchesSearch && matchesType;
+  });
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      {!userType && (
-        <div className="bg-gradient-to-r from-primary/10 to-secondary/20 border-2 border-primary/20 rounded-lg p-6 mb-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div>
-              <h3 className="mb-1">👋 Browsing as Guest</h3>
-              <p className="text-sm text-muted-foreground">
-                Login to book accommodations and view availability
-              </p>
+    <div className="min-h-screen bg-gray-50/40 pb-16 font-sans">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+
+        {/* ── HEADER TITLE & SEARCH ── */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-8 bg-pink-500 rounded-full" />
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">Stays & Resorts</h1>
             </div>
-            <button
-              onClick={() => navigate('/select-role')}
-              className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors whitespace-nowrap inline-flex items-center gap-2"
-            >
-              <LogIn className="h-4 w-4" />
-              Login Now
-            </button>
+            <p className="text-xs sm:text-sm text-gray-500 mt-1 font-medium pl-4.5">
+              Discover resorts, glamping sites, and places to stay in Mansalay
+            </p>
           </div>
-        </div>
-      )}
 
-      {userType && userType !== 'tourist' && (
-        <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-300 rounded-lg p-6 mb-6">
-          <div className="flex items-center gap-3">
-            <Hotel className="h-6 w-6 text-blue-600" />
-            <div>
-              <h3 className="mb-1 text-blue-900">Business Account - Browse Only</h3>
-              <p className="text-sm text-blue-700">
-                You are logged in as <strong>{userType}</strong>. This is a business management account. Only tourists can book accommodations.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="mb-8">
-        <h1 className="mb-2">Accommodations</h1>
-        <p className="text-muted-foreground">
-          Find the perfect place to stay during your visit to Mansalay
-        </p>
-      </div>
-
-      {/* Search Bar with Filter Button */}
-      <div className="mb-6 flex gap-3">
-        <SearchBar
-          value={filters.search}
-          onChange={(value) => updateFilter({ search: value })}
-          placeholder="Search accommodations by name or description..."
-          className="flex-1"
-        />
-        <FilterButton
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          activeFilterCount={activeFilterCount}
-          isOpen={isSidebarOpen}
-        />
-      </div>
-
-      {/* Filter Chips */}
-      <FilterChips
-        filters={filters}
-        onRemoveFilter={handleRemoveFilter}
-      />
-
-      {/* Filter Sidebar */}
-      <FilterSidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        filters={filters}
-        onFilterChange={updateFilter}
-        onClearFilters={handleClearAllFilters}
-        availableBarangays={[]}
-        showBarangayFilter={false}
-        showDateFilters={true}
-      />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {filteredAccommodations.map(accommodation => {
-          const isExpanded = expandedId === accommodation.id;
-          const isBooking = bookingModal === accommodation.id;
-
-          return (
-            <div
-              key={accommodation.id}
-              className="bg-white border-2 border-primary/20 rounded-lg overflow-hidden hover:border-primary transition-all hover:shadow-lg"
-            >
-              <img
-                src={accommodation.image}
-                alt={accommodation.name}
-                className="w-full h-56 object-cover"
+          {/* Search Pill Input & Filter Dropdown */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search accommodations, types, or location..."
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-pink-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-full text-xs font-medium placeholder:text-gray-400 shadow-2xs outline-none transition-all"
               />
-              <div className="p-6">
-                <div className="flex justify-between items-start mb-2">
-                  <h3>{accommodation.name}</h3>
-                  <div className="text-right">
-                    <p className="text-primary">₱{accommodation.pricePerNight}</p>
-                    <p className="text-xs text-muted-foreground">per night</p>
-                  </div>
-                </div>
+            </div>
 
-                <div className="flex items-center gap-4 mb-3 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <MapPin className="h-4 w-4" />
-                    Mansalay
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Star className="h-4 w-4 fill-primary text-primary" />
-                    4.8
-                  </div>
-                  {/* Registered business: show View Business Page link */}
-                  {accommodation.user_id && (accommodation as any).is_registered && (
-                    <Link
-                      to={`/business/resort/${accommodation.user_id}`}
-                      className="flex items-center gap-1 text-primary hover:underline text-xs"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      View Business Page
-                    </Link>
-                  )}
-                  {accommodation.type === 'resort_profile' && (
-                    <span className="text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-                      Resort Profile
+            <div className="relative w-full sm:w-48">
+              <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-pink-500 pointer-events-none" />
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="w-full pl-9 pr-8 py-2.5 bg-white border border-pink-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-full text-xs font-semibold text-gray-700 shadow-2xs outline-none transition-all cursor-pointer appearance-none"
+              >
+                <option value="All">All Categories</option>
+                {typeCategories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            </div>
+          </div>
+        </div>
+
+        {/* ── COUNT SUBHEADER ── */}
+        <p className="text-xs font-semibold text-gray-400 mb-4">
+          Showing <span className="text-gray-900 font-bold">{filteredAccommodations.length}</span> stays
+        </p>
+
+        {/* ── CARDS GRID (4 COLUMNS) ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {filteredAccommodations.map(acc => {
+            const isSaved = savedAccIds.includes(acc.id);
+            return (
+              <div
+                key={acc.id}
+                onClick={() => setSelectedAcc(acc)}
+                className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-xs hover:shadow-xl transition-all cursor-pointer group flex flex-col justify-between"
+              >
+                {/* Image Container */}
+                <div className="relative h-60 bg-gray-900 overflow-hidden">
+                  <AutoSwipeCarousel
+                    images={acc.images && acc.images.length > 0 ? acc.images : [acc.image]}
+                    alt={acc.name}
+                    className="w-full h-full"
+                    intervalMs={3500}
+                  />
+
+                  {acc.badge && (
+                    <span className="absolute top-3 left-3 px-3 py-1 bg-pink-500 text-white text-[10px] font-bold rounded-full shadow-xs">
+                      {acc.badge}
                     </span>
                   )}
-                  {/* Unregistered static listing badge */}
-                  {!(accommodation as any).is_registered && !accommodation.user_id && (
-                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                      Static Listing
-                    </span>
-                  )}
-                </div>
 
-                {!isExpanded && (
-                  <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
-                    {accommodation.description}
-                  </p>
-                )}
-
-                {isExpanded && (
-                  <div className="mb-4 space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                      {accommodation.description}
-                    </p>
-
-                    <div className="bg-primary/5 p-4 rounded-lg">
-                      <h4 className="mb-3 flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        Availability Calendar
-                      </h4>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {Object.entries(accommodation.availability).map(([date, status]) => (
-                          <div
-                            key={date}
-                            className={`p-2 rounded text-xs text-center ${getAvailabilityColor(status)}`}
-                          >
-                            <p>{new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
-                            <p className="capitalize">{status}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setExpandedId(isExpanded ? null : accommodation.id)}
-                    className="flex-1 px-4 py-2 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors inline-flex items-center justify-center gap-2"
-                  >
-                    {isExpanded ? (
-                      <>
-                        Less Details <ChevronUp className="h-4 w-4" />
-                      </>
-                    ) : (
-                      <>
-                        More Details <ChevronDown className="h-4 w-4" />
-                      </>
-                    )}
-                  </button>
-
-                  {/* Unregistered static listing — no online booking */}
-                  {!(accommodation as any).is_registered && !(accommodation as any).user_id ? (
-                    <div className="flex-1 px-4 py-2 bg-gray-100 text-gray-500 border-2 border-gray-200 rounded-lg inline-flex items-center justify-center gap-2 text-sm cursor-default">
-                      <Hotel className="h-4 w-4" />
-                      Contact Directly
-                    </div>
-                  ) : (
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5">
                     <button
-                      onClick={() => handleOpenBooking(accommodation.id)}
-                      disabled={userType !== 'tourist' && userType !== null}
-                      className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShareData({
+                          title: acc.name,
+                          description: acc.description,
+                          image: acc.image,
+                          category: acc.type || 'Resort',
+                        });
+                      }}
+                      className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors hover:scale-110"
+                      title="Share this resort"
                     >
-                      {!userType ? (
-                        <>
-                          <LogIn className="h-4 w-4" />
-                          Login to Book
-                        </>
-                      ) : userType !== 'tourist' ? (
-                        <>
-                          <Building2 className="h-4 w-4" />
-                          Business Account
-                        </>
-                      ) : (
-                        <>
-                          <Hotel className="h-4 w-4" />
-                          Book Now
-                        </>
-                      )}
+                      <Share2 className="h-3.5 w-3.5" />
                     </button>
-                  )}
+                    <button
+                      onClick={(e) => toggleSaveAcc(acc, e)}
+                      className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
+                    >
+                      <Heart className={`h-3.5 w-3.5 ${isInWishlist(acc.id, 'accommodation') ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
+                    </button>
+                  </div>
+
+                  {/* Dark Overlay Rating */}
+                  <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-white text-[11px] font-bold">
+                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                    <span>{acc.rating || '4.8'}</span>
+                    <span className="text-gray-300 font-normal">({acc.likes || 89} saves)</span>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="p-4 flex-1 flex flex-col justify-between">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-gray-400">{acc.type || 'Resort'}</p>
+                    <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-0.5">{acc.name}</h3>
+                    <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 min-h-[32px]">{acc.description}</p>
+                  </div>
+
+                  <div className="flex items-center gap-1 text-[11px] text-pink-500 font-semibold mt-4 pt-3 border-t border-gray-100">
+                    <MapPin className="h-3.5 w-3.5" />
+                    <span className="truncate">{acc.location || 'Mansalay, Oriental Mindoro'}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── ACCOMMODATION DETAIL MODAL (Exact FIGMA Screenshot 3 Design) ── */}
+      {selectedAcc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setSelectedAcc(null)}
+        >
+          <div
+            className="bg-white rounded-3xl overflow-hidden max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Image Slider Header */}
+            <div className="relative h-64 bg-gray-900 flex-shrink-0">
+              <AutoSwipeCarousel
+                images={selectedAcc.images && selectedAcc.images.length > 0 ? selectedAcc.images : [selectedAcc.image]}
+                alt={selectedAcc.name}
+                className="w-full h-full"
+                intervalMs={3000}
+                showDots={true}
+                showArrows={true}
+              />
+
+              <button
+                onClick={() => setSelectedAcc(null)}
+                className="absolute top-4 right-4 w-8 h-8 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all z-20"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              {/* Rating Pill on Bottom Left */}
+              <div className="absolute bottom-3 left-4 flex items-center gap-1 px-3 py-1 bg-black/60 backdrop-blur-md rounded-full text-white text-xs font-bold">
+                <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                <span>{selectedAcc.rating || '4.7'}</span>
+                <span className="text-gray-300 font-normal">• {selectedAcc.likes || 89} saves</span>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="px-3 py-1 bg-pink-100 text-pink-600 text-[11px] font-bold rounded-full uppercase">
+                    {selectedAcc.type === 'resort_profile' ? 'Beach Resort' : (selectedAcc.type || 'Beach Resort')}
+                  </span>
+                  <h2 className="text-xl font-extrabold text-gray-900 mt-2">{selectedAcc.name}</h2>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setShareData({
+                        title: selectedAcc.name,
+                        description: selectedAcc.description,
+                        image: selectedAcc.image,
+                        category: selectedAcc.type || 'Resort',
+                      });
+                    }}
+                    className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-pink-50 hover:text-pink-600 transition-colors"
+                    title="Share this resort"
+                  >
+                    <Share2 className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => toggleSaveAcc(selectedAcc)} className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-pink-50"><Heart className={`h-4 w-4 ${savedAccIds.includes(selectedAcc.id) ? 'fill-pink-500 text-pink-500' : ''}`} /></button>
                 </div>
               </div>
 
-              {/* Booking Modal */}
-              {isBooking && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                  <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-                    <h3 className="mb-4">Book {accommodation.name}</h3>
-
-                    <div className="space-y-4 mb-6">
-                      <div>
-                        <label className="block text-sm mb-2">Check-in Date</label>
-                        <input
-                          type="date"
-                          value={checkIn}
-                          onChange={(e) => setCheckIn(e.target.value)}
-                          min={new Date().toISOString().split('T')[0]}
-                          className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm mb-2">Check-out Date</label>
-                        <input
-                          type="date"
-                          value={checkOut}
-                          onChange={(e) => setCheckOut(e.target.value)}
-                          min={checkIn || new Date().toISOString().split('T')[0]}
-                          className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                        />
-                      </div>
-
-                      {/* Availability Calendar — read-only for tourists */}
-                      {blockedDates.length > 0 && (
-                        <div>
-                          <label className="block text-sm font-medium mb-2 flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-primary" />
-                            Availability
-                          </label>
-                          <div className="border-2 border-primary/20 rounded-xl p-3 bg-primary/5">
-                            <AvailabilityCalendar
-                              blockedDates={blockedDates}
-                              onToggleDate={() => {}}
-                              readOnly
-                            />
-                            <p className="text-xs text-red-600 mt-2 text-center">
-                              🔴 Red dates are fully booked — please avoid selecting them
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Room Selection */}
-                      {resortRooms.length > 0 && (                        <div>
-                          <label className="block text-sm font-medium mb-2">Select Room</label>
-                          <div className="space-y-2">
-                            {resortRooms.map((room: any) => {
-                              const roomImg = room.image
-                                ? (String(room.image).startsWith('http') ? room.image : `${API_BASE}${room.image}`)
-                                : null;
-                              return (
-                                <label
-                                  key={room.id}
-                                  className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${
-                                    selectedRoom?.id === room.id
-                                      ? 'border-primary bg-primary/5'
-                                      : 'border-primary/20 hover:border-primary/50'
-                                  }`}
-                                >
-                                  <input
-                                    type="radio"
-                                    name="roomSelect"
-                                    checked={selectedRoom?.id === room.id}
-                                    onChange={() => setSelectedRoom(room)}
-                                    className="w-4 h-4 accent-primary"
-                                  />
-                                  {roomImg && (
-                                    <img src={roomImg} alt={room.name} className="w-16 h-12 object-cover rounded" />
-                                  )}
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <p className="font-medium text-sm">{room.name}</p>
-                                      {room.type && (
-                                        <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{room.type}</span>
-                                      )}
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">Up to {room.capacity} guests</p>
-                                    {room.description && (
-                                      <p className="text-xs text-muted-foreground line-clamp-1">{room.description}</p>
-                                    )}
-                                  </div>
-                                  <p className="text-primary font-semibold text-sm whitespace-nowrap">
-                                    ₱{Number(room.price_per_night).toLocaleString()}/night
-                                  </p>
-                                </label>
-                              );
-                            })}
-                          </div>
-                          {selectedRoom && bookingNights > 0 && (
-                            <div className="mt-3 p-3 bg-primary/5 rounded-lg">
-                              <p className="text-sm font-medium">
-                                {selectedRoom.name} × {bookingNights} night{bookingNights > 1 ? 's' : ''} = <span className="text-primary">₱{bookingTotal.toLocaleString()}</span>
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      <div>
-                        <label className="block text-sm mb-2">Payment Method</label>
-                        <div className="space-y-2">
-                          <label className="flex items-center gap-2 p-3 border-2 border-primary/20 rounded-lg cursor-pointer">
-                            <input
-                              type="radio"
-                              value="online"
-                              checked={paymentMethod === 'online'}
-                              onChange={(e) => setPaymentMethod(e.target.value as 'online' | 'otc' | 'cod')}
-                            />
-                            <CreditCard className="h-4 w-4 text-primary" />
-                            <span className="text-sm">Online Payment (Advance Payment)</span>
-                          </label>
-                          <label className="flex items-center gap-2 p-3 border-2 border-primary/20 rounded-lg cursor-pointer">
-                            <input
-                              type="radio"
-                              value="cod"
-                              checked={paymentMethod === 'cod'}
-                              onChange={(e) => setPaymentMethod(e.target.value as 'online' | 'otc' | 'cod')}
-                            />
-                            <Truck className="h-4 w-4 text-primary" />
-                            <span className="text-sm">Cash on Arrival</span>
-                          </label>
-                          <label className="flex items-center gap-2 p-3 border-2 border-primary/20 rounded-lg cursor-pointer">
-                            <input
-                              type="radio"
-                              value="otc"
-                              checked={paymentMethod === 'otc'}
-                              onChange={(e) => setPaymentMethod(e.target.value as 'online' | 'otc' | 'cod')}
-                            />
-                            <Building2 className="h-4 w-4 text-primary" />
-                            <span className="text-sm">Pay at Resort</span>
-                          </label>
-                        </div>
-                      </div>
-
-                      {/* Resort Payment Details for Online Payment */}
-                      {paymentMethod === 'online' && (
-                        <div className="bg-primary/5 border-2 border-primary/20 rounded-lg p-4">
-                          {businessPaymentDetails.length === 0 ? (
-                            <div className="text-center py-3">
-                              <CreditCard className="h-8 w-8 mx-auto text-orange-400 mb-2" />
-                              <p className="text-sm font-medium text-orange-800">No payment details set up</p>
-                              <p className="text-xs text-orange-700 mt-1">
-                                This resort hasn't added payment methods yet. Please choose Cash on Arrival or Pay at Resort.
-                              </p>
-                            </div>
-                          ) : (
-                            <>
-                              <h4 className="mb-2 font-semibold">Resort Payment Details</h4>
-                              <div className="bg-white rounded-lg px-3 py-2 mb-3 flex items-center justify-between">
-                                <span className="text-xs text-muted-foreground">Amount to transfer</span>
-                                <span className="font-bold text-primary">
-                                  {bookingTotal > 0 ? `₱${bookingTotal.toLocaleString()}` : 'Select dates first'}
-                                </span>
-                              </div>
-
-                              <div className="space-y-2 mb-4">
-                                {businessPaymentDetails.map((payment, index) => (
-                                  <label key={index} className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${selectedPayment === payment ? 'border-primary bg-white' : 'border-primary/20 hover:border-primary/50'}`}>
-                                    <input
-                                      type="radio"
-                                      name="resortPayment"
-                                      checked={selectedPayment === payment}
-                                      onChange={() => setSelectedPayment(payment)}
-                                      className="w-4 h-4 text-primary"
-                                    />
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2 mb-0.5">
-                                        <span className="text-xs font-bold text-white bg-primary px-1.5 py-0.5 rounded uppercase">{payment.type}</span>
-                                      </div>
-                                    </div>
-                                  </label>
-                                ))}
-                              </div>
-
-                              {selectedPayment && (
-                                <div className="space-y-3 bg-white rounded-lg p-3 border border-primary/10">
-                                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Upload Payment Proof</p>
-                                  <div>
-                                    <label className="block text-xs mb-1">Reference / Transaction No. *</label>
-                                    <input
-                                      type="text"
-                                      value={paymentReference}
-                                      onChange={(e) => setPaymentReference(e.target.value)}
-                                      className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm"
-                                      placeholder="e.g. 1234567890"
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-xs mb-1">Receipt Screenshot *</label>
-                                    {!receiptPreview ? (
-                                      <label
-                                        htmlFor="booking-receipt-upload"
-                                        className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-primary/30 rounded-lg cursor-pointer hover:border-primary hover:bg-primary/5 transition-all"
-                                      >
-                                        <Upload className="h-6 w-6 text-primary/40 mb-1" />
-                                        <span className="text-xs text-muted-foreground">Click to upload screenshot</span>
-                                        <input
-                                          type="file"
-                                          accept="image/*"
-                                          onChange={handleReceiptUpload}
-                                          className="hidden"
-                                          id="booking-receipt-upload"
-                                        />
-                                      </label>
-                                    ) : (
-                                      <div className="relative">
-                                        <img
-                                          src={receiptPreview}
-                                          alt="Receipt preview"
-                                          className="w-full h-32 object-cover rounded-lg border-2 border-primary/20"
-                                        />
-                                        <button
-                                          onClick={removeReceipt}
-                                          className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-xs mb-1">Notes (Optional)</label>
-                                    <textarea
-                                      value={paymentNotes}
-                                      onChange={(e) => setPaymentNotes(e.target.value)}
-                                      rows={2}
-                                      className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm resize-none"
-                                      placeholder="Any additional info..."
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => {
-                          setBookingModal(null);
-                          setSelectedPayment(null);
-                          setReceiptFile(null);
-                          setReceiptPreview(null);
-                          setPaymentReference('');
-                          setPaymentNotes('');
-                        }}
-                        className="flex-1 px-4 py-2 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => handleBookNow(accommodation)}
-                        className="flex-1 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                      >
-                        Confirm Booking
-                      </button>
-                    </div>
+              {/* Location & Directions Button */}
+              <div className="flex items-center justify-between bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                <div>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-gray-800">
+                    <MapPin className="h-4 w-4 text-pink-500" />
+                    <span>{selectedAcc.location || 'Mansalay, Oriental Mindoro'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-gray-500 font-medium mt-1">
+                    <Clock className="h-3.5 w-3.5 text-gray-400" />
+                    <span>8:00 AM – 8:00 PM</span>
                   </div>
                 </div>
-              )}
+
+                <button
+                  onClick={() => {
+                    const query = encodeURIComponent(`${selectedAcc.name} ${selectedAcc.location || 'Mansalay Oriental Mindoro'}`);
+                    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+                  }}
+                  className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1"
+                >
+                  <Navigation className="h-3 w-3" />
+                  <span>Directions</span>
+                </button>
+              </div>
+
+              {/* Description */}
+              <p className="text-xs text-gray-600 leading-relaxed font-normal">
+                {selectedAcc.description}
+              </p>
+
+              {/* Tags */}
+              <div className="flex flex-wrap gap-2">
+                {(selectedAcc.resort_amenities || ['Farm', 'Agri-tourism', 'Nature', 'Family-friendly']).map((amenity, i) => (
+                  <span key={i} className="px-3 py-1 bg-pink-50 text-pink-600 rounded-full text-[11px] font-semibold border border-pink-100">
+                    ♡ {amenity}
+                  </span>
+                ))}
+              </div>
+
+              {/* Contact & Connect Box */}
+              <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl space-y-2.5">
+                <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Contact & Connect</h4>
+                <div className="flex flex-wrap items-center gap-2">
+                  <a href={`tel:${selectedAcc.contact_number || '09123456789'}`} className="px-3.5 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5">
+                    <Phone className="h-3.5 w-3.5" /> Call
+                  </a>
+                  <a href="https://facebook.com" target="_blank" rel="noreferrer" className="px-3.5 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5">
+                    <Facebook className="h-3.5 w-3.5" /> Facebook
+                  </a>
+                  <a href="https://instagram.com" target="_blank" rel="noreferrer" className="px-3.5 py-2 bg-pink-50 text-pink-700 hover:bg-pink-100 border border-pink-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5">
+                    <Instagram className="h-3.5 w-3.5" /> Instagram
+                  </a>
+
+                </div>
+              </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── GUEST LOGIN REQUIRED MODAL ── */}
+      {showLoginModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setShowLoginModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center space-y-4 animate-in zoom-in-95 duration-200 relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowLoginModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="w-14 h-14 bg-pink-50 text-pink-500 rounded-full flex items-center justify-center mx-auto shadow-inner">
+              <Heart className="h-7 w-7 fill-pink-500/20 text-pink-500" />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-extrabold text-gray-900">Login Required</h3>
+              <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                You are currently in guest mode. Please log in or register to save accommodations to your wishlist.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setShowLoginModal(false);
+                  navigate('/select-role');
+                }}
+                className="w-full py-2.5 px-4 bg-pink-500 hover:bg-pink-600 text-white font-bold text-xs rounded-full shadow-md shadow-pink-500/20 transition-all"
+              >
+                Log In / Register
+              </button>
+              <button
+                onClick={() => setShowLoginModal(false)}
+                className="w-full py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs rounded-full transition-all"
+              >
+                Continue as Guest
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── SOCIAL SHARE MODAL ── */}
+      {shareData && (
+        <ShareModal
+          isOpen={!!shareData}
+          onClose={() => setShareData(null)}
+          title={shareData.title}
+          description={shareData.description}
+          image={shareData.image}
+          category={shareData.category}
+        />
+      )}
     </div>
   );
 }

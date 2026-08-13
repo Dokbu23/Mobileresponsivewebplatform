@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\ResortRoomController;
 use App\Http\Controllers\Api\ResortAvailabilityController;
 use App\Http\Controllers\Api\PromoCodeController;
 use App\Http\Controllers\Api\EnterpriseProfileController;
+use App\Http\Controllers\Api\LandmarkController;
 
 use App\Models\User;
 
@@ -48,6 +49,8 @@ Route::group(['prefix' => 'public'], function () {
     Route::get('products/{id}', [ProductController::class, 'show']);
     Route::get('accommodations', [AccommodationController::class, 'index']);
     Route::get('accommodations/{id}', [AccommodationController::class, 'show']);
+    Route::get('landmarks', [LandmarkController::class, 'index']);
+    Route::post('landmarks', [LandmarkController::class, 'store']);
 
     // Public resort rooms (for tourists when booking)
     Route::get('resort-rooms/{userId}', [ResortRoomController::class, 'publicIndex']);
@@ -61,10 +64,17 @@ Route::group(['prefix' => 'public'], function () {
     // Product reviews (public)
     Route::get('products/{productId}/reviews', [ReviewController::class, 'getProductReviews']);
 
-    // Public business profile pages (for registered businesses)
-    // Tourists can view dedicated pages of registered resort/enterprise owners
-    Route::get('business/resort/{userId}', [AccommodationController::class, 'businessProfile']);
-    Route::get('business/enterprise/{userId}', [ProductController::class, 'businessProfile']);
+    // Hero Video API (Public GET)
+    Route::get('hero-video', function () {
+        $video = \Illuminate\Support\Facades\Cache::get('hero_video');
+        if (!$video && \Illuminate\Support\Facades\Storage::disk('public')->exists('videos/hero.mp4')) {
+            $video = asset('storage/videos/hero.mp4');
+        }
+        return response()->json([
+            'video' => $video,
+            'title' => \Illuminate\Support\Facades\Cache::get('hero_video_title', 'Mansalay Hero Video')
+        ]);
+    });
 });
 
 // Authentication routes
@@ -87,6 +97,7 @@ Route::group(['middleware' => ['jwt.auth']], function () {
     Route::post('logout', [AuthController::class, 'logout']);
     Route::get('me', [AuthController::class, 'me']);
     Route::post('refresh', [AuthController::class, 'refresh']);
+    Route::post('setup-profile', [AuthController::class, 'setupProfile']);
 
     // Messaging routes (available to all authenticated users)
     Route::post('messages/send', [MessageController::class, 'send']);
@@ -104,6 +115,7 @@ Route::group(['middleware' => ['jwt.auth']], function () {
     // Promo code apply (tourist) — validate without redeeming
     Route::post('promo-codes/apply', [PromoCodeController::class, 'apply']);
     Route::post('promo-codes/redeem', [PromoCodeController::class, 'redeem']);
+    Route::post('landmarks', [LandmarkController::class, 'store']);
     Route::patch('profile', [UserController::class, 'updateProfile']);
     Route::post('profile', [UserController::class, 'updateProfile']); // FormData support
     Route::post('profile/change-password', [UserController::class, 'changePassword']);
@@ -184,6 +196,7 @@ Route::group(['middleware' => ['jwt.auth']], function () {
     Route::group(['middleware' => ['role:resort']], function () {
         Route::get('resort-profile', [App\Http\Controllers\Api\ResortProfileController::class, 'show']);
         Route::put('resort-profile', [App\Http\Controllers\Api\ResortProfileController::class, 'update']);
+        Route::post('resort-profile', [App\Http\Controllers\Api\ResortProfileController::class, 'update']); // FormData upload support
         Route::post('resort-profile/setup', [App\Http\Controllers\Api\ResortProfileController::class, 'setup']);
 
         // Room management
@@ -205,6 +218,7 @@ Route::group(['middleware' => ['jwt.auth']], function () {
     Route::group(['middleware' => ['role:enterprise']], function () {
         Route::get('enterprise-profile', [EnterpriseProfileController::class, 'show']);
         Route::put('enterprise-profile', [EnterpriseProfileController::class, 'update']);
+        Route::post('enterprise-profile', [EnterpriseProfileController::class, 'update']); // FormData upload support
         Route::post('enterprise-profile/setup', [EnterpriseProfileController::class, 'setup']);
     });
 
@@ -269,9 +283,61 @@ Route::group(['middleware' => ['jwt.auth']], function () {
             ]);
 
             $user = User::findOrFail($id);
+            $oldStatus = $user->listing_status;
             $user->update(['listing_status' => $data['status']]);
 
+            // Fire notification to the user about status change (fire-and-forget)
+            try {
+                if ($oldStatus !== $data['status'] && in_array($data['status'], ['approved', 'rejected'])) {
+                    $statusText = $data['status'] === 'approved' ? 'approved' : 'rejected';
+                    $statusMessage = $data['status'] === 'approved' 
+                        ? "Your {$user->role} account has been approved! You can now start using business features."
+                        : "Your {$user->role} account registration has been rejected. Please contact support for more information.";
+
+                    \App\Models\Notification::notify(
+                        $user->id,
+                        'account_status_change',
+                        "Account {$statusText}",
+                        $statusMessage,
+                        ['old_status' => $oldStatus, 'new_status' => $data['status'], 'role' => $user->role],
+                        '/profile'
+                    );
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('Account status notification failed', ['error' => $e->getMessage()]);
+            }
+
             return response()->json($user);
+        });
+
+        // Hero Video API (Admin POST upload / save)
+        Route::post('hero-video', function (Request $request) {
+            $url = null;
+            if ($request->hasFile('video')) {
+                $file = $request->file('video');
+                $ext = $file->getClientOriginalExtension() ?: 'mp4';
+                $path = $file->storeAs('videos', 'hero_' . time() . '.' . $ext, 'public');
+                $url = '/storage/' . $path;
+                \Illuminate\Support\Facades\Cache::forever('hero_video', $url);
+            } elseif ($request->filled('video_url')) {
+                $url = $request->input('video_url');
+                \Illuminate\Support\Facades\Cache::forever('hero_video', $url);
+            }
+            if ($request->filled('title')) {
+                \Illuminate\Support\Facades\Cache::forever('hero_video_title', $request->input('title'));
+            }
+            return response()->json([
+                'success' => true,
+                'video' => $url ?? \Illuminate\Support\Facades\Cache::get('hero_video'),
+                'message' => 'Hero video saved successfully'
+            ]);
+        });
+
+        // Delete Hero Video (Admin)
+        Route::delete('hero-video', function () {
+            \Illuminate\Support\Facades\Cache::forget('hero_video');
+            \Illuminate\Support\Facades\Cache::forget('hero_video_title');
+            return response()->json(['success' => true, 'message' => 'Hero video removed']);
         });
     });
 

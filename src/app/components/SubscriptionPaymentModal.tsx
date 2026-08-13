@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Upload, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
-import { getAuthToken, getPublicPaymentSettings } from '../lib/api';
+import { getAuthToken, getPublicPaymentSettings, API_BASE } from '../lib/api';
 
 interface SubscriptionPaymentModalProps {
   isOpen: boolean;
@@ -100,7 +100,7 @@ export function SubscriptionPaymentModal({
       }
 
       const token = getAuthToken();
-      const response = await fetch('http://localhost:8000/api/subscription/payment', {
+      const response = await fetch(`${API_BASE}/api/subscription/payment`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -109,15 +109,15 @@ export function SubscriptionPaymentModal({
       });
 
       if (!response.ok) {
-        throw new Error('Failed to upload payment');
+        const errData = await response.json().catch(() => null);
+        throw new Error(errData?.message || 'Failed to upload payment');
       }
 
       toast.success('Payment receipt uploaded! Waiting for admin verification.');
       setIsSubmitted(true);
       onPaymentSubmitted();
-    } catch (error) {
-      toast.error('Failed to upload payment receipt');
-      console.error(error);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to upload payment receipt');
     } finally {
       setIsSubmitting(false);
     }
@@ -193,8 +193,7 @@ export function SubscriptionPaymentModal({
         <div className="p-6">
           <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4 mb-6">
             <p className="text-yellow-800 font-medium">
-              🎉 To unlock all features and start managing your {userRole === 'enterprise' ? 'products' : 'accommodations'}, 
-              please complete your subscription payment.
+              🎉 <strong>Kailangan ang Subscription Payment!</strong> Magbayad muna ng Subscription Fee upang ma-access ang full features at ma-manage ang iyong {userRole === 'enterprise' ? 'mga produkto' : 'resort accommodations'}.
             </p>
           </div>
 

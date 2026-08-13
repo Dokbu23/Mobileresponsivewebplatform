@@ -52,7 +52,7 @@ class NotificationContentPropertyTest extends TestCase
     {
         return User::factory()->create(array_merge([
             'role'                => 'enterprise',
-            'subscription_status' => 'active',
+            'subscription_status' => 'paid',
         ], $overrides));
     }
 

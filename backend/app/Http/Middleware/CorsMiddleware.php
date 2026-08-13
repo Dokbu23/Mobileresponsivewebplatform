@@ -26,8 +26,10 @@ class CorsMiddleware
             // Development URLs
             'http://localhost:3000',
             'http://localhost:5173',
+            'http://localhost:5174',  // Added for current Vite dev server
             'http://127.0.0.1:3000',
             'http://127.0.0.1:5173',
+            'http://127.0.0.1:5174',  // Added for current Vite dev server
             
             // Production URLs (update mo ito with your actual domain)
             'https://discovermansalay.com',

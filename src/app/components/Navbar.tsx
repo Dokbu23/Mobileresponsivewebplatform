@@ -1,9 +1,13 @@
 import { Link, useLocation, useNavigate } from 'react-router';
-import { ShoppingCart, Menu, X, MapPin, User, LogOut, Shield, Hotel, Store, Moon, Sun } from 'lucide-react';
+import { Menu, X, MapPin, User, LogOut, Shield, Hotel, Store, Moon, Sun, Search, Heart, ChevronDown, Plus, LayoutDashboard, Calendar, CreditCard, Settings } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
-import { NotificationBell } from './NotificationBell';
+
 import { showLogoutConfirm, showLogoutSuccess } from '../lib/sweetAlert';
+import { API_BASE, postJSON, removeAuthToken } from '../lib/api';
+
+import { NotificationBell } from './NotificationBell';
 
 type RoleType = 'tourist' | 'admin' | 'resort' | 'enterprise';
 
@@ -15,7 +19,7 @@ type RoleMenuItem = {
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const { cart, userType, setUserType, setIsAdmin, clearCart, setCurrentUser, currentUser } = useApp();
+  const { userType, setUserType, setIsAdmin, setCurrentUser, currentUser } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -47,7 +51,7 @@ export function Navbar() {
         return '/enterprise/dashboard';
       case 'tourist':
       default:
-        return '/';
+        return '/dashboard';
     }
   })();
 
@@ -56,38 +60,30 @@ export function Navbar() {
     { path: '/attractions', label: 'Attractions' },
     { path: '/events', label: 'Events' },
     { path: '/products', label: 'Products' },
-    { path: '/accommodations', label: 'Accommodations' },
-    { path: '/map', label: '🗺️ Map' },
+    { path: '/accommodations', label: 'Stays' },
+    { path: '/map', label: 'Map' },
+    { path: '/itinerary', label: 'Itinerary' },
   ];
-
-  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const roleMenuItems: Record<RoleType, RoleMenuItem[]> = {
     tourist: [
       { to: '/profile', label: 'My Profile' },
-      { to: '/status', label: 'My Orders & Bookings' },
-      { to: '/messages', label: 'Messages' },
       { to: '/settings', label: 'Settings' },
     ],
     admin: [
       { to: '/profile', label: 'My Profile' },
-      { to: '/admin/listings', label: 'Manage Listings' },
+      { to: '/admin/publish', label: 'Manage Listings' },
       { to: '/admin/events', label: 'Manage Events' },
       { to: '/admin/users', label: 'User Management' },
       { to: '/admin/subscriptions', label: 'Subscriptions' },
-      { to: '/admin/payment-settings', label: 'Payment Settings' },
-      { to: '/messages', label: 'Messages' },
     ],
     resort: [
       { to: '/profile', label: 'My Profile' },
       { to: '/resort/profile', label: 'Manage Resort' },
-      { to: '/messages', label: 'Messages' },
     ],
     enterprise: [
       { to: '/profile', label: 'My Profile' },
       { to: '/enterprise/profile', label: 'Manage Products' },
-      { to: '/enterprise/orders', label: 'Manage Orders' },
-      { to: '/messages', label: 'Messages' },
     ],
   };
 
@@ -99,15 +95,18 @@ export function Navbar() {
       return;
     }
 
+    removeAuthToken();
     setUserType(null);
     setIsAdmin(false);
     setCurrentUser(null);
-    clearCart();
     window.localStorage.removeItem('discover-mansalay:userType');
     window.localStorage.removeItem('discover-mansalay:isAdmin');
+    window.localStorage.removeItem('discover-mansalay:user');
+    window.localStorage.removeItem('discover-mansalay:currentUser');
+    window.localStorage.removeItem('user');
     setShowUserMenu(false);
     await showLogoutSuccess();
-    navigate('/select-role');
+    navigate('/login');
   };
 
   const closeMenus = () => {
@@ -116,120 +115,257 @@ export function Navbar() {
   };
 
   const getRoleInfo = () => {
+    const name = currentUser?.name?.split(' ')[0] || (userType ? userType.charAt(0).toUpperCase() + userType.slice(1) : 'Guest');
+    const initial = name.charAt(0).toUpperCase();
+
     switch (userType) {
       case 'tourist':
-        return { icon: User, label: currentUser?.name || 'Tourist', color: 'text-blue-600' };
+        return { initial, label: name, bg: 'bg-blue-500', color: 'text-blue-600' };
       case 'admin':
-        return { icon: Shield, label: currentUser?.name || 'Admin', color: 'text-purple-600' };
+        return { initial, label: 'Admin', bg: 'bg-purple-500', color: 'text-purple-600' };
       case 'resort':
-        return { icon: Hotel, label: currentUser?.name || 'Resort Owner', color: 'text-green-600' };
+        return { initial, label: name, bg: 'bg-emerald-500', color: 'text-emerald-600' };
       case 'enterprise':
-        return { icon: Store, label: currentUser?.name || 'Enterprise', color: 'text-pink-600' };
+        return { initial, label: name, bg: 'bg-amber-500', color: 'text-amber-600' };
       default:
-        return { icon: User, label: 'Guest', color: 'text-gray-600' };
+        return { initial: 'G', label: 'Guest', bg: 'bg-gray-400', color: 'text-gray-600' };
     }
   };
 
   const roleInfo = getRoleInfo();
-  const RoleIcon = roleInfo.icon;
 
   return (
-    <nav className="bg-white border-b-2 border-primary/20 sticky top-0 z-50 shadow-sm">
+    <header className="sticky top-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-gray-100 dark:border-slate-800/80 shadow-sm transition-colors duration-200">
+      {/* Top Pink Line */}
+      <div className="h-1 bg-gradient-to-r from-pink-500 via-rose-400 to-pink-500 w-full" />
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          <Link to="/" className="flex items-center gap-2">
-            <MapPin className="h-8 w-8 text-primary" />
-            <span className="text-xl text-primary">DiscoverMansalay</span>
+          
+          {/* Logo */}
+          <Link to={dashboardPath} className="flex items-center gap-2 group">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-400 flex items-center justify-center text-white shadow-md shadow-pink-500/20 group-hover:scale-105 transition-transform">
+              <MapPin className="h-5 w-5 fill-white stroke-pink-500" />
+            </div>
+            <span className="text-lg font-extrabold tracking-tight">
+              <span className="text-pink-500">Discover</span>
+              <span className="text-pink-600 dark:text-pink-400">Mansalay</span>
+            </span>
           </Link>
 
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-6">
-            {navLinks.map(link => (
-              <Link
-                key={link.path}
-                to={link.path}
-                className={`transition-colors ${
-                  location.pathname === link.path
-                    ? 'text-primary'
-                    : 'text-foreground hover:text-primary'
-                }`}
+          {/* Desktop Navigation Links */}
+          <div className="hidden lg:flex items-center gap-1 xl:gap-2">
+            {navLinks.map(link => {
+              const isActive = location.pathname === link.path || (link.label === 'Home' && (location.pathname === '/' || location.pathname === '/dashboard'));
+              const isProtectedLink = (link.path === '/map' || link.path === '/itinerary');
+
+              return (
+                <Link
+                  key={link.path}
+                  to={link.path}
+                  onClick={(e) => {
+                    if (isProtectedLink && !currentUser) {
+                      e.preventDefault();
+                      toast.error(`Please log in to access ${link.label}`);
+                      navigate('/tourist/login');
+                    }
+                  }}
+                  className={`text-xs xl:text-sm font-semibold transition-all px-3 py-1.5 rounded-full ${
+                    isActive
+                      ? 'bg-pink-100/70 dark:bg-pink-500/20 text-pink-600 dark:text-pink-400 font-bold shadow-xs'
+                      : 'text-gray-600 dark:text-slate-300 hover:text-pink-600 dark:hover:text-pink-400 hover:bg-pink-50/50 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* Right Action Icons & Profile */}
+          <div className="hidden md:flex items-center gap-3">
+            {/* Search Button */}
+            <button
+              onClick={() => navigate('/attractions')}
+              className="p-2 text-gray-600 dark:text-slate-300 hover:text-pink-500 dark:hover:text-pink-400 hover:bg-pink-50 dark:hover:bg-slate-800 rounded-full transition-colors"
+              title="Search"
+            >
+              <Search className="h-5 w-5" />
+            </button>
+
+            {/* Wishlist Button - Only shown when logged in */}
+            {currentUser && (
+              <button
+                onClick={() => navigate('/wishlist')}
+                className="p-2 text-gray-600 dark:text-slate-300 hover:text-pink-500 dark:hover:text-pink-400 hover:bg-pink-50 dark:hover:bg-slate-800 rounded-full transition-colors relative"
+                title="Wishlist"
               >
-                {link.label}
-              </Link>
-            ))}
+                <Heart className="h-5 w-5" />
+              </button>
+            )}
+
+            {/* Notification Bell - Only shown when logged in */}
+            {currentUser && <NotificationBell />}
 
             {/* Dark mode toggle */}
             <button
               onClick={toggleDark}
-              className="p-2 rounded-lg hover:bg-primary/10 transition-colors"
+              className="p-2 rounded-full text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
               title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
               {isDark ? (
                 <Sun className="h-5 w-5 text-yellow-400" />
               ) : (
-                <Moon className="h-5 w-5 text-gray-600" />
+                <Moon className="h-5 w-5 text-gray-600 dark:text-slate-300" />
               )}
             </button>
 
-            {/* Show cart only for tourists */}
-            {userType === 'tourist' ? (              <Link to="/cart" className="relative">
-                <ShoppingCart className="h-6 w-6 text-foreground hover:text-primary transition-colors" />
-                {cartCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-primary text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    {cartCount}
-                  </span>
-                )}
-              </Link>
-            ) : null}
-
-            {/* Notification Bell - Show for all logged in users */}
-            {userType && <NotificationBell />}
-
-            {/* User Role Menu */}
+            {/* User Role Dropdown Pill */}
             {userType ? (
               <div className="relative">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary/10 border-2 border-primary/20 rounded-lg hover:border-primary transition-colors"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-pink-50/60 border border-pink-200 hover:border-pink-300 rounded-full transition-all text-xs font-semibold text-gray-700 shadow-2xs"
                 >
-                  <RoleIcon className={`h-5 w-5 ${roleInfo.color}`} />
-                  <span className="text-sm">{roleInfo.label}</span>
+                  {currentUser?.avatar ? (
+                    <img
+                    src={currentUser.avatar.startsWith('http') ? currentUser.avatar : `${API_BASE}${currentUser.avatar}`}
+                      alt="avatar"
+                      className="w-6 h-6 rounded-full object-cover border border-pink-200"
+                    />
+                  ) : (
+                    <div className={`w-6 h-6 rounded-full ${roleInfo.bg} text-white flex items-center justify-center text-[11px] font-bold`}>
+                      {roleInfo.initial}
+                    </div>
+                  )}
+                  <span className="font-bold text-gray-800">{roleInfo.label}</span>
+                  <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
                 </button>
 
                 {showUserMenu && (
                   <>
-                    {/* Backdrop to close menu when clicking outside */}
                     <div 
                       className="fixed inset-0 z-10" 
                       onClick={() => setShowUserMenu(false)}
                     />
-                    <div className="absolute right-0 mt-2 w-56 bg-white border-2 border-primary/20 rounded-lg shadow-lg overflow-hidden z-20">
-                      <div className="p-3 border-b border-primary/20 bg-primary/5">
-                        <p className="text-sm text-muted-foreground">Current Role</p>
-                        <p className={`flex items-center gap-2 font-medium ${roleInfo.color}`}>
-                          <RoleIcon className="h-4 w-4" />
-                          {roleInfo.label}
-                        </p>
+                    <div className="absolute right-0 mt-2 w-64 bg-white border border-pink-100/80 rounded-3xl shadow-xl overflow-hidden z-30 animate-in fade-in slide-in-from-top-2 duration-150 p-2 font-sans">
+                      {/* Header Avatar Card matching screenshot */}
+                      <div className="p-3 flex items-center gap-3">
+                        {currentUser?.avatar ? (
+                          <img
+                            src={currentUser.avatar.startsWith('http') ? currentUser.avatar : `${API_BASE}${currentUser.avatar}`}
+                            alt="avatar"
+                            className="w-10 h-10 rounded-full object-cover border-2 border-pink-100"
+                          />
+                        ) : (
+                          <div className={`w-10 h-10 rounded-full ${roleInfo.bg} text-white font-extrabold flex items-center justify-center text-base shadow-xs`}>
+                            {roleInfo.initial}
+                          </div>
+                        )}
+                        <div>
+                          <h4 className="text-sm font-extrabold text-gray-900 leading-tight">
+                            {currentUser?.name || roleInfo.label}
+                          </h4>
+                          <p className="text-xs text-gray-400 font-medium capitalize">{userType}</p>
+                        </div>
                       </div>
-                      <div className="py-1">
-                        {activeRoleItems.map(item => (
+
+                      <div className="border-t border-pink-100/60 my-1" />
+
+                      {/* Main Menu Items with Icons matching screenshot */}
+                      {userType === 'tourist' ? (
+                        <div className="space-y-0.5">
                           <Link
-                            key={item.to}
-                            to={item.to}
+                            to="/profile"
                             onClick={() => setShowUserMenu(false)}
-                            className="block px-4 py-3 hover:bg-primary/5 transition-colors text-foreground"
+                            className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
                           >
-                            {item.label}
+                            <User className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                            <span>My Profile</span>
                           </Link>
-                        ))}
-                      </div>
-                      <div className="border-t border-primary/20">
+
+                          <Link
+                            to="/wishlist"
+                            onClick={() => setShowUserMenu(false)}
+                            className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
+                          >
+                            <Heart className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                            <span>My Wishlist</span>
+                          </Link>
+
+                          <Link
+                            to="/itinerary"
+                            onClick={() => setShowUserMenu(false)}
+                            className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
+                          >
+                            <Calendar className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                            <span>My Itineraries</span>
+                          </Link>
+                        </div>
+                      ) : userType === 'admin' ? (
+                        <div className="space-y-0.5">
+                          <Link
+                            to="/admin/dashboard"
+                            onClick={() => setShowUserMenu(false)}
+                            className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
+                          >
+                            <Shield className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                            <span>Dashboard</span>
+                          </Link>
+
+                          <Link
+                            to="/admin/users"
+                            onClick={() => setShowUserMenu(false)}
+                            className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
+                          >
+                            <MapPin className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                            <span>Account Management</span>
+                          </Link>
+
+                          <Link
+                            to="/admin/subscriptions"
+                            onClick={() => setShowUserMenu(false)}
+                            className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
+                          >
+                            <CreditCard className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                            <span>Manage Subscriptions</span>
+                          </Link>
+
+                          <Link
+                            to="/admin/publish"
+                            onClick={() => setShowUserMenu(false)}
+                            className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
+                          >
+                            <Plus className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                            <span>Publish Content</span>
+                          </Link>
+                        </div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {activeRoleItems.map(item => (
+                            <Link
+                              key={item.to}
+                              to={item.to}
+                              onClick={() => setShowUserMenu(false)}
+                              className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
+                            >
+                              <Shield className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                              <span>{item.label}</span>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="border-t border-pink-100/60 my-1" />
+
+                      {/* Logout */}
+                      <div className="space-y-0.5">
                         <button
                           onClick={handleLogout}
-                          className="w-full text-left px-4 py-3 hover:bg-destructive/10 transition-colors flex items-center gap-2 text-destructive font-medium"
+                          className="w-full flex items-center gap-3 px-3.5 py-2.5 hover:bg-rose-50 rounded-2xl transition-colors text-xs font-bold text-rose-600"
                         >
-                          <LogOut className="h-4 w-4" />
-                          Logout
+                          <LogOut className="h-4 w-4 text-rose-500 flex-shrink-0" />
+                          <span>Logout</span>
                         </button>
                       </div>
                     </div>
@@ -238,30 +374,21 @@ export function Navbar() {
               </div>
             ) : (
               <Link
-                to="/select-role"
-                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                to="/login"
+                className="flex items-center gap-2 px-4 py-1.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white rounded-full transition-all text-xs font-semibold shadow-md shadow-pink-500/25 active:scale-95"
               >
-                <User className="h-5 w-5" />
-                <span className="text-sm">Login / Register</span>
+                <User className="h-3.5 w-3.5" />
+                <span>Login / Register</span>
               </Link>
             )}
           </div>
 
           {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center gap-2">
-            <button
-              onClick={toggleDark}
-              className="p-2 rounded-lg hover:bg-primary/10 transition-colors"
-            >
-              {isDark ? (
-                <Sun className="h-5 w-5 text-yellow-400" />
-              ) : (
-                <Moon className="h-5 w-5 text-gray-600" />
-              )}
-            </button>
+          <div className="lg:hidden flex items-center gap-2">
+            <NotificationBell />
             <button
               onClick={() => setIsOpen(!isOpen)}
-              className="p-2"
+              className="p-2 text-gray-700 hover:bg-gray-100 rounded-xl"
             >
               {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
@@ -270,58 +397,64 @@ export function Navbar() {
 
         {/* Mobile Navigation */}
         {isOpen && (
-          <div className="md:hidden pb-4 space-y-2">
-            <div className="px-4 py-3 bg-primary/5 rounded-lg mb-2">
-              <p className="text-xs text-muted-foreground">Current Role</p>
-              <p className={`flex items-center gap-2 ${roleInfo.color}`}>
-                <RoleIcon className="h-4 w-4" />
-                {roleInfo.label}
-              </p>
-            </div>
+          <div className="lg:hidden pb-4 pt-2 space-y-1.5 border-t border-gray-100">
             {navLinks.map(link => (
               <Link
                 key={link.path}
                 to={link.path}
-                onClick={() => setIsOpen(false)}
-                className={`block px-4 py-2 rounded ${
+                onClick={(e) => {
+                  setIsOpen(false);
+                  if ((link.path === '/map' || link.path === '/itinerary') && !currentUser) {
+                    e.preventDefault();
+                    toast.error(`Please log in to access ${link.label}`);
+                    navigate('/tourist/login');
+                  }
+                }}
+                className={`block px-4 py-2.5 rounded-xl text-xs font-semibold ${
                   location.pathname === link.path
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-foreground hover:bg-primary/5'
+                    ? 'bg-pink-100/70 text-pink-600'
+                    : 'text-gray-700 hover:bg-pink-50/50'
                 }`}
               >
                 {link.label}
               </Link>
             ))}
-            {/* Show cart only for tourists in mobile */}
-            {userType === 'tourist' && (
+
+            {userType ? (
+              <>
+                <div className="pt-2 border-t border-gray-100">
+                  {activeRoleItems.map(item => (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      onClick={closeMenus}
+                      className="block px-4 py-2 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50"
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                  <button
+                    onClick={handleLogout}
+                    className="w-full mt-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-semibold flex items-center justify-center gap-2"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Logout
+                  </button>
+                </div>
+              </>
+            ) : (
               <Link
-                to="/cart"
+                to="/login"
                 onClick={() => setIsOpen(false)}
-                className="block px-4 py-2 rounded text-foreground hover:bg-primary/5"
+                className="block w-full text-center py-2.5 bg-pink-500 text-white rounded-xl text-xs font-bold shadow-md shadow-pink-500/25 mt-2"
               >
-                Cart ({cartCount})
+                Login / Register
               </Link>
             )}
-            {activeRoleItems.map(item => (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={closeMenus}
-                className="block px-4 py-2 rounded text-foreground hover:bg-primary/5"
-              >
-                {item.label}
-              </Link>
-            ))}
-            <button
-              onClick={handleLogout}
-              className="w-full px-4 py-2 bg-destructive text-white rounded-lg text-center flex items-center justify-center gap-2"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </button>
           </div>
         )}
       </div>
-    </nav>
+    </header>
   );
 }
+
