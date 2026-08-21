@@ -8,6 +8,7 @@ import { showSuccessAlert } from '../../lib/sweetAlert';
 export function EnterpriseProfileSetup() {
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
+  const [storeName, setStoreName] = useState('');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
@@ -41,7 +42,9 @@ export function EnterpriseProfileSetup() {
     try {
       const token = getAuthToken();
       const formData = new FormData();
-      formData.append('store_name', 'default'); // Will use the name from registration
+      if (storeName.trim()) {
+        formData.append('store_name', storeName.trim());
+      }
       if (logoFile) formData.append('logo', logoFile);
       if (bannerFile) formData.append('banner', bannerFile);
 
@@ -78,6 +81,19 @@ export function EnterpriseProfileSetup() {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white border-2 border-primary/20 rounded-lg p-6 space-y-6">
+        {/* Store Name Input */}
+        <div>
+          <label className="block text-sm font-medium mb-2">Shop / Business Name</label>
+          <input
+            type="text"
+            value={storeName}
+            onChange={(e) => setStoreName(e.target.value)}
+            placeholder="e.g. AWATI Shop, Mansalay Crafts"
+            className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm"
+          />
+          <p className="text-xs text-muted-foreground mt-1">Leave blank to use the business name you entered during registration.</p>
+        </div>
+
         {/* Logo Upload */}
         <div>
           <label className="block text-sm font-medium mb-2">Store Logo <span className="text-red-500">*</span></label>

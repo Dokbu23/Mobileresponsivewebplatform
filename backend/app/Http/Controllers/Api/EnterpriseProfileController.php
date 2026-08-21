@@ -27,6 +27,10 @@ class EnterpriseProfileController extends Controller
             'address'           => $user->address,
             'barangay'          => $user->barangay,
             'description'       => $user->description,
+            'facebook_link'     => $user->facebook_link,
+            'instagram_link'    => $user->instagram_link,
+            'latitude'          => $user->latitude,
+            'longitude'         => $user->longitude,
         ]);
     }
 
@@ -56,8 +60,8 @@ class EnterpriseProfileController extends Controller
         }
 
         $user->update([
-            'store_name'        => ($data['store_name'] && $data['store_name'] !== 'default') ? $data['store_name'] : $user->name,
-            'store_description' => $data['store_description'] ?? $user->description,
+            'store_name'        => ($data['store_name'] && $data['store_name'] !== 'default') ? $data['store_name'] : ($user->store_name ?: $user->name),
+            'store_description' => $data['store_description'] ?? ($user->store_description ?: $user->description),
             'store_logo'        => $data['store_logo'] ?? $user->store_logo,
             'store_banner'      => $data['store_banner'] ?? $user->store_banner,
             'store_is_setup'    => true,
@@ -86,6 +90,10 @@ class EnterpriseProfileController extends Controller
             'phone'             => 'nullable|string|max:20',
             'address'           => 'nullable|string|max:500',
             'barangay'          => 'nullable|string|max:100',
+            'facebook_link'     => 'nullable|string|max:500',
+            'instagram_link'    => 'nullable|string|max:500',
+            'latitude'          => 'nullable|numeric',
+            'longitude'         => 'nullable|numeric',
             'logo'              => 'nullable|file|mimes:jpg,jpeg,png,webp|max:5120',
             'banner'            => 'nullable|file|mimes:jpg,jpeg,png,webp|max:5120',
         ]);
@@ -108,6 +116,10 @@ class EnterpriseProfileController extends Controller
             'phone'             => $data['phone'] ?? null,
             'address'           => $data['address'] ?? null,
             'barangay'          => $data['barangay'] ?? null,
+            'facebook_link'     => $data['facebook_link'] ?? null,
+            'instagram_link'    => $data['instagram_link'] ?? null,
+            'latitude'          => $data['latitude'] ?? null,
+            'longitude'         => $data['longitude'] ?? null,
         ], fn($v) => $v !== null);
 
         $user->update($updateData);
@@ -115,6 +127,56 @@ class EnterpriseProfileController extends Controller
         return response()->json([
             'message' => 'Store profile updated successfully.',
             'user'    => $user->fresh(),
+        ]);
+    }
+
+    /**
+     * GET /api/public/business/enterprise/{userId}
+     * Public enterprise business profile — no auth required.
+     * Returns store info + products added by this enterprise.
+     */
+    public function publicProfile(int $userId)
+    {
+        $owner = \App\Models\User::where('id', $userId)
+            ->where('role', 'enterprise')
+            ->where('listing_status', 'approved')
+            ->firstOrFail();
+
+        $products = \App\Models\Product::where('user_id', $userId)
+            ->get()
+            ->map(function ($p) {
+                return [
+                    'id'          => $p->id,
+                    'name'        => $p->name,
+                    'description' => $p->description,
+                    'price'       => (float) $p->price,
+                    'stock'       => (int) $p->stock,
+                    'category'    => $p->category,
+                    'image'       => $p->image,
+                ];
+            });
+
+        return response()->json([
+            'owner' => [
+                'id'               => $owner->id,
+                'name'             => $owner->name,
+                'email'            => $owner->email,
+                'phone'            => $owner->phone,
+                'address'          => $owner->address,
+                'barangay'         => $owner->barangay,
+                'description'      => $owner->store_description ?? $owner->description,
+                'store_name'       => $owner->store_name,
+                'store_description'=> $owner->store_description,
+                'store_logo'       => $owner->store_logo,
+                'store_banner'     => $owner->store_banner,
+                'store_is_setup'   => (bool) $owner->store_is_setup,
+                'facebook_link'    => $owner->facebook_link,
+                'instagram_link'   => $owner->instagram_link,
+                'last_active_at'   => $owner->updated_at,
+                'created_at'       => $owner->created_at,
+            ],
+            'products'      => $products,
+            'is_registered' => true,
         ]);
     }
 }

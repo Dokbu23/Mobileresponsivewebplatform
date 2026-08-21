@@ -2,14 +2,12 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Calendar,
-  Heart,
   CheckCircle2,
   Wand2,
   Edit3,
   MapPin,
   ArrowRight,
   Sparkles,
-  Compass,
   Plus,
   Trash2,
   Clock,
@@ -20,7 +18,6 @@ import {
   Check,
   Navigation,
   BookmarkCheck,
-  FolderHeart
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
@@ -78,15 +75,6 @@ export function Itinerary() {
     }
   }, [currentUser, navigate]);
 
-  const [savedIds, setSavedIds] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem('discover-mansalay:saved-itineraries');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-
   const [myCustomTrips, setMyCustomTrips] = useState<ItineraryCard[]>(() => {
     try {
       const stored = localStorage.getItem('discover-mansalay:custom-trips');
@@ -96,7 +84,6 @@ export function Itinerary() {
     }
   });
 
-  const [activeTab, setActiveTab] = useState<'suggested' | 'my-trips'>('suggested');
   const [selectedItinerary, setSelectedItinerary] = useState<ItineraryCard | null>(null);
 
   // Modals
@@ -133,15 +120,6 @@ export function Itinerary() {
     }
   ]);
 
-  // Persist saved IDs
-  useEffect(() => {
-    try {
-      localStorage.setItem('discover-mansalay:saved-itineraries', JSON.stringify(savedIds));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [savedIds]);
-
   // Persist custom trips
   useEffect(() => {
     try {
@@ -150,30 +128,6 @@ export function Itinerary() {
       console.error(e);
     }
   }, [myCustomTrips]);
-
-  const [suggestedItineraries, setSuggestedItineraries] = useState<ItineraryCard[]>([]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const stored = localStorage.getItem('discover-mansalay:suggested-itineraries');
-        if (stored) {
-          setSuggestedItineraries(JSON.parse(stored));
-        }
-      } catch {
-        setSuggestedItineraries([]);
-      }
-    })();
-  }, []);
-
-  const toggleSave = (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setSavedIds(prev => {
-      const updated = prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id];
-      toast.success(prev.includes(id) ? 'Removed from saved trips' : 'Saved to your trip list!');
-      return updated;
-    });
-  };
 
   // AI Itinerary Generator Logic
   const handleGenerateAiItinerary = () => {
@@ -339,271 +293,86 @@ export function Itinerary() {
             Trip Itinerary Planner
           </h1>
           <p className="text-xs sm:text-sm text-gray-500 font-medium mt-2">
-            Plan your perfect Mansalay adventure — choose curated trips, use AI auto-generator, or build your custom schedule.
+            Plan your perfect Mansalay adventure — use our AI auto-generator or build your custom schedule.
           </p>
         </div>
 
-        {/* ── TAB SELECTOR ── */}
-        <div className="flex items-center justify-center gap-3 mb-10">
-          <button
-            onClick={() => setActiveTab('suggested')}
-            className={`px-5 py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-2 ${
-              activeTab === 'suggested'
-                ? 'bg-pink-500 text-white shadow-md shadow-pink-500/25'
-                : 'bg-white text-gray-600 hover:bg-pink-50 border border-gray-200'
-            }`}
-          >
-            <Compass className="h-4 w-4" />
-            <span>Curated Trips ({suggestedItineraries.length})</span>
-          </button>
+        {/* ── MY TRIPS & SAVED ITINERARIES ── */}
+        <section className="mb-16">
+          <div className="flex items-center gap-2 text-pink-500 text-xs font-bold uppercase tracking-wider mb-1">
+            <BookmarkCheck className="h-4 w-4" />
+            <span>Personalized Plans</span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-1">
+            My Trips & Itineraries ({myCustomTrips.length})
+          </h2>
+          <p className="text-xs text-gray-400 mb-6">Manage and view your generated and custom trip schedules</p>
 
-          <button
-            onClick={() => setActiveTab('my-trips')}
-            className={`px-5 py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-2 ${
-              activeTab === 'my-trips'
-                ? 'bg-pink-500 text-white shadow-md shadow-pink-500/25'
-                : 'bg-white text-gray-600 hover:bg-pink-50 border border-gray-200'
-            }`}
-          >
-            <FolderHeart className="h-4 w-4" />
-            <span>My Trips & Saved ({myCustomTrips.length + savedIds.length})</span>
-          </button>
-        </div>
-
-        {/* ── 1. CURATED / SUGGESTED ITINERARIES ── */}
-        {activeTab === 'suggested' && (
-          <section className="mb-16">
-            <div className="flex items-center gap-2 text-pink-500 text-xs font-bold uppercase tracking-wider mb-1">
-              <Compass className="h-4 w-4" />
-              <span>Recommended Guides</span>
+          {myCustomTrips.length === 0 ? (
+            <div className="bg-white border border-gray-100 rounded-3xl p-8 text-center max-w-md mx-auto shadow-xs">
+              <Calendar className="h-10 w-10 text-pink-300 mx-auto mb-3" />
+              <h3 className="text-sm font-bold text-gray-800">No Custom Trips Yet</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Use the interactive options below to auto-generate with AI or build your schedule manually.
+              </p>
             </div>
-            <h2 className="text-xl font-extrabold text-gray-900 mb-1">Curated Trips for You</h2>
-            <p className="text-xs text-gray-400 mb-6">Explore ready-to-use step-by-step itineraries designed by local travel experts</p>
-
-            {suggestedItineraries.length === 0 ? (
-              <div className="bg-white rounded-3xl p-10 text-center border border-gray-100 shadow-xs mb-16">
-                <Compass className="h-12 w-12 text-pink-300 mx-auto mb-3" />
-                <h3 className="text-base font-bold text-gray-900">No Recommended Guides Available Yet</h3>
-                <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
-                  There are no ready-made suggested itineraries in the system yet. You can create your own custom trips using the AI Travel Planner or Manual Trip Builder!
-                </p>
-                <div className="flex flex-wrap items-center justify-center gap-3 mt-6">
-                  <button
-                    onClick={() => setShowAiModal(true)}
-                    className="px-5 py-2.5 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-full text-xs font-bold shadow-md shadow-pink-500/20 flex items-center gap-1.5"
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Generate with AI
-                  </button>
-                  <button
-                    onClick={() => setShowBuilderModal(true)}
-                    className="px-5 py-2.5 bg-white border border-pink-200 text-pink-600 rounded-full text-xs font-bold flex items-center gap-1.5"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Create Manual Trip
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {suggestedItineraries.map((item) => {
-                  const isSaved = savedIds.includes(item.id);
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => setSelectedItinerary(item)}
-                      className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-xs hover:shadow-xl transition-all cursor-pointer group flex flex-col justify-between"
-                    >
-                      {/* Top Image Box */}
-                      <div className="relative h-56 bg-gray-900 overflow-hidden">
-                        <img
-                          src={item.image}
-                          alt={item.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-gray-950/90 via-gray-950/40 to-transparent" />
-
-                        {item.badge && (
-                          <span className="absolute top-4 left-4 px-3 py-1 bg-pink-500 text-white text-[11px] font-bold rounded-full shadow-xs">
-                            ★ {item.badge}
-                          </span>
-                        )}
-
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Render Custom Built / AI Generated Trips */}
+              {myCustomTrips.map(trip => (
+                <div
+                  key={trip.id}
+                  onClick={() => setSelectedItinerary(trip)}
+                  className="bg-white rounded-3xl overflow-hidden border border-pink-100 shadow-sm hover:shadow-xl transition-all cursor-pointer p-5 flex flex-col justify-between relative group"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="px-3 py-1 bg-pink-100 text-pink-700 text-[10px] font-bold rounded-full uppercase">
+                        {trip.badge || 'Custom Trip'}
+                      </span>
+                      <div className="flex items-center gap-1">
                         <button
-                          onClick={(e) => toggleSave(item.id, e)}
-                          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-gray-700 shadow-xs flex items-center justify-center backdrop-blur-md transition-colors"
+                          onClick={(e) => handleDeleteCustomTrip(trip.id, e)}
+                          className="p-1 text-gray-400 hover:text-red-500 rounded-full transition-colors"
+                          title="Delete trip"
                         >
-                          <Heart className={`h-4 w-4 ${isSaved ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
-                        </button>
-
-                        <div className="absolute bottom-4 left-4 right-4 text-white">
-                          <h3 className="text-lg font-bold leading-tight">{item.title}</h3>
-                        </div>
-                      </div>
-
-                      {/* Content Area */}
-                      <div className="p-5 flex-1 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-center justify-between text-xs mb-3">
-                            <span className="px-3 py-1 bg-pink-50 text-pink-600 font-bold rounded-full text-[11px]">
-                              {item.category}
-                            </span>
-                            <span className="text-gray-400 font-semibold">{item.duration}</span>
-                          </div>
-
-                          <p className="text-xs text-gray-600 leading-relaxed min-h-[36px] mb-4">
-                            {item.description}
-                          </p>
-
-                          <div className="space-y-2 mb-6">
-                            {item.highlights.map((h, i) => (
-                              <div key={i} className="flex items-start gap-2 text-xs text-gray-700 font-medium">
-                                <CheckCircle2 className="h-4 w-4 text-pink-500 flex-shrink-0 mt-0.5" />
-                                <span>{h}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedItinerary(item);
-                          }}
-                          className="w-full py-3 bg-pink-500 hover:bg-pink-600 active:scale-95 text-white font-bold rounded-full text-xs shadow-md shadow-pink-500/20 transition-all flex items-center justify-center gap-2"
-                        >
-                          <span>View Step-by-Step Schedule</span>
-                          <ArrowRight className="h-3.5 w-3.5" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        )}
 
-        {/* ── 2. MY TRIPS & SAVED ITINERARIES ── */}
-        {activeTab === 'my-trips' && (
-          <section className="mb-16">
-            <div className="flex items-center gap-2 text-pink-500 text-xs font-bold uppercase tracking-wider mb-1">
-              <BookmarkCheck className="h-4 w-4" />
-              <span>Personalized Plans</span>
-            </div>
-            <h2 className="text-xl font-extrabold text-gray-900 mb-1">My Saved & Custom Trips</h2>
-            <p className="text-xs text-gray-400 mb-6">Manage your custom generated trips and bookmarked guides</p>
+                    <h3 className="text-base font-extrabold text-gray-900 group-hover:text-pink-600 transition-colors mb-1">
+                      {trip.title}
+                    </h3>
+                    <p className="text-xs text-gray-500 line-clamp-2 mb-4">{trip.description}</p>
 
-            {myCustomTrips.length === 0 && savedIds.length === 0 ? (
-              <div className="bg-white border border-gray-100 rounded-3xl p-10 text-center max-w-lg mx-auto">
-                <Calendar className="h-10 w-10 text-pink-300 mx-auto mb-3" />
-                <h3 className="text-sm font-bold text-gray-800">No Custom Trips Yet</h3>
-                <p className="text-xs text-gray-500 mt-1 mb-6">Use the AI Smart Generator or Manual Builder below to create your itinerary.</p>
-                <div className="flex justify-center gap-3">
-                  <button
-                    onClick={() => setShowAiModal(true)}
-                    className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-full text-xs font-bold flex items-center gap-1.5"
-                  >
-                    <Wand2 className="h-3.5 w-3.5" /> Generate with AI
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Render Custom Built / AI Generated Trips */}
-                {myCustomTrips.map(trip => (
-                  <div
-                    key={trip.id}
-                    onClick={() => setSelectedItinerary(trip)}
-                    className="bg-white rounded-3xl overflow-hidden border border-pink-100 shadow-sm hover:shadow-xl transition-all cursor-pointer p-5 flex flex-col justify-between relative group"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="px-3 py-1 bg-pink-100 text-pink-700 text-[10px] font-bold rounded-full uppercase">
-                          {trip.badge || 'Custom Trip'}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={(e) => handleDeleteCustomTrip(trip.id, e)}
-                            className="p-1 text-gray-400 hover:text-red-500 rounded-full transition-colors"
-                            title="Delete trip"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
+                    <div className="bg-pink-50/50 rounded-2xl p-3 border border-pink-100 text-xs space-y-1">
+                      <div className="flex items-center justify-between font-bold text-gray-700">
+                        <span>Duration:</span>
+                        <span className="text-pink-600">{trip.duration}</span>
                       </div>
-
-                      <h3 className="text-base font-extrabold text-gray-900 group-hover:text-pink-600 transition-colors mb-1">
-                        {trip.title}
-                      </h3>
-                      <p className="text-xs text-gray-500 line-clamp-2 mb-4">{trip.description}</p>
-
-                      <div className="bg-pink-50/50 rounded-2xl p-3 border border-pink-100 text-xs space-y-1">
-                        <div className="flex items-center justify-between font-bold text-gray-700">
-                          <span>Duration:</span>
-                          <span className="text-pink-600">{trip.duration}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-gray-500 text-[11px]">
-                          <span>Daily Days:</span>
-                          <span>{trip.days?.length || 0} Days Plan</span>
-                        </div>
+                      <div className="flex items-center justify-between text-gray-500 text-[11px]">
+                        <span>Daily Days:</span>
+                        <span>{trip.days?.length || 0} Days Plan</span>
                       </div>
                     </div>
-
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedItinerary(trip);
-                      }}
-                      className="mt-4 w-full py-2.5 bg-gray-900 hover:bg-pink-500 text-white font-bold rounded-full text-xs transition-colors flex items-center justify-center gap-1.5"
-                    >
-                      <span>View Full Schedule</span>
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </button>
                   </div>
-                ))}
 
-                {/* Render Bookmarked Curated Items */}
-                {suggestedItineraries
-                  .filter(item => savedIds.includes(item.id))
-                  .map(item => (
-                    <div
-                      key={item.id}
-                      onClick={() => setSelectedItinerary(item)}
-                      className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition-all cursor-pointer p-5 flex flex-col justify-between"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full uppercase">
-                            Saved Guide
-                          </span>
-                          <button
-                            onClick={(e) => toggleSave(item.id, e)}
-                            className="p-1 text-pink-500 hover:text-gray-400 transition-colors"
-                          >
-                            <Heart className="h-4 w-4 fill-pink-500" />
-                          </button>
-                        </div>
-                        <h3 className="text-base font-extrabold text-gray-900 mb-1">{item.title}</h3>
-                        <p className="text-xs text-gray-500 line-clamp-2 mb-4">{item.description}</p>
-                      </div>
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedItinerary(item);
-                        }}
-                        className="w-full py-2.5 bg-pink-500 hover:bg-pink-600 text-white font-bold rounded-full text-xs transition-colors flex items-center justify-center gap-1.5"
-                      >
-                        <span>Open Saved Schedule</span>
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </section>
-        )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedItinerary(trip);
+                    }}
+                    className="mt-4 w-full py-2.5 bg-gray-900 hover:bg-pink-500 text-white font-bold rounded-full text-xs transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <span>View Full Schedule</span>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* ── 3. DYNAMIC TRIP GENERATOR & BUILDER CALLOUT ── */}
         <section className="bg-gradient-to-r from-pink-50/70 via-rose-50/50 to-pink-50/70 border border-pink-100 rounded-3xl p-6 sm:p-10 text-center">

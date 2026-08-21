@@ -69,7 +69,7 @@ interface DirectoryLocation {
 
 export function MapExplore() {
   const navigate = useNavigate();
-  const { currentUser } = useApp();
+  const { currentUser, userType, isAdmin } = useApp();
 
   useEffect(() => {
     if (!currentUser && !getAuthToken()) {
@@ -357,8 +357,6 @@ export function MapExplore() {
     fetchAllData();
   }, []);
 
-  const { isAdmin, userType } = useApp();
-
   const userRole = useMemo(() => {
     if (isAdmin || userType === 'admin' || currentUser?.role === 'admin') return 'admin';
     if (userType === 'resort' || currentUser?.role === 'resort') return 'resort';
@@ -382,14 +380,22 @@ export function MapExplore() {
     }
 
     const defaultType = userRole === 'enterprise' ? 'enterprise' : 'resort';
+    const prefilledName = userRole === 'resort'
+      ? ((currentUser as any)?.resort_name || currentUser?.name || '')
+      : userRole === 'enterprise'
+      ? ((currentUser as any)?.store_name || currentUser?.name || '')
+      : '';
+    const prefilledAddress = (currentUser as any)?.barangay
+      ? `${(currentUser as any).barangay}, Mansalay, Oriental Mindoro`
+      : 'Mansalay, Oriental Mindoro';
 
     setClickedCoords(coords);
     setLandmarkForm({
-      name: '',
+      name: prefilledName,
       type: defaultType,
       category: defaultType === 'resort' ? 'Resort' : 'Enterprise',
-      description: '',
-      address: 'Mansalay, Oriental Mindoro',
+      description: (currentUser as any)?.store_description || (currentUser as any)?.resort_description || (currentUser as any)?.description || '',
+      address: prefilledAddress,
       image: '',
     });
     setShowAddLandmarkModal(true);

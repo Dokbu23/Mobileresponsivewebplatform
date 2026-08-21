@@ -4,11 +4,32 @@ import {
   Hotel, Store, MapPin, Phone, Mail, Star,
   ArrowLeft, Package, Search, CreditCard,
   MessageCircle, Heart,
-  CheckCircle, ShoppingBag, ExternalLink
+  CheckCircle, ShoppingBag, ExternalLink,
+  Pencil, Upload, X, Image as ImageIcon, Loader2
 } from 'lucide-react';
 import { getPublicJSON, getAuthToken, API_BASE } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
+
+const MANSALAY_BARANGAYS = [
+  'Barangay I (Poblacion)',
+  'Barangay II (Poblacion)',
+  'B. Del Mundo',
+  'Balugo',
+  'Bonbon',
+  'Budburan',
+  'Buktot',
+  'Cabalwa',
+  'Don Pedro',
+  'Maliwanag',
+  'Manaul',
+  'Panaytayan',
+  'Poblacion',
+  'Santa Maria',
+  'Santa Maria II',
+  'Villa Cerveza',
+  'Waygan'
+];
 
 
 interface BusinessOwner {
@@ -25,11 +46,21 @@ interface BusinessOwner {
   description?: string;
   payment_details?: any[];
   created_at?: string;
+  last_active_at?: string;
   store_name?: string;
   store_description?: string;
   store_logo?: string;
   store_banner?: string;
   store_is_setup?: boolean;
+  resort_name?: string;
+  resort_description?: string;
+  resort_logo?: string;
+  resort_banner?: string;
+  resort_images?: string[];
+  resort_amenities?: string[];
+  resort_facilities?: string;
+  resort_policies?: string;
+  resort_is_setup?: boolean;
 }
 
 interface BusinessProfileData {
@@ -276,7 +307,7 @@ function createFallbackBusinessProfile(rawId: string): BusinessProfileData {
 export function BusinessProfile() {
   const { type, userId } = useParams<{ type: 'resort' | 'enterprise'; userId: string }>();
   const navigate = useNavigate();
-  const { addToCart, userType } = useApp();
+  const { addToCart, userType, currentUser } = useApp();
   const [data, setData] = useState<BusinessProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -285,19 +316,49 @@ export function BusinessProfile() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
 
+  // Edit Shop Profile Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    description: '',
+    phone: '',
+    barangay: 'Barangay I (Poblacion)',
+    address: '',
+    facebook_link: '',
+    instagram_link: '',
+  });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+
   useEffect(() => {
     if (!type || !userId) return;
 
     (async () => {
       try {
-        const result = await getPublicJSON(`/business/${type}/${userId}`);
+        // Use the correct public endpoint per type
+        const endpoint = type === 'enterprise'
+          ? `/business/enterprise/${userId}`
+          : `/business/resort/${userId}`;
+        const result = await getPublicJSON(endpoint);
         if (result && result.owner) {
           setData(result);
         } else {
-          setData(createFallbackBusinessProfile(userId));
+          // Only use mock fallback for resort (enterprise must come from DB)
+          if (type === 'resort') {
+            setData(createFallbackBusinessProfile(userId));
+          } else {
+            setError('Shop not found.');
+          }
         }
       } catch {
-        setData(createFallbackBusinessProfile(userId));
+        if (type === 'resort') {
+          setData(createFallbackBusinessProfile(userId));
+        } else {
+          setError('Shop not found or not yet approved.');
+        }
       } finally {
         setLoading(false);
       }
@@ -342,14 +403,46 @@ export function BusinessProfile() {
   const accommodations = data.accommodations || [];
   const items = isResort ? accommodations : products;
 
+  // Display name & info: Accurate resort_name for resort, store_name for enterprise
+  const shopName = isResort
+    ? (owner.resort_name || owner.name)
+    : ((owner.store_name && owner.store_name !== 'default') ? owner.store_name : owner.name);
+
+  const shopDescription = isResort
+    ? (owner.resort_description || owner.description)
+    : (owner.store_description || owner.description);
+
+  const shopBanner = isResort
+    ? (owner.resort_banner || (owner.resort_images && owner.resort_images[0]) || owner.store_banner)
+    : owner.store_banner;
+
+  const shopLogo = isResort
+    ? (owner.resort_logo || (owner.resort_images && owner.resort_images[0]) || owner.store_logo)
+    : owner.store_logo;
+
+  // Active Now vs time ago logic
+  const getActiveStatus = () => {
+    const activeAt = owner.last_active_at || owner.created_at;
+    if (!activeAt) return { label: 'Active', isNow: false };
+    const diffMs = Date.now() - new Date(activeAt).getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 5) return { label: 'Active Now', isNow: true };
+    if (diffMins < 60) return { label: `Active ${diffMins}m ago`, isNow: false };
+    const diffHrs = Math.floor(diffMins / 60);
+    if (diffHrs < 24) return { label: `Active ${diffHrs}h ago`, isNow: false };
+    const diffDays = Math.floor(diffHrs / 24);
+    if (diffDays < 7) return { label: `Active ${diffDays}d ago`, isNow: false };
+    return { label: `Active ${Math.floor(diffDays / 7)}w ago`, isNow: false };
+  };
+  const activeStatus = getActiveStatus();
+
   const getImageUrl = (img: string) => {
-    if (!img) return '/assets/default-product.jpg';
+    if (!img) return isResort ? '/assets/default-accommodation.jpg' : '/assets/default-product.jpg';
     return img.startsWith('http') ? img : `${API_BASE}${img}`;
   };
 
   const totalProducts = items.length;
   const joinedYear = owner.created_at ? new Date(owner.created_at).getFullYear() : new Date().getFullYear();
-  const yearsActive = new Date().getFullYear() - joinedYear;
 
   // Categories with product images
   const categoryMap = new Map<string, { count: number; image: string }>();
@@ -381,14 +474,165 @@ export function BusinessProfile() {
            accommodation.description?.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
+  const isOwner = Boolean(
+    currentUser && (
+      (userType === 'enterprise' && type === 'enterprise' && (!userId || String(currentUser.id) === String(userId) || String(currentUser.id) === String(owner?.id) || !userId.match(/^\d+$/))) ||
+      (userType === 'resort' && type === 'resort' && (!userId || String(currentUser.id) === String(userId) || String(currentUser.id) === String(owner?.id) || !userId.match(/^\d+$/))) ||
+      (currentUser.role === type && (String(currentUser.id) === String(userId) || String(currentUser.id) === String(owner?.id)))
+    )
+  );
+
+  const handleOpenEditModal = () => {
+    setEditForm({
+      name: isResort ? (owner.resort_name || owner.name || '') : ((owner.store_name && owner.store_name !== 'default') ? owner.store_name : (owner.name || '')),
+      description: isResort ? (owner.resort_description || owner.description || '') : (owner.store_description || owner.description || ''),
+      phone: owner.phone || '',
+      barangay: owner.barangay || 'Barangay I (Poblacion)',
+      address: owner.address || '',
+      facebook_link: owner.facebook_link || owner.facebook || '',
+      instagram_link: owner.instagram_link || owner.instagram || '',
+    });
+    setLogoFile(null);
+    setLogoPreview(null);
+    setBannerFile(null);
+    setBannerPreview(null);
+    setIsEditModalOpen(true);
+  };
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLogoFile(file);
+      setLogoPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setBannerFile(file);
+      setBannerPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editForm.name.trim()) {
+      toast.error(isResort ? 'Resort name is required' : 'Shop / Business name is required');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const token = getAuthToken();
+      const formData = new FormData();
+
+      if (isResort) {
+        formData.append('resort_name', editForm.name.trim());
+        formData.append('resort_description', editForm.description.trim());
+        formData.append('phone', editForm.phone.trim());
+        formData.append('barangay', editForm.barangay);
+        formData.append('address', editForm.address.trim());
+        formData.append('facebook_link', editForm.facebook_link.trim());
+        formData.append('instagram_link', editForm.instagram_link.trim());
+        if (logoFile) formData.append('logo', logoFile);
+        if (bannerFile) formData.append('banner', bannerFile);
+        formData.append('_method', 'PUT');
+
+        const res = await fetch(`${API_BASE}/api/resort-profile`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          throw new Error(errData?.message || 'Failed to update resort profile');
+        }
+
+        const updated = await res.json();
+        toast.success('Resort profile updated successfully!');
+
+        setData(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            owner: {
+              ...prev.owner,
+              resort_name: editForm.name.trim(),
+              resort_description: editForm.description.trim(),
+              phone: editForm.phone.trim(),
+              barangay: editForm.barangay,
+              address: editForm.address.trim(),
+              facebook_link: editForm.facebook_link.trim(),
+              instagram_link: editForm.instagram_link.trim(),
+              resort_logo: updated?.logo || updated?.resort_logo || prev.owner.resort_logo,
+              resort_banner: updated?.banner || updated?.resort_banner || prev.owner.resort_banner,
+            }
+          };
+        });
+      } else {
+        formData.append('store_name', editForm.name.trim());
+        formData.append('store_description', editForm.description.trim());
+        formData.append('phone', editForm.phone.trim());
+        formData.append('barangay', editForm.barangay);
+        formData.append('address', editForm.address.trim());
+        formData.append('facebook_link', editForm.facebook_link.trim());
+        formData.append('instagram_link', editForm.instagram_link.trim());
+        if (logoFile) formData.append('logo', logoFile);
+        if (bannerFile) formData.append('banner', bannerFile);
+        formData.append('_method', 'PUT');
+
+        const res = await fetch(`${API_BASE}/api/enterprise-profile`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          throw new Error(errData?.message || 'Failed to update store profile');
+        }
+
+        const updated = await res.json();
+        toast.success('Shop profile updated successfully!');
+
+        setData(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            owner: {
+              ...prev.owner,
+              store_name: editForm.name.trim(),
+              store_description: editForm.description.trim(),
+              phone: editForm.phone.trim(),
+              barangay: editForm.barangay,
+              address: editForm.address.trim(),
+              facebook_link: editForm.facebook_link.trim(),
+              instagram_link: editForm.instagram_link.trim(),
+              store_logo: updated?.logo || updated?.store_logo || prev.owner.store_logo,
+              store_banner: updated?.banner || updated?.store_banner || prev.owner.store_banner,
+            }
+          };
+        });
+      }
+
+      setIsEditModalOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save changes');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleFollow = () => {
     setIsFollowing(!isFollowing);
-    toast.success(isFollowing ? 'Unfollowed shop' : 'Following shop!');
+    toast.success(isFollowing ? (isResort ? 'Unfollowed resort' : 'Unfollowed shop') : (isResort ? 'Following resort!' : 'Following shop!'));
   };
 
   const handleChat = () => {
     if (!getAuthToken()) {
-      toast.error('Please login to chat with the shop');
+      toast.error('Please login to chat with the host');
       navigate('/select-role');
       return;
     }
@@ -400,77 +644,123 @@ export function BusinessProfile() {
       <div className="max-w-7xl mx-auto px-4 py-4">
         {/* Back Button */}
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => isResort ? navigate('/accommodations') : navigate('/products')}
           className="flex items-center gap-2 text-gray-600 hover:text-pink-500 transition-colors mb-3 text-sm font-medium"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to Products
+          {isResort ? 'Back to Stays & Resorts' : 'Back to Products'}
         </button>
 
-        {/* 🌟 SHOP HEADER BANNER - Enhanced */}
+        {/* 🌟 SHOP / RESORT HEADER BANNER - Enhanced */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
           {/* Banner */}
-          {owner.store_banner ? (
-            <div className="relative h-36 md:h-48 overflow-hidden">
+          <div className="relative h-36 md:h-52 overflow-hidden bg-gradient-to-br from-pink-500 via-rose-500 to-teal-500">
+            {shopBanner ? (
               <img
-                src={getImageUrl(owner.store_banner)}
-                alt="Store banner"
+                src={getImageUrl(shopBanner)}
+                alt={`${shopName} banner`}
                 className="w-full h-full object-cover"
               />
-              <div className="absolute inset-0 bg-black/20" />
-            </div>
-          ) : (
-            <div className="h-24 bg-gradient-to-br from-pink-50 via-white to-pink-50" />
-          )}
+            ) : (
+              <div className="w-full h-full opacity-90" />
+            )}
+            <div className="absolute inset-0 bg-black/25" />
+
+            {isOwner && (
+              <button
+                onClick={handleOpenEditModal}
+                className="absolute top-3 right-3 px-3.5 py-1.5 bg-black/60 hover:bg-black/80 active:scale-95 text-white rounded-full text-xs font-bold backdrop-blur-md flex items-center gap-1.5 shadow-md transition-all z-10"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                <span>Edit Cover</span>
+              </button>
+            )}
+          </div>
 
           <div className="px-5 py-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 {/* Logo / Avatar */}
-                <div className="relative -mt-10">
-                  {owner.store_logo ? (
+                <div className="relative -mt-12 md:-mt-14">
+                  {shopLogo ? (
                     <img
-                      src={getImageUrl(owner.store_logo)}
-                      alt={(owner.store_name && owner.store_name !== 'default') ? owner.store_name : owner.name}
-                      className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover shadow-lg ring-4 ring-white border-2 border-pink-100"
+                      src={getImageUrl(shopLogo)}
+                      alt={shopName}
+                      className="w-20 h-20 md:w-24 md:h-24 rounded-full object-cover shadow-xl ring-4 ring-white border-2 border-pink-100 bg-white"
                     />
                   ) : (
-                    <div className="w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-pink-500 to-pink-600 rounded-full flex items-center justify-center shadow-lg ring-4 ring-white">
+                    <div className="w-20 h-20 md:w-24 md:h-24 bg-gradient-to-br from-pink-500 to-rose-600 rounded-full flex items-center justify-center shadow-xl ring-4 ring-white">
                       {isResort
-                        ? <Hotel className="h-8 w-8 md:h-10 md:w-10 text-white" />
-                        : <Store className="h-8 w-8 md:h-10 md:w-10 text-white" />
+                        ? <Hotel className="h-10 w-10 text-white" />
+                        : <Store className="h-10 w-10 text-white" />
                       }
                     </div>
                   )}
                   <div className="absolute -bottom-1 -right-1 bg-green-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center">
                     <CheckCircle className="h-3 w-3 text-white" />
                   </div>
+                  {isOwner && (
+                    <button
+                      onClick={handleOpenEditModal}
+                      className="absolute -top-1 -right-1 bg-pink-500 hover:bg-pink-600 active:scale-95 text-white w-7 h-7 rounded-full border-2 border-white flex items-center justify-center shadow-md transition-all z-10"
+                      title="Edit Logo"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
 
-                {/* Shop Info */}
+                {/* Shop / Resort Info */}
                 <div>
                   <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <h1 className="text-xl md:text-2xl font-bold text-gray-900">
-                      {(owner.store_name && owner.store_name !== 'default') ? owner.store_name : owner.name}
+                    <h1 className="text-xl md:text-2xl font-extrabold text-gray-900 tracking-tight">
+                      {shopName}
                     </h1>
-                    <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">
+                    <span className="px-2.5 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">
                       ✓ Verified
                     </span>
+                    {isResort && (
+                      <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold">
+                        🏨 Resort & Stays
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-500 flex items-center gap-2 flex-wrap">
-                    <span>Active {yearsActive > 0 ? `${yearsActive} year${yearsActive > 1 ? 's' : ''} ago` : 'Today'}</span>
+                    {/* Active Now indicator */}
+                    {activeStatus.isNow ? (
+                      <span className="flex items-center gap-1 text-green-600 font-semibold">
+                        <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        Active Now
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">{activeStatus.label}</span>
+                    )}
                     <span className="text-gray-300">•</span>
                     <span className="flex items-center gap-1">
-                      <MapPin className="h-3 w-3" />
-                      {[owner.barangay, 'Mansalay'].filter(Boolean).join(', ')}
+                      <MapPin className="h-3 w-3 text-pink-500" />
+                      {[owner.barangay, 'Mansalay, Oriental Mindoro'].filter(Boolean).join(', ')}
                     </span>
                   </p>
-                  {owner.description && (
-                    <p className="text-sm text-gray-600 mt-2 line-clamp-2 max-w-xl">{owner.description}</p>
+                  {shopDescription && (
+                    <p className="text-xs md:text-sm text-gray-600 mt-2 line-clamp-2 max-w-2xl leading-relaxed">
+                      {shopDescription}
+                    </p>
                   )}
                 </div>
               </div>
 
+              {/* Edit Shop Profile Button with Pencil */}
+              {isOwner && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleOpenEditModal}
+                    className="px-4 py-2 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 active:scale-95 text-white rounded-full text-xs font-bold shadow-md shadow-pink-500/25 flex items-center gap-1.5 transition-all"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    <span>Edit {isResort ? 'Resort' : 'Shop'} Profile</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -534,7 +824,7 @@ export function BusinessProfile() {
               <div className="text-[10px] md:text-xs text-gray-500 mt-0.5">Response</div>
             </div>
             <div className="px-3 py-3 text-center">
-              <div className="text-base md:text-lg font-bold text-pink-500">{yearsActive}y</div>
+              <div className="text-base md:text-lg font-bold text-pink-500">{joinedYear}</div>
               <div className="text-[10px] md:text-xs text-gray-500 mt-0.5">Joined</div>
             </div>
           </div>
@@ -622,20 +912,20 @@ export function BusinessProfile() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search products in this shop..."
+              placeholder={isResort ? "Search rooms in this resort..." : "Search products in this shop..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-11 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm bg-gray-50"
+              className="w-full pl-11 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm bg-gray-50 outline-none"
             />
           </div>
         </div>
 
-        {/* 📦 PRODUCTS GRID */}
+        {/* 📦 PRODUCTS / ROOMS GRID */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="border-b border-gray-100 px-5 py-4 flex items-center justify-between">
             <h2 className="text-sm font-bold text-gray-800 tracking-widest">
               {selectedCategory === 'all' 
-                ? (isResort ? 'ALL ACCOMMODATIONS' : 'ALL PRODUCTS')
+                ? (isResort ? 'ALL ROOMS & COTTAGES' : 'ALL PRODUCTS')
                 : selectedCategory.toUpperCase()}
             </h2>
             <span className="text-xs text-gray-500 font-medium">
@@ -648,7 +938,7 @@ export function BusinessProfile() {
               filteredAccommodations.length === 0 ? (
                 <div className="py-16 text-center">
                   <Hotel className="h-16 w-16 mx-auto text-gray-300 mb-3" />
-                  <p className="text-gray-500">No accommodations available</p>
+                  <p className="text-gray-500">No rooms or cottages added yet by this resort.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
@@ -656,7 +946,6 @@ export function BusinessProfile() {
                     <AccommodationCard
                       key={accommodation.id}
                       accommodation={accommodation}
-                      onBookNow={() => navigate('/accommodations')}
                     />
                   ))}
                 </div>
@@ -740,6 +1029,231 @@ export function BusinessProfile() {
         </div>
       </div>
 
+      {/* ── MODAL: EDIT SHOP / RESORT PROFILE ── */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-pink-50 via-rose-50 to-pink-50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-pink-500 text-white flex items-center justify-center shadow-xs">
+                  <Pencil className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-gray-900 leading-tight">
+                    Edit {isResort ? 'Resort' : 'Shop'} Profile
+                  </h3>
+                  <p className="text-xs text-gray-500 font-medium">Update your public store details, cover banner, logo, and contact info</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white hover:bg-gray-100 text-gray-500 flex items-center justify-center transition-colors shadow-xs"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Form Content */}
+            <form onSubmit={handleSaveProfile} className="p-6 overflow-y-auto flex-1 space-y-5">
+              {/* Cover Banner Upload */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                  Cover Banner Image
+                </label>
+                <div className="relative h-32 rounded-2xl overflow-hidden bg-gray-100 border-2 border-dashed border-gray-200 hover:border-pink-300 transition-colors flex items-center justify-center">
+                  {bannerPreview || shopBanner ? (
+                    <img
+                      src={bannerPreview || getImageUrl(shopBanner || '')}
+                      alt="Cover Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="text-center p-4">
+                      <ImageIcon className="h-8 w-8 text-gray-400 mx-auto mb-1" />
+                      <span className="text-xs text-gray-500 font-medium">Upload Cover Banner</span>
+                    </div>
+                  )}
+                  <label className="absolute inset-0 bg-black/35 hover:bg-black/45 text-white flex items-center justify-center gap-2 text-xs font-bold cursor-pointer opacity-0 hover:opacity-100 transition-opacity">
+                    <Upload className="h-4 w-4" />
+                    <span>Change Cover Photo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleBannerChange}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Logo / Profile Picture Upload */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                  {isResort ? 'Resort Logo / Picture' : 'Store Logo / Profile Picture'}
+                </label>
+                <div className="flex items-center gap-4">
+                  <div className="relative w-16 h-16 rounded-full overflow-hidden bg-gray-100 border-2 border-pink-200 flex-shrink-0">
+                    {logoPreview || shopLogo ? (
+                      <img
+                        src={logoPreview || getImageUrl(shopLogo || '')}
+                        alt="Logo Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-pink-50 flex items-center justify-center text-pink-500">
+                        {isResort ? <Hotel className="h-8 w-8" /> : <Store className="h-8 w-8" />}
+                      </div>
+                    )}
+                  </div>
+                  <label className="px-4 py-2 border border-pink-200 text-pink-600 hover:bg-pink-50 rounded-full text-xs font-bold cursor-pointer flex items-center gap-1.5 shadow-xs transition-colors">
+                    <Upload className="h-3.5 w-3.5" />
+                    <span>Choose Image</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoChange}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Shop / Resort Name */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    {isResort ? 'Resort Name *' : 'Shop / Business Name *'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.name}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-pink-500 focus:bg-white"
+                    placeholder="e.g. AWATI Souvenir Shop"
+                  />
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Contact Phone Number
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-pink-500 focus:bg-white"
+                    placeholder="0917-xxx-xxxx"
+                  />
+                </div>
+
+                {/* Barangay */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Barangay Location
+                  </label>
+                  <select
+                    value={editForm.barangay}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, barangay: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-pink-500 focus:bg-white"
+                  >
+                    {MANSALAY_BARANGAYS.map((brgy) => (
+                      <option key={brgy} value={brgy}>{brgy}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Specific Address */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Complete Street Address / Landmark
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.address}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, address: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-pink-500 focus:bg-white"
+                    placeholder="e.g. Coastal Road, near Mansalay Town Plaza"
+                  />
+                </div>
+
+                {/* Facebook Link */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Facebook Page / Profile Link
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.facebook_link}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, facebook_link: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-pink-500 focus:bg-white"
+                    placeholder="https://facebook.com/yourpage"
+                  />
+                </div>
+
+                {/* Instagram Link */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Instagram Profile Link
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.instagram_link}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, instagram_link: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-pink-500 focus:bg-white"
+                    placeholder="https://instagram.com/yourprofile"
+                  />
+                </div>
+
+                {/* Description */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    About / Description
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editForm.description}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 focus:outline-pink-500 focus:bg-white resize-none"
+                    placeholder="Describe your shop, specialty products, or business history..."
+                  />
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-4 border-t border-gray-100 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  disabled={isSaving}
+                  className="px-5 py-2.5 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-full text-xs font-bold transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-6 py-2.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 active:scale-95 text-white rounded-full text-xs font-bold shadow-md shadow-pink-500/25 flex items-center gap-2 transition-all disabled:opacity-50"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Saving Changes...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4" />
+                      <span>Save Changes</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -786,38 +1300,46 @@ function ProductCard({ product }: any) {
   );
 }
 
-// Clean Accommodation Card (no Resort badges)
-function AccommodationCard({ accommodation, onBookNow }: any) {
+// Clean Accommodation Card
+function AccommodationCard({ accommodation }: any) {
   const imageUrl = accommodation.image
     ? (accommodation.image.startsWith('http') ? accommodation.image : `${API_BASE}${accommodation.image}`)
     : '/assets/default-accommodation.jpg';
 
+  const price = Number(accommodation.price_per_night || accommodation.price || 0);
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-pink-300 transition-all duration-300 group cursor-pointer">
-      <div className="aspect-square bg-gray-100 overflow-hidden">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-pink-300 transition-all duration-300 group cursor-pointer flex flex-col justify-between">
+      <div className="aspect-square bg-gray-100 overflow-hidden relative">
         <img
           src={imageUrl}
           alt={accommodation.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => { e.currentTarget.src = '/assets/default-accommodation.jpg'; }}
         />
+        {accommodation.type && (
+          <span className="absolute top-2 left-2 px-2 py-0.5 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold rounded-md">
+            {accommodation.type}
+          </span>
+        )}
       </div>
-      <div className="p-3">
-        <h3 className="text-sm text-gray-900 line-clamp-2 min-h-[40px] leading-snug mb-2 font-medium">
-          {accommodation.name}
-        </h3>
-        <div className="flex items-center gap-1 text-[11px] text-gray-500 mb-2">
-          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-          <span className="font-medium">4.8</span>
-          <span className="mx-1">|</span>
-          <span className="text-green-600">Available</span>
+      <div className="p-3 flex-1 flex flex-col justify-between">
+        <div>
+          <h3 className="text-sm text-gray-900 line-clamp-2 min-h-[36px] leading-snug mb-1 font-bold">
+            {accommodation.name}
+          </h3>
+          {accommodation.capacity ? (
+            <div className="text-[11px] text-gray-500 mb-2">
+              👥 Max {accommodation.capacity} Guests
+            </div>
+          ) : null}
         </div>
-        <button
-          onClick={onBookNow}
-          className="w-full py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg text-xs font-medium transition-all opacity-0 group-hover:opacity-100 shadow-sm"
-        >
-          View Stay Details
-        </button>
+        {price > 0 && (
+          <div className="text-pink-600 font-extrabold text-sm">
+            ₱{price.toLocaleString()}
+            <span className="text-[10px] font-normal text-gray-400"> / night</span>
+          </div>
+        )}
       </div>
     </div>
   );

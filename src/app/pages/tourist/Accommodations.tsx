@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Hotel, MapPin, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown } from 'lucide-react';
+import { Hotel, MapPin, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink } from 'lucide-react';
 import { API_BASE, getPublicJSON } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
@@ -9,6 +9,7 @@ import { ShareModal } from '../../components/ShareModal';
 interface AccommodationItem {
   id: string;
   name: string;
+  resort_name?: string;
   description?: string;
   image: string;
   images?: string[];
@@ -23,6 +24,10 @@ interface AccommodationItem {
   resort_amenities?: string[];
   contact_number?: string;
   website?: string;
+  rooms?: any[];
+  rooms_count?: number;
+  capacity?: number;
+  is_room?: boolean;
 }
 
 export function Accommodations() {
@@ -35,6 +40,7 @@ export function Accommodations() {
   const [selectedAcc, setSelectedAcc] = useState<AccommodationItem | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('All');
+  const [selectedResortFilter, setSelectedResortFilter] = useState<string | null>(null);
   const [savedAccIds, setSavedAccIds] = useState<string[]>([]);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [shareData, setShareData] = useState<{ title: string; description?: string; image?: string; category?: string } | null>(null);
@@ -103,19 +109,31 @@ export function Accommodations() {
           parsedImages = [mainImg];
         }
 
+        const parsedRooms = Array.isArray(d.rooms) ? d.rooms.map((r: any) => ({
+          ...r,
+          image: r.image ? (String(r.image).startsWith('http') ? r.image : `${API_BASE}${r.image}`) : '',
+        })) : [];
+
         return {
           id: String(d.id),
           name: d.name || d.resort_name || 'Accommodation',
+          resort_name: d.resort_name || d.name || '',
           description: d.description || '',
           pricePerNight: Number(d.price_per_night ?? d.pricePerNight ?? d.price ?? 0),
-          location: d.location || 'Mansalay, Oriental Mindoro',
-          type: (d.type === 'resort_profile' || d.category === 'resort_profile') ? 'Beach Resort' : (d.category || d.type || 'Beach Resort'),
-          badge: d.badge || (idx % 2 === 0 ? 'Top Rated' : 'Eco-Friendly'),
+          location: d.location || (d.barangay ? `${d.barangay}, Mansalay, Oriental Mindoro` : 'Mansalay, Oriental Mindoro'),
+          type: d.is_room ? (d.type || 'Rooms & Suites') : (d.type === 'resort_profile' || d.category === 'resort_profile') ? 'Beach Resort' : (d.category || d.type || 'Beach Resort'),
+          badge: d.badge || (d.rooms_count ? `${d.rooms_count} Rooms` : idx % 2 === 0 ? 'Top Rated' : 'Eco-Friendly'),
           rating: d.rating || 4.8,
           likes: d.likes || 0,
           image: mainImg,
           images: parsedImages,
-          resort_amenities: Array.isArray(d.resort_amenities) ? d.resort_amenities : []
+          resort_amenities: Array.isArray(d.resort_amenities) ? d.resort_amenities : [],
+          rooms: parsedRooms,
+          rooms_count: d.rooms_count || parsedRooms.length || 0,
+          capacity: d.capacity,
+          is_room: Boolean(d.is_room),
+          user_id: d.user_id,
+          is_registered: d.is_registered,
         };
       });
       setItems(mapped);
@@ -188,11 +206,21 @@ export function Accommodations() {
 
   const predefinedStaysCategories = [
     'Beach Resort',
+    'Rooms & Suites',
     'Glamping',
     'Farm Resort',
     'Guesthouse',
     'Hotel',
   ];
+
+  const handleResortClick = (resortName: string, userId?: number | string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (userId) {
+      navigate(`/business/resort/${userId}`);
+    } else {
+      setSelectedResortFilter(resortName);
+    }
+  };
 
   const typeCategories = useMemo(() => {
     const types = Array.from(new Set([...predefinedStaysCategories, ...items.map(acc => acc.type).filter(Boolean)]));
@@ -204,11 +232,14 @@ export function Accommodations() {
       acc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (acc.type && acc.type.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (acc.location && acc.location.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (acc.description && acc.description.toLowerCase().includes(searchQuery.toLowerCase()));
+      (acc.description && acc.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (acc.resort_name && acc.resort_name.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const matchesType = typeFilter === 'All' || typeFilter === 'All Stays' || acc.type === typeFilter;
+    const matchesResort = !selectedResortFilter ||
+      (acc.resort_name && acc.resort_name.toLowerCase() === selectedResortFilter.toLowerCase());
 
-    return matchesSearch && matchesType;
+    return matchesSearch && matchesType && matchesResort;
   });
 
   return (
@@ -223,7 +254,7 @@ export function Accommodations() {
               <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">Stays & Resorts</h1>
             </div>
             <p className="text-xs sm:text-sm text-gray-500 mt-1 font-medium pl-4.5">
-              Discover resorts, glamping sites, and places to stay in Mansalay
+              Discover rooms, suites, cottages, and beach resorts in Mansalay
             </p>
           </div>
 
@@ -235,7 +266,7 @@ export function Accommodations() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search accommodations, types, or location..."
+                placeholder="Search rooms, types, or resorts..."
                 className="w-full pl-10 pr-4 py-2.5 bg-white border border-pink-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-full text-xs font-medium placeholder:text-gray-400 shadow-2xs outline-none transition-all"
               />
             </div>
@@ -257,9 +288,31 @@ export function Accommodations() {
           </div>
         </div>
 
+        {/* ── ACTIVE RESORT FILTER BANNER ── */}
+        {selectedResortFilter && (
+          <div className="mb-6 p-4 bg-emerald-50/90 border border-emerald-200 rounded-2xl flex items-center justify-between shadow-xs animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-bold text-xs shadow-xs">
+                <Hotel className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Filtered by Resort</p>
+                <h4 className="text-sm font-extrabold text-gray-900">{selectedResortFilter}</h4>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedResortFilter(null)}
+              className="px-3.5 py-1.5 bg-white hover:bg-emerald-100 border border-emerald-300 rounded-full text-xs font-bold text-emerald-800 transition-colors flex items-center gap-1 shadow-2xs"
+            >
+              <X className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Show All Stays</span>
+            </button>
+          </div>
+        )}
+
         {/* ── COUNT SUBHEADER ── */}
         <p className="text-xs font-semibold text-gray-400 mb-4">
-          Showing <span className="text-gray-900 font-bold">{filteredAccommodations.length}</span> stays
+          Showing <span className="text-gray-900 font-bold">{filteredAccommodations.length}</span> stays & rooms
         </p>
 
         {/* ── CARDS GRID (4 COLUMNS) ── */}
@@ -299,7 +352,7 @@ export function Accommodations() {
                         });
                       }}
                       className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors hover:scale-110"
-                      title="Share this resort"
+                      title="Share this stay"
                     >
                       <Share2 className="h-3.5 w-3.5" />
                     </button>
@@ -322,14 +375,36 @@ export function Accommodations() {
                 {/* Content */}
                 <div className="p-4 flex-1 flex flex-col justify-between">
                   <div>
-                    <p className="text-[10px] uppercase font-bold text-gray-400">{acc.type || 'Resort'}</p>
+                    <div className="flex items-center justify-between gap-1">
+                      <p className="text-[10px] uppercase font-bold text-gray-400">{acc.type || 'Resort'}</p>
+                      {acc.capacity ? (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                          <Users className="h-3 w-3" /> Max {acc.capacity}
+                        </span>
+                      ) : null}
+                    </div>
+
                     <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-0.5">{acc.name}</h3>
+
+                    {acc.pricePerNight > 0 ? (
+                      <p className="text-pink-500 font-extrabold text-sm mt-1">
+                        ₱{Number(acc.pricePerNight).toLocaleString()}
+                        <span className="text-[10px] font-normal text-gray-400"> / night</span>
+                      </p>
+                    ) : null}
+
                     <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 min-h-[32px]">{acc.description}</p>
                   </div>
 
-                  <div className="flex items-center gap-1 text-[11px] text-pink-500 font-semibold mt-4 pt-3 border-t border-gray-100">
-                    <MapPin className="h-3.5 w-3.5" />
-                    <span className="truncate">{acc.location || 'Mansalay, Oriental Mindoro'}</span>
+                  {/* Clickable Resort Host Link */}
+                  <div
+                    onClick={(e) => handleResortClick(acc.resort_name || acc.name, acc.user_id, e)}
+                    className="flex items-center gap-1.5 text-[11px] text-emerald-700 hover:text-emerald-800 font-semibold mt-4 pt-3 border-t border-gray-100 group/resort cursor-pointer transition-colors"
+                    title={`Click to view resort profile of ${acc.resort_name || 'this resort'}`}
+                  >
+                    <Hotel className="h-3.5 w-3.5 text-emerald-600 group-hover/resort:scale-110 transition-transform flex-shrink-0" />
+                    <span className="truncate group-hover/resort:underline">{acc.resort_name || 'Mansalay Beach Resort'}</span>
+                    <ExternalLink className="h-2.5 w-2.5 opacity-60 ml-auto flex-shrink-0 group-hover/resort:opacity-100 text-emerald-600" />
                   </div>
                 </div>
               </div>
@@ -338,7 +413,7 @@ export function Accommodations() {
         </div>
       </div>
 
-      {/* ── ACCOMMODATION DETAIL MODAL (Exact FIGMA Screenshot 3 Design) ── */}
+      {/* ── ACCOMMODATION / ROOM DETAIL MODAL ── */}
       {selectedAcc && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
@@ -378,10 +453,23 @@ export function Accommodations() {
             <div className="p-6 overflow-y-auto space-y-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="px-3 py-1 bg-pink-100 text-pink-600 text-[11px] font-bold rounded-full uppercase">
-                    {selectedAcc.type === 'resort_profile' ? 'Beach Resort' : (selectedAcc.type || 'Beach Resort')}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 bg-pink-100 text-pink-600 text-[11px] font-bold rounded-full uppercase">
+                      {selectedAcc.type === 'resort_profile' ? 'Beach Resort' : (selectedAcc.type || 'Room')}
+                    </span>
+                    {selectedAcc.capacity && (
+                      <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-full flex items-center gap-1">
+                        <Users className="h-3 w-3" /> Max {selectedAcc.capacity} Guests
+                      </span>
+                    )}
+                  </div>
                   <h2 className="text-xl font-extrabold text-gray-900 mt-2">{selectedAcc.name}</h2>
+                  {selectedAcc.pricePerNight > 0 && (
+                    <p className="text-pink-600 font-extrabold text-base mt-1">
+                      ₱{Number(selectedAcc.pricePerNight).toLocaleString()}
+                      <span className="text-xs font-normal text-gray-500"> / night</span>
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -395,13 +483,97 @@ export function Accommodations() {
                       });
                     }}
                     className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-pink-50 hover:text-pink-600 transition-colors"
-                    title="Share this resort"
+                    title="Share this stay"
                   >
                     <Share2 className="h-4 w-4" />
                   </button>
                   <button onClick={() => toggleSaveAcc(selectedAcc)} className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-pink-50"><Heart className={`h-4 w-4 ${savedAccIds.includes(selectedAcc.id) ? 'fill-pink-500 text-pink-500' : ''}`} /></button>
                 </div>
               </div>
+
+              {/* 🏨 Resort Host Card with "View Resort Profile" Button */}
+              <div className="flex items-center justify-between p-3.5 bg-emerald-50/80 rounded-2xl border border-emerald-200">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-xs flex-shrink-0">
+                    <Hotel className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">Resort Host</p>
+                    <h4 className="text-sm font-extrabold text-gray-900 truncate">{selectedAcc.resort_name || selectedAcc.name}</h4>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const hostId = selectedAcc.user_id || selectedAcc.id;
+                    setSelectedAcc(null);
+                    if (hostId) navigate(`/business/resort/${hostId}`);
+                  }}
+                  className="px-3.5 py-1.5 bg-white hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-full text-xs font-bold transition-all flex items-center gap-1 shadow-2xs flex-shrink-0"
+                >
+                  <span>View Resort</span>
+                  <ExternalLink className="h-3 w-3" />
+                </button>
+              </div>
+
+              {/* 🏨 AVAILABLE ROOMS & COTTAGES (Uploaded by Resort Owner) */}
+              {selectedAcc.rooms && selectedAcc.rooms.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Available Rooms & Cottages ({selectedAcc.rooms.length})
+                    </h4>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {selectedAcc.rooms.map((room: any) => (
+                      <div
+                        key={room.id}
+                        className="bg-gray-50/90 hover:bg-pink-50/40 p-3 rounded-2xl border border-gray-100 hover:border-pink-200 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          {room.image ? (
+                            <img
+                              src={room.image}
+                              alt={room.name}
+                              className="w-16 h-16 rounded-xl object-cover border border-gray-200 flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-16 h-16 rounded-xl bg-emerald-100/60 text-emerald-700 flex items-center justify-center text-xl flex-shrink-0">
+                              🏨
+                            </div>
+                          )}
+                          <div>
+                            <h5 className="text-sm font-extrabold text-gray-900 leading-tight">{room.name}</h5>
+                            <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5 flex-wrap">
+                              {room.type && (
+                                <span className="px-2 py-0.5 bg-white rounded-md text-[10px] font-bold text-gray-600 border border-gray-200">
+                                  {room.type}
+                                </span>
+                              )}
+                              {room.capacity && (
+                                <span className="flex items-center gap-1 font-medium text-gray-600">
+                                  <Users className="h-3 w-3 text-gray-400" /> Max {room.capacity} Guests
+                                </span>
+                              )}
+                            </div>
+                            {room.description && (
+                              <p className="text-[11px] text-gray-500 line-clamp-1 mt-1 max-w-xs">{room.description}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center sm:items-end justify-between sm:justify-center gap-1.5 flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-200/60">
+                          <div className="text-sm font-extrabold text-pink-600">
+                            ₱{Number(room.price_per_night).toLocaleString()}
+                            <span className="text-[10px] font-normal text-gray-400"> / night</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Location & Directions Button */}
               <div className="flex items-center justify-between bg-gray-50 p-3 rounded-2xl border border-gray-100">

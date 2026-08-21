@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router';
-import { Menu, X, MapPin, User, LogOut, Shield, Hotel, Store, Moon, Sun, Search, Heart, ChevronDown, Plus, LayoutDashboard, Calendar, CreditCard, Settings } from 'lucide-react';
+import { Menu, X, MapPin, User, LogOut, Shield, Hotel, Store, Moon, Sun, Search, Heart, ChevronDown, Plus, LayoutDashboard, Calendar, CreditCard, Settings, Package, ShoppingBag } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
@@ -14,6 +14,7 @@ type RoleType = 'tourist' | 'admin' | 'resort' | 'enterprise';
 type RoleMenuItem = {
   to: string;
   label: string;
+  icon: React.ComponentType<{ className?: string }>;
 };
 
 export function Navbar() {
@@ -41,22 +42,8 @@ export function Navbar() {
 
   const toggleDark = () => setIsDark(prev => !prev);
 
-  const dashboardPath = (() => {
-    switch (userType) {
-      case 'admin':
-        return '/admin/dashboard';
-      case 'resort':
-        return '/resort/dashboard';
-      case 'enterprise':
-        return '/enterprise/dashboard';
-      case 'tourist':
-      default:
-        return '/dashboard';
-    }
-  })();
-
   const navLinks = [
-    { path: dashboardPath, label: 'Home' },
+    { path: '/dashboard', label: 'Home' },
     { path: '/attractions', label: 'Attractions' },
     { path: '/events', label: 'Events' },
     { path: '/products', label: 'Products' },
@@ -67,23 +54,27 @@ export function Navbar() {
 
   const roleMenuItems: Record<RoleType, RoleMenuItem[]> = {
     tourist: [
-      { to: '/profile', label: 'My Profile' },
-      { to: '/settings', label: 'Settings' },
+      { to: '/profile', label: 'My Profile', icon: User },
+      { to: '/wishlist', label: 'My Wishlist', icon: Heart },
+      { to: '/itinerary', label: 'My Itineraries', icon: Calendar },
+      { to: '/settings', label: 'Settings', icon: Settings },
     ],
     admin: [
-      { to: '/profile', label: 'My Profile' },
-      { to: '/admin/publish', label: 'Manage Listings' },
-      { to: '/admin/events', label: 'Manage Events' },
-      { to: '/admin/users', label: 'User Management' },
-      { to: '/admin/subscriptions', label: 'Subscriptions' },
+      { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/admin/users', label: 'Account Management', icon: User },
+      { to: '/admin/subscriptions', label: 'Manage Subscriptions', icon: CreditCard },
+      { to: '/admin/publish', label: 'Publish Content', icon: Plus },
+      { to: '/admin/events', label: 'Manage Events', icon: Calendar },
     ],
     resort: [
-      { to: '/profile', label: 'My Profile' },
-      { to: '/resort/profile', label: 'Manage Resort' },
+      { to: '/resort/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: `/business/resort/${currentUser?.id ?? ''}`, label: 'My Shop Profile', icon: Hotel },
+      { to: '/resort/profile', label: 'Manage Resort', icon: Settings },
     ],
     enterprise: [
-      { to: '/profile', label: 'My Profile' },
-      { to: '/enterprise/profile', label: 'Manage Products' },
+      { to: '/enterprise/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: `/business/enterprise/${currentUser?.id ?? ''}`, label: 'My Shop Profile', icon: Store },
+      { to: '/enterprise/profile', label: 'Manage Products', icon: Package },
     ],
   };
 
@@ -123,10 +114,14 @@ export function Navbar() {
         return { initial, label: name, bg: 'bg-blue-500', color: 'text-blue-600' };
       case 'admin':
         return { initial, label: 'Admin', bg: 'bg-purple-500', color: 'text-purple-600' };
-      case 'resort':
-        return { initial, label: name, bg: 'bg-emerald-500', color: 'text-emerald-600' };
-      case 'enterprise':
-        return { initial, label: name, bg: 'bg-amber-500', color: 'text-amber-600' };
+      case 'resort': {
+        const shopName = (currentUser as any)?.resort_name || name;
+        return { initial: shopName.charAt(0).toUpperCase(), label: shopName, bg: 'bg-emerald-500', color: 'text-emerald-600' };
+      }
+      case 'enterprise': {
+        const shopName = (currentUser as any)?.store_name || name;
+        return { initial: shopName.charAt(0).toUpperCase(), label: shopName, bg: 'bg-amber-500', color: 'text-amber-600' };
+      }
       default:
         return { initial: 'G', label: 'Guest', bg: 'bg-gray-400', color: 'text-gray-600' };
     }
@@ -143,7 +138,7 @@ export function Navbar() {
         <div className="flex justify-between items-center h-16">
           
           {/* Logo */}
-          <Link to={dashboardPath} className="flex items-center gap-2 group">
+          <Link to="/dashboard" className="flex items-center gap-2 group">
             <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-400 flex items-center justify-center text-white shadow-md shadow-pink-500/20 group-hover:scale-105 transition-transform">
               <MapPin className="h-5 w-5 fill-white stroke-pink-500" />
             </div>
@@ -225,11 +220,11 @@ export function Navbar() {
               <div className="relative">
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-white hover:bg-pink-50/60 border border-pink-200 hover:border-pink-300 rounded-full transition-all text-xs font-semibold text-gray-700 shadow-2xs"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-pink-50/60 dark:hover:bg-slate-700 border border-pink-200 dark:border-slate-700 hover:border-pink-300 rounded-full transition-all text-xs font-semibold text-gray-700 dark:text-slate-200 shadow-2xs"
                 >
                   {currentUser?.avatar ? (
                     <img
-                    src={currentUser.avatar.startsWith('http') ? currentUser.avatar : `${API_BASE}${currentUser.avatar}`}
+                      src={currentUser.avatar.startsWith('http') ? currentUser.avatar : `${API_BASE}${currentUser.avatar}`}
                       alt="avatar"
                       className="w-6 h-6 rounded-full object-cover border border-pink-200"
                     />
@@ -238,7 +233,7 @@ export function Navbar() {
                       {roleInfo.initial}
                     </div>
                   )}
-                  <span className="font-bold text-gray-800">{roleInfo.label}</span>
+                  <span className="font-bold text-gray-800 dark:text-slate-100">{roleInfo.label}</span>
                   <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
                 </button>
 
@@ -248,14 +243,14 @@ export function Navbar() {
                       className="fixed inset-0 z-10" 
                       onClick={() => setShowUserMenu(false)}
                     />
-                    <div className="absolute right-0 mt-2 w-64 bg-white border border-pink-100/80 rounded-3xl shadow-xl overflow-hidden z-30 animate-in fade-in slide-in-from-top-2 duration-150 p-2 font-sans">
-                      {/* Header Avatar Card matching screenshot */}
+                    <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-pink-100/80 dark:border-slate-800 rounded-3xl shadow-xl overflow-hidden z-30 animate-in fade-in slide-in-from-top-2 duration-150 p-2 font-sans">
+                      {/* Header Avatar Card */}
                       <div className="p-3 flex items-center gap-3">
                         {currentUser?.avatar ? (
                           <img
                             src={currentUser.avatar.startsWith('http') ? currentUser.avatar : `${API_BASE}${currentUser.avatar}`}
                             alt="avatar"
-                            className="w-10 h-10 rounded-full object-cover border-2 border-pink-100"
+                            className="w-10 h-10 rounded-full object-cover border-2 border-pink-100 dark:border-slate-700"
                           />
                         ) : (
                           <div className={`w-10 h-10 rounded-full ${roleInfo.bg} text-white font-extrabold flex items-center justify-center text-base shadow-xs`}>
@@ -263,106 +258,44 @@ export function Navbar() {
                           </div>
                         )}
                         <div>
-                          <h4 className="text-sm font-extrabold text-gray-900 leading-tight">
-                            {currentUser?.name || roleInfo.label}
+                          <h4 className="text-sm font-extrabold text-gray-900 dark:text-slate-100 leading-tight">
+                            {userType === 'enterprise'
+                              ? ((currentUser as any)?.store_name || currentUser?.name)
+                              : userType === 'resort'
+                              ? ((currentUser as any)?.resort_name || currentUser?.name)
+                              : (currentUser?.name || roleInfo.label)}
                           </h4>
                           <p className="text-xs text-gray-400 font-medium capitalize">{userType}</p>
                         </div>
                       </div>
 
-                      <div className="border-t border-pink-100/60 my-1" />
+                      <div className="border-t border-pink-100/60 dark:border-slate-800 my-1" />
 
-                      {/* Main Menu Items with Icons matching screenshot */}
-                      {userType === 'tourist' ? (
-                        <div className="space-y-0.5">
-                          <Link
-                            to="/profile"
-                            onClick={() => setShowUserMenu(false)}
-                            className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
-                          >
-                            <User className="h-4 w-4 text-pink-500 flex-shrink-0" />
-                            <span>My Profile</span>
-                          </Link>
-
-                          <Link
-                            to="/wishlist"
-                            onClick={() => setShowUserMenu(false)}
-                            className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
-                          >
-                            <Heart className="h-4 w-4 text-pink-500 flex-shrink-0" />
-                            <span>My Wishlist</span>
-                          </Link>
-
-                          <Link
-                            to="/itinerary"
-                            onClick={() => setShowUserMenu(false)}
-                            className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
-                          >
-                            <Calendar className="h-4 w-4 text-pink-500 flex-shrink-0" />
-                            <span>My Itineraries</span>
-                          </Link>
-                        </div>
-                      ) : userType === 'admin' ? (
-                        <div className="space-y-0.5">
-                          <Link
-                            to="/admin/dashboard"
-                            onClick={() => setShowUserMenu(false)}
-                            className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
-                          >
-                            <Shield className="h-4 w-4 text-pink-500 flex-shrink-0" />
-                            <span>Dashboard</span>
-                          </Link>
-
-                          <Link
-                            to="/admin/users"
-                            onClick={() => setShowUserMenu(false)}
-                            className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
-                          >
-                            <MapPin className="h-4 w-4 text-pink-500 flex-shrink-0" />
-                            <span>Account Management</span>
-                          </Link>
-
-                          <Link
-                            to="/admin/subscriptions"
-                            onClick={() => setShowUserMenu(false)}
-                            className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
-                          >
-                            <CreditCard className="h-4 w-4 text-pink-500 flex-shrink-0" />
-                            <span>Manage Subscriptions</span>
-                          </Link>
-
-                          <Link
-                            to="/admin/publish"
-                            onClick={() => setShowUserMenu(false)}
-                            className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
-                          >
-                            <Plus className="h-4 w-4 text-pink-500 flex-shrink-0" />
-                            <span>Publish Content</span>
-                          </Link>
-                        </div>
-                      ) : (
-                        <div className="space-y-0.5">
-                          {activeRoleItems.map(item => (
+                      {/* Main Menu Items with dynamic Icons */}
+                      <div className="space-y-0.5">
+                        {activeRoleItems.map((item) => {
+                          const IconComp = item.icon;
+                          return (
                             <Link
                               key={item.to}
                               to={item.to}
                               onClick={() => setShowUserMenu(false)}
-                              className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 rounded-2xl transition-colors text-xs font-semibold text-gray-700 hover:text-pink-600"
+                              className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 dark:hover:bg-slate-800 rounded-2xl transition-colors text-xs font-semibold text-gray-700 dark:text-slate-200 hover:text-pink-600 dark:hover:text-pink-400"
                             >
-                              <Shield className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                              <IconComp className="h-4 w-4 text-pink-500 flex-shrink-0" />
                               <span>{item.label}</span>
                             </Link>
-                          ))}
-                        </div>
-                      )}
+                          );
+                        })}
+                      </div>
 
-                      <div className="border-t border-pink-100/60 my-1" />
+                      <div className="border-t border-pink-100/60 dark:border-slate-800 my-1" />
 
                       {/* Logout */}
                       <div className="space-y-0.5">
                         <button
                           onClick={handleLogout}
-                          className="w-full flex items-center gap-3 px-3.5 py-2.5 hover:bg-rose-50 rounded-2xl transition-colors text-xs font-bold text-rose-600"
+                          className="w-full flex items-center gap-3 px-3.5 py-2.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-2xl transition-colors text-xs font-bold text-rose-600 dark:text-rose-400"
                         >
                           <LogOut className="h-4 w-4 text-rose-500 flex-shrink-0" />
                           <span>Logout</span>
@@ -388,7 +321,7 @@ export function Navbar() {
             <NotificationBell />
             <button
               onClick={() => setIsOpen(!isOpen)}
-              className="p-2 text-gray-700 hover:bg-gray-100 rounded-xl"
+              className="p-2 text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl"
             >
               {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
@@ -397,7 +330,7 @@ export function Navbar() {
 
         {/* Mobile Navigation */}
         {isOpen && (
-          <div className="lg:hidden pb-4 pt-2 space-y-1.5 border-t border-gray-100">
+          <div className="lg:hidden pb-4 pt-2 space-y-1.5 border-t border-gray-100 dark:border-slate-800">
             {navLinks.map(link => (
               <Link
                 key={link.path}
@@ -412,8 +345,8 @@ export function Navbar() {
                 }}
                 className={`block px-4 py-2.5 rounded-xl text-xs font-semibold ${
                   location.pathname === link.path
-                    ? 'bg-pink-100/70 text-pink-600'
-                    : 'text-gray-700 hover:bg-pink-50/50'
+                    ? 'bg-pink-100/70 text-pink-600 dark:bg-pink-500/20 dark:text-pink-400'
+                    : 'text-gray-700 dark:text-slate-200 hover:bg-pink-50/50 dark:hover:bg-slate-800'
                 }`}
               >
                 {link.label}
@@ -422,20 +355,24 @@ export function Navbar() {
 
             {userType ? (
               <>
-                <div className="pt-2 border-t border-gray-100">
-                  {activeRoleItems.map(item => (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      onClick={closeMenus}
-                      className="block px-4 py-2 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50"
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
+                <div className="pt-2 border-t border-gray-100 dark:border-slate-800 space-y-0.5">
+                  {activeRoleItems.map(item => {
+                    const IconComp = item.icon;
+                    return (
+                      <Link
+                        key={item.to}
+                        to={item.to}
+                        onClick={closeMenus}
+                        className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-medium text-gray-600 dark:text-slate-300 hover:bg-pink-50/60 dark:hover:bg-slate-800"
+                      >
+                        <IconComp className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
                   <button
                     onClick={handleLogout}
-                    className="w-full mt-2 px-4 py-2 bg-red-50 text-red-600 rounded-xl text-xs font-semibold flex items-center justify-center gap-2"
+                    className="w-full mt-2 px-4 py-2.5 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-semibold flex items-center justify-center gap-2"
                   >
                     <LogOut className="h-4 w-4" />
                     Logout

@@ -40,8 +40,6 @@ import { EnterpriseRegistration } from "./pages/enterprise/EnterpriseRegistratio
 import { EnterpriseDashboard } from "./pages/enterprise/EnterpriseDashboard";
 import { EnterpriseProfile } from "./pages/enterprise/EnterpriseProfile";
 import { EnterpriseProfileSetup } from "./pages/enterprise/EnterpriseProfileSetup";
-import { ManageOrders as EnterpriseManageOrders } from "./pages/enterprise/ManageOrders";
-import { ManageOrders as AdminManageOrders } from "./pages/admin/ManageOrders";
 
 function SmartRedirect() {
   const navigate = useNavigate();
@@ -49,15 +47,12 @@ function SmartRedirect() {
   useEffect(() => {
     const userType = window.localStorage.getItem('discover-mansalay:userType');
     switch (userType) {
-      case 'resort':
-        navigate('/resort/dashboard', { replace: true });
-        break;
-      case 'enterprise':
-        navigate('/enterprise/dashboard', { replace: true });
-        break;
       case 'admin':
         navigate('/admin/dashboard', { replace: true });
         break;
+      case 'resort':
+      case 'enterprise':
+      case 'tourist':
       default:
         navigate('/dashboard', { replace: true });
         break;
@@ -120,8 +115,6 @@ export const router = createBrowserRouter([
       { path: "enterprise/dashboard", Component: EnterpriseDashboard },
       { path: "enterprise/profile", Component: EnterpriseProfile },
       { path: "enterprise/profile/setup", Component: EnterpriseProfileSetup },
-      { path: "admin/orders", Component: AdminManageOrders },
-      { path: "enterprise/orders", Component: EnterpriseManageOrders },
     ],
   },
 ]);

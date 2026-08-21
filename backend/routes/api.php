@@ -64,6 +64,10 @@ Route::group(['prefix' => 'public'], function () {
     // Product reviews (public)
     Route::get('products/{productId}/reviews', [ReviewController::class, 'getProductReviews']);
 
+    // Public business profiles (enterprise & resort) — no auth needed
+    Route::get('business/enterprise/{userId}', [EnterpriseProfileController::class, 'publicProfile']);
+    Route::get('business/resort/{userId}', [AccommodationController::class, 'businessProfile']);
+
     // Hero Video API (Public GET)
     Route::get('hero-video', function () {
         $video = \Illuminate\Support\Facades\Cache::get('hero_video');

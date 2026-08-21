@@ -1,11 +1,31 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Store, Plus, Edit, Trash2, Package, DollarSign, ShoppingCart, TrendingUp, BarChart3, ChevronDown, CreditCard, Eye, CheckCircle, XCircle, Calendar } from 'lucide-react';
+import { Store, Plus, Edit, Trash2, Package, DollarSign, TrendingUp, BarChart3, ChevronDown, CreditCard, Eye, CheckCircle, XCircle, Calendar, Upload, Image as ImageIcon, X, MapPin, Phone, Mail, Facebook, Instagram, ExternalLink, ShieldCheck, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router';
 import { useApp } from '../../context/AppContext';
 import { getAuthToken, getJSON, getPublicJSON, postJSON, putJSON, patchJSON, deleteJSON, API_BASE } from '../../lib/api';
 import { showPaymentMethodSuccess, showProductSuccess, showStatusUpdateSuccess } from '../../lib/sweetAlert';
 import { LocationPicker } from '../../components/LocationPicker';
+
+const MANSALAY_BARANGAYS = [
+  'Barangay I (Poblacion)',
+  'Barangay II (Poblacion)',
+  'B. Del Mundo',
+  'Balugo',
+  'Bonbon',
+  'Budburan',
+  'Buktot',
+  'Cabalwa',
+  'Don Pedro',
+  'Maliwanag',
+  'Manaul',
+  'Panaytayan',
+  'Poblacion',
+  'Santa Maria',
+  'Santa Maria II',
+  'Villa Cerveza',
+  'Waygan'
+];
 
 interface ProductVariationForm {
   id?: number;
@@ -57,16 +77,38 @@ interface Event {
 }
 
 const CATEGORIES = ['Festival', 'Concert', 'Workshop', 'Sports', 'Cultural', 'Other'];
+const PRODUCTS_PER_PAGE = 5;
 
 export function EnterpriseProfile() {
-  const { currentUser } = useApp();
+  const { currentUser, setCurrentUser } = useApp();
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [productPage, setProductPage] = useState(1);
   const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
+
+  // Store Profile State (like Resort Profile)
+  const [storeProfile, setStoreProfile] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileEditMode, setProfileEditMode] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    store_name: '',
+    store_description: '',
+    phone: '',
+    barangay: 'Barangay I (Poblacion)',
+    address: '',
+    facebook_link: '',
+    instagram_link: '',
+  });
+  const [storeLogoFile, setStoreLogoFile] = useState<File | null>(null);
+  const [storeLogoPreview, setStoreLogoPreview] = useState<string | null>(null);
+  const [storeBannerFile, setStoreBannerFile] = useState<File | null>(null);
+  const [storeBannerPreview, setStoreBannerPreview] = useState<string | null>(null);
+  const [storeLocation, setStoreLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [newProduct, setNewProduct] = useState({
     name: '',
     description: '',
@@ -128,14 +170,106 @@ export function EnterpriseProfile() {
   useEffect(() => {
     fetchData();
     fetchSubscriptionStatus();
-    // Load saved location
-    getJSON('/me').then((me: any) => {
-      if (me?.latitude && me?.longitude) {
-        setEnterpriseLocation({ lat: Number(me.latitude), lng: Number(me.longitude) });
-      }
-    }).catch(() => {});
+    loadStoreProfile();
     fetchPromoCodes();
   }, []);
+
+  const loadStoreProfile = async () => {
+    setProfileLoading(true);
+    try {
+      const data = await getJSON('/enterprise-profile');
+      setStoreProfile(data);
+      setProfileForm({
+        store_name: data?.store_name ?? '',
+        store_description: data?.store_description ?? data?.description ?? '',
+        phone: data?.phone ?? '',
+        barangay: data?.barangay ?? 'Barangay I (Poblacion)',
+        address: data?.address ?? '',
+        facebook_link: data?.facebook_link ?? '',
+        instagram_link: data?.instagram_link ?? '',
+      });
+
+      if (data?.store_logo) {
+        setStoreLogoPreview(data.store_logo.startsWith('http') ? data.store_logo : `${API_BASE}${data.store_logo}`);
+      } else {
+        setStoreLogoPreview(null);
+      }
+
+      if (data?.store_banner) {
+        setStoreBannerPreview(data.store_banner.startsWith('http') ? data.store_banner : `${API_BASE}${data.store_banner}`);
+      } else {
+        setStoreBannerPreview(null);
+      }
+
+      if (data?.latitude && data?.longitude) {
+        setStoreLocation({ lat: Number(data.latitude), lng: Number(data.longitude) });
+      }
+    } catch {
+      setStoreProfile(null);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const handleSaveStoreProfile = async () => {
+    if (!profileForm.store_name.trim()) {
+      toast.error('Shop / Business name is required');
+      return;
+    }
+
+    setProfileSaving(true);
+    try {
+      const token = getAuthToken();
+      const formData = new FormData();
+      formData.append('store_name', profileForm.store_name.trim());
+      formData.append('store_description', profileForm.store_description.trim());
+      formData.append('phone', profileForm.phone.trim());
+      formData.append('barangay', profileForm.barangay);
+      formData.append('address', profileForm.address.trim());
+      formData.append('facebook_link', profileForm.facebook_link.trim());
+      formData.append('instagram_link', profileForm.instagram_link.trim());
+      if (storeLocation?.lat && storeLocation?.lng) {
+        formData.append('latitude', String(storeLocation.lat));
+        formData.append('longitude', String(storeLocation.lng));
+      }
+      if (storeLogoFile) {
+        formData.append('logo', storeLogoFile);
+      }
+      if (storeBannerFile) {
+        formData.append('banner', storeBannerFile);
+      }
+      formData.append('_method', 'PUT');
+
+      const res = await fetch(`${API_BASE}/api/enterprise-profile`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message || 'Failed to update store profile');
+      }
+
+      const updated = await res.json();
+      toast.success('Shop profile updated successfully!');
+      setProfileEditMode(false);
+      setStoreLogoFile(null);
+      setStoreBannerFile(null);
+      await loadStoreProfile();
+
+      if (currentUser && updated.user) {
+        setCurrentUser({
+          ...currentUser,
+          store_name: updated.user.store_name,
+        } as any);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save store profile');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const fetchSubscriptionStatus = async () => {
     try {
@@ -325,7 +459,7 @@ export function EnterpriseProfile() {
       iconColor: 'text-green-600',
     },
     {
-      icon: ShoppingCart,
+      icon: Package,
       label: 'Total Sales',
       value: orders
         .reduce((sum, order) => sum + order.items.reduce((total, item) => total + (item.quantity || 0), 0), 0)
@@ -723,6 +857,411 @@ export function EnterpriseProfile() {
         </div>
       </div>
 
+      {/* 🏬 SHOP / ENTERPRISE PROFILE SECTION */}
+      <div className="bg-white border-2 border-primary/20 rounded-2xl p-6 mb-8 shadow-xs overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
+              <Store className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Shop Profile & Branding</h2>
+              <p className="text-xs text-muted-foreground">Manage your shop name, logo, banner, location and contact details</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {currentUser?.id && (
+              <Link
+                to={`/business/enterprise/${currentUser.id}`}
+                target="_blank"
+                className="px-3.5 py-2 bg-gray-50 border border-gray-200 hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
+              >
+                <ExternalLink className="h-3.5 w-3.5 text-primary" />
+                View Public Shop
+              </Link>
+            )}
+            <button
+              onClick={() => {
+                if (profileEditMode) {
+                  loadStoreProfile();
+                  setStoreLogoFile(null);
+                  setStoreBannerFile(null);
+                }
+                setProfileEditMode(!profileEditMode);
+              }}
+              className="px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors text-xs font-semibold inline-flex items-center gap-1.5 shadow-sm"
+            >
+              <Edit className="h-3.5 w-3.5" />
+              {profileEditMode ? 'Cancel Editing' : 'Edit Shop Profile'}
+            </button>
+          </div>
+        </div>
+
+        {profileLoading ? (
+          <div className="py-12 text-center text-muted-foreground text-sm">
+            Loading shop profile...
+          </div>
+        ) : profileEditMode ? (
+          /* ✏️ EDIT MODE FORM */
+          <div className="pt-6 space-y-6 animate-in fade-in duration-200">
+            {/* Banner & Logo Upload Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-primary/5 p-5 rounded-2xl border border-primary/10">
+              {/* Logo Upload */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">
+                  Shop Logo (Avatar)
+                </label>
+                <div className="flex items-center gap-4">
+                  {storeLogoPreview ? (
+                    <div className="relative group">
+                      <img
+                        src={storeLogoPreview}
+                        alt="Logo Preview"
+                        className="w-20 h-20 rounded-2xl object-cover border-2 border-primary/30 shadow-sm"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-20 h-20 rounded-2xl bg-white border-2 border-dashed border-primary/30 flex items-center justify-center text-primary/40">
+                      <Store className="h-8 w-8" />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setStoreLogoFile(file);
+                          setStoreLogoPreview(URL.createObjectURL(file));
+                        }
+                      }}
+                      className="w-full text-xs text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90 file:cursor-pointer cursor-pointer"
+                    />
+                    <p className="text-[11px] text-gray-400 mt-1">Recommended: 400x400 JPG, PNG or WebP</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Banner Upload */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">
+                  Shop Banner Cover
+                </label>
+                <div>
+                  {storeBannerPreview ? (
+                    <div className="relative rounded-xl overflow-hidden mb-2 h-20 border border-primary/20">
+                      <img
+                        src={storeBannerPreview}
+                        alt="Banner Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="h-20 rounded-xl bg-white border-2 border-dashed border-primary/30 flex items-center justify-center text-xs text-muted-foreground mb-2">
+                      <Upload className="h-4 w-4 mr-1.5 text-primary/50" /> No banner cover uploaded
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setStoreBannerFile(file);
+                        setStoreBannerPreview(URL.createObjectURL(file));
+                      }
+                    }}
+                    className="w-full text-xs text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90 file:cursor-pointer cursor-pointer"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Inputs Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
+                  Shop / Business Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={profileForm.store_name}
+                  onChange={(e) => setProfileForm(p => ({ ...p, store_name: e.target.value }))}
+                  placeholder="e.g. AWATI Shop"
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-xl focus:border-primary outline-none text-sm bg-white font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
+                  Contact Phone Number
+                </label>
+                <input
+                  type="text"
+                  value={profileForm.phone}
+                  onChange={(e) => setProfileForm(p => ({ ...p, phone: e.target.value }))}
+                  placeholder="e.g. 09123456789"
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-xl focus:border-primary outline-none text-sm bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
+                  Barangay (Mansalay)
+                </label>
+                <select
+                  value={profileForm.barangay}
+                  onChange={(e) => setProfileForm(p => ({ ...p, barangay: e.target.value }))}
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-xl focus:border-primary outline-none text-sm bg-white"
+                >
+                  {MANSALAY_BARANGAYS.map((b) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
+                  Street Address / Sitio
+                </label>
+                <input
+                  type="text"
+                  value={profileForm.address}
+                  onChange={(e) => setProfileForm(p => ({ ...p, address: e.target.value }))}
+                  placeholder="e.g. Sitio Centro, Near Public Market"
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-xl focus:border-primary outline-none text-sm bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
+                  Facebook Page Link
+                </label>
+                <input
+                  type="url"
+                  value={profileForm.facebook_link}
+                  onChange={(e) => setProfileForm(p => ({ ...p, facebook_link: e.target.value }))}
+                  placeholder="https://facebook.com/your-shop"
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-xl focus:border-primary outline-none text-sm bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
+                  Instagram Profile Link
+                </label>
+                <input
+                  type="url"
+                  value={profileForm.instagram_link}
+                  onChange={(e) => setProfileForm(p => ({ ...p, instagram_link: e.target.value }))}
+                  placeholder="https://instagram.com/your-shop"
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-xl focus:border-primary outline-none text-sm bg-white"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
+                  Shop Description / About Us
+                </label>
+                <textarea
+                  rows={3}
+                  value={profileForm.store_description}
+                  onChange={(e) => setProfileForm(p => ({ ...p, store_description: e.target.value }))}
+                  placeholder="Tell tourists about your authentic handcrafted products, delicacies, specialties, and business hours..."
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-xl focus:border-primary outline-none text-sm bg-white"
+                />
+              </div>
+            </div>
+
+            {/* Map Location Picker */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <MapPin className="h-4 w-4 text-primary" />
+                Pin Shop Location on Map (Mansalay)
+              </label>
+              <div className="rounded-2xl overflow-hidden border-2 border-primary/20 shadow-xs">
+                <LocationPicker
+                  initialLat={storeLocation?.lat || 12.5115}
+                  initialLng={storeLocation?.lng || 121.4238}
+                  onLocationSelect={(lat, lng) => setStoreLocation({ lat, lng })}
+                  height="260px"
+                />
+              </div>
+            </div>
+
+            {/* Save Buttons */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  loadStoreProfile();
+                  setStoreLogoFile(null);
+                  setStoreBannerFile(null);
+                  setProfileEditMode(false);
+                }}
+                className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold text-xs transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={profileSaving}
+                onClick={handleSaveStoreProfile}
+                className="px-6 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-xl font-bold text-xs transition-colors disabled:opacity-50 shadow-md shadow-primary/20"
+              >
+                {profileSaving ? 'Saving Changes...' : 'Save Shop Profile'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* 👁️ VIEW MODE CARD */
+          <div className="pt-6 space-y-6">
+            {/* Banner Cover & Logo Header */}
+            <div className="relative rounded-2xl overflow-hidden border border-gray-100 bg-gradient-to-r from-pink-500 to-rose-400 h-36 md:h-44">
+              {storeBannerPreview && (
+                <img
+                  src={storeBannerPreview}
+                  alt="Shop Banner"
+                  className="w-full h-full object-cover"
+                />
+              )}
+              <div className="absolute inset-0 bg-black/25 backdrop-blur-[1px]" />
+              
+              {/* Profile Card Floating Inside/Bottom */}
+              <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-white p-1 shadow-lg border border-white/80 overflow-hidden flex-shrink-0">
+                    {storeLogoPreview ? (
+                      <img
+                        src={storeLogoPreview}
+                        alt="Store Logo"
+                        className="w-full h-full object-cover rounded-xl"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-primary/10 rounded-xl flex items-center justify-center text-primary font-bold text-xl">
+                        {(storeProfile?.store_name || currentUser?.name || 'S').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-white drop-shadow-md">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-xl md:text-2xl font-extrabold tracking-tight">
+                        {storeProfile?.store_name || (currentUser as any)?.store_name || currentUser?.name || 'My Shop'}
+                      </h3>
+                      <span className="px-2 py-0.5 bg-green-500/90 text-white rounded-full text-[10px] font-bold backdrop-blur-xs">
+                        ✓ Verified
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/90 font-medium flex items-center gap-1.5 mt-0.5">
+                      <MapPin className="h-3.5 w-3.5 text-pink-200" />
+                      {[storeProfile?.barangay || (currentUser as any)?.barangay, 'Mansalay, Oriental Mindoro'].filter(Boolean).join(', ')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Shop Details Info */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-2 space-y-4">
+                {/* Description */}
+                <div className="bg-gray-50/80 p-4 rounded-xl border border-gray-100">
+                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">About Our Shop</h4>
+                  <p className="text-sm text-gray-700 leading-relaxed font-normal">
+                    {storeProfile?.store_description || storeProfile?.description || 'No description provided yet. Click "Edit Shop Profile" to add a description for tourists.'}
+                  </p>
+                </div>
+
+                {/* Contact & Social Links */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {storeProfile?.phone && (
+                    <div className="flex items-center gap-3 p-3 bg-white border border-gray-100 rounded-xl shadow-2xs">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                        <Phone className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] text-gray-400 uppercase font-bold">Contact Phone</div>
+                        <div className="text-xs font-semibold text-gray-800 truncate">{storeProfile.phone}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {storeProfile?.address && (
+                    <div className="flex items-center gap-3 p-3 bg-white border border-gray-100 rounded-xl shadow-2xs">
+                      <div className="w-8 h-8 rounded-lg bg-pink-50 text-pink-600 flex items-center justify-center flex-shrink-0">
+                        <MapPin className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] text-gray-400 uppercase font-bold">Address / Street</div>
+                        <div className="text-xs font-semibold text-gray-800 truncate">{storeProfile.address}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {storeProfile?.facebook_link && (
+                    <a
+                      href={storeProfile.facebook_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 bg-white border border-gray-100 hover:border-blue-300 rounded-xl shadow-2xs transition-colors"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+                        <Facebook className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] text-gray-400 uppercase font-bold">Facebook</div>
+                        <div className="text-xs font-semibold text-blue-600 truncate">Visit Facebook Page</div>
+                      </div>
+                    </a>
+                  )}
+
+                  {storeProfile?.instagram_link && (
+                    <a
+                      href={storeProfile.instagram_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 bg-white border border-gray-100 hover:border-pink-300 rounded-xl shadow-2xs transition-colors"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-pink-50 text-pink-600 flex items-center justify-center flex-shrink-0">
+                        <Instagram className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] text-gray-400 uppercase font-bold">Instagram</div>
+                        <div className="text-xs font-semibold text-pink-600 truncate">Visit Instagram</div>
+                      </div>
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Mini Map Location Card */}
+              <div className="bg-gray-50/80 p-4 rounded-xl border border-gray-100 flex flex-col justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-primary" />
+                    Shop Location
+                  </h4>
+                  <p className="text-xs text-gray-600 mb-3">
+                    {storeProfile?.barangay ? `${storeProfile.barangay}, Mansalay` : 'Mansalay, Oriental Mindoro'}
+                  </p>
+                </div>
+                {storeLocation?.lat && storeLocation?.lng && (
+                  <div className="rounded-xl overflow-hidden border border-gray-200">
+                    <LocationPicker
+                      initialLat={storeLocation.lat}
+                      initialLng={storeLocation.lng}
+                      onLocationSelect={() => {}}
+                      height="140px"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {stats.map(stat => {
@@ -1011,132 +1550,6 @@ export function EnterpriseProfile() {
         />
       </div>
 
-      {/* Payment Details Management */}
-      <div className="bg-white border-2 border-primary/20 rounded-lg p-6 mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <CreditCard className="h-6 w-6 text-primary" />
-            <div>
-              <h2 className="text-xl font-bold">Payment Details</h2>
-              <p className="text-sm text-muted-foreground">Manage your payment methods for customer transactions</p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                setShowReceiptsModal(true);
-                fetchReceipts();
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
-            >
-              <Eye className="h-4 w-4" />
-              View Receipts ({receipts.length})
-            </button>
-            <button
-              onClick={() => setShowPaymentForm(!showPaymentForm)}
-              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Add Payment Method
-            </button>
-          </div>
-        </div>
-
-        {/* Payment Methods List */}
-        {paymentDetails.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-            {paymentDetails.map((payment, index) => (
-              <div key={index} className="border-2 border-primary/20 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-primary uppercase">{payment.type}</span>
-                  <button
-                    onClick={() => handleDeletePayment(index)}
-                    className="text-red-500 hover:text-red-700"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-                <p className="font-semibold">{payment.name}</p>
-                <p className="text-sm text-muted-foreground">{payment.account_number}</p>
-                <p className="text-sm text-muted-foreground">{payment.account_name}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Add Payment Form */}
-        {showPaymentForm && (
-          <div className="bg-primary/5 border-2 border-primary/20 rounded-lg p-6 mb-6">
-            <h3 className="text-lg font-semibold mb-4">Add Payment Method</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm mb-2">Payment Type *</label>
-                <select
-                  value={newPayment.type}
-                  onChange={(e) => setNewPayment({ ...newPayment, type: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                >
-                  <option value="gcash">GCash</option>
-                  <option value="paymaya">PayMaya</option>
-                  <option value="bank_account">Bank Account</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm mb-2">Display Name *</label>
-                <input
-                  type="text"
-                  value={newPayment.name}
-                  onChange={(e) => setNewPayment({ ...newPayment, name: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                  placeholder="e.g., My GCash, Business Account"
-                />
-              </div>
-              <div>
-                <label className="block text-sm mb-2">Account Number *</label>
-                <input
-                  type="text"
-                  value={newPayment.account_number}
-                  onChange={(e) => setNewPayment({ ...newPayment, account_number: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                  placeholder="09123456789 or Account Number"
-                />
-              </div>
-              <div>
-                <label className="block text-sm mb-2">Account Name *</label>
-                <input
-                  type="text"
-                  value={newPayment.account_name}
-                  onChange={(e) => setNewPayment({ ...newPayment, account_name: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-                  placeholder="Juan Dela Cruz"
-                />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={() => setShowPaymentForm(false)}
-                className="px-4 py-2 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddPayment}
-                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-              >
-                Add Payment Method
-              </button>
-            </div>
-          </div>
-        )}
-
-        {paymentDetails.length === 0 && !showPaymentForm && (
-          <div className="text-center py-8 text-muted-foreground">
-            <CreditCard className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>No payment methods added yet</p>
-            <p className="text-sm">Add payment methods so customers can pay for your products</p>
-          </div>
-        )}
-      </div>
 
       {/* Products Management */}
       <div className="bg-white border-2 border-primary/20 rounded-lg p-6 mb-8">
@@ -1420,425 +1833,144 @@ export function EnterpriseProfile() {
           </div>
         )}
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b-2 border-primary/20">
-                <th className="text-left pb-3 font-semibold">Image</th>
-                <th className="text-left pb-3 font-semibold">Product Name</th>
-                <th className="text-left pb-3 font-semibold">Category</th>
-                <th className="text-left pb-3 font-semibold">Price</th>
-                <th className="text-left pb-3 font-semibold">Stock</th>
-                <th className="text-left pb-3 font-semibold">Sold</th>
-                <th className="text-left pb-3 font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-4 text-center text-muted-foreground">
-                    No products yet
-                  </td>
-                </tr>
-              ) : (
-                products.map(product => (
-                  <tr key={product.id} className="border-b border-primary/10">
-                    <td className="py-4">
-                      {product.image ? (
-                        <img 
-                          src={product.image} 
-                          alt={product.name}
-                          className="w-16 h-16 object-cover rounded border-2 border-primary/20"
-                          onError={(e) => {
-                            e.currentTarget.src = '/assets/default-product.jpg';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">
-                          No image
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-4">{product.name}</td>
-                    <td className="py-4">
-                      <span className="px-2 py-1 bg-primary/10 text-primary text-xs rounded">{product.category}</span>
-                    </td>
-                    <td className="py-4">₱{product.price.toLocaleString()}</td>
-                    <td className="py-4">
-                      <span className={product.stock < 10 ? 'text-orange-600 font-medium' : 'text-green-600'}>
-                        {product.stock} units
-                      </span>
-                    </td>
-                    <td className="py-4">{soldByProduct.get(product.name) || 0}</td>
-                    <td className="py-4">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            if (subscriptionStatus?.subscription_status !== 'paid') {
-                              toast.error('Subscription required to edit products');
-                              return;
-                            }
-                            handleEditProduct(product);
-                          }}
-                          disabled={subscriptionStatus?.subscription_status !== 'paid'}
-                          className="p-2 text-primary hover:bg-primary/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (subscriptionStatus?.subscription_status !== 'paid') {
-                              toast.error('Subscription required to delete products');
-                              return;
-                            }
-                            handleDeleteProduct(product.id);
-                          }}
-                          disabled={subscriptionStatus?.subscription_status !== 'paid'}
-                          className="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        {(() => {
+          const totalProductPages = Math.max(1, Math.ceil(products.length / PRODUCTS_PER_PAGE));
+          const safePage = Math.min(productPage, totalProductPages);
+          const paginatedProducts = products.slice((safePage - 1) * PRODUCTS_PER_PAGE, safePage * PRODUCTS_PER_PAGE);
+          return (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b-2 border-primary/20">
+                      <th className="text-left pb-3 font-semibold">Image</th>
+                      <th className="text-left pb-3 font-semibold">Product Name</th>
+                      <th className="text-left pb-3 font-semibold">Category</th>
+                      <th className="text-left pb-3 font-semibold">Price</th>
+                      <th className="text-left pb-3 font-semibold">Stock</th>
+                      <th className="text-left pb-3 font-semibold">Sold</th>
+                      <th className="text-left pb-3 font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-4 text-center text-muted-foreground">
+                          No products yet
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedProducts.map(product => (
+                        <tr key={product.id} className="border-b border-primary/10">
+                          <td className="py-4">
+                            {product.image ? (
+                              <img
+                                src={product.image}
+                                alt={product.name}
+                                className="w-16 h-16 object-cover rounded border-2 border-primary/20"
+                                onError={(e) => {
+                                  e.currentTarget.src = '/assets/default-product.jpg';
+                                }}
+                              />
+                            ) : (
+                              <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">
+                                No image
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-4">{product.name}</td>
+                          <td className="py-4">
+                            <span className="px-2 py-1 bg-primary/10 text-primary text-xs rounded">{product.category}</span>
+                          </td>
+                          <td className="py-4">₱{product.price.toLocaleString()}</td>
+                          <td className="py-4">
+                            <span className={product.stock < 10 ? 'text-orange-600 font-medium' : 'text-green-600'}>
+                              {product.stock} units
+                            </span>
+                          </td>
+                          <td className="py-4">{soldByProduct.get(product.name) || 0}</td>
+                          <td className="py-4">
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  if (subscriptionStatus?.subscription_status !== 'paid') {
+                                    toast.error('Subscription required to edit products');
+                                    return;
+                                  }
+                                  handleEditProduct(product);
+                                }}
+                                disabled={subscriptionStatus?.subscription_status !== 'paid'}
+                                className="p-2 text-primary hover:bg-primary/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (subscriptionStatus?.subscription_status !== 'paid') {
+                                    toast.error('Subscription required to delete products');
+                                    return;
+                                  }
+                                  handleDeleteProduct(product.id);
+                                }}
+                                disabled={subscriptionStatus?.subscription_status !== 'paid'}
+                                className="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-      {/* Event Management */}
-      <div className="bg-white border-2 border-primary/20 rounded-lg p-6 mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Calendar className="h-6 w-6 text-primary" />
-            <div>
-              <h2 className="text-xl font-bold">Event Management</h2>
-              <p className="text-sm text-muted-foreground">Manage your events and activities</p>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              if (subscriptionStatus?.subscription_status !== 'paid') {
-                toast.error('Subscription required to add events');
-                return;
-              }
-              setShowAddEvent(!showAddEvent);
-              if (showAddEvent) {
-                setEditingEventId(null);
-                setNewEvent({ name: '', location: '', category: '', date: '', time: '', capacity: '', description: '', full_description: '' });
-                setEventImageFile(null);
-                setEventImagePreview(null);
-              }
-            }}
-            disabled={subscriptionStatus?.subscription_status !== 'paid'}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Plus className="h-4 w-4" />
-            Add Event
-          </button>
-        </div>
-
-        {showAddEvent && (
-          <div className="bg-primary/5 border-2 border-primary/20 rounded-lg p-6 mb-6">
-            <h3 className="text-lg font-semibold mb-4">{editingEventId ? 'Edit Event' : 'Add New Event'}</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Event Name *</label>
-                <input
-                  type="text"
-                  value={newEvent.name}
-                  onChange={e => setNewEvent({ ...newEvent, name: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
-                  placeholder="Enter event name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Location</label>
-                <input
-                  type="text"
-                  value={newEvent.location}
-                  onChange={e => setNewEvent({ ...newEvent, location: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
-                  placeholder="Enter location"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Category</label>
-                <select
-                  value={newEvent.category}
-                  onChange={e => setNewEvent({ ...newEvent, category: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
-                >
-                  <option value="">Select category</option>
-                  {CATEGORIES.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Capacity</label>
-                <input
-                  type="text"
-                  value={newEvent.capacity}
-                  onChange={e => setNewEvent({ ...newEvent, capacity: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
-                  placeholder="e.g., 100 people"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Date</label>
-                <input
-                  type="date"
-                  value={newEvent.date}
-                  onChange={e => setNewEvent({ ...newEvent, date: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Time</label>
-                <input
-                  type="time"
-                  value={newEvent.time}
-                  onChange={e => setNewEvent({ ...newEvent, time: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-2">Short Description</label>
-                <textarea
-                  value={newEvent.description}
-                  onChange={e => setNewEvent({ ...newEvent, description: e.target.value })}
-                  rows={3}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white resize-none"
-                  placeholder="Brief description of the event"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-2">Full Description</label>
-                <textarea
-                  value={newEvent.full_description}
-                  onChange={e => setNewEvent({ ...newEvent, full_description: e.target.value })}
-                  rows={5}
-                  className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white resize-none"
-                  placeholder="Detailed description of the event"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-2">Event Image</label>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-4">
-                    <label className="flex-1 cursor-pointer">
-                      <div className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg hover:border-primary transition-colors bg-white flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">
-                          {eventImageFile ? eventImageFile.name : 'Choose image file...'}
-                        </span>
-                        <span className="px-3 py-1 bg-primary/10 text-primary text-xs rounded">
-                          Browse
-                        </span>
-                      </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={e => {
-                          const f = e.target.files?.[0] ?? null;
-                          if (f && f.size > 5 * 1024 * 1024) {
-                            toast.error('Image size must be less than 5MB');
-                            return;
-                          }
-                          setEventImageFile(f);
-                          setEventImagePreview(f ? URL.createObjectURL(f) : null);
-                        }}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                  {eventImagePreview && (
-                    <div className="relative w-full max-w-xs">
-                      <img 
-                        src={eventImagePreview} 
-                        alt="Event preview" 
-                        className="w-full h-48 object-cover rounded-lg border-2 border-primary/20"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEventImageFile(null);
-                          setEventImagePreview(null);
-                        }}
-                        className="absolute top-2 right-2 p-2 bg-destructive text-white rounded-full hover:bg-destructive/90 transition-colors"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+              {/* Pagination Controls */}
+              {products.length > PRODUCTS_PER_PAGE && (
+                <div className="flex items-center justify-between mt-4 pt-4 border-t border-primary/10">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {(safePage - 1) * PRODUCTS_PER_PAGE + 1}–{Math.min(safePage * PRODUCTS_PER_PAGE, products.length)} of {products.length} products
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setProductPage(p => Math.max(1, p - 1))}
+                      disabled={safePage === 1}
+                      className="px-3 py-1.5 text-sm border-2 border-primary/20 rounded-lg hover:bg-primary/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      ← Prev
+                    </button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: totalProductPages }, (_, i) => i + 1).map(page => (
+                        <button
+                          key={page}
+                          onClick={() => setProductPage(page)}
+                          className={`w-8 h-8 text-sm rounded-lg font-medium transition-colors ${
+                            page === safePage
+                              ? 'bg-primary text-white'
+                              : 'border-2 border-primary/20 hover:bg-primary/5 text-foreground'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
                     </div>
-                  )}
+                    <button
+                      onClick={() => setProductPage(p => Math.min(totalProductPages, p + 1))}
+                      disabled={safePage === totalProductPages}
+                      className="px-3 py-1.5 text-sm border-2 border-primary/20 rounded-lg hover:bg-primary/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Next →
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </div>
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={handleAddEvent}
-                className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors font-medium"
-              >
-                {editingEventId ? 'Update Event' : 'Add Event'}
-              </button>
-              <button
-                onClick={() => {
-                  setShowAddEvent(false);
-                  setEditingEventId(null);
-                  setNewEvent({ name: '', location: '', category: '', date: '', time: '', capacity: '', description: '', full_description: '' });
-                  setEventImageFile(null);
-                  setEventImagePreview(null);
-                }}
-                className="px-6 py-2 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors font-medium"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b-2 border-primary/20">
-                <th className="text-left pb-3 font-semibold">Image</th>
-                <th className="text-left pb-3 font-semibold">Event Name</th>
-                <th className="text-left pb-3 font-semibold">Category</th>
-                <th className="text-left pb-3 font-semibold">Date</th>
-                <th className="text-left pb-3 font-semibold">Location</th>
-                <th className="text-left pb-3 font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-4 text-center text-muted-foreground">
-                    No events yet
-                  </td>
-                </tr>
-              ) : (
-                events.map(event => (
-                  <tr key={event.id} className="border-b border-primary/10">
-                    <td className="py-4">
-                      {event.image ? (
-                        <img 
-                          src={getEventImageUrl(event.image) || ''} 
-                          alt={event.name}
-                          className="w-16 h-16 object-cover rounded border-2 border-primary/20"
-                          onError={(e) => {
-                            e.currentTarget.src = '/assets/default-event.jpg';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-16 h-16 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">
-                          No image
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-4">{event.name}</td>
-                    <td className="py-4">
-                      {event.category && (
-                        <span className="px-2 py-1 bg-primary/10 text-primary text-xs rounded">{event.category}</span>
-                      )}
-                    </td>
-                    <td className="py-4">
-                      {event.date ? new Date(event.date).toLocaleDateString() : '-'}
-                    </td>
-                    <td className="py-4">{event.location || '-'}</td>
-                    <td className="py-4">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            if (subscriptionStatus?.subscription_status !== 'paid') {
-                              toast.error('Subscription required to edit events');
-                              return;
-                            }
-                            handleEditEvent(event);
-                          }}
-                          disabled={subscriptionStatus?.subscription_status !== 'paid'}
-                          className="p-2 text-primary hover:bg-primary/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (subscriptionStatus?.subscription_status !== 'paid') {
-                              toast.error('Subscription required to delete events');
-                              return;
-                            }
-                            handleDeleteEvent(event.id);
-                          }}
-                          disabled={subscriptionStatus?.subscription_status !== 'paid'}
-                          className="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
               )}
-            </tbody>
-          </table>
-        </div>
+            </>
+          );
+        })()}
       </div>
 
-      {/* Recent Orders */}
-      <div className="bg-white border-2 border-primary/20 rounded-lg p-6">
-        <h2 className="text-xl font-bold mb-6">Recent Orders</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b-2 border-primary/20">
-                <th className="text-left pb-3 font-semibold">Order ID</th>
-                <th className="text-left pb-3 font-semibold">Items</th>
-                <th className="text-left pb-3 font-semibold">Total</th>
-                <th className="text-left pb-3 font-semibold">Date</th>
-                <th className="text-left pb-3 font-semibold">Status</th>
-                <th className="text-left pb-3 font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-4 text-center text-muted-foreground">
-                    No orders yet
-                  </td>
-                </tr>
-              ) : (
-                orders.map(order => (
-                  <tr key={order.id} className="border-b border-primary/10">
-                    <td className="py-4">ORD-{String(order.id).padStart(3, '0')}</td>
-                    <td className="py-4 text-sm">
-                      {order.items.map(item => `${item.name} (${item.quantity})`).join(', ')}
-                    </td>
-                    <td className="py-4">₱{order.total.toLocaleString()}</td>
-                    <td className="py-4">{new Date(order.created_at).toLocaleDateString()}</td>
-                    <td className="py-4">
-                      <span className={getStatusBadge(order.status)}>
-                        {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="py-4">
-                      {orderStatusFlow[order.status] && (
-                        <button
-                          onClick={() => handleUpdateOrderStatus(order.id, order.status)}
-                          className="px-3 py-2 bg-primary text-white text-xs rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-1"
-                        >
-                          <ChevronDown className="h-3 w-3" />
-                          Update
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+
 
       {/* Receipts Modal */}
       {showReceiptsModal && (

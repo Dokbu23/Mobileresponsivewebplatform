@@ -385,7 +385,7 @@ export async function getPublicLandmarks() {
 
 export async function createLandmark(data: {
   name: string;
-  type: 'resort' | 'enterprise' | 'attraction';
+  type: 'resort' | 'enterprise';
   category?: string;
   description?: string;
   address?: string;
@@ -393,7 +393,7 @@ export async function createLandmark(data: {
   longitude: number;
   image?: string;
 }) {
-  return await postJSON('/public/landmarks', data, false);
+  return await postJSON('/landmarks', data, true);
 }
 
 

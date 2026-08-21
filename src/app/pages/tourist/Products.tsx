@@ -105,7 +105,7 @@ export function Products() {
           badge: p.badge || (idx % 2 === 0 ? 'Best Seller' : 'Top Rated'),
           rating: p.rating || 4.8,
           likes: p.likes || 0,
-          sellerName: p.owner?.name ?? p.owner?.store_name ?? p.seller_name ?? 'Mansalay Artisan Co-op',
+          sellerName: p.owner?.store_name || p.owner?.resort_name || p.seller_name || p.owner?.name || 'Mansalay Artisan Co-op',
           user_id: p.user_id,
           is_registered: p.is_registered,
         };

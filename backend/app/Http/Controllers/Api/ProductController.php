@@ -18,7 +18,7 @@ class ProductController extends Controller
         $user = $request->user();
 
         $query = \App\Models\Product::query()
-            ->with('owner:id,name,email,phone')
+            ->with('owner:id,name,email,phone,store_name,resort_name')
             ->with('variations');
 
         // Enterprise owner view: return their own products
