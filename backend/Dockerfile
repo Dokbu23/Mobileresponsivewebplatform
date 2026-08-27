@@ -1,4 +1,4 @@
-# Use official PHP 8.1 with Apache (supports Laravel 8 and modern PHP features)
+# Use official PHP 8.1 with Apache
 FROM php:8.1-apache
 
 # Set working directory
@@ -23,21 +23,17 @@ RUN apt-get update && apt-get install -y \
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Copy composer files first (better caching)
-COPY composer.json composer.lock ./
+# Copy ALL application files at once (avoids separate COPY issues)
+COPY . .
 
-# Install PHP dependencies with verbose output for debugging
+# Install PHP dependencies
 RUN composer install \
     --no-dev \
     --optimize-autoloader \
     --no-interaction \
     --prefer-dist \
-    --verbose \
     --no-scripts \
     && composer dump-autoload --optimize
-
-# Copy rest of application files
-COPY . .
 
 # Create required directories
 RUN mkdir -p storage/framework/{sessions,views,cache} \
@@ -56,11 +52,11 @@ ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf && \
     sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
-# Copy and set entrypoint
-COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# Write entrypoint script inline (avoids COPY file-not-found issues)
+RUN printf '#!/bin/bash\nset -e\n\nRENDER_PORT="${PORT:-80}"\necho "Configuring Apache on port ${RENDER_PORT}..."\nsed -i "s/Listen 80/Listen ${RENDER_PORT}/" /etc/apache2/ports.conf || true\nsed -i "s/<VirtualHost \\*:80>/<VirtualHost *:${RENDER_PORT}>/" /etc/apache2/sites-available/000-default.conf || true\n\nif [ -f "/var/www/html/build.sh" ]; then\n    echo "Running build.sh..."\n    chmod +x /var/www/html/build.sh\n    /var/www/html/build.sh\nfi\n\necho "Starting Apache on port ${RENDER_PORT}..."\nexec apache2-foreground\n' > /usr/local/bin/docker-entrypoint.sh \
+    && chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Expose port (Render will override this with $PORT)
+# Expose port
 EXPOSE 80
 
 # Use custom entrypoint
