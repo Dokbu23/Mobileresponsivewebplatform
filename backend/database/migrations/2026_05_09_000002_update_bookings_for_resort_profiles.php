@@ -23,7 +23,12 @@ class UpdateBookingsForResortProfiles extends Migration
             $table->dropForeign(['accommodation_id']);
         });
 
-        DB::statement('ALTER TABLE bookings MODIFY accommodation_id BIGINT UNSIGNED NULL');
+        // Make accommodation_id nullable (cross-database compatible without doctrine/dbal)
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('ALTER TABLE bookings ALTER COLUMN accommodation_id DROP NOT NULL');
+        } else {
+            DB::statement('ALTER TABLE bookings MODIFY accommodation_id BIGINT UNSIGNED NULL');
+        }
 
         Schema::table('bookings', function (Blueprint $table) {
             $table->foreign('accommodation_id')
@@ -54,7 +59,12 @@ class UpdateBookingsForResortProfiles extends Migration
             $table->dropForeign(['accommodation_id']);
         });
 
-        DB::statement('ALTER TABLE bookings MODIFY accommodation_id BIGINT UNSIGNED NOT NULL');
+        // Make accommodation_id NOT NULL (cross-database compatible without doctrine/dbal)
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('ALTER TABLE bookings ALTER COLUMN accommodation_id SET NOT NULL');
+        } else {
+            DB::statement('ALTER TABLE bookings MODIFY accommodation_id BIGINT UNSIGNED NOT NULL');
+        }
 
         Schema::table('bookings', function (Blueprint $table) {
             $table->foreign('accommodation_id')
