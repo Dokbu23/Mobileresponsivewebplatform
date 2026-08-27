@@ -29,13 +29,18 @@ COPY . .
 # Remove Windows-built vendor (will reinstall fresh for Linux)
 RUN rm -rf vendor/ node_modules/
 
+# Set dummy APP_KEY so any artisan calls during build don't fail
+ENV APP_KEY=base64:dGVzdGtleWZvcmJ1aWxkb25seXRlc3RrZXk=
+
 # Install PHP dependencies (fresh, Linux-native)
+ENV COMPOSER_MEMORY_LIMIT=-1
 RUN composer install \
     --no-dev \
     --optimize-autoloader \
     --no-interaction \
     --prefer-dist \
     --no-scripts \
+    --verbose \
     && composer dump-autoload --optimize --no-scripts
 
 # Create required directories
