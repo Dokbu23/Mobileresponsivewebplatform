@@ -1,4 +1,8 @@
-export const API_BASE = ((import.meta as any).env?.VITE_API_BASE as string | undefined) || 'http://localhost:8000';
+const rawApiBase = ((import.meta as any).env?.VITE_API_BASE as string | undefined) 
+  || ((import.meta as any).env?.VITE_API_URL as string | undefined) 
+  || 'http://localhost:8000';
+
+export const API_BASE = rawApiBase.replace(/\/api\/?$/, '').replace(/\/+$/, '');
 
 export function getStorageUrl(path: string | null | undefined): string {
   if (!path) return '';

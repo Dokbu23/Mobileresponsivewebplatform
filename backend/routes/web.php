@@ -14,5 +14,9 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/', function () {
-    return view('welcome');
+    return response()->json(['status' => 'ok', 'app' => 'DiscoverMansalay API']);
+});
+
+Route::get('/health', function () {
+    return response()->json(['status' => 'ok']);
 });
