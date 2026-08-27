@@ -37,6 +37,7 @@ class AddIndexToUserIdOnEventsTable extends Migration
 
     /**
      * Check if an index exists on a table.
+     * Compatible with both MySQL and PostgreSQL.
      *
      * @param string $table
      * @param string $index
@@ -44,11 +45,22 @@ class AddIndexToUserIdOnEventsTable extends Migration
      */
     protected function hasIndex(string $table, string $index): bool
     {
-        $database = DB::getDatabaseName();
-        $result = DB::select(
-            'SELECT 1 FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ? LIMIT 1',
-            [$database, $table, $index]
-        );
+        $connection = DB::getDriverName();
+
+        if ($connection === 'pgsql') {
+            // PostgreSQL: use pg_indexes view
+            $result = DB::select(
+                "SELECT 1 FROM pg_indexes WHERE tablename = ? AND indexname = ? LIMIT 1",
+                [$table, $index]
+            );
+        } else {
+            // MySQL: use information_schema.statistics
+            $database = DB::getDatabaseName();
+            $result = DB::select(
+                'SELECT 1 FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ? LIMIT 1',
+                [$database, $table, $index]
+            );
+        }
 
         return !empty($result);
     }
