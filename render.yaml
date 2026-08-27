@@ -110,7 +110,7 @@ services:
     plan: free
     rootDir: .
     buildCommand: npm install && npm run build
-    startCommand: npx serve dist -l $PORT
+    startCommand: npx serve dist -s -l $PORT
     envVars:
       - key: VITE_API_URL
         value: https://disc-mansalay-api.onrender.com/api
