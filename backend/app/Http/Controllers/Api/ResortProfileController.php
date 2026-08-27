@@ -34,23 +34,37 @@ class ResortProfileController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
+        $images = $user->resort_images ?? [];
+        $primary = is_array($images) && count($images) > 0 ? $images[0] : '';
+        $logo = $user->store_logo ?: $primary;
+        $banner = $user->store_banner ?: $primary;
+
         return response()->json([
-            'id' => $user->id,
-            'user_id' => $user->id,
-            'name' => $user->name,
-            'email' => $user->email,
-            'subscription_status' => $user->subscription_status,
-            'resort_name' => $user->resort_name,
-            'resort_description' => $user->resort_description,
+            'id'                     => $user->id,
+            'user_id'                => $user->id,
+            'name'                   => $user->name,
+            'email'                  => $user->email,
+            'phone'                  => $user->phone,
+            'address'                => $user->address,
+            'barangay'               => $user->barangay,
+            'facebook_link'          => $user->facebook_link,
+            'instagram_link'         => $user->instagram_link,
+            'subscription_status'    => $user->subscription_status,
+            'resort_name'            => $user->resort_name ?: $user->name,
+            'resort_description'     => $user->resort_description ?: $user->description,
             'resort_price_per_night' => $user->resort_price_per_night,
-            'resort_images' => $user->resort_images ?? [],
-            'resort_amenities' => $user->resort_amenities ?? [],
-            'resort_facilities' => $user->resort_facilities,
-            'resort_policies' => $user->resort_policies,
-            'resort_is_setup' => (bool) $user->resort_is_setup,
-            'listing_status' => $user->listing_status,
-            'latitude' => $user->latitude,
-            'longitude' => $user->longitude,
+            'resort_images'          => $images,
+            'resort_amenities'       => $user->resort_amenities ?? [],
+            'resort_facilities'      => $user->resort_facilities,
+            'resort_policies'        => $user->resort_policies,
+            'resort_is_setup'        => (bool) $user->resort_is_setup,
+            'listing_status'         => $user->listing_status,
+            'latitude'               => $user->latitude,
+            'longitude'              => $user->longitude,
+            'store_logo'             => $logo,
+            'store_banner'           => $banner,
+            'resort_logo'            => $logo,
+            'resort_banner'          => $banner,
         ]);
     }
 
@@ -62,45 +76,111 @@ class ResortProfileController extends Controller
      */
     public function update(Request $request)
     {
-        $amenities = $this->normalizeArrayField($request->input('resort_amenities'));
-        if ($amenities !== null) {
-            $request->merge(['resort_amenities' => $amenities]);
-        }
-
-        // Validate using User model validation rules
-        $validated = $request->validate(
-            User::resortProfileValidationRules(false),
-            User::resortProfileValidationMessages()
-        );
-
         $user = $request->user();
 
         if (!$user || $user->role !== 'resort') {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
+        $amenities = $this->normalizeArrayField($request->input('resort_amenities'));
+        if ($amenities !== null) {
+            $request->merge(['resort_amenities' => $amenities]);
+        }
+
+        $request->validate([
+            'resort_name'            => 'sometimes|nullable|string|max:255',
+            'resort_description'     => 'sometimes|nullable|string',
+            'resort_price_per_night' => 'sometimes|nullable|numeric|min:0',
+            'resort_amenities'       => 'nullable|array',
+            'resort_facilities'      => 'nullable|string',
+            'resort_policies'        => 'nullable|string',
+            'phone'                  => 'nullable|string|max:50',
+            'address'                => 'nullable|string|max:500',
+            'barangay'               => 'nullable|string|max:100',
+            'facebook_link'          => 'nullable|string|max:500',
+            'instagram_link'         => 'nullable|string|max:500',
+            'latitude'               => 'nullable|numeric',
+            'longitude'              => 'nullable|numeric',
+            'images'                 => 'nullable|array|max:10',
+            'images.*'               => 'nullable|file|mimes:jpg,jpeg,png,webp,avif|max:10240',
+            'logo'                   => 'nullable|file|mimes:jpg,jpeg,png,webp,avif|max:10240',
+            'banner'                 => 'nullable|file|mimes:jpg,jpeg,png,webp,avif|max:10240',
+        ]);
+
+        $updateData = [];
+
+        foreach ([
+            'resort_name', 'resort_description', 'resort_price_per_night',
+            'resort_amenities', 'resort_facilities', 'resort_policies',
+            'phone', 'address', 'barangay', 'facebook_link', 'instagram_link',
+            'latitude', 'longitude'
+        ] as $field) {
+            if ($request->has($field) && $request->input($field) !== null) {
+                $updateData[$field] = $request->input($field);
+            }
+        }
+
+        // If resort_description is updated, also update base description
+        if (isset($updateData['resort_description'])) {
+            $updateData['description'] = $updateData['resort_description'];
+        }
+
+        // Handle gallery images upload
         $newImages = $this->handleImageUploads($request);
         if (!empty($newImages)) {
             $oldImages = $user->resort_images ?? [];
             $this->deleteOldImages($oldImages);
-            $validated['resort_images'] = $newImages;
+            $updateData['resort_images'] = $newImages;
         }
 
-        $user->update($validated);
+        // Handle logo upload
+        if ($request->hasFile('logo')) {
+            $path = $request->file('logo')->store('resort-profiles/logos', 'public');
+            $updateData['store_logo'] = '/storage/' . $path;
+        }
+
+        // Handle banner upload
+        if ($request->hasFile('banner')) {
+            $path = $request->file('banner')->store('resort-profiles/banners', 'public');
+            $updateData['store_banner'] = '/storage/' . $path;
+        }
+
+        if (!empty($updateData)) {
+            $user->update($updateData);
+        }
+
+        $fresh = $user->fresh();
+        $images = $fresh->resort_images ?? [];
+        $primary = is_array($images) && count($images) > 0 ? $images[0] : '';
+        $logo = $fresh->store_logo ?: $primary;
+        $banner = $fresh->store_banner ?: $primary;
 
         return response()->json([
             'message' => 'Resort profile updated successfully',
-            'user' => $user->fresh(),
+            'user'    => $fresh,
+            'logo'    => $logo,
+            'banner'  => $banner,
             'profile' => [
-                'user_id' => $user->id,
-                'resort_name' => $user->resort_name,
-                'resort_description' => $user->resort_description,
-                'resort_price_per_night' => $user->resort_price_per_night,
-                'resort_images' => $user->resort_images ?? [],
-                'resort_amenities' => $user->resort_amenities ?? [],
-                'resort_facilities' => $user->resort_facilities,
-                'resort_policies' => $user->resort_policies,
-                'resort_is_setup' => (bool) $user->resort_is_setup,
+                'user_id'                => $fresh->id,
+                'resort_name'            => $fresh->resort_name ?: $fresh->name,
+                'resort_description'     => $fresh->resort_description ?: $fresh->description,
+                'resort_price_per_night' => $fresh->resort_price_per_night,
+                'resort_images'          => $images,
+                'resort_amenities'       => $fresh->resort_amenities ?? [],
+                'resort_facilities'      => $fresh->resort_facilities,
+                'resort_policies'        => $fresh->resort_policies,
+                'resort_is_setup'        => (bool) $fresh->resort_is_setup,
+                'phone'                  => $fresh->phone,
+                'address'                => $fresh->address,
+                'barangay'               => $fresh->barangay,
+                'facebook_link'          => $fresh->facebook_link,
+                'instagram_link'         => $fresh->instagram_link,
+                'latitude'               => $fresh->latitude,
+                'longitude'              => $fresh->longitude,
+                'store_logo'             => $logo,
+                'store_banner'           => $banner,
+                'resort_logo'            => $logo,
+                'resort_banner'          => $banner,
             ],
         ]);
     }

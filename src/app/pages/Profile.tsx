@@ -518,7 +518,7 @@ export function Profile() {
           {userType === 'resort' && (
             <>
               <Link to="/resort/profile" className="flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-primary/5 transition-colors text-sm">
-                <span>Manage Resort Profile</span>
+                <span>Manage Rooms</span>
                 <span className="text-muted-foreground">→</span>
               </Link>
             </>

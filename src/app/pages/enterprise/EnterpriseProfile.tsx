@@ -5,7 +5,6 @@ import { Link } from 'react-router';
 import { useApp } from '../../context/AppContext';
 import { getAuthToken, getJSON, getPublicJSON, postJSON, putJSON, patchJSON, deleteJSON, API_BASE } from '../../lib/api';
 import { showPaymentMethodSuccess, showProductSuccess, showStatusUpdateSuccess } from '../../lib/sweetAlert';
-import { LocationPicker } from '../../components/LocationPicker';
 
 const MANSALAY_BARANGAYS = [
   'Barangay I (Poblacion)',
@@ -60,30 +59,13 @@ interface Order {
   created_at: string;
 }
 
-interface Event {
-  id: number;
-  name: string;
-  location: string | null;
-  category: string | null;
-  image: string | null;
-  date: string | null;
-  time: string | null;
-  capacity: string | null;
-  description: string | null;
-  full_description: string | null;
-  user_id: number | null;
-  created_at: string;
-  updated_at: string;
-}
-
-const CATEGORIES = ['Festival', 'Concert', 'Workshop', 'Sports', 'Cultural', 'Other'];
+const CATEGORIES = ['Food', 'Souvenir', 'Handicraft', 'Clothing', 'Agriculture', 'Other'];
 const PRODUCTS_PER_PAGE = 5;
 
 export function EnterpriseProfile() {
   const { currentUser, setCurrentUser } = useApp();
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
@@ -122,22 +104,6 @@ export function EnterpriseProfile() {
   // Product variations (Shopee-style) — optional. Each row has name/value/price/stock.
   const [variations, setVariations] = useState<ProductVariationForm[]>([]);
   
-  // Event management state
-  const [showAddEvent, setShowAddEvent] = useState(false);
-  const [editingEventId, setEditingEventId] = useState<number | null>(null);
-  const [newEvent, setNewEvent] = useState({
-    name: '',
-    location: '',
-    category: '',
-    date: '',
-    time: '',
-    capacity: '',
-    description: '',
-    full_description: '',
-  });
-  const [eventImageFile, setEventImageFile] = useState<File | null>(null);
-  const [eventImagePreview, setEventImagePreview] = useState<string | null>(null);
-  
   // Payment details state
   const [paymentDetails, setPaymentDetails] = useState<any[]>([]);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -149,7 +115,6 @@ export function EnterpriseProfile() {
   });
   const [receipts, setReceipts] = useState<any[]>([]);
   const [showReceiptsModal, setShowReceiptsModal] = useState(false);
-  const [enterpriseLocation, setEnterpriseLocation] = useState<{ lat: number; lng: number } | null>(null);
 
   // Promo code state
   const [promoCodes, setPromoCodes] = useState<any[]>([]);
@@ -399,34 +364,6 @@ export function EnterpriseProfile() {
     } catch (error) {
       console.error('Error fetching orders:', error);
       setOrders([]);
-    }
-
-    try {
-      const eventsResponse = await getJSON('/events/my');
-      setEvents(
-        Array.isArray(eventsResponse)
-          ? eventsResponse.map((event: any) => ({
-              id: event.id,
-              name: event.name || '',
-              location: event.location || null,
-              category: event.category || null,
-              image: event.image || null,
-              date: event.date || null,
-              time: event.time || null,
-              capacity: event.capacity || null,
-              description: event.description || null,
-              full_description: event.full_description || null,
-              user_id: event.user_id || null,
-              created_at: event.created_at || new Date().toISOString(),
-              updated_at: event.updated_at || new Date().toISOString(),
-            }))
-          : []
-      );
-    } catch (error) {
-      console.error('Error fetching events:', error);
-      console.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
-      toast.error('Failed to load events');
-      setEvents([]);
     } finally {
       setLoading(false);
     }
@@ -729,101 +666,6 @@ export function EnterpriseProfile() {
     }
   };
 
-  // Event Management Functions
-  const handleAddEvent = async () => {
-    if (!newEvent.name.trim()) {
-      toast.error('Event name is required');
-      return;
-    }
-
-    try {
-      const formData = new FormData();
-      formData.append('name', newEvent.name);
-      if (newEvent.location) formData.append('location', newEvent.location);
-      if (newEvent.category) formData.append('category', newEvent.category);
-      if (newEvent.date) formData.append('date', newEvent.date);
-      if (newEvent.time) formData.append('time', newEvent.time);
-      if (newEvent.capacity) formData.append('capacity', newEvent.capacity);
-      if (newEvent.description) formData.append('description', newEvent.description);
-      if (newEvent.full_description) formData.append('full_description', newEvent.full_description);
-      if (eventImageFile) formData.append('image', eventImageFile);
-
-      if (editingEventId) {
-        formData.append('_method', 'PUT');
-      }
-
-      const url = editingEventId ? `${API_BASE}/api/events/${editingEventId}` : `${API_BASE}/api/events`;
-      const method = 'POST';
-
-      const token = getAuthToken();
-      const headers: HeadersInit = token
-        ? { Authorization: `Bearer ${token}`, Accept: 'application/json' }
-        : { Accept: 'application/json' };
-      const res = await fetch(url, { method, headers, body: formData });
-
-      if (!res.ok) {
-        const contentType = res.headers.get('content-type');
-        let errorMsg = `HTTP ${res.status}`;
-        if (contentType?.includes('application/json')) {
-          try {
-            const data = await res.json();
-            console.error('Event creation error data:', data);
-            errorMsg = data.message || data.error || JSON.stringify(data);
-          } catch {
-            errorMsg = await res.text().catch(() => errorMsg);
-          }
-        } else {
-          errorMsg = await res.text().catch(() => errorMsg);
-        }
-        throw new Error(errorMsg);
-      }
-
-      await showProductSuccess(editingEventId ? 'updated' : 'added', newEvent.name);
-      await fetchData();
-      setNewEvent({ name: '', location: '', category: '', date: '', time: '', capacity: '', description: '', full_description: '' });
-      setEventImageFile(null);
-      setEventImagePreview(null);
-      setEditingEventId(null);
-      setShowAddEvent(false);
-    } catch (error) {
-      console.error('Event creation error:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to save event');
-    }
-  };
-
-  const handleEditEvent = (event: Event) => {
-    setEditingEventId(event.id);
-    setNewEvent({
-      name: event.name,
-      location: event.location || '',
-      category: event.category || '',
-      date: event.date || '',
-      time: event.time || '',
-      capacity: event.capacity || '',
-      description: event.description || '',
-      full_description: event.full_description || '',
-    });
-    setEventImagePreview(event.image ? getEventImageUrl(event.image) : null);
-    setEventImageFile(null);
-    setShowAddEvent(true);
-  };
-
-  const handleDeleteEvent = async (id: number) => {
-    try {
-      await deleteJSON(`/events/${id}`);
-      await showProductSuccess('deleted');
-      await fetchData();
-    } catch {
-      toast.error('Failed to delete event');
-    }
-  };
-
-  const getEventImageUrl = (imagePath: string | null) => {
-    if (!imagePath) return null;
-    if (imagePath.startsWith('http')) return imagePath;
-    return `${API_BASE}${imagePath}`;
-  };
-
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -840,11 +682,11 @@ export function EnterpriseProfile() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-              <Store className="h-6 w-6 text-primary" />
+              <Package className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold">Enterprise Profile</h1>
-              <p className="text-sm text-muted-foreground">{currentUser?.name || 'Live product management'}</p>
+              <h1 className="text-2xl font-bold">Manage Products</h1>
+              <p className="text-sm text-muted-foreground">Add, update, and manage your inventory and product listings</p>
             </div>
           </div>
           <Link
@@ -855,411 +697,6 @@ export function EnterpriseProfile() {
             Dashboard
           </Link>
         </div>
-      </div>
-
-      {/* 🏬 SHOP / ENTERPRISE PROFILE SECTION */}
-      <div className="bg-white border-2 border-primary/20 rounded-2xl p-6 mb-8 shadow-xs overflow-hidden">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
-              <Store className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">Shop Profile & Branding</h2>
-              <p className="text-xs text-muted-foreground">Manage your shop name, logo, banner, location and contact details</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {currentUser?.id && (
-              <Link
-                to={`/business/enterprise/${currentUser.id}`}
-                target="_blank"
-                className="px-3.5 py-2 bg-gray-50 border border-gray-200 hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
-              >
-                <ExternalLink className="h-3.5 w-3.5 text-primary" />
-                View Public Shop
-              </Link>
-            )}
-            <button
-              onClick={() => {
-                if (profileEditMode) {
-                  loadStoreProfile();
-                  setStoreLogoFile(null);
-                  setStoreBannerFile(null);
-                }
-                setProfileEditMode(!profileEditMode);
-              }}
-              className="px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors text-xs font-semibold inline-flex items-center gap-1.5 shadow-sm"
-            >
-              <Edit className="h-3.5 w-3.5" />
-              {profileEditMode ? 'Cancel Editing' : 'Edit Shop Profile'}
-            </button>
-          </div>
-        </div>
-
-        {profileLoading ? (
-          <div className="py-12 text-center text-muted-foreground text-sm">
-            Loading shop profile...
-          </div>
-        ) : profileEditMode ? (
-          /* ✏️ EDIT MODE FORM */
-          <div className="pt-6 space-y-6 animate-in fade-in duration-200">
-            {/* Banner & Logo Upload Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-primary/5 p-5 rounded-2xl border border-primary/10">
-              {/* Logo Upload */}
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">
-                  Shop Logo (Avatar)
-                </label>
-                <div className="flex items-center gap-4">
-                  {storeLogoPreview ? (
-                    <div className="relative group">
-                      <img
-                        src={storeLogoPreview}
-                        alt="Logo Preview"
-                        className="w-20 h-20 rounded-2xl object-cover border-2 border-primary/30 shadow-sm"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-20 h-20 rounded-2xl bg-white border-2 border-dashed border-primary/30 flex items-center justify-center text-primary/40">
-                      <Store className="h-8 w-8" />
-                    </div>
-                  )}
-                  <div className="flex-1">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setStoreLogoFile(file);
-                          setStoreLogoPreview(URL.createObjectURL(file));
-                        }
-                      }}
-                      className="w-full text-xs text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90 file:cursor-pointer cursor-pointer"
-                    />
-                    <p className="text-[11px] text-gray-400 mt-1">Recommended: 400x400 JPG, PNG or WebP</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Banner Upload */}
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">
-                  Shop Banner Cover
-                </label>
-                <div>
-                  {storeBannerPreview ? (
-                    <div className="relative rounded-xl overflow-hidden mb-2 h-20 border border-primary/20">
-                      <img
-                        src={storeBannerPreview}
-                        alt="Banner Preview"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <div className="h-20 rounded-xl bg-white border-2 border-dashed border-primary/30 flex items-center justify-center text-xs text-muted-foreground mb-2">
-                      <Upload className="h-4 w-4 mr-1.5 text-primary/50" /> No banner cover uploaded
-                    </div>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        setStoreBannerFile(file);
-                        setStoreBannerPreview(URL.createObjectURL(file));
-                      }
-                    }}
-                    className="w-full text-xs text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90 file:cursor-pointer cursor-pointer"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Inputs Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                  Shop / Business Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={profileForm.store_name}
-                  onChange={(e) => setProfileForm(p => ({ ...p, store_name: e.target.value }))}
-                  placeholder="e.g. AWATI Shop"
-                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-xl focus:border-primary outline-none text-sm bg-white font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                  Contact Phone Number
-                </label>
-                <input
-                  type="text"
-                  value={profileForm.phone}
-                  onChange={(e) => setProfileForm(p => ({ ...p, phone: e.target.value }))}
-                  placeholder="e.g. 09123456789"
-                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-xl focus:border-primary outline-none text-sm bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                  Barangay (Mansalay)
-                </label>
-                <select
-                  value={profileForm.barangay}
-                  onChange={(e) => setProfileForm(p => ({ ...p, barangay: e.target.value }))}
-                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-xl focus:border-primary outline-none text-sm bg-white"
-                >
-                  {MANSALAY_BARANGAYS.map((b) => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                  Street Address / Sitio
-                </label>
-                <input
-                  type="text"
-                  value={profileForm.address}
-                  onChange={(e) => setProfileForm(p => ({ ...p, address: e.target.value }))}
-                  placeholder="e.g. Sitio Centro, Near Public Market"
-                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-xl focus:border-primary outline-none text-sm bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                  Facebook Page Link
-                </label>
-                <input
-                  type="url"
-                  value={profileForm.facebook_link}
-                  onChange={(e) => setProfileForm(p => ({ ...p, facebook_link: e.target.value }))}
-                  placeholder="https://facebook.com/your-shop"
-                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-xl focus:border-primary outline-none text-sm bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                  Instagram Profile Link
-                </label>
-                <input
-                  type="url"
-                  value={profileForm.instagram_link}
-                  onChange={(e) => setProfileForm(p => ({ ...p, instagram_link: e.target.value }))}
-                  placeholder="https://instagram.com/your-shop"
-                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-xl focus:border-primary outline-none text-sm bg-white"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
-                  Shop Description / About Us
-                </label>
-                <textarea
-                  rows={3}
-                  value={profileForm.store_description}
-                  onChange={(e) => setProfileForm(p => ({ ...p, store_description: e.target.value }))}
-                  placeholder="Tell tourists about your authentic handcrafted products, delicacies, specialties, and business hours..."
-                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-xl focus:border-primary outline-none text-sm bg-white"
-                />
-              </div>
-            </div>
-
-            {/* Map Location Picker */}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                <MapPin className="h-4 w-4 text-primary" />
-                Pin Shop Location on Map (Mansalay)
-              </label>
-              <div className="rounded-2xl overflow-hidden border-2 border-primary/20 shadow-xs">
-                <LocationPicker
-                  initialLat={storeLocation?.lat || 12.5115}
-                  initialLng={storeLocation?.lng || 121.4238}
-                  onLocationSelect={(lat, lng) => setStoreLocation({ lat, lng })}
-                  height="260px"
-                />
-              </div>
-            </div>
-
-            {/* Save Buttons */}
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => {
-                  loadStoreProfile();
-                  setStoreLogoFile(null);
-                  setStoreBannerFile(null);
-                  setProfileEditMode(false);
-                }}
-                className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-semibold text-xs transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={profileSaving}
-                onClick={handleSaveStoreProfile}
-                className="px-6 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-xl font-bold text-xs transition-colors disabled:opacity-50 shadow-md shadow-primary/20"
-              >
-                {profileSaving ? 'Saving Changes...' : 'Save Shop Profile'}
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* 👁️ VIEW MODE CARD */
-          <div className="pt-6 space-y-6">
-            {/* Banner Cover & Logo Header */}
-            <div className="relative rounded-2xl overflow-hidden border border-gray-100 bg-gradient-to-r from-pink-500 to-rose-400 h-36 md:h-44">
-              {storeBannerPreview && (
-                <img
-                  src={storeBannerPreview}
-                  alt="Shop Banner"
-                  className="w-full h-full object-cover"
-                />
-              )}
-              <div className="absolute inset-0 bg-black/25 backdrop-blur-[1px]" />
-              
-              {/* Profile Card Floating Inside/Bottom */}
-              <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-white p-1 shadow-lg border border-white/80 overflow-hidden flex-shrink-0">
-                    {storeLogoPreview ? (
-                      <img
-                        src={storeLogoPreview}
-                        alt="Store Logo"
-                        className="w-full h-full object-cover rounded-xl"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-primary/10 rounded-xl flex items-center justify-center text-primary font-bold text-xl">
-                        {(storeProfile?.store_name || currentUser?.name || 'S').charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-white drop-shadow-md">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-xl md:text-2xl font-extrabold tracking-tight">
-                        {storeProfile?.store_name || (currentUser as any)?.store_name || currentUser?.name || 'My Shop'}
-                      </h3>
-                      <span className="px-2 py-0.5 bg-green-500/90 text-white rounded-full text-[10px] font-bold backdrop-blur-xs">
-                        ✓ Verified
-                      </span>
-                    </div>
-                    <p className="text-xs text-white/90 font-medium flex items-center gap-1.5 mt-0.5">
-                      <MapPin className="h-3.5 w-3.5 text-pink-200" />
-                      {[storeProfile?.barangay || (currentUser as any)?.barangay, 'Mansalay, Oriental Mindoro'].filter(Boolean).join(', ')}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Shop Details Info */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-2 space-y-4">
-                {/* Description */}
-                <div className="bg-gray-50/80 p-4 rounded-xl border border-gray-100">
-                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">About Our Shop</h4>
-                  <p className="text-sm text-gray-700 leading-relaxed font-normal">
-                    {storeProfile?.store_description || storeProfile?.description || 'No description provided yet. Click "Edit Shop Profile" to add a description for tourists.'}
-                  </p>
-                </div>
-
-                {/* Contact & Social Links */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {storeProfile?.phone && (
-                    <div className="flex items-center gap-3 p-3 bg-white border border-gray-100 rounded-xl shadow-2xs">
-                      <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
-                        <Phone className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-[10px] text-gray-400 uppercase font-bold">Contact Phone</div>
-                        <div className="text-xs font-semibold text-gray-800 truncate">{storeProfile.phone}</div>
-                      </div>
-                    </div>
-                  )}
-
-                  {storeProfile?.address && (
-                    <div className="flex items-center gap-3 p-3 bg-white border border-gray-100 rounded-xl shadow-2xs">
-                      <div className="w-8 h-8 rounded-lg bg-pink-50 text-pink-600 flex items-center justify-center flex-shrink-0">
-                        <MapPin className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-[10px] text-gray-400 uppercase font-bold">Address / Street</div>
-                        <div className="text-xs font-semibold text-gray-800 truncate">{storeProfile.address}</div>
-                      </div>
-                    </div>
-                  )}
-
-                  {storeProfile?.facebook_link && (
-                    <a
-                      href={storeProfile.facebook_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-3 bg-white border border-gray-100 hover:border-blue-300 rounded-xl shadow-2xs transition-colors"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
-                        <Facebook className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-[10px] text-gray-400 uppercase font-bold">Facebook</div>
-                        <div className="text-xs font-semibold text-blue-600 truncate">Visit Facebook Page</div>
-                      </div>
-                    </a>
-                  )}
-
-                  {storeProfile?.instagram_link && (
-                    <a
-                      href={storeProfile.instagram_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 p-3 bg-white border border-gray-100 hover:border-pink-300 rounded-xl shadow-2xs transition-colors"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-pink-50 text-pink-600 flex items-center justify-center flex-shrink-0">
-                        <Instagram className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-[10px] text-gray-400 uppercase font-bold">Instagram</div>
-                        <div className="text-xs font-semibold text-pink-600 truncate">Visit Instagram</div>
-                      </div>
-                    </a>
-                  )}
-                </div>
-              </div>
-
-              {/* Mini Map Location Card */}
-              <div className="bg-gray-50/80 p-4 rounded-xl border border-gray-100 flex flex-col justify-between">
-                <div>
-                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5 text-primary" />
-                    Shop Location
-                  </h4>
-                  <p className="text-xs text-gray-600 mb-3">
-                    {storeProfile?.barangay ? `${storeProfile.barangay}, Mansalay` : 'Mansalay, Oriental Mindoro'}
-                  </p>
-                </div>
-                {storeLocation?.lat && storeLocation?.lng && (
-                  <div className="rounded-xl overflow-hidden border border-gray-200">
-                    <LocationPicker
-                      initialLat={storeLocation.lat}
-                      initialLng={storeLocation.lng}
-                      onLocationSelect={() => {}}
-                      height="140px"
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Stats */}
@@ -1513,43 +950,6 @@ export function EnterpriseProfile() {
           </div>
         </div>
       )}
-
-      {/* Store Location */}
-      <div className="bg-white border-2 border-primary/20 rounded-lg p-6 mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center">
-              <span className="text-lg">📍</span>
-            </div>
-            <div>
-              <h2 className="text-xl font-bold">Store Location</h2>
-              <p className="text-sm text-muted-foreground">Pin your store on the Mansalay map so tourists can find you</p>
-            </div>
-          </div>
-          {enterpriseLocation && (
-            <button
-              onClick={async () => {
-                try {
-                  await patchJSON('/profile/location', { latitude: enterpriseLocation.lat, longitude: enterpriseLocation.lng });
-                  import('sonner').then(({ toast }) => toast.success('Location saved!'));
-                } catch {
-                  import('sonner').then(({ toast }) => toast.error('Failed to save location'));
-                }
-              }}
-              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors text-sm"
-            >
-              Save Location
-            </button>
-          )}
-        </div>
-        <LocationPicker
-          initialLat={enterpriseLocation?.lat}
-          initialLng={enterpriseLocation?.lng}
-          onLocationSelect={(lat, lng) => setEnterpriseLocation({ lat, lng })}
-          height="280px"
-        />
-      </div>
-
 
       {/* Products Management */}
       <div className="bg-white border-2 border-primary/20 rounded-lg p-6 mb-8">

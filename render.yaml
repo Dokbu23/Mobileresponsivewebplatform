@@ -84,8 +84,42 @@ services:
         sync: false
       - key: MAIL_FROM_NAME
         value: DiscoverMansalay
+      # AI / LLM providers (set in Render dashboard)
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.1-8b-instant
+      - key: GROQ_API_URL
+        value: https://api.groq.com
+      - key: LLM_PROVIDER
+        value: groq
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: HUGGINGFACE_API_KEY
+        sync: false
+      - key: HUGGINGFACE_MODEL
+        value: gpt2
 
-  # PostgreSQL Database
+  # Frontend (React/Vite)
+  - type: web
+    name: disc-mansalay
+    env: node
+    region: singapore
+    plan: free
+    rootDir: .
+    buildCommand: npm install && npm run build
+    startCommand: npx serve dist -l $PORT
+    envVars:
+      - key: VITE_API_URL
+        value: https://disc-mansalay-api.onrender.com/api
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "20"
+
+# PostgreSQL Database
 databases:
   - name: disc-mansalay-db
     databaseName: discmansalay
@@ -93,17 +127,3 @@ databases:
     region: singapore
     plan: free
     ipAllowList: []
-
-  # Frontend (React/Vite)
-  - type: web
-    name: disc-mansalay-frontend
-    env: node
-    region: singapore
-    plan: free
-    buildCommand: cd .. && npm install && npm run build
-    startCommand: cd .. && npm run preview -- --host 0.0.0.0 --port $PORT
-    envVars:
-      - key: VITE_API_URL
-        value: https://disc-mansalay-api.onrender.com/api
-      - key: NODE_ENV
-        value: production

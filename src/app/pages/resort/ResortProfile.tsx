@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Hotel, Plus, Edit, Calendar, DollarSign, Users, TrendingUp, BarChart3, ChevronDown, CreditCard, Eye, CheckCircle, XCircle, Upload, Image as ImageIcon, X, Trash2, Play } from 'lucide-react';
+import { Hotel, Bed, Plus, Edit, Calendar, DollarSign, Users, TrendingUp, BarChart3, ChevronDown, CreditCard, Eye, CheckCircle, XCircle, Upload, Image as ImageIcon, X, Trash2, Play } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router';
 import { useApp } from '../../context/AppContext';
 import { API_BASE, deleteJSON, getJSON, patchJSON, postJSON, getAuthToken } from '../../lib/api';
 import { showPaymentMethodSuccess, showProductSuccess, showStatusUpdateSuccess } from '../../lib/sweetAlert';
-import { LocationPicker } from '../../components/LocationPicker';
-import { AvailabilityCalendar } from '../../components/AvailabilityCalendar';
 
 interface ApiBooking {
   id: number;
@@ -38,23 +36,6 @@ interface BookingRow {
   customerPhone: string | null;
 }
 
-interface Event {
-  id: number;
-  name: string;
-  location: string | null;
-  category: string | null;
-  image: string | null;
-  date: string | null;
-  time: string | null;
-  capacity: string | null;
-  description: string | null;
-  full_description: string | null;
-  user_id: number | null;
-  created_at: string;
-  updated_at: string;
-}
-
-const CATEGORIES = ['Festival', 'Concert', 'Workshop', 'Sports', 'Cultural', 'Other'];
 const AMENITIES = [
   'WiFi',
   'Pool',
@@ -72,40 +53,9 @@ export function ResortProfile() {
   const { currentUser } = useApp();
   const [profileLoading, setProfileLoading] = useState(true);
   const [resortProfile, setResortProfile] = useState<any>(null);
-  const [profileEditMode, setProfileEditMode] = useState(false);
-  const [profileForm, setProfileForm] = useState({
-    resort_name: '',
-    resort_description: '',
-    resort_price_per_night: '',
-    resort_amenities: [] as string[],
-    resort_facilities: '',
-    resort_policies: '',
-    video_url: '',
-  });
-  const [profileImages, setProfileImages] = useState<File[]>([]);
-  const [profileImagePreviews, setProfileImagePreviews] = useState<string[]>([]);
-  const [profileVideoFile, setProfileVideoFile] = useState<File | null>(null);
-  const [profileLocation, setProfileLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
-  const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
-
-  // Event management state
-  const [showAddEvent, setShowAddEvent] = useState(false);
-  const [editingEventId, setEditingEventId] = useState<number | null>(null);
-  const [newEvent, setNewEvent] = useState({
-    name: '',
-    location: '',
-    category: '',
-    date: '',
-    time: '',
-    capacity: '',
-    description: '',
-    full_description: '',
-  });
-  const [eventImageFile, setEventImageFile] = useState<File | null>(null);
-  const [eventImagePreview, setEventImagePreview] = useState<string | null>(null);
 
   // Payment details state
   const [paymentDetails, setPaymentDetails] = useState<any[]>([]);
@@ -147,47 +97,12 @@ export function ResortProfile() {
   const [roomImageFile, setRoomImageFile] = useState<File | null>(null);
   const [roomImagePreview, setRoomImagePreview] = useState<string | null>(null);
 
-  // Availability calendar state
-  const [blockedDates, setBlockedDates] = useState<string[]>([]);
-  const [calendarSaving, setCalendarSaving] = useState(false);
-
   const fetchRooms = async () => {
     try {
       const response = await getJSON('/resort-rooms');
       setRooms(Array.isArray(response) ? response : []);
     } catch {
       setRooms([]);
-    }
-  };
-
-  const fetchBlockedDates = async () => {
-    try {
-      const res = await getJSON('/resort-availability');
-      setBlockedDates(Array.isArray(res) ? res.map((d: any) => d.blocked_date) : []);
-    } catch {
-      setBlockedDates([]);
-    }
-  };
-
-  const handleToggleDate = async (dateStr: string) => {
-    const isBlocked = blockedDates.includes(dateStr);
-    setCalendarSaving(true);
-    try {
-      if (isBlocked) {
-        // Unblock — use POST endpoint
-        await postJSON('/resort-availability-unblock', { date: dateStr });
-        setBlockedDates(prev => prev.filter(d => d !== dateStr));
-        toast.success(`${dateStr} unblocked`);
-      } else {
-        // Block
-        await postJSON('/resort-availability', { blocked_date: dateStr, reason: 'Fully booked' });
-        setBlockedDates(prev => [...prev, dateStr].sort());
-        toast.success(`${dateStr} blocked`);
-      }
-    } catch (err) {
-      toast.error('Failed to update availability');
-    } finally {
-      setCalendarSaving(false);
     }
   };
 
@@ -260,35 +175,6 @@ export function ResortProfile() {
     }
   };
 
-  const loadResortProfile = async () => {    try {
-      const profile = await getJSON('/resort-profile');
-      setResortProfile(profile);
-      setProfileForm({
-        resort_name: profile?.resort_name ?? '',
-        resort_description: profile?.resort_description ?? '',
-        resort_price_per_night: profile?.resort_price_per_night ? String(profile.resort_price_per_night) : '',
-        resort_amenities: Array.isArray(profile?.resort_amenities) ? profile.resort_amenities : [],
-        resort_facilities: profile?.resort_facilities ?? '',
-        resort_policies: profile?.resort_policies ?? '',
-        video_url: profile?.video_url ?? profile?.video ?? '',
-      });
-
-      const images = Array.isArray(profile?.resort_images) ? profile.resort_images : [];
-      const resolved = images.map((img: string) =>
-        String(img).startsWith('http') ? img : `${API_BASE}${img}`
-      );
-      setProfileImagePreviews(resolved);
-
-      if (profile?.latitude && profile?.longitude) {
-        setProfileLocation({ lat: Number(profile.latitude), lng: Number(profile.longitude) });
-      }
-    } catch {
-      setResortProfile(null);
-    } finally {
-      setProfileLoading(false);
-    }
-  };
-
   const fetchAttractions = async () => {
     try {
       const response = await getJSON('/attractions/my');
@@ -343,99 +229,15 @@ export function ResortProfile() {
     }
   };
 
-  const handleProfileImageAdd = (files: FileList | null) => {
-    if (!files) return;
-    const incoming: File[] = [];
-    let invalidType = 0;
-    let invalidSize = 0;
-    Array.from(files).forEach((file) => {
-      if (!file.type.startsWith('image/')) {
-        invalidType += 1;
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        invalidSize += 1;
-        return;
-      }
-      incoming.push(file);
-    });
-
-    if (invalidType > 0) {
-      toast.error('Only image files are allowed');
-    }
-    if (invalidSize > 0) {
-      toast.error('Some images exceed the 5MB limit');
-    }
-
-    const combined = [...profileImages, ...incoming].slice(0, 10);
-    setProfileImages(combined);
-    setProfileImagePreviews(combined.map((file) => URL.createObjectURL(file)));
-  };
-
-  const removeProfileImage = (index: number) => {
-    const nextImages = profileImages.filter((_, i) => i !== index);
-    setProfileImages(nextImages);
-    setProfileImagePreviews(nextImages.map((file) => URL.createObjectURL(file)));
-  };
-
-  const toggleProfileAmenity = (amenity: string) => {
-    setProfileForm((prev) => ({
-      ...prev,
-      resort_amenities: prev.resort_amenities.includes(amenity)
-        ? prev.resort_amenities.filter((item) => item !== amenity)
-        : [...prev.resort_amenities, amenity],
-    }));
-  };
-
-  const handleSaveProfile = async () => {
-    if (!profileForm.resort_name.trim() || !profileForm.resort_description.trim() || !profileForm.resort_price_per_night) {
-      toast.error('Please fill all required fields');
-      return;
-    }
-
+  const loadResortProfile = async () => {
+    setProfileLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('resort_name', profileForm.resort_name.trim());
-      formData.append('resort_description', profileForm.resort_description.trim());
-      formData.append('resort_price_per_night', profileForm.resort_price_per_night);
-      // Send amenities as form-array entries so Laravel receives them as an array
-      if (Array.isArray(profileForm.resort_amenities) && profileForm.resort_amenities.length > 0) {
-        profileForm.resort_amenities.forEach((amenity) => formData.append('resort_amenities[]', amenity));
-      }
-
-      if (profileForm.resort_facilities.trim()) {
-        formData.append('resort_facilities', profileForm.resort_facilities.trim());
-      }
-      if (profileForm.resort_policies.trim()) {
-        formData.append('resort_policies', profileForm.resort_policies.trim());
-      }
-      if (profileForm.video_url.trim()) {
-        formData.append('video_url', profileForm.video_url.trim());
-      }
-      if (profileVideoFile) {
-        formData.append('video', profileVideoFile);
-      }
-
-      profileImages.forEach((image) => formData.append('images[]', image));
-      formData.append('_method', 'PUT');
-
-      await postJSON('/resort-profile', formData, true);
-      toast.success('Resort profile updated');
-
-      // Save location if set
-      if (profileLocation) {
-        try {
-          await patchJSON('/profile/location', { latitude: profileLocation.lat, longitude: profileLocation.lng });
-        } catch {
-          // non-critical
-        }
-      }
-
-      setProfileEditMode(false);
-      setProfileImages([]);
-      await loadResortProfile();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update resort profile');
+      const data = await getJSON('/resort-profile');
+      setResortProfile(data);
+    } catch {
+      setResortProfile(null);
+    } finally {
+      setProfileLoading(false);
     }
   };
 
@@ -459,7 +261,6 @@ export function ResortProfile() {
     loadResortProfile();
     fetchAttractions();
     fetchRooms();
-    fetchBlockedDates();
   }, []);
 
   useEffect(() => {
@@ -496,31 +297,6 @@ export function ResortProfile() {
         );
       } catch {
         setBookings([]);
-      }
-
-      try {
-        const eventsResponse = await getJSON('/events/my');
-        setEvents(
-          Array.isArray(eventsResponse)
-            ? eventsResponse.map((event: any) => ({
-                id: event.id,
-                name: event.name || '',
-                location: event.location || null,
-                category: event.category || null,
-                image: event.image || null,
-                date: event.date || null,
-                time: event.time || null,
-                capacity: event.capacity || null,
-                description: event.description || null,
-                full_description: event.full_description || null,
-                user_id: event.user_id || null,
-                created_at: event.created_at || new Date().toISOString(),
-                updated_at: event.updated_at || new Date().toISOString(),
-              }))
-            : []
-        );
-      } catch {
-        setEvents([]);
       }
 
       setLoading(false);
@@ -641,142 +417,6 @@ export function ResortProfile() {
     return () => clearInterval(interval);
   }, []);
 
-  // Event Management Functions
-  const handleAddEvent = async () => {
-    if (!newEvent.name.trim()) {
-      toast.error('Event name is required');
-      return;
-    }
-
-    try {
-      const formData = new FormData();
-      formData.append('name', newEvent.name);
-      if (newEvent.location) formData.append('location', newEvent.location);
-      if (newEvent.category) formData.append('category', newEvent.category);
-      if (newEvent.date) formData.append('date', newEvent.date);
-      if (newEvent.time) formData.append('time', newEvent.time);
-      if (newEvent.capacity) formData.append('capacity', newEvent.capacity);
-      if (newEvent.description) formData.append('description', newEvent.description);
-      if (newEvent.full_description) formData.append('full_description', newEvent.full_description);
-      if (eventImageFile) formData.append('image', eventImageFile);
-
-      if (editingEventId) {
-        formData.append('_method', 'PUT');
-      }
-
-      const url = editingEventId ? `${API_BASE}/api/events/${editingEventId}` : `${API_BASE}/api/events`;
-      const method = 'POST';
-
-      const token = getAuthToken();
-      const headers: HeadersInit = token
-        ? { Authorization: `Bearer ${token}`, Accept: 'application/json' }
-        : { Accept: 'application/json' };
-      const res = await fetch(url, { method, headers, body: formData });
-
-      if (!res.ok) {
-        const contentType = res.headers.get('content-type');
-        let errorMsg = `HTTP ${res.status}`;
-        if (contentType?.includes('application/json')) {
-          try {
-            const data = await res.json();
-            errorMsg = data.message || data.error || JSON.stringify(data);
-          } catch {
-            errorMsg = await res.text().catch(() => errorMsg);
-          }
-        } else {
-          errorMsg = await res.text().catch(() => errorMsg);
-        }
-        throw new Error(errorMsg);
-      }
-
-      await showProductSuccess(editingEventId ? 'updated' : 'added', newEvent.name);
-      
-      // Refresh events list
-      const eventsResponse = await getJSON('/events/my');
-      setEvents(
-        Array.isArray(eventsResponse)
-          ? eventsResponse.map((event: any) => ({
-              id: event.id,
-              name: event.name || '',
-              location: event.location || null,
-              category: event.category || null,
-              image: event.image || null,
-              date: event.date || null,
-              time: event.time || null,
-              capacity: event.capacity || null,
-              description: event.description || null,
-              full_description: event.full_description || null,
-              user_id: event.user_id || null,
-              created_at: event.created_at || new Date().toISOString(),
-              updated_at: event.updated_at || new Date().toISOString(),
-            }))
-          : []
-      );
-
-      setNewEvent({ name: '', location: '', category: '', date: '', time: '', capacity: '', description: '', full_description: '' });
-      setEventImageFile(null);
-      setEventImagePreview(null);
-      setEditingEventId(null);
-      setShowAddEvent(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save event');
-    }
-  };
-
-  const handleEditEvent = (event: Event) => {
-    setEditingEventId(event.id);
-    setNewEvent({
-      name: event.name,
-      location: event.location || '',
-      category: event.category || '',
-      date: event.date || '',
-      time: event.time || '',
-      capacity: event.capacity || '',
-      description: event.description || '',
-      full_description: event.full_description || '',
-    });
-    setEventImagePreview(event.image ? getEventImageUrl(event.image) : null);
-    setEventImageFile(null);
-    setShowAddEvent(true);
-  };
-
-  const handleDeleteEvent = async (id: number) => {
-    try {
-      await deleteJSON(`/events/${id}`);
-      await showProductSuccess('deleted');
-      
-      // Refresh events list
-      const eventsResponse = await getJSON('/events/my');
-      setEvents(
-        Array.isArray(eventsResponse)
-          ? eventsResponse.map((event: any) => ({
-              id: event.id,
-              name: event.name || '',
-              location: event.location || null,
-              category: event.category || null,
-              image: event.image || null,
-              date: event.date || null,
-              time: event.time || null,
-              capacity: event.capacity || null,
-              description: event.description || null,
-              full_description: event.full_description || null,
-              user_id: event.user_id || null,
-              created_at: event.created_at || new Date().toISOString(),
-              updated_at: event.updated_at || new Date().toISOString(),
-            }))
-          : []
-      );
-    } catch {
-      toast.error('Failed to delete event');
-    }
-  };
-
-  const getEventImageUrl = (imagePath: string | null) => {
-    if (!imagePath) return null;
-    if (imagePath.startsWith('http')) return imagePath;
-    return `${API_BASE}${imagePath}`;
-  };
-
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -793,12 +433,12 @@ export function ResortProfile() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-              <Hotel className="h-6 w-6 text-primary" />
+              <Bed className="h-6 w-6 text-primary" />
             </div>
-              <div>
-                <h1>Resort Profile</h1>
-                <p className="text-sm text-muted-foreground">{currentUser?.name ?? 'Live accommodation management'}</p>
-              </div>
+            <div>
+              <h1 className="text-2xl font-bold">Manage Rooms</h1>
+              <p className="text-sm text-muted-foreground">Add, update, and manage your rooms, availability, and inventory</p>
+            </div>
           </div>
           <div className="flex gap-3">
             <Link
@@ -810,289 +450,6 @@ export function ResortProfile() {
             </Link>
           </div>
         </div>
-      </div>
-
-      {!profileLoading && resortProfile && !resortProfile.resort_is_setup && (
-        <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6 mb-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h3 className="mb-1">Resort Profile Not Yet Setup</h3>
-              <p className="text-sm text-yellow-800">
-                Finish your resort profile to appear in the accommodations list.
-              </p>
-            </div>
-            <Link
-              to="/resort/profile/setup"
-              className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors inline-flex items-center gap-2"
-            >
-              <CheckCircle className="h-4 w-4" />
-              Setup Now
-            </Link>
-          </div>
-        </div>
-      )}
-
-      <div className="bg-white border-2 border-primary/20 rounded-lg p-6 mb-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <div>
-            <h2 className="text-xl font-bold">Resort Profile Details</h2>
-            <p className="text-sm text-muted-foreground">This profile is your bookable accommodation.</p>
-          </div>
-          <button
-            onClick={() => setProfileEditMode((prev) => !prev)}
-            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors inline-flex items-center gap-2"
-          >
-            <Edit className="h-4 w-4" />
-            {profileEditMode ? 'Cancel' : 'Edit Resort'}
-          </button>
-        </div>
-
-        {profileLoading ? (
-          <div className="text-sm text-muted-foreground">Loading resort profile...</div>
-        ) : profileEditMode ? (
-          <div className="space-y-5">
-            <div>
-              <label className="block text-sm mb-2">Resort Name *</label>
-              <input
-                value={profileForm.resort_name}
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, resort_name: e.target.value }))}
-                className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-2">Description *</label>
-              <textarea
-                value={profileForm.resort_description}
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, resort_description: e.target.value }))}
-                className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none min-h-[140px]"
-              />
-            </div>
-            <div>
-              <label className="block text-sm mb-2">Price Per Night (PHP) *</label>
-              <input
-                type="number"
-                min="1"
-                value={profileForm.resort_price_per_night}
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, resort_price_per_night: e.target.value }))}
-                className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2">Amenities</label>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {AMENITIES.map((amenity) => (
-                  <button
-                    key={amenity}
-                    type="button"
-                    onClick={() => toggleProfileAmenity(amenity)}
-                    className={`px-3 py-2 rounded-lg border-2 text-sm transition-colors ${
-                      profileForm.resort_amenities.includes(amenity)
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-gray-200 text-muted-foreground hover:border-primary/50'
-                    }`}
-                  >
-                    {amenity}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2">Facilities</label>
-              <textarea
-                value={profileForm.resort_facilities}
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, resort_facilities: e.target.value }))}
-                className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none min-h-[120px]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2">Policies</label>
-              <textarea
-                value={profileForm.resort_policies}
-                onChange={(e) => setProfileForm((prev) => ({ ...prev, resort_policies: e.target.value }))}
-                className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none min-h-[120px]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-bold text-gray-800 mb-2 flex items-center gap-2">
-                <Play className="h-4 w-4 text-pink-500 fill-pink-500" />
-                Resort Virtual Tour Video (YouTube Link or Upload File)
-              </label>
-              <div className="space-y-3 bg-pink-50/50 p-4 rounded-xl border border-pink-100">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">YouTube Video URL / Link</label>
-                  <input
-                    type="text"
-                    value={profileForm.video_url}
-                    onChange={(e) => setProfileForm((prev) => ({ ...prev, video_url: e.target.value }))}
-                    placeholder="e.g. https://www.youtube.com/watch?v=your-video-id"
-                    className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-xs bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Or Upload Video File (MP4, WebM)</label>
-                  <input
-                    type="file"
-                    accept="video/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) setProfileVideoFile(file);
-                    }}
-                    className="w-full text-xs text-gray-600 border border-gray-200 rounded-lg p-2 bg-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2">Resort Images</label>
-              <div className="border-2 border-dashed border-primary/20 rounded-lg p-5 text-center">
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  id="profile-image-upload"
-                  onChange={(e) => handleProfileImageAdd(e.target.files)}
-                />
-                <label htmlFor="profile-image-upload" className="cursor-pointer inline-flex items-center gap-2 text-primary">
-                  <Upload className="h-4 w-4" />
-                  Upload New Images
-                </label>
-                <p className="text-xs text-muted-foreground mt-2">Uploading images replaces the current gallery.</p>
-              </div>
-              {profileImagePreviews.length > 0 ? (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                  {profileImagePreviews.map((preview, index) => (
-                    <div key={`${preview}-${index}`} className="relative rounded-lg overflow-hidden border">
-                      <img src={preview} alt="Resort" className="w-full h-28 object-cover" />
-                      {profileImages.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => removeProfileImage(index)}
-                          className="absolute top-2 right-2 bg-white/80 hover:bg-white text-gray-700 rounded-full p-1"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-3">
-                  <ImageIcon className="h-4 w-4" />
-                  No images uploaded yet.
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm mb-2">📍 Your Location on Map</label>
-              <LocationPicker
-                initialLat={profileLocation?.lat}
-                initialLng={profileLocation?.lng}
-                onLocationSelect={(lat, lng) => setProfileLocation({ lat, lng })}
-                height="280px"
-              />
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                onClick={handleSaveProfile}
-                className="px-5 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-              >
-                Save Profile
-              </button>
-            </div>          </div>
-        ) : resortProfile ? (
-          <div className="space-y-6">
-            {/* Hero banner using first gallery image */}
-            {profileImagePreviews.length > 0 && (
-              <div className="relative w-full h-48 rounded-xl overflow-hidden">
-                <img src={profileImagePreviews[0]} alt="Resort" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                <div className="absolute bottom-4 left-4 text-white">
-                  <h3 className="text-xl font-bold">{resortProfile.resort_name || currentUser?.name}</h3>
-                  <p className="text-sm opacity-90">₱{Number(resortProfile.resort_price_per_night || 0).toLocaleString()} per night</p>
-                </div>
-              </div>
-            )}
-
-            {!profileImagePreviews.length && (
-              <div>
-                <h3 className="text-xl font-bold">{resortProfile.resort_name || currentUser?.name}</h3>
-                <p className="text-primary font-semibold">₱{Number(resortProfile.resort_price_per_night || 0).toLocaleString()} per night</p>
-              </div>
-            )}
-
-            <p className="text-sm text-muted-foreground leading-relaxed">{resortProfile.resort_description || 'No description provided.'}</p>
-
-            {/* Amenities */}
-            <div>
-              <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                <span className="w-1.5 h-4 bg-primary rounded-full inline-block" />
-                Amenities
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {(resortProfile.resort_amenities || []).length ? (
-                  resortProfile.resort_amenities.map((amenity: string) => (
-                    <span key={amenity} className="px-3 py-1 bg-primary/10 text-primary text-xs rounded-full font-medium border border-primary/20">
-                      {amenity}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-muted-foreground">No amenities listed</span>
-                )}
-              </div>
-            </div>
-
-            {/* Facilities & Policies */}
-            {(resortProfile.resort_facilities || resortProfile.resort_policies) && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {resortProfile.resort_facilities && (
-                  <div className="bg-blue-50 rounded-xl p-4">
-                    <h4 className="text-sm font-semibold text-blue-800 mb-2 flex items-center gap-2">
-                      <span className="w-1.5 h-4 bg-blue-500 rounded-full inline-block" />
-                      Facilities
-                    </h4>
-                    <p className="text-sm text-blue-700">{resortProfile.resort_facilities}</p>
-                  </div>
-                )}
-                {resortProfile.resort_policies && (
-                  <div className="bg-amber-50 rounded-xl p-4">
-                    <h4 className="text-sm font-semibold text-amber-800 mb-2 flex items-center gap-2">
-                      <span className="w-1.5 h-4 bg-amber-500 rounded-full inline-block" />
-                      Policies
-                    </h4>
-                    <p className="text-sm text-amber-700">{resortProfile.resort_policies}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Gallery */}
-            {profileImagePreviews.length > 0 && (
-              <div>
-                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                  <span className="w-1.5 h-4 bg-primary rounded-full inline-block" />
-                  Gallery
-                </h4>
-                <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
-                  {profileImagePreviews.map((preview, index) => (
-                    <div key={`${preview}-${index}`} className="rounded-lg overflow-hidden border-2 border-primary/10 hover:border-primary transition-colors">
-                      <img src={preview} alt="Resort" className="w-full h-20 object-cover" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="text-sm text-muted-foreground">No resort profile data available.</div>
-        )}
       </div>
 
       <div className="bg-white border-2 border-primary/20 rounded-lg p-6 mb-8">
@@ -1264,53 +621,6 @@ export function ResortProfile() {
             </div>
           );
         })}
-      </div>
-
-      {/* Availability Calendar */}
-      <div className="bg-white border-2 border-primary/20 rounded-2xl overflow-hidden mb-8">
-        <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 py-4 flex items-center justify-between border-b border-primary/10">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-primary/20 rounded-xl flex items-center justify-center">
-              <Calendar className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold">Availability Calendar</h2>
-              <p className="text-xs text-muted-foreground">Click a date to block it — tourists won't be able to book on blocked dates</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {calendarSaving && <span className="text-xs text-muted-foreground animate-pulse">Saving...</span>}
-            <span className="text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-full font-medium">
-              {blockedDates.length} blocked
-            </span>
-          </div>
-        </div>
-        <div className="p-6">
-          <AvailabilityCalendar
-            blockedDates={blockedDates}
-            onToggleDate={handleToggleDate}
-          />
-          {blockedDates.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-primary/10">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Blocked Dates</p>
-              <div className="flex flex-wrap gap-2">
-                {blockedDates.slice(0, 20).map(d => (
-                  <span
-                    key={d}
-                    className="inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full cursor-pointer hover:bg-red-200 transition-colors"
-                    onClick={() => handleToggleDate(d)}
-                    title="Click to unblock"
-                  >
-                    {d} ✕
-                  </span>
-                ))}
-                {blockedDates.length > 20 && (
-                  <span className="text-xs text-muted-foreground">+{blockedDates.length - 20} more</span>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Room Management */}

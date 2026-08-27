@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\ResortRoomController;
 use App\Http\Controllers\Api\ResortAvailabilityController;
 use App\Http\Controllers\Api\PromoCodeController;
 use App\Http\Controllers\Api\EnterpriseProfileController;
+use App\Http\Controllers\Api\EnterprisePostController;
 use App\Http\Controllers\Api\LandmarkController;
 
 use App\Models\User;
@@ -79,6 +80,11 @@ Route::group(['prefix' => 'public'], function () {
             'title' => \Illuminate\Support\Facades\Cache::get('hero_video_title', 'Mansalay Hero Video')
         ]);
     });
+
+    // Enterprise Posts (public feed & likes)
+    Route::get('enterprise-posts', [EnterprisePostController::class, 'index']);
+    Route::post('enterprise-posts/{id}/like', [EnterprisePostController::class, 'like']);
+    Route::post('enterprise-posts/{id}/save', [EnterprisePostController::class, 'save']);
 });
 
 // Authentication routes
@@ -218,8 +224,15 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::post('resort-availability-unblock', [ResortAvailabilityController::class, 'destroyByDate']);
     });
 
+    // Posts Management (Enterprise, Resort & Admin)
+    Route::group(['middleware' => ['role:enterprise,resort,admin']], function () {
+        Route::get('enterprise-posts', [EnterprisePostController::class, 'index']);
+        Route::post('enterprise-posts', [EnterprisePostController::class, 'store']);
+        Route::delete('enterprise-posts/{id}', [EnterprisePostController::class, 'destroy']);
+    });
+
     // Enterprise Profile Management Routes - JWT + role:enterprise required
-    Route::group(['middleware' => ['role:enterprise']], function () {
+    Route::group(['middleware' => ['role:enterprise,admin']], function () {
         Route::get('enterprise-profile', [EnterpriseProfileController::class, 'show']);
         Route::put('enterprise-profile', [EnterpriseProfileController::class, 'update']);
         Route::post('enterprise-profile', [EnterpriseProfileController::class, 'update']); // FormData upload support

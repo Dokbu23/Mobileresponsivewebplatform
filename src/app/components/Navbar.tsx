@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router';
-import { Menu, X, MapPin, User, LogOut, Shield, Hotel, Store, Moon, Sun, Search, Heart, ChevronDown, Plus, LayoutDashboard, Calendar, CreditCard, Settings, Package, ShoppingBag } from 'lucide-react';
+import { Menu, X, MapPin, User, LogOut, Shield, Hotel, Store, Moon, Sun, Search, Heart, ChevronDown, Plus, LayoutDashboard, Calendar, CreditCard, Settings, Package, ShoppingBag, Bed } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
@@ -68,12 +68,12 @@ export function Navbar() {
     ],
     resort: [
       { to: '/resort/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { to: `/business/resort/${currentUser?.id ?? ''}`, label: 'My Shop Profile', icon: Hotel },
-      { to: '/resort/profile', label: 'Manage Resort', icon: Settings },
+      { to: `/business/resort/${currentUser?.id ?? ''}?manage=true`, label: 'My Shop Profile', icon: Hotel },
+      { to: '/resort/profile', label: 'Manage Rooms', icon: Bed },
     ],
     enterprise: [
       { to: '/enterprise/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { to: `/business/enterprise/${currentUser?.id ?? ''}`, label: 'My Shop Profile', icon: Store },
+      { to: `/business/enterprise/${currentUser?.id ?? ''}?manage=true`, label: 'My Shop Profile', icon: Store },
       { to: '/enterprise/profile', label: 'Manage Products', icon: Package },
     ],
   };

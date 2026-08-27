@@ -328,7 +328,6 @@ class AccommodationController extends Controller
     {
         $owner = \App\Models\User::where('id', $userId)
             ->where('role', 'resort')
-            ->where('listing_status', 'approved')
             ->firstOrFail();
 
         $rooms = \App\Models\ResortRoom::where('user_id', $userId)
@@ -351,6 +350,8 @@ class AccommodationController extends Controller
 
         $images = $owner->resort_images ?? [];
         $primaryImage = is_array($images) && count($images) > 0 ? $images[0] : '';
+        $logo = $owner->store_logo ?: $primaryImage;
+        $banner = $owner->store_banner ?: $primaryImage;
 
         $ownerResponse = [
             'id'                 => $owner->id,
@@ -364,10 +365,10 @@ class AccommodationController extends Controller
             'resort_description' => $owner->resort_description ?? $owner->description,
             'store_name'         => $owner->resort_name ?? $owner->name,
             'store_description'  => $owner->resort_description ?? $owner->description,
-            'store_logo'         => $primaryImage,
-            'store_banner'       => $primaryImage,
-            'resort_logo'        => $primaryImage,
-            'resort_banner'      => $primaryImage,
+            'store_logo'         => $logo,
+            'store_banner'       => $banner,
+            'resort_logo'        => $logo,
+            'resort_banner'      => $banner,
             'resort_images'      => $images,
             'resort_amenities'   => $owner->resort_amenities ?? [],
             'resort_facilities'  => $owner->resort_facilities,
@@ -381,10 +382,30 @@ class AccommodationController extends Controller
             'payment_details'    => $owner->payment_details,
         ];
 
+        $promoCodes = \App\Models\PromoCode::where('user_id', $userId)
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                  ->orWhere('expires_at', '>', now());
+            })
+            ->get()
+            ->map(function ($c) {
+                return [
+                    'id'          => $c->id,
+                    'code'        => $c->code,
+                    'description' => $c->description,
+                    'type'        => $c->type,
+                    'value'       => (float) $c->value,
+                    'min_amount'  => (float) $c->min_amount,
+                    'expires_at'  => $c->expires_at,
+                ];
+            });
+
         return response()->json([
             'owner'          => $ownerResponse,
             'accommodations' => $rooms,
             'rooms'          => $rooms,
+            'promo_codes'    => $promoCodes,
             'is_registered'  => true,
         ]);
     }

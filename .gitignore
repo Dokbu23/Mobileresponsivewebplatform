@@ -1,1 +1,7 @@
 node_modules
+dist
+.env
+backend/.env
+backend/vendor
+backend/node_modules
+*.log

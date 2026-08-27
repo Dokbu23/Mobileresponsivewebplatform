@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, useSearchParams } from 'react-router';
 import {
   Hotel, Store, MapPin, Phone, Mail, Star,
   ArrowLeft, Package, Search, CreditCard,
   MessageCircle, Heart,
   CheckCircle, ShoppingBag, ExternalLink,
-  Pencil, Upload, X, Image as ImageIcon, Loader2
+  Pencil, Upload, X, Image as ImageIcon, Loader2,
+  Ticket, Tag, Copy, Check
 } from 'lucide-react';
 import { getPublicJSON, getAuthToken, API_BASE } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
+import { LocationPicker } from '../../components/LocationPicker';
 
 const MANSALAY_BARANGAYS = [
   'Barangay I (Poblacion)',
@@ -43,6 +45,8 @@ interface BusinessOwner {
   instagram?: string;
   address?: string;
   barangay?: string;
+  latitude?: number | string;
+  longitude?: number | string;
   description?: string;
   payment_details?: any[];
   created_at?: string;
@@ -63,10 +67,21 @@ interface BusinessOwner {
   resort_is_setup?: boolean;
 }
 
+interface PromoCodeItem {
+  id: number;
+  code: string;
+  description?: string;
+  type: 'percent' | 'fixed';
+  value: number;
+  min_amount?: number;
+  expires_at?: string;
+}
+
 interface BusinessProfileData {
   owner: BusinessOwner;
   accommodations?: any[];
   products?: any[];
+  promo_codes?: PromoCodeItem[];
   is_registered: boolean;
 }
 
@@ -306,6 +321,7 @@ function createFallbackBusinessProfile(rawId: string): BusinessProfileData {
 
 export function BusinessProfile() {
   const { type, userId } = useParams<{ type: 'resort' | 'enterprise'; userId: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { addToCart, userType, currentUser } = useApp();
   const [data, setData] = useState<BusinessProfileData | null>(null);
@@ -332,30 +348,44 @@ export function BusinessProfile() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  const [storeLocation, setStoreLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [copiedPromoCode, setCopiedPromoCode] = useState<string | null>(null);
+
+  const handleCopyPromo = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedPromoCode(code);
+    toast.success(`Promo code "${code}" copied to clipboard!`);
+    setTimeout(() => {
+      setCopiedPromoCode(prev => (prev === code ? null : prev));
+    }, 2500);
+  };
 
   useEffect(() => {
-    if (!type || !userId) return;
+    if (!type) return;
+
+    const targetUserId = userId || (currentUser?.id ? String(currentUser.id) : null);
+    if (!targetUserId) return;
 
     (async () => {
       try {
-        // Use the correct public endpoint per type
+        setLoading(true);
         const endpoint = type === 'enterprise'
-          ? `/business/enterprise/${userId}`
-          : `/business/resort/${userId}`;
+          ? `/business/enterprise/${targetUserId}`
+          : `/business/resort/${targetUserId}`;
         const result = await getPublicJSON(endpoint);
         if (result && result.owner) {
           setData(result);
+          setError(null);
         } else {
-          // Only use mock fallback for resort (enterprise must come from DB)
           if (type === 'resort') {
-            setData(createFallbackBusinessProfile(userId));
+            setData(createFallbackBusinessProfile(targetUserId));
           } else {
             setError('Shop not found.');
           }
         }
       } catch {
         if (type === 'resort') {
-          setData(createFallbackBusinessProfile(userId));
+          setData(createFallbackBusinessProfile(targetUserId));
         } else {
           setError('Shop not found or not yet approved.');
         }
@@ -363,7 +393,7 @@ export function BusinessProfile() {
         setLoading(false);
       }
     })();
-  }, [type, userId]);
+  }, [type, userId, currentUser?.id]);
 
   if (loading) {
     return (
@@ -474,7 +504,9 @@ export function BusinessProfile() {
            accommodation.description?.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
+  const isManageMode = searchParams.get('manage') === 'true';
   const isOwner = Boolean(
+    isManageMode &&
     currentUser && (
       (userType === 'enterprise' && type === 'enterprise' && (!userId || String(currentUser.id) === String(userId) || String(currentUser.id) === String(owner?.id) || !userId.match(/^\d+$/))) ||
       (userType === 'resort' && type === 'resort' && (!userId || String(currentUser.id) === String(userId) || String(currentUser.id) === String(owner?.id) || !userId.match(/^\d+$/))) ||
@@ -496,6 +528,9 @@ export function BusinessProfile() {
     setLogoPreview(null);
     setBannerFile(null);
     setBannerPreview(null);
+    const lat = owner.latitude ? Number(owner.latitude) : 12.51507;
+    const lng = owner.longitude ? Number(owner.longitude) : 121.42810;
+    setStoreLocation({ lat, lng });
     setIsEditModalOpen(true);
   };
 
@@ -535,6 +570,10 @@ export function BusinessProfile() {
         formData.append('address', editForm.address.trim());
         formData.append('facebook_link', editForm.facebook_link.trim());
         formData.append('instagram_link', editForm.instagram_link.trim());
+        if (storeLocation?.lat && storeLocation?.lng) {
+          formData.append('latitude', String(storeLocation.lat));
+          formData.append('longitude', String(storeLocation.lng));
+        }
         if (logoFile) formData.append('logo', logoFile);
         if (bannerFile) formData.append('banner', bannerFile);
         formData.append('_method', 'PUT');
@@ -566,6 +605,8 @@ export function BusinessProfile() {
               address: editForm.address.trim(),
               facebook_link: editForm.facebook_link.trim(),
               instagram_link: editForm.instagram_link.trim(),
+              latitude: storeLocation?.lat ?? prev.owner.latitude,
+              longitude: storeLocation?.lng ?? prev.owner.longitude,
               resort_logo: updated?.logo || updated?.resort_logo || prev.owner.resort_logo,
               resort_banner: updated?.banner || updated?.resort_banner || prev.owner.resort_banner,
             }
@@ -579,6 +620,10 @@ export function BusinessProfile() {
         formData.append('address', editForm.address.trim());
         formData.append('facebook_link', editForm.facebook_link.trim());
         formData.append('instagram_link', editForm.instagram_link.trim());
+        if (storeLocation?.lat && storeLocation?.lng) {
+          formData.append('latitude', String(storeLocation.lat));
+          formData.append('longitude', String(storeLocation.lng));
+        }
         if (logoFile) formData.append('logo', logoFile);
         if (bannerFile) formData.append('banner', bannerFile);
         formData.append('_method', 'PUT');
@@ -610,8 +655,10 @@ export function BusinessProfile() {
               address: editForm.address.trim(),
               facebook_link: editForm.facebook_link.trim(),
               instagram_link: editForm.instagram_link.trim(),
-              store_logo: updated?.logo || updated?.store_logo || prev.owner.store_logo,
-              store_banner: updated?.banner || updated?.store_banner || prev.owner.store_banner,
+              latitude: storeLocation?.lat ?? prev.owner.latitude,
+              longitude: storeLocation?.lng ?? prev.owner.longitude,
+              store_logo: updated?.store_logo || updated?.logo || prev.owner.store_logo,
+              store_banner: updated?.store_banner || updated?.banner || prev.owner.store_banner,
             }
           };
         });
@@ -906,6 +953,84 @@ export function BusinessProfile() {
           </div>
         )}
 
+        {/* 🏷️ ACTIVE VOUCHERS / PROMO CODES */}
+        {data?.promo_codes && data.promo_codes.length > 0 && (
+          <div className="bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 rounded-2xl p-4 sm:p-5 mb-4 text-white shadow-md shadow-pink-500/10">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-xs">
+                  <Ticket className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold tracking-wide uppercase">
+                    Available Shop Vouchers & Promo Discounts
+                  </h3>
+                  <p className="text-[11px] text-white/90 font-medium">Use these exclusive promo codes at checkout for instant discounts!</p>
+                </div>
+              </div>
+              <span className="text-[11px] bg-white/20 backdrop-blur-xs px-2.5 py-0.5 rounded-full font-bold">
+                {data.promo_codes.length} Active {data.promo_codes.length === 1 ? 'Voucher' : 'Vouchers'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {data.promo_codes.map((promo) => {
+                const discountText = promo.type === 'percent' ? `${promo.value}% OFF` : `₱${Number(promo.value).toLocaleString()} OFF`;
+                const isCopied = copiedPromoCode === promo.code;
+
+                return (
+                  <div
+                    key={promo.id}
+                    className="bg-white rounded-xl p-3.5 text-gray-800 shadow-sm border border-white/50 flex items-center justify-between gap-3 relative overflow-hidden group"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2 py-0.5 bg-pink-100 text-pink-700 font-extrabold text-xs rounded-md">
+                          {discountText}
+                        </span>
+                        {promo.min_amount && promo.min_amount > 0 ? (
+                          <span className="text-[10px] text-gray-500 font-medium truncate">
+                            Min. ₱{Number(promo.min_amount).toLocaleString()}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="font-mono font-bold text-sm tracking-wider text-gray-900">
+                        {promo.code}
+                      </div>
+                      {promo.description && (
+                        <p className="text-[11px] text-gray-500 truncate mt-0.5">
+                          {promo.description}
+                        </p>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => handleCopyPromo(promo.code)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 flex-shrink-0 active:scale-95 ${
+                        isCopied
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-gradient-to-r from-pink-500 to-rose-500 text-white hover:opacity-90 shadow-xs'
+                      }`}
+                    >
+                      {isCopied ? (
+                        <>
+                          <Check className="h-3.5 w-3.5" />
+                          <span>Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5" />
+                          <span>Copy Code</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* 🔍 SEARCH BAR */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 mb-4">
           <div className="relative">
@@ -986,45 +1111,106 @@ export function BusinessProfile() {
           </div>
         </div>
 
-        {/* 📞 CONTACT INFO */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mt-4">
-          <h3 className="text-sm font-bold text-gray-800 tracking-widest mb-4">CONTACT INFORMATION</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {owner.email && (
-              <a href={`mailto:${owner.email}`} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-pink-300 hover:bg-pink-50/50 transition-all">
-                <div className="w-10 h-10 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Mail className="h-5 w-5 text-pink-500" />
+        {/* 📍 SHOP LOCATION & CONTACT INFO SECTION */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
+          {/* Shop Location & Interactive Map Card */}
+          <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-pink-50 text-pink-500 flex items-center justify-center">
+                  <MapPin className="h-4 w-4" />
                 </div>
-                <div className="min-w-0">
-                  <div className="text-xs text-gray-500">Email</div>
-                  <div className="text-sm text-gray-800 truncate font-medium">{owner.email}</div>
-                </div>
-              </a>
-            )}
-            {owner.phone && (
-              <a href={`tel:${owner.phone}`} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-pink-300 hover:bg-pink-50/50 transition-all">
-                <div className="w-10 h-10 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Phone className="h-5 w-5 text-pink-500" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs text-gray-500">Phone</div>
-                  <div className="text-sm text-gray-800 font-medium">{owner.phone}</div>
-                </div>
-              </a>
-            )}
-            {(owner.address || owner.barangay) && (
-              <div className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl">
-                <div className="w-10 h-10 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <MapPin className="h-5 w-5 text-pink-500" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs text-gray-500">Location</div>
-                  <div className="text-sm text-gray-800 truncate font-medium">
-                    {[owner.barangay, 'Mansalay, Oriental Mindoro'].filter(Boolean).join(', ')}
-                  </div>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
+                    {isResort ? 'Resort Location & Landmark' : 'Shop Location & Landmark'}
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    {[owner.address, owner.barangay, 'Mansalay, Oriental Mindoro'].filter(Boolean).join(', ')}
+                  </p>
                 </div>
               </div>
+              {isOwner && (
+                <button
+                  onClick={handleOpenEditModal}
+                  className="px-3 py-1 bg-pink-50 hover:bg-pink-100 text-pink-600 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
+                >
+                  <Pencil className="h-3 w-3" />
+                  Edit Pin
+                </button>
+              )}
+            </div>
+
+            {/* Map Display */}
+            <div className="rounded-xl overflow-hidden border border-gray-200 mt-2">
+              <LocationPicker
+                initialLat={owner.latitude ? Number(owner.latitude) : 12.51507}
+                initialLng={owner.longitude ? Number(owner.longitude) : 121.42810}
+                onLocationSelect={() => {}}
+                height="190px"
+              />
+            </div>
+            
+            {owner.address && (
+              <div className="mt-3 text-xs bg-gray-50 p-2.5 rounded-xl border border-gray-100 flex items-center gap-2">
+                <span className="font-bold text-gray-700">Landmark / Directions:</span>
+                <span className="text-gray-600">{owner.address}</span>
+              </div>
             )}
+          </div>
+
+          {/* 📞 CONTACT INFO */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-4">
+                CONTACT INFORMATION
+              </h3>
+              <div className="space-y-3">
+                {owner.email && (
+                  <a href={`mailto:${owner.email}`} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-pink-300 hover:bg-pink-50/50 transition-all">
+                    <div className="w-9 h-9 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <Mail className="h-4 w-4 text-pink-500" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[10px] text-gray-400 font-bold uppercase">Email Address</div>
+                      <div className="text-xs text-gray-800 truncate font-semibold">{owner.email}</div>
+                    </div>
+                  </a>
+                )}
+                {owner.phone && (
+                  <a href={`tel:${owner.phone}`} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-pink-300 hover:bg-pink-50/50 transition-all">
+                    <div className="w-9 h-9 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <Phone className="h-4 w-4 text-pink-500" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[10px] text-gray-400 font-bold uppercase">Contact Phone</div>
+                      <div className="text-xs text-gray-800 font-semibold">{owner.phone}</div>
+                    </div>
+                  </a>
+                )}
+                {owner.facebook_link && (
+                  <a href={owner.facebook_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-blue-300 hover:bg-blue-50/50 transition-all">
+                    <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <ExternalLink className="h-4 w-4 text-blue-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[10px] text-gray-400 font-bold uppercase">Facebook Page</div>
+                      <div className="text-xs text-blue-600 font-semibold truncate">Visit Facebook</div>
+                    </div>
+                  </a>
+                )}
+                {owner.instagram_link && (
+                  <a href={owner.instagram_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-pink-300 hover:bg-pink-50/50 transition-all">
+                    <div className="w-9 h-9 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <ExternalLink className="h-4 w-4 text-pink-600" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[10px] text-gray-400 font-bold uppercase">Instagram</div>
+                      <div className="text-xs text-pink-600 font-semibold truncate">Visit Instagram</div>
+                    </div>
+                  </a>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1165,18 +1351,43 @@ export function BusinessProfile() {
                   </select>
                 </div>
 
-                {/* Specific Address */}
+                {/* Specific Address / Landmark */}
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-bold text-gray-700 mb-1">
-                    Complete Street Address / Landmark
+                    Street Address / Landmark (e.g. Near Public Market / Town Plaza)
                   </label>
                   <input
                     type="text"
                     value={editForm.address}
                     onChange={(e) => setEditForm(prev => ({ ...prev, address: e.target.value }))}
                     className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-pink-500 focus:bg-white"
-                    placeholder="e.g. Coastal Road, near Mansalay Town Plaza"
+                    placeholder="e.g. Coastal Road, Sitio Centro, Near Mansalay Town Plaza"
                   />
+                </div>
+
+                {/* Map Location & Landmark Pinning */}
+                <div className="sm:col-span-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5 text-pink-500" />
+                      Pin Exact Location on Mansalay Map
+                    </label>
+                    <span className="text-[11px] text-pink-500 font-medium">Click on map to place pin</span>
+                  </div>
+                  <div className="rounded-2xl overflow-hidden border-2 border-pink-200 shadow-xs mb-2">
+                    <LocationPicker
+                      initialLat={storeLocation?.lat || 12.51507}
+                      initialLng={storeLocation?.lng || 121.42810}
+                      onLocationSelect={(lat, lng) => setStoreLocation({ lat, lng })}
+                      height="200px"
+                    />
+                  </div>
+                  {storeLocation && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-semibold bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                      <CheckCircle className="h-3.5 w-3.5" />
+                      Pinned Coordinates: {storeLocation.lat.toFixed(5)}, {storeLocation.lng.toFixed(5)}
+                    </div>
+                  )}
                 </div>
 
                 {/* Facebook Link */}
