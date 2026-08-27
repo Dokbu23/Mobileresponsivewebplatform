@@ -22,8 +22,8 @@ echo "🗄️  Running database migrations..."
 php artisan migrate --force --no-interaction
 
 # ── Seed essential data (safe — uses firstOrCreate) ─────────────────────
-echo "🌱 Seeding essential data..."
-php artisan db:seed --class=PaymentSettingsSeeder --force --no-interaction || true
+echo "🌱 Seeding essential data (users, tourism data, payment settings)..."
+php artisan db:seed --force --no-interaction || true
 
 # ── Create storage symlink ───────────────────────────────────────────────
 echo "🔗 Creating storage link..."
