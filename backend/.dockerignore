@@ -1,36 +1,34 @@
-# Ignore these files when building Docker image
-.env
-.env.backup
-.env.testing
-.git
-.gitignore
-.gitattributes
-node_modules
-vendor
-npm-debug.log
-yarn-error.log
-.phpunit.result.cache
+# Exclude EVERYTHING by default
+*
+
+# Then explicitly INCLUDE only what Laravel needs
+
+# Core files
+!composer.json
+!composer.lock
+!artisan
+!build.sh
+
+# Application directories
+!app/
+app/.gitignore
+
+!config/
+!routes/
+!resources/
+!bootstrap/
+
+# Database
+!database/
+database/database.sqlite
+
+# Public (but not storage symlinks)
+!public/
+public/storage
+
+# Storage skeleton only (not cached data)
+!storage/
 storage/logs/*.log
 storage/framework/cache/data/*
 storage/framework/sessions/*
 storage/framework/views/*
-tests
-.editorconfig
-README.md
-.styleci.yml
-database/database.sqlite
-
-# Keep these files (important!)
-!composer.json
-!composer.lock
-!artisan
-!public/
-!app/
-!config/
-!database/migrations
-!database/seeders
-!database/factories
-!resources/
-!routes/
-!storage/.gitignore
-!bootstrap/
