@@ -23,10 +23,11 @@ RUN apt-get update && apt-get install -y \
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Copy ALL application files
-COPY . .
+# Copy ONLY the backend/ folder into /var/www/html
+# (Docker context is repo root, so we specify backend/ subdirectory)
+COPY backend/ .
 
-# Remove Windows-built vendor (will reinstall fresh for Linux)
+# Remove Windows-built vendor (reinstall fresh for Linux)
 RUN rm -rf vendor/ node_modules/
 
 # Set dummy APP_KEY so any artisan calls during build don't fail
@@ -34,7 +35,6 @@ ENV APP_KEY=base64:dGVzdGtleWZvcmJ1aWxkb25seXRlc3RrZXk=
 
 # Install PHP dependencies (fresh, Linux-native)
 ENV COMPOSER_MEMORY_LIMIT=-1
-RUN echo "=== FILES IN /var/www/html ===" && ls -la /var/www/html/ && echo "=== END ==="
 RUN composer install \
     --no-dev \
     --optimize-autoloader \

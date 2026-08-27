@@ -1,0 +1,13 @@
+﻿# Root .dockerignore - Docker context is repo root
+# Exclude everything except backend/
+
+*
+!backend/
+
+backend/node_modules/
+backend/.env
+backend/.env.backup
+backend/vendor/
+backend/tests/
+backend/.phpunit.result.cache
+backend/database/database.sqlite
