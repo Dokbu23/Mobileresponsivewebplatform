@@ -34,6 +34,7 @@ ENV APP_KEY=base64:dGVzdGtleWZvcmJ1aWxkb25seXRlc3RrZXk=
 
 # Install PHP dependencies (fresh, Linux-native)
 ENV COMPOSER_MEMORY_LIMIT=-1
+RUN echo "=== FILES IN /var/www/html ===" && ls -la /var/www/html/ && echo "=== END ==="
 RUN composer install \
     --no-dev \
     --optimize-autoloader \
