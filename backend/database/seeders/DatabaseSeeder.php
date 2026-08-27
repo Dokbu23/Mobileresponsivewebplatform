@@ -21,10 +21,20 @@ class DatabaseSeeder extends Seeder
         // Seed all test users (idempotent — uses firstOrCreate)
         // ---------------------------------------------------------------
         $users = [
-            // Admin
+            // Admin Users
             [
                 'name'             => 'Admin User',
                 'email'            => 'admin@mansalay.com',
+                'password'         => bcrypt('admin123'),
+                'role'             => 'admin',
+                'listing_status'   => 'approved',
+                'subscription_status' => 'paid',
+                'is_active'        => true,
+                'email_verified_at' => now(),
+            ],
+            [
+                'name'             => 'Tourism',
+                'email'            => 'jaymarzx21@gmail.com',
                 'password'         => bcrypt('admin123'),
                 'role'             => 'admin',
                 'listing_status'   => 'approved',

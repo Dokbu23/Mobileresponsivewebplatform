@@ -15,399 +15,249 @@ class TourismDataSeeder extends Seeder
      */
     public function run()
     {
-        // Get admin user ID (assuming admin exists)
-        $adminId = DB::table('users')->where('role', 'admin')->first()->id ?? 1;
+        $now = Carbon::now();
 
-        // Seed Attractions
+        // -------------------------------------------------------------
+        // 1. Seed Attractions with images
+        // -------------------------------------------------------------
         $attractions = [
             [
-                'name' => 'Puting Buhangin Beach',
+                'name' => 'Buktot Beach',
                 'description' => 'A pristine white sand beach with crystal clear waters, perfect for swimming and snorkeling.',
-                'full_description' => 'Puting Buhangin Beach is known for its powdery white sand and turquoise waters. The beach offers excellent swimming conditions and is a popular spot for snorkeling with visible coral formations near the shore.',
-                'location' => 'Barangay Puting Buhangin, Mansalay',
+                'full_description' => 'Buktot Beach is renowned for its powdery white sand and turquoise waters. It offers excellent swimming conditions and is a popular spot for snorkeling with visible coral formations near the shore.',
+                'location' => 'Barangay Buktot, Mansalay',
                 'category' => 'Beach',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
+                'image' => '/drive-download-20260416T051436Z-3-001/attraction/buktot_beach.jpg',
             ],
             [
-                'name' => 'Buyayao Falls',
-                'description' => 'A majestic multi-tiered waterfall surrounded by lush forest.',
-                'full_description' => 'Buyayao Falls cascades down several levels creating natural pools perfect for swimming. The falls are surrounded by pristine forest and offer a refreshing escape from the heat.',
-                'location' => 'Barangay Buyayao, Mansalay',
-                'category' => 'Waterfall',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Mansalay River',
-                'description' => 'A scenic river perfect for kayaking and river cruising.',
-                'full_description' => 'The calm waters and beautiful scenery of Mansalay River make it ideal for nature lovers. Kayaking tours are available, and the river is home to various bird species.',
-                'location' => 'Mansalay Town Proper',
-                'category' => 'River',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Mount Mansalay',
-                'description' => 'A challenging hiking destination offering panoramic views.',
-                'full_description' => 'Mount Mansalay offers panoramic views of Mansalay and surrounding areas. Popular among adventure seekers and mountaineers, the trail takes 4-6 hours to complete.',
-                'location' => 'Mansalay Mountain Range',
-                'category' => 'Mountain',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Coral Garden Marine Sanctuary',
-                'description' => 'An underwater paradise featuring vibrant coral reefs.',
-                'full_description' => 'The Coral Garden Marine Sanctuary features vibrant coral reefs and diverse marine life. Perfect for snorkeling and diving enthusiasts, with visibility often exceeding 20 meters.',
-                'location' => 'Offshore Mansalay',
-                'category' => 'Marine Sanctuary',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Mansalay Church (St. Joseph Parish)',
-                'description' => 'A historic Spanish-era church built in the 1800s.',
-                'full_description' => 'St. Joseph Parish features beautiful Spanish colonial architecture and serves as a cultural landmark. The church hosts the annual town fiesta every March.',
+                'name' => 'Oriental Mindoro Heritage and Cultural Center',
+                'description' => 'Cultural museum and heritage center showcasing indigenous Mangyan artifacts and history.',
+                'full_description' => 'A cultural hub dedicated to preserving the rich heritage, traditions, and artifacts of the Hanunoo Mangyan tribe and the historical development of Mansalay and Oriental Mindoro.',
                 'location' => 'Poblacion, Mansalay',
                 'category' => 'Historical Site',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
+                'image' => '/drive-download-20260416T051436Z-3-001/attraction/Oriental Mindoro Heritage and Cultural Center.png',
             ],
             [
-                'name' => 'Mangrove Forest Park',
-                'description' => 'A protected mangrove ecosystem with boardwalk trails.',
-                'full_description' => 'The Mangrove Forest Park features elevated boardwalk trails through the mangrove ecosystem. Great for eco-tourism, bird watching, and learning about coastal conservation.',
-                'location' => 'Barangay Victoria, Mansalay',
-                'category' => 'Eco Park',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
+                'name' => 'Mangyan Village & Cultural Sanctuary',
+                'description' => 'Authentic indigenous village displaying traditional Hanunoo Mangyan culture and Surat Mangyan script.',
+                'full_description' => 'Experience the rich living traditions of the Hanunoo Mangyan community. Learn their ancient Surat Mangyan syllabic script inscribed on bamboo, traditional weaving, and peaceful forest-dwelling lifestyle.',
+                'location' => 'Panaytayan, Mansalay',
+                'category' => 'Cultural',
+                'image' => '/drive-download-20260416T051436Z-3-001/attraction/mangyan village.jpg',
             ],
             [
-                'name' => 'Talipanan Beach',
-                'description' => 'A secluded beach with golden sand and calm waters.',
-                'full_description' => 'Talipanan Beach offers a more secluded experience with golden sand and calm waters. Perfect for family picnics and relaxation away from crowds.',
-                'location' => 'Barangay Talipanan, Mansalay',
-                'category' => 'Beach',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
+                'name' => 'Mangyan Ancient Burial Cave',
+                'description' => 'Historical limestone cave containing ancient Mangyan burial jars and archaeological treasures.',
+                'full_description' => 'A sacred cultural and archaeological site featuring ancient limestone burial caves, where prehistoric pottery and jar burials of early settlers were preserved.',
+                'location' => 'Manaul, Mansalay',
+                'category' => 'Historical Site',
+                'image' => '/drive-download-20260416T051436Z-3-001/attraction/mangya burial cave.jpg',
             ],
             [
-                'name' => 'Biga Falls',
-                'description' => 'A hidden gem waterfall with cool, refreshing waters.',
-                'full_description' => 'Biga Falls is surrounded by tropical vegetation and accessible via a short 30-minute trek. The cool waters and natural pool make it perfect for swimming.',
-                'location' => 'Barangay Biga, Mansalay',
-                'category' => 'Waterfall',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
+                'name' => 'Buyayao Island & Marine Reserve',
+                'description' => 'Picturesque island surrounded by lush marine life, vibrant coral reefs, and tranquil waters.',
+                'full_description' => 'Buyayao Island is an eco-tourism sanctuary offering breathtaking scuba diving, snorkeling, and boat touring experiences with rich biodiversity.',
+                'location' => 'Buyayao Island, Mansalay',
+                'category' => 'Marine Sanctuary',
+                'image' => '/drive-download-20260416T051436Z-3-001/beach and resorts/pgd beach.jpg',
             ],
             [
-                'name' => 'Mansalay Public Market',
-                'description' => 'A vibrant local market offering fresh produce and seafood.',
-                'full_description' => 'Experience authentic local culture at Mansalay Public Market. Find fresh produce, seafood, local handicrafts, and traditional Filipino delicacies.',
-                'location' => 'Poblacion, Mansalay',
-                'category' => 'Market',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
+                'name' => 'Mount Mansalay & Highland Trails',
+                'description' => 'Scenic mountain range featuring panoramic views of the ocean and mountain ridges.',
+                'full_description' => 'A favorite trekking spot for adventure seekers and eco-tourists offering sweeping 360-degree vistas of Mansalay Bay and southern Mindoro.',
+                'location' => 'Mansalay Mountain Range',
+                'category' => 'Mountain',
+                'image' => '/drive-download-20260416T051436Z-3-001/MOUNTAIN AND FARM RESORTS/melzar mountain.jpg',
             ],
         ];
 
-        DB::table('attractions')->insert($attractions);
+        foreach ($attractions as $item) {
+            DB::table('attractions')->updateOrInsert(
+                ['name' => $item['name']],
+                array_merge($item, ['created_at' => $now, 'updated_at' => $now])
+            );
+        }
 
-        // Seed Accommodations
+        // -------------------------------------------------------------
+        // 2. Seed Accommodations & Resorts with images
+        // -------------------------------------------------------------
         $accommodations = [
             [
-                'name' => 'Puting Buhangin Beach Resort',
-                'description' => 'Beachfront resort with modern amenities, swimming pool, and restaurant. Offers stunning ocean views and direct beach access. Amenities: WiFi, Swimming Pool, Restaurant, Beach Access, Air Conditioning, Hot Shower.',
-                'price_per_night' => 2500,
+                'name' => 'Lasersita Casitas & Beach Resort',
+                'description' => 'Premier beachfront casitas offering modern comfort, swimming pool, and direct beach access. Amenities: WiFi, Swimming Pool, Air Conditioning, Hot Shower, Restaurant.',
+                'price_per_night' => 3500,
+                'image' => '/drive-download-20260416T051436Z-3-001/beach and resorts/lasersita casitas.jpg',
                 'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
             ],
             [
-                'name' => 'Mansalay Bay Hotel',
-                'description' => 'Comfortable hotel in town center with easy access to local attractions. Features spacious rooms and friendly service. Amenities: WiFi, Air Conditioning, Cable TV, Hot Shower, Parking, Restaurant.',
-                'price_per_night' => 1800,
-                'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Riverside Cottages',
-                'description' => 'Cozy cottages along Mansalay River. Perfect for nature lovers seeking a peaceful retreat. Amenities: WiFi, River View, Fan, Shared Kitchen, Parking.',
-                'price_per_night' => 1500,
-                'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Mountain View Lodge',
-                'description' => 'Hillside lodge offering panoramic mountain views. Ideal for hikers and adventure seekers. Amenities: Mountain View, Restaurant, Hiking Guides, Bonfire Area, Hot Shower.',
-                'price_per_night' => 2000,
-                'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Talipanan Beach Huts',
-                'description' => 'Traditional nipa huts right on the beach. Affordable and authentic beach experience. Amenities: Beach Access, Fan, Shared Bathroom, Grilling Area.',
-                'price_per_night' => 1200,
-                'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Coral Bay Dive Resort',
-                'description' => 'Dive resort with equipment rental and dive guides. Perfect for diving enthusiasts. Amenities: Dive Shop, Equipment Rental, Dive Guides, Restaurant, WiFi, Air Conditioning.',
-                'price_per_night' => 3000,
-                'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Mansalay Pension House',
-                'description' => 'Budget-friendly pension house in town center. Clean rooms with basic amenities. Amenities: WiFi, Fan, Shared Bathroom, Cable TV.',
-                'price_per_night' => 800,
-                'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Eco Lodge Mansalay',
-                'description' => 'Eco-friendly lodge promoting sustainable tourism. Solar-powered with organic garden. Amenities: Solar Power, Organic Garden, Nature Trails, Bird Watching, WiFi.',
-                'price_per_night' => 2200,
-                'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Sunset View Inn',
-                'description' => 'Charming inn with spectacular sunset views. Rooftop terrace and cozy rooms. Amenities: Rooftop Terrace, WiFi, Air Conditioning, Hot Shower, Breakfast Included.',
-                'price_per_night' => 1600,
-                'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Family Beach Resort',
-                'description' => 'Family-friendly resort with playground and kiddie pool. Spacious family rooms available. Amenities: Kiddie Pool, Playground, Family Rooms, Restaurant, WiFi, Beach Access.',
+                'name' => 'Mahalta Glamping & Beach Resort',
+                'description' => 'Luxury glamping tents right on the shoreline with romantic sunset dining and bonfire setups.',
                 'price_per_night' => 2800,
+                'image' => '/drive-download-20260416T051436Z-3-001/beach and resorts/mahalta glamping.jpg',
                 'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
+            ],
+            [
+                'name' => 'Sky and Shore Beach Resort',
+                'description' => 'Tranquil coastal resort perfect for family vacations and corporate retreats with oceanfront cottages.',
+                'price_per_night' => 2400,
+                'image' => '/drive-download-20260416T051436Z-3-001/beach and resorts/sky and shore.jpg',
+                'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
+            ],
+            [
+                'name' => 'Sidell Beach & Kiteboarding Resort',
+                'description' => 'Water sports and kiteboarding destination on the breezy eastern shore of Mansalay.',
+                'price_per_night' => 2000,
+                'image' => '/drive-download-20260416T051436Z-3-001/beach and resorts/sidell beach.jpg',
+                'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
+            ],
+            [
+                'name' => 'RC Farm and Mountain Resort',
+                'description' => 'Serene agro-tourism farm resort surrounded by fruit orchards, mountain breezes, and fresh springs.',
+                'price_per_night' => 1800,
+                'image' => '/drive-download-20260416T051436Z-3-001/MOUNTAIN AND FARM RESORTS/RC farm and resort.jpg',
+                'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
+            ],
+            [
+                'name' => 'Carishiela Lodging House',
+                'description' => 'Budget-friendly lodging house in town center with clean, air-conditioned rooms and reliable service.',
+                'price_per_night' => 1200,
+                'image' => '/drive-download-20260416T051436Z-3-001/ACCOMMODATIONS/carishiela lodging house.jpg',
+                'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
+            ],
+            [
+                'name' => 'Nel Travellers Inn',
+                'description' => 'Convenient travelers inn near the highway and transportation terminals with WiFi and dining.',
+                'price_per_night' => 1000,
+                'image' => '/drive-download-20260416T051436Z-3-001/ACCOMMODATIONS/nel travellers inn.jpg',
+                'availability' => json_encode(['monday' => true, 'tuesday' => true, 'wednesday' => true, 'thursday' => true, 'friday' => true, 'saturday' => true, 'sunday' => true]),
             ],
         ];
 
-        DB::table('accommodations')->insert($accommodations);
+        foreach ($accommodations as $item) {
+            DB::table('accommodations')->updateOrInsert(
+                ['name' => $item['name']],
+                array_merge($item, ['created_at' => $now, 'updated_at' => $now])
+            );
+        }
 
-        // Seed Products
+        // -------------------------------------------------------------
+        // 3. Seed Products with images
+        // -------------------------------------------------------------
         $products = [
             [
-                'name' => 'Dried Mangoes',
-                'description' => 'Sweet and chewy dried mangoes from local farms. Perfect pasalubong from Mansalay.',
-                'price' => 150,
-                'category' => 'Food',
-                'stock' => 100,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
+                'name' => 'Authentic Mangyan Woven Bag (Bayong)',
+                'description' => 'Handcrafted bag woven from natural nito vines and bamboo by Hanunoo Mangyan women artisans.',
+                'price' => 450,
+                'category' => 'Handicraft',
+                'stock' => 50,
+                'image' => '/drive-download-20260416T051436Z-3-001/product_awati/Mangyan Woven Bag.jpg',
             ],
             [
-                'name' => 'Coconut Oil',
-                'description' => 'Pure virgin coconut oil extracted from fresh coconuts. 500ml bottle.',
+                'name' => 'Handwoven Traditional Baskets',
+                'description' => 'Durable and decorative multipurpose basket made of natural bamboo fibers and nito weave.',
+                'price' => 380,
+                'category' => 'Handicraft',
+                'stock' => 40,
+                'image' => '/drive-download-20260416T051436Z-3-001/product_awati/handwoven-baskets-linda-phelps.jpg',
+            ],
+            [
+                'name' => 'Handcrafted Beaded Bracelet',
+                'description' => 'Colorful traditional Hanunoo Mangyan beaded bracelet with intricate geometric patterns.',
+                'price' => 150,
+                'category' => 'Jewelry',
+                'stock' => 100,
+                'image' => '/drive-download-20260416T051436Z-3-001/product_awati/Beaded-Bracelet.webp',
+            ],
+            [
+                'name' => 'Ammonite Fossil Souvenir Keychain',
+                'description' => 'Unique collectible keychain featuring genuine ammonite fossil found in ancient Mansalay rock formations.',
                 'price' => 200,
-                'category' => 'Food',
-                'stock' => 50,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
+                'category' => 'Souvenir',
+                'stock' => 75,
+                'image' => '/drive-download-20260416T051436Z-3-001/product_awati/Ammonite Souvenir Keychain.webp',
             ],
             [
                 'name' => 'Handwoven Banig Mat',
-                'description' => 'Traditional handwoven mat made by local artisans. Colorful and durable.',
-                'price' => 500,
-                'category' => 'Handicraft',
-                'stock' => 30,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Dried Fish (Tuyo)',
-                'description' => 'Salted dried fish, a Filipino breakfast staple. Freshly caught from Mansalay waters.',
-                'price' => 120,
-                'category' => 'Food',
-                'stock' => 80,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Bamboo Handicrafts',
-                'description' => 'Decorative bamboo crafts including baskets, lamps, and ornaments.',
-                'price' => 350,
-                'category' => 'Handicraft',
-                'stock' => 40,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Local Honey',
-                'description' => 'Pure organic honey from Mansalay forests. 250ml jar.',
-                'price' => 250,
-                'category' => 'Food',
-                'stock' => 60,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Shell Jewelry',
-                'description' => 'Beautiful jewelry made from local seashells. Necklaces, bracelets, and earrings.',
-                'price' => 180,
-                'category' => 'Jewelry',
-                'stock' => 70,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Banana Chips',
-                'description' => 'Crispy banana chips, lightly sweetened. Made from local bananas.',
-                'price' => 100,
-                'category' => 'Food',
-                'stock' => 120,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Woven Bags',
-                'description' => 'Eco-friendly woven bags made from natural fibers. Various sizes available.',
-                'price' => 400,
-                'category' => 'Handicraft',
-                'stock' => 35,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Coffee Beans',
-                'description' => 'Locally grown and roasted coffee beans. Rich and aromatic. 250g pack.',
-                'price' => 280,
-                'category' => 'Food',
-                'stock' => 45,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Peanut Brittle',
-                'description' => 'Sweet and crunchy peanut brittle. A favorite local delicacy.',
-                'price' => 130,
-                'category' => 'Food',
-                'stock' => 90,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Wooden Carvings',
-                'description' => 'Intricate wooden carvings of local wildlife and cultural symbols.',
+                'description' => 'Cool and smooth traditional sleeping and floor mat made from dried and dyed pandan reeds.',
                 'price' => 600,
                 'category' => 'Handicraft',
-                'stock' => 20,
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
+                'stock' => 30,
+                'image' => '/drive-download-20260416T051436Z-3-001/product_awati/woven_mat.jpg',
+            ],
+            [
+                'name' => 'Bamboo Crafts & Tableware',
+                'description' => 'Eco-friendly bamboo cups, utensil holders, and table decor crafted by local woodworkers.',
+                'price' => 280,
+                'category' => 'Handicraft',
+                'stock' => 60,
+                'image' => '/drive-download-20260416T051436Z-3-001/product_awati/bamboo_crafts.jpg',
             ],
         ];
 
-        DB::table('products')->insert($products);
+        foreach ($products as $item) {
+            DB::table('products')->updateOrInsert(
+                ['name' => $item['name']],
+                array_merge($item, ['created_at' => $now, 'updated_at' => $now])
+            );
+        }
 
-        // Seed Events
+        // -------------------------------------------------------------
+        // 4. Seed Events with images
+        // -------------------------------------------------------------
         $events = [
             [
-                'name' => 'Mansalay Town Fiesta',
-                'description' => 'Annual town celebration featuring street dancing, cultural shows, and food festival.',
-                'full_description' => 'The Mansalay Town Fiesta celebrates the feast of St. Joseph, patron saint of Mansalay. Features street dancing, cultural shows, food festival, and religious activities. A week-long celebration of local culture and traditions.',
-                'location' => 'Poblacion, Mansalay',
+                'name' => 'Mansalay Town Fiesta & St. Joseph Feast',
+                'description' => 'Annual grand town fiesta featuring street dancing competitions, cultural pageants, and food festival.',
+                'full_description' => 'The premier cultural event of Mansalay celebrating the feast of St. Joseph. Highlighted by the spectacular street dancing competition, Hanunoo Mangyan cultural exhibition, and local food bazaars.',
+                'location' => 'Mansalay Municipal Grounds, Poblacion',
                 'category' => 'Festival',
-                'date' => Carbon::create(2024, 3, 19),
+                'image' => '/drive-download-20260416T051436Z-3-001/attraction/Oriental Mindoro Heritage and Cultural Center.png',
+                'date' => Carbon::create(2026, 3, 19),
                 'time' => '8:00 AM - 10:00 PM',
                 'capacity' => 'Unlimited',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
             ],
             [
-                'name' => 'Beach Clean-up Drive',
-                'description' => 'Community-led environmental activity to keep Mansalay beaches clean.',
-                'full_description' => 'Join us in keeping Mansalay beaches pristine! Community-led environmental activity. Volunteers welcome. Free snacks and refreshments provided. Bring your own gloves and bags.',
-                'location' => 'Puting Buhangin Beach',
-                'category' => 'Community Service',
-                'date' => Carbon::create(2024, 6, 8),
-                'time' => '6:00 AM - 10:00 AM',
-                'capacity' => '100',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Mansalay Food Festival',
-                'description' => 'Showcase of local cuisine and delicacies with cooking competitions.',
-                'full_description' => 'Experience the flavors of Mansalay! Cooking competitions, food stalls featuring local delicacies, and cultural performances. Taste authentic Mansalay cuisine and vote for your favorite dish.',
-                'location' => 'Mansalay Public Market Area',
-                'category' => 'Food Festival',
-                'date' => Carbon::create(2024, 5, 15),
-                'time' => '10:00 AM - 8:00 PM',
-                'capacity' => 'Unlimited',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Diving Festival',
-                'description' => 'Underwater photography contest and dive competitions.',
-                'full_description' => 'Celebrate Mansalay\'s marine biodiversity! Underwater photography contest, dive competitions, and marine conservation awareness activities. Open to certified divers only.',
-                'location' => 'Coral Garden Marine Sanctuary',
-                'category' => 'Sports',
-                'date' => Carbon::create(2024, 4, 20),
-                'time' => '7:00 AM - 5:00 PM',
-                'capacity' => '50',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Mountain Hiking Challenge',
-                'description' => 'Organized hiking event to Mount Mansalay with experienced guides.',
-                'full_description' => 'Conquer Mount Mansalay! Registration required. Experienced guides provided. Difficulty: Moderate to Difficult. Estimated time: 4-6 hours. Bring your own water and snacks.',
-                'location' => 'Mount Mansalay',
-                'category' => 'Adventure',
-                'date' => Carbon::create(2024, 7, 10),
-                'time' => '5:00 AM - 2:00 PM',
-                'capacity' => '30',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Handicraft Fair',
-                'description' => 'Exhibition and sale of local handicrafts by Mansalay artisans.',
-                'full_description' => 'Meet local artisans and learn traditional crafts! Exhibition and sale of handwoven mats, bamboo crafts, shell jewelry, and wooden carvings. Workshops available for visitors.',
-                'location' => 'Mansalay Municipal Hall',
-                'category' => 'Cultural',
-                'date' => Carbon::create(2024, 8, 5),
-                'time' => '9:00 AM - 6:00 PM',
-                'capacity' => 'Unlimited',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
-            ],
-            [
-                'name' => 'Summer Beach Party',
-                'description' => 'Beach party with live music, games, and bonfire.',
-                'full_description' => 'Kick off summer at Talipanan Beach! Live music, beach games, volleyball tournament, and bonfire. Family-friendly event. Food and drinks available for purchase.',
-                'location' => 'Talipanan Beach',
+                'name' => 'Summer Coastal Beach Party & Bonfire',
+                'description' => 'Lively evening beach gathering with live acoustic music, local grilling, and bonfire games.',
+                'full_description' => 'Kick off the sunny summer season with fellow tourists and locals at Buktot Beach. Enjoy acoustic reggae bands, volleyball tournaments, and fresh seafood barbecue.',
+                'location' => 'Buktot Beach Shoreline',
                 'category' => 'Entertainment',
-                'date' => Carbon::create(2024, 5, 1),
-                'time' => '3:00 PM - 11:00 PM',
+                'image' => '/drive-download-20260416T051436Z-3-001/beach and resorts/footprints.jpg',
+                'date' => Carbon::create(2026, 5, 1),
+                'time' => '4:00 PM - 11:00 PM',
                 'capacity' => 'Unlimited',
-                'created_at' => Carbon::now(),
-                'updated_at' => Carbon::now(),
+            ],
+            [
+                'name' => 'Mangyan Cultural Craft & Weaving Fair',
+                'description' => 'Live demonstration of Surat Mangyan poetry writing on bamboo and traditional nito weaving.',
+                'full_description' => 'An immersive interactive cultural workshop where visitors can meet Mangyan elders, learn the ancient script, and purchase direct handwoven art.',
+                'location' => 'Poblacion Plaza, Mansalay',
+                'category' => 'Cultural',
+                'image' => '/drive-download-20260416T051436Z-3-001/attraction/mangyan village.jpg',
+                'date' => Carbon::create(2026, 8, 15),
+                'time' => '9:00 AM - 5:00 PM',
+                'capacity' => '500',
+            ],
+            [
+                'name' => 'Mansalay Marine Eco-Clean & Dive Expedition',
+                'description' => 'Volunteer coastal clean-up and reef monitoring dive in Buyayao marine sanctuary.',
+                'full_description' => 'Join marine biologists and eco-divers in reef preservation, crown-of-thorns removal, and coastal cleanup.',
+                'location' => 'Buyayao Island Marine Sanctuary',
+                'category' => 'Community Service',
+                'image' => '/drive-download-20260416T051436Z-3-001/beach and resorts/pgd beach.jpg',
+                'date' => Carbon::create(2026, 6, 8),
+                'time' => '6:00 AM - 12:00 PM',
+                'capacity' => '100',
             ],
         ];
 
-        DB::table('events')->insert($events);
+        foreach ($events as $item) {
+            DB::table('events')->updateOrInsert(
+                ['name' => $item['name']],
+                array_merge($item, ['created_at' => $now, 'updated_at' => $now])
+            );
+        }
 
-        $this->command->info('Tourism data seeded successfully!');
-        $this->command->info('- ' . count($attractions) . ' attractions');
-        $this->command->info('- ' . count($accommodations) . ' accommodations');
-        $this->command->info('- ' . count($products) . ' products');
-        $this->command->info('- ' . count($events) . ' events');
+        $this->command->info('✅ Complete Tourism data with images seeded successfully!');
     }
 }
