@@ -23,17 +23,20 @@ RUN apt-get update && apt-get install -y \
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Copy ALL application files at once (avoids separate COPY issues)
+# Copy ALL application files
 COPY . .
 
-# Install PHP dependencies
+# Remove Windows-built vendor (will reinstall fresh for Linux)
+RUN rm -rf vendor/ node_modules/
+
+# Install PHP dependencies (fresh, Linux-native)
 RUN composer install \
     --no-dev \
     --optimize-autoloader \
     --no-interaction \
     --prefer-dist \
     --no-scripts \
-    && composer dump-autoload --optimize
+    && composer dump-autoload --optimize --no-scripts
 
 # Create required directories
 RUN mkdir -p storage/framework/{sessions,views,cache} \

@@ -6,6 +6,7 @@
 .gitignore
 .gitattributes
 node_modules
+vendor
 npm-debug.log
 yarn-error.log
 .phpunit.result.cache
@@ -17,6 +18,7 @@ tests
 .editorconfig
 README.md
 .styleci.yml
+database/database.sqlite
 
 # Keep these files (important!)
 !composer.json
@@ -25,7 +27,9 @@ README.md
 !public/
 !app/
 !config/
-!database/
+!database/migrations
+!database/seeders
+!database/factories
 !resources/
 !routes/
 !storage/.gitignore
