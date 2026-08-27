@@ -899,7 +899,7 @@ export function EnterpriseProfile() {
                   {/* Receipt image */}
                   <div className="flex-shrink-0">
                     <img
-                      src={`http://localhost:8000${receipt.receipt_image}`}
+                      src={`${API_BASE}${receipt.receipt_image}`}
                       alt="Payment receipt"
                       className="w-32 h-32 object-cover rounded-lg border-2 border-orange-100"
                       onError={(e) => { e.currentTarget.style.display = 'none'; }}
@@ -1430,7 +1430,7 @@ export function EnterpriseProfile() {
                       {receipt.receipt_image && (
                         <div className="mb-4">
                           <img 
-                            src={`http://localhost:8000${receipt.receipt_image}`}
+                            src={`${API_BASE}${receipt.receipt_image}`}
                             alt="Payment Receipt"
                             className="max-w-xs h-auto border rounded"
                           />

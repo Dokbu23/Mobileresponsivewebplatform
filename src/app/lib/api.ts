@@ -1,6 +1,11 @@
-const rawApiBase = ((import.meta as any).env?.VITE_API_BASE as string | undefined) 
-  || ((import.meta as any).env?.VITE_API_URL as string | undefined) 
-  || 'http://localhost:8000';
+const envApiBase = ((import.meta as any).env?.VITE_API_BASE as string | undefined) 
+  || ((import.meta as any).env?.VITE_API_URL as string | undefined);
+
+const defaultApiBase = (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+  ? 'https://discmansalay.onrender.com'
+  : 'http://localhost:8000';
+
+const rawApiBase = envApiBase || defaultApiBase;
 
 export const API_BASE = rawApiBase.replace(/\/api\/?$/, '').replace(/\/+$/, '');
 

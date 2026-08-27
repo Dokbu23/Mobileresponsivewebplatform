@@ -431,7 +431,7 @@ export function ManageListings() {
     if (!imagePath) return null;
     if (imagePath.startsWith('http')) return imagePath;
     const decodedPath = decodeURIComponent(imagePath);
-    if (decodedPath.startsWith('/assets')) return `http://localhost:5173${decodedPath}`;
+    if (decodedPath.startsWith('/assets')) return decodedPath;
     return `${API_BASE}${decodedPath}`;
   };
 

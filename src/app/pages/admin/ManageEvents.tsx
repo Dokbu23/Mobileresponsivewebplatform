@@ -192,7 +192,7 @@ export function ManageEvents() {
     if (imagePath.startsWith('http')) return imagePath;
     const decodedPath = decodeURIComponent(imagePath);
     if (decodedPath.startsWith('/assets')) {
-      return `http://localhost:5173${decodedPath}`;
+      return decodedPath;
     }
     return `${API_BASE}${decodedPath}`;
   };
