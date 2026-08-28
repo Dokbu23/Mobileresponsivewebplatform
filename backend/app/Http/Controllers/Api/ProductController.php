@@ -161,9 +161,18 @@ class ProductController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $product = \App\Models\Product::findOrFail($id);
+        $product = \App\Models\Product::find($id);
+        if (!$product) {
+            return response()->json(['message' => 'Product already removed or not found'], 200);
+        }
+
+        $user = $request->user();
+        if ($user && $user->role !== 'admin' && (int)$product->user_id !== (int)$user->id) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
         $product->delete();
 
         return response()->json(['message' => 'Product deleted']);

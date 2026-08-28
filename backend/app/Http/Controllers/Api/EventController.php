@@ -183,7 +183,11 @@ class EventController extends Controller
      */
     public function destroy(Request $request, int $id)
     {
-        $item = \App\Models\Event::findOrFail($id);
+        $item = \App\Models\Event::find($id);
+        if (!$item) {
+            return response()->json(['message' => 'Event already removed or not found'], 200);
+        }
+
         $user = $request->user();
 
         // Verify ownership before allowing deletion

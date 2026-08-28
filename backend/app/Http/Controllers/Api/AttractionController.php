@@ -228,7 +228,11 @@ class AttractionController extends Controller
      */
     public function destroy(Request $request, $id)
     {
-        $item = \App\Models\Attraction::findOrFail($id);
+        $item = \App\Models\Attraction::find($id);
+        if (!$item) {
+            return response()->json(['message' => 'Attraction already removed or not found'], 200);
+        }
+
         $user = $request->user();
 
         // Verify ownership before allowing deletion

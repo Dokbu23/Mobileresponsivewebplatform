@@ -309,14 +309,61 @@ class AccommodationController extends Controller
     }
 
     /**
-     * Remove an accommodation.
+     * Remove an accommodation (static accommodation, resort room, or resort profile listing).
      */
-    public function destroy(int $id)
+    public function destroy(Request $request, $id)
     {
-        $accommodation = \App\Models\Accommodation::findOrFail($id);
-        $accommodation->delete();
+        $user = $request->user();
 
-        return response()->json(['message' => 'Accommodation deleted']);
+        // 1. Check if ID is formatted as 'room-{id}'
+        if (is_string($id) && str_starts_with($id, 'room-')) {
+            $roomId = (int) str_replace('room-', '', $id);
+            $room = \App\Models\ResortRoom::find($roomId);
+            if ($room) {
+                if ($user && $user->role !== 'admin' && (int)$room->user_id !== (int)$user->id) {
+                    return response()->json(['error' => 'Unauthorized'], 403);
+                }
+                $room->delete();
+                return response()->json(['message' => 'Resort room deleted']);
+            }
+        }
+
+        // 2. Check in Accommodation model (static listings)
+        $accommodation = \App\Models\Accommodation::find($id);
+        if ($accommodation) {
+            if ($user && $user->role !== 'admin' && (int)$accommodation->user_id !== (int)$user->id) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+            $accommodation->delete();
+            return response()->json(['message' => 'Accommodation deleted']);
+        }
+
+        // 3. Check in ResortRoom model directly by numerical ID
+        $room = \App\Models\ResortRoom::find($id);
+        if ($room) {
+            if ($user && $user->role !== 'admin' && (int)$room->user_id !== (int)$user->id) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+            $room->delete();
+            return response()->json(['message' => 'Resort room deleted']);
+        }
+
+        // 4. Check if ID corresponds to a Resort User account
+        $resortUser = \App\Models\User::where('id', $id)->where('role', 'resort')->first();
+        if ($resortUser) {
+            if ($user && $user->role !== 'admin' && (int)$resortUser->id !== (int)$user->id) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+            // Reset resort profile & unpublish listing
+            $resortUser->update([
+                'resort_is_setup' => false,
+                'listing_status' => 'pending',
+            ]);
+            \App\Models\ResortRoom::where('user_id', $resortUser->id)->delete();
+            return response()->json(['message' => 'Resort listing removed']);
+        }
+
+        return response()->json(['message' => 'Accommodation already removed or not found'], 200);
     }
 
     /**
