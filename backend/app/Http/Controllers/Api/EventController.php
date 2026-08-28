@@ -95,8 +95,8 @@ class EventController extends Controller
             'name'             => 'required|string|max:255',
             'location'         => 'nullable|string|max:255',
             'category'         => 'nullable|string|max:255',
-            'image'            => 'nullable|file|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max
-            'date'             => 'nullable|date',
+            'image'            => 'nullable', // file upload or URL string
+            'date'             => 'nullable|string|max:255',
             'time'             => 'nullable|string|max:255',
             'capacity'         => 'nullable|string|max:255',
             'description'      => 'nullable|string',
@@ -112,6 +112,8 @@ class EventController extends Controller
             } catch (\Exception $e) {
                 return response()->json(['error' => 'Failed to store file: ' . $e->getMessage()], 400);
             }
+        } elseif (is_string($request->input('image'))) {
+            $data['image'] = $request->input('image');
         }
 
         $item = \App\Models\Event::create(array_merge($data, [
@@ -152,8 +154,8 @@ class EventController extends Controller
             'name'             => 'sometimes|required|string|max:255',
             'location'         => 'sometimes|nullable|string|max:255',
             'category'         => 'sometimes|nullable|string|max:255',
-            'image'            => 'sometimes|nullable|file|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max
-            'date'             => 'sometimes|nullable|date',
+            'image'            => 'sometimes|nullable',
+            'date'             => 'sometimes|nullable|string|max:255',
             'time'             => 'sometimes|nullable|string|max:255',
             'capacity'         => 'sometimes|nullable|string|max:255',
             'description'      => 'sometimes|nullable|string',
@@ -169,6 +171,8 @@ class EventController extends Controller
             } catch (\Exception $e) {
                 return response()->json(['error' => 'Failed to store file: ' . $e->getMessage()], 400);
             }
+        } elseif (is_string($request->input('image'))) {
+            $data['image'] = $request->input('image');
         }
 
         $item->update($data);

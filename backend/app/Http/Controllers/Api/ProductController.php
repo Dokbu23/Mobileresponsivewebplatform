@@ -60,11 +60,16 @@ class ProductController extends Controller
             'name'        => 'required|string|max:255',
             'description' => 'nullable|string',
             'price'       => 'required|numeric',
-            'stock'       => 'required|integer',
-            'image'       => 'nullable|file|image|max:5120',
+            'stock'       => 'nullable|integer',
+            'image'       => 'nullable',
+            'images'      => 'nullable',
             'category'    => 'nullable|string|max:255',
             'user_id'     => 'nullable|integer',
         ]);
+
+        if (!isset($data['stock'])) {
+            $data['stock'] = 0;
+        }
 
         $user = $request->user();
 
@@ -77,6 +82,8 @@ class ProductController extends Controller
             } catch (\Exception $e) {
                 return response()->json(['error' => 'Failed to store file: ' . $e->getMessage()], 400);
             }
+        } elseif (is_string($request->input('image'))) {
+            $data['image'] = $request->input('image');
         }
 
         // Enterprise owner creates a registered listing; admin creates a static listing
@@ -112,36 +119,28 @@ class ProductController extends Controller
      */
     public function update(Request $request, $id)
     {
-            \Log::info('=== UPDATE REQUEST DEBUG ===');
-            \Log::info('Method: ' . $request->getMethod());
-            \Log::info('Content-Type: ' . $request->header('content-type'));
-            \Log::info('Has Image File: ' . ($request->hasFile('image') ? 'YES' : 'NO'));
-            \Log::info('Request All: ', $request->all());
-            \Log::info('Request Files: ', $request->files->all());
         // allow partial updates - image can be file or string
         $data = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'description' => 'sometimes|nullable|string',
             'price' => 'sometimes|required|numeric',
-            'stock' => 'sometimes|required|integer',
-            'image' => 'sometimes|nullable|file|image|max:5120',
+            'stock' => 'sometimes|nullable|integer',
+            'image' => 'sometimes|nullable',
+            'images' => 'sometimes|nullable',
             'category' => 'sometimes|nullable|string|max:255',
         ]);
-
-        \Log::info('Update request received', ['id' => $id, 'hasFile' => $request->hasFile('image'), 'allFields' => $request->all()]);
 
         // handle uploaded image file
         if ($request->hasFile('image')) {
             try {
                 $file = $request->file('image');
-                    \Log::info('File found - storing', ['name' => $file->getClientOriginalName(), 'size' => $file->getSize()]);
                 $path = $file->store('products', 'public');
                 $data['image'] = '/storage/' . $path;
-                    \Log::info('File stored', ['path' => $path]);
             } catch (\Exception $e) {
-                \Log::error('File storage error', ['error' => $e->getMessage()]);
                 return response()->json(['error' => 'Failed to store file: ' . $e->getMessage()], 400);
             }
+        } elseif (is_string($request->input('image'))) {
+            $data['image'] = $request->input('image');
         }
 
         $product = \App\Models\Product::findOrFail($id);
