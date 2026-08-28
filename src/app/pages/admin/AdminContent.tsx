@@ -880,7 +880,7 @@ export function AdminContent() {
     // 7. Send delete request to backend API asynchronously
     try {
       let endpoint = `/accommodations/${id}`;
-      if (type === 'product') endpoint = `/products/${id}`;
+      if (type === 'product') endpoint = `/admin/products/${id}`;
       if (type === 'attraction' || type === 'itinerary') endpoint = `/attractions/${id}`;
       if (type === 'event') endpoint = `/events/${id}`;
 
@@ -888,7 +888,7 @@ export function AdminContent() {
         await deleteJSON(endpoint);
       } catch (err) {
         if (type === 'resort') await deleteJSON(`/admin/accommodations/${id}`);
-        if (type === 'product') await deleteJSON(`/admin/products/${id}`);
+        if (type === 'product') await deleteJSON(`/products/${id}`);
       }
     } catch (err: any) {
       console.warn('Backend delete notice:', err);

@@ -251,12 +251,16 @@ class AttractionController extends Controller
      */
     private function verifyOwnership(\App\Models\Attraction $attraction, $user): bool
     {
-        // Admin can only modify attractions with null user_id (admin-created attractions)
+        if (!$user) {
+            return false;
+        }
+
+        // Admin can modify and delete any attraction
         if ($user->role === 'admin') {
-            return $attraction->user_id === null;
+            return true;
         }
         
         // Resort owners can only modify their own attractions
-        return $attraction->user_id === $user->id;
+        return (int) $attraction->user_id === (int) $user->id;
     }
 }

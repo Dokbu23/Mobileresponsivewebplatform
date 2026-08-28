@@ -210,16 +210,13 @@ class EventController extends Controller
         if (!$user) {
             return false;
         }
-        // Admin can modify their own events or admin-created events (null owner)
-        if ($user->role === 'admin') {
-            if ($event->user_id === null) {
-                return true;
-            }
 
-            return (int) $event->user_id === (int) $user->id;
+        // Admin can modify and delete any event
+        if ($user->role === 'admin') {
+            return true;
         }
         
         // Business owners can only modify their own events
-        return $event->user_id === $user->id;
+        return (int) $event->user_id === (int) $user->id;
     }
 }
