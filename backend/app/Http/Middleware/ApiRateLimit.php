@@ -18,8 +18,15 @@ class ApiRateLimit
      * @param  int  $decayMinutes
      * @return \Illuminate\Http\Response|\Illuminate\Http\RedirectResponse
      */
-    public function handle(Request $request, Closure $next, $maxAttempts = 60, $decayMinutes = 1)
+    public function handle(Request $request, Closure $next, $maxAttempts = 300, $decayMinutes = 1)
     {
+        $user = $request->user();
+        if ($user) {
+            $maxAttempts = 1000;
+        } else {
+            $maxAttempts = 300;
+        }
+
         $key = $this->resolveRequestSignature($request);
         
         if (RateLimiter::tooManyAttempts($key, $maxAttempts)) {

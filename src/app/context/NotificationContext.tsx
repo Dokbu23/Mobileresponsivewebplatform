@@ -17,7 +17,7 @@ import {
   markNotificationAsRead as apiMarkRead,
 } from '../lib/api';
 
-const POLL_INTERVAL_MS = 15000;
+const POLL_INTERVAL_MS = 30000;
 
 interface NotificationContextType {
   notifications: ApiNotification[];
@@ -111,12 +111,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       initializedRef.current = true;
     } catch (error: any) {
       // Silent fail — reset state if unauthenticated, avoid noise in console
-      if (error?.message === 'Authentication required' || !getAuthToken()) {
-        setNotifications([]);
-        setUnreadCount(0);
-        prevUnreadRef.current = 0;
-        prevTopIdRef.current = null;
-        initializedRef.current = false;
+      if (error?.message === 'Authentication required' || !getAuthToken() || error?.message?.includes('429')) {
+        if (!getAuthToken() || error?.message === 'Authentication required') {
+          setNotifications([]);
+          setUnreadCount(0);
+          prevUnreadRef.current = 0;
+          prevTopIdRef.current = null;
+          initializedRef.current = false;
+        }
       } else {
         console.warn('Failed to refresh notifications:', error);
       }
