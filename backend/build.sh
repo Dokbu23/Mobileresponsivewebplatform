@@ -17,15 +17,7 @@ for i in $(seq 1 $MAX_TRIES); do
     sleep $WAIT_SEC
 done
 
-# Run migrations
-echo 'Running database migrations...'
-php artisan migrate --force --no-interaction
-
-# Seed essential data (safe - uses firstOrCreate)
-echo 'Seeding essential data (users, tourism data, payment settings)...'
-php artisan db:seed --force --no-interaction || true
-
-# Create storage symlink
+# Storage symlink and caching
 echo 'Creating storage link...'
 php artisan storage:link || true
 

@@ -38,6 +38,11 @@ class StatsController extends Controller
             $totalOrders     = Order::count();
             $completedOrders = Order::where('status', 'completed')->count();
 
+            // Bookings & Tourist Arrivals
+            $totalBookings    = Booking::count();
+            $completedBookings = Booking::whereIn('status', ['confirmed', 'completed', 'paid'])->count();
+            $touristArrivals  = $touristsCount + $totalBookings;
+
             // Rating proxy
             $rating = $totalOrders > 0
                 ? round(($completedOrders / $totalOrders) * 5, 1)
@@ -98,6 +103,8 @@ class StatsController extends Controller
                     'products'            => $productsCount,
                     'events'              => $eventsCount,
                     'tourists'            => $touristsCount,
+                    'tourist_arrivals'    => $touristArrivals,
+                    'total_bookings'      => $totalBookings,
                     'users'               => $usersCount,
                     'businesses'          => $businessesCount,
                     'rating'              => $rating,

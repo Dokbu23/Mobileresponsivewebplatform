@@ -75,6 +75,24 @@ export interface WishlistItem {
   price?: number;
 }
 
+export interface CurrentUser {
+  id: number;
+  name: string;
+  email: string;
+  role: 'tourist' | 'admin' | 'resort' | 'enterprise' | 'pending' | null;
+  avatar?: string | null;
+  phone?: string;
+  barangay?: string;
+  listing_status?: string;
+  subscription_status?: string;
+  resort_name?: string;
+  store_name?: string;
+  address?: string;
+  facebook_link?: string;
+  instagram_link?: string;
+  description?: string;
+}
+
 interface AppContextType {
   cart: CartItem[];
   addToCart: (product: Product, quantity?: number, selectedVariation?: CartItem['selectedVariation']) => void;
@@ -89,18 +107,8 @@ interface AppContextType {
   setIsAdmin: (value: boolean) => void;
   userType: 'tourist' | 'admin' | 'resort' | 'enterprise' | 'pending' | null;
   setUserType: (type: 'tourist' | 'admin' | 'resort' | 'enterprise' | 'pending' | null) => void;
-  currentUser: {
-    id: number;
-    name: string;
-    email: string;
-    role: 'tourist' | 'admin' | 'resort' | 'enterprise' | 'pending' | null;
-    avatar?: string | null;
-    phone?: string;
-    barangay?: string;
-    listing_status?: string;
-    subscription_status?: string;
-  } | null;
-  setCurrentUser: (user: AppContextType['currentUser']) => void;
+  currentUser: CurrentUser | null;
+  setCurrentUser: (user: CurrentUser | null) => void;
   wishlist: WishlistItem[];
   addToWishlist: (item: WishlistItem) => void;
   removeFromWishlist: (id: string | number, type: string) => void;

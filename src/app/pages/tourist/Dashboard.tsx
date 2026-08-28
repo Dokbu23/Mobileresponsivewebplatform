@@ -17,6 +17,7 @@ export function Dashboard() {
   const [products, setProducts] = useState<any[]>([]);
   const [accommodations, setAccommodations] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   // Detail modal state
@@ -47,13 +48,20 @@ export function Dashboard() {
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      const [attractionsRes, productsRes, accommodationsRes, eventsRes, heroVideoRes] = await Promise.all([
+      const [attractionsRes, productsRes, accommodationsRes, eventsRes, heroVideoRes, statsRes] = await Promise.all([
         getPublicJSON('/attractions').catch(() => []),
         getPublicJSON('/products').catch(() => []),
         getPublicJSON('/accommodations').catch(() => []),
         getPublicJSON('/events').catch(() => []),
         getPublicJSON('/hero-video').catch(() => null),
+        getPublicJSON('/stats').catch(() => null),
       ]);
+
+      if (statsRes?.success && statsRes?.stats) {
+        setStats(statsRes.stats);
+      } else if (statsRes?.stats) {
+        setStats(statsRes.stats);
+      }
 
       let customAttractions: any[] = [];
       let customResorts: any[] = [];
@@ -116,6 +124,15 @@ export function Dashboard() {
       window.removeEventListener('storage', loadDashboardData);
     };
   }, []);
+
+  // Number formatting helper for stats
+  const formatCount = (count?: number | null) => {
+    const n = Number(count) || 0;
+    if (n <= 0) return '0';
+    if (n >= 1000000) return `${(n / 1000000).toFixed(1).replace(/\.0$/, '')}M+`;
+    if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K+`;
+    return `${n}+`;
+  };
 
   // Get image helper
   const getImageUrl = (img: string | null | undefined, fallback: string = '/assets/mansalay_hero_bg.jpg') => {
@@ -335,7 +352,9 @@ export function Dashboard() {
               <Users className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-2xl font-black text-gray-900 leading-tight">50K+</p>
+              <p className="text-2xl font-black text-gray-900 leading-tight">
+                {formatCount(stats?.tourist_arrivals ?? stats?.tourists ?? 0)}
+              </p>
               <p className="text-xs text-gray-500 font-medium">Tourist Arrivals</p>
             </div>
           </div>
@@ -345,7 +364,9 @@ export function Dashboard() {
               <Compass className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-2xl font-black text-gray-900 leading-tight">{attractions.length || 10}+</p>
+              <p className="text-2xl font-black text-gray-900 leading-tight">
+                {formatCount(stats?.attractions ?? attractions.length)}
+              </p>
               <p className="text-xs text-gray-500 font-medium">Local Attractions</p>
             </div>
           </div>
@@ -355,7 +376,9 @@ export function Dashboard() {
               <Waves className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-2xl font-black text-gray-900 leading-tight">{displayBeaches.length || 5}+</p>
+              <p className="text-2xl font-black text-gray-900 leading-tight">
+                {formatCount(displayBeaches.length)}
+              </p>
               <p className="text-xs text-gray-500 font-medium">Beaches</p>
             </div>
           </div>
@@ -365,7 +388,9 @@ export function Dashboard() {
               <Hotel className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-2xl font-black text-gray-900 leading-tight">{accommodations.length || 8}+</p>
+              <p className="text-2xl font-black text-gray-900 leading-tight">
+                {formatCount(stats?.resorts ?? accommodations.length)}
+              </p>
               <p className="text-xs text-gray-500 font-medium">Resorts</p>
             </div>
           </div>

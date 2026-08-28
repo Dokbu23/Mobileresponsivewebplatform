@@ -102,7 +102,9 @@ export function AdminDashboard() {
               </span>
             </div>
             <p className="text-xs text-gray-500 font-medium">Visitor Count</p>
-            <h3 className="text-2xl font-extrabold text-gray-900 mt-0.5">1,245</h3>
+            <h3 className="text-2xl font-extrabold text-gray-900 mt-0.5">
+              {loading ? '—' : Number(stats?.tourist_arrivals ?? stats?.tourists ?? totalViews ?? 0).toLocaleString()}
+            </h3>
           </div>
 
           {/* Total Attractions */}
