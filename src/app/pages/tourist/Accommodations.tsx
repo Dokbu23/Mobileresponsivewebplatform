@@ -82,10 +82,16 @@ export function Accommodations() {
         if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
       } catch { }
 
-      const allRaw = [...rawAcc, ...accAttractions].filter(i => !deletedIds.has(String(i.id)));
+      let archivedIds = new Set<string>();
+      try {
+        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
+        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
+      } catch { }
+
+      const allRaw = [...rawAcc, ...accAttractions].filter(i => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
       const existingIds = new Set(allRaw.map(r => String(r.id)));
       [...customResorts, ...customAttractions].forEach(cr => {
-        if (!existingIds.has(String(cr.id)) && !deletedIds.has(String(cr.id))) {
+        if (!existingIds.has(String(cr.id)) && !deletedIds.has(String(cr.id)) && !archivedIds.has(String(cr.id))) {
           allRaw.unshift(cr);
         }
       });

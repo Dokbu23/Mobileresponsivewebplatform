@@ -68,6 +68,7 @@ export function Dashboard() {
       let customEvents: any[] = [];
       let customProducts: any[] = [];
       let deletedIds = new Set<string>();
+      let archivedIds = new Set<string>();
 
       try {
         const a = localStorage.getItem('discover-mansalay:custom_attractions');
@@ -80,6 +81,8 @@ export function Dashboard() {
         if (p) customProducts = JSON.parse(p);
         const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
         if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
+        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
+        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
       } catch {}
 
       const rawAttr = Array.isArray(attractionsRes) ? attractionsRes : attractionsRes?.data ?? [];
@@ -93,7 +96,7 @@ export function Dashboard() {
         customList.forEach(c => {
           if (!existingIds.has(String(c.id))) combined.unshift(c);
         });
-        return combined.filter(i => !deletedIds.has(String(i.id)));
+        return combined.filter(i => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
       };
 
       setAttractions(mergeSection(rawAttr, customAttractions));

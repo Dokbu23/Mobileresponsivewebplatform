@@ -55,10 +55,16 @@ export function Attractions() {
         if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
       } catch {}
 
-      const allRaw = [...raw].filter(i => !deletedIds.has(String(i.id)));
+      let archivedIds = new Set<string>();
+      try {
+        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
+        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
+      } catch {}
+
+      const allRaw = [...raw].filter(i => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
       const existingIds = new Set(allRaw.map(r => String(r.id)));
       customAttractions.forEach(ca => {
-        if (!existingIds.has(String(ca.id)) && !deletedIds.has(String(ca.id))) {
+        if (!existingIds.has(String(ca.id)) && !deletedIds.has(String(ca.id)) && !archivedIds.has(String(ca.id))) {
           allRaw.unshift(ca);
         }
       });

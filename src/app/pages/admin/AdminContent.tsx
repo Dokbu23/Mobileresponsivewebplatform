@@ -266,12 +266,19 @@ export function AdminContent() {
     if (targetIds.length === 0) return;
 
     const updatedArchived = new Set(archivedPostIds);
-    targetIds.forEach((id) => updatedArchived.add(id));
+    targetIds.forEach((id) => {
+      updatedArchived.add(id);
+      updatedArchived.add(String(id));
+      if (!isNaN(Number(id))) updatedArchived.add(Number(id));
+    });
     saveArchivedPostIds(updatedArchived);
 
     const updatedSelected = new Set(selectedPostIds);
     targetIds.forEach((id) => updatedSelected.delete(id));
     setSelectedPostIds(updatedSelected);
+
+    window.dispatchEvent(new Event('contentUpdated'));
+    window.dispatchEvent(new Event('storage'));
 
     toast.success(`Archived ${targetIds.length} post(s) successfully!`);
   };
@@ -281,12 +288,19 @@ export function AdminContent() {
     if (targetIds.length === 0) return;
 
     const updatedArchived = new Set(archivedPostIds);
-    targetIds.forEach((id) => updatedArchived.delete(id));
+    targetIds.forEach((id) => {
+      updatedArchived.delete(id);
+      updatedArchived.delete(String(id));
+      if (!isNaN(Number(id))) updatedArchived.delete(Number(id));
+    });
     saveArchivedPostIds(updatedArchived);
 
     const updatedSelected = new Set(selectedPostIds);
     targetIds.forEach((id) => updatedSelected.delete(id));
     setSelectedPostIds(updatedSelected);
+
+    window.dispatchEvent(new Event('contentUpdated'));
+    window.dispatchEvent(new Event('storage'));
 
     toast.success(`Restored ${targetIds.length} post(s) from Archive!`);
   };

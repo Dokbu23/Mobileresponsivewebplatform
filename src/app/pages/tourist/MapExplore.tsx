@@ -255,9 +255,15 @@ export function MapExplore() {
 
   const [dynamicLocations, setDynamicLocations] = useState<DirectoryLocation[]>([]);
 
-  // Auto-acquire tourist GPS location on load
+  // Auto-acquire tourist GPS location on load and listen to content changes
   useEffect(() => {
     handleGetLocation();
+    window.addEventListener('contentUpdated', fetchAllData);
+    window.addEventListener('storage', fetchAllData);
+    return () => {
+      window.removeEventListener('contentUpdated', fetchAllData);
+      window.removeEventListener('storage', fetchAllData);
+    };
   }, []);
 
   const fetchAllData = async () => {
@@ -269,14 +275,17 @@ export function MapExplore() {
       ]);
 
       let deletedIds = new Set<string>();
+      let archivedIds = new Set<string>();
       try {
         const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
         if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
+        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
+        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
       } catch {}
 
-      const rawAttractions = (Array.isArray(attractions) ? attractions : []).filter((a: any) => !deletedIds.has(String(a.id)));
-      const rawAccommodations = (Array.isArray(accommodations) ? accommodations : []).filter((a: any) => !deletedIds.has(String(a.id)));
-      const rawLandmarks = (Array.isArray(landmarks) ? landmarks : []).filter((l: any) => !deletedIds.has(String(l.id)));
+      const rawAttractions = (Array.isArray(attractions) ? attractions : []).filter((a: any) => !deletedIds.has(String(a.id)) && !archivedIds.has(String(a.id)));
+      const rawAccommodations = (Array.isArray(accommodations) ? accommodations : []).filter((a: any) => !deletedIds.has(String(a.id)) && !archivedIds.has(String(a.id)));
+      const rawLandmarks = (Array.isArray(landmarks) ? landmarks : []).filter((l: any) => !deletedIds.has(String(l.id)) && !archivedIds.has(String(l.id)));
 
       const attractionMarkers: MapMarker[] = rawAttractions.map((a: any) => ({
         id: `attraction-${a.id}`,

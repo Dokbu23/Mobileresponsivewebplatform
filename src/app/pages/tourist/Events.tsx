@@ -35,45 +35,77 @@ export function Events() {
   const [savedEventIds, setSavedEventIds] = useState<string[]>([]);
   const [shareData, setShareData] = useState<{ title: string; description?: string; image?: string; category?: string } | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const data = await getPublicJSON('/events');
-        const raw = Array.isArray(data) ? data : data?.data ?? [];
-        const mapped = raw.map((d: any, idx: number) => {
-          const mainImg = d.image
-            ? (String(d.image).startsWith('http') || String(d.image).startsWith('/assets') ? d.image : `${API_BASE}${d.image}`)
-            : '/assets/mansalay_hero_bg.jpg';
-          const imgList = Array.isArray(d.images) && d.images.length > 0
-            ? d.images.map((img: any) => String(img).startsWith('http') || String(img).startsWith('/assets') ? img : `${API_BASE}${img}`)
-            : [mainImg];
+  const loadEvents = async () => {
+    setLoading(true);
+    try {
+      const data = await getPublicJSON('/events');
+      const raw = Array.isArray(data) ? data : data?.data ?? [];
 
-          return {
-            ...d,
-            id: String(d.id),
-            name: d.name || 'Event',
-            date: d.date || '',
-            time: d.time || '',
-            location: d.location || 'Mansalay, Oriental Mindoro',
-            category: d.category || 'Festival',
-            rating: d.rating || 4.8,
-            description: d.description || '',
-            fullDescription: d.full_description ?? d.fullDescription ?? d.description ?? '',
-            image: mainImg,
-            images: imgList,
-            badges: d.category ? ['Upcoming', d.category] : ['Upcoming', 'Event'],
-            tags: [d.category || 'Event', 'Mansalay', 'Community']
-          };
-        });
-        setItems(mapped);
-      } catch (err) {
-        console.error('Error fetching real events:', err);
-        setItems([]);
-      } finally {
-        setLoading(false);
-      }
-    })();
+      let customEvents: any[] = [];
+      try {
+        const stored = localStorage.getItem('discover-mansalay:custom_events');
+        if (stored) customEvents = JSON.parse(stored);
+      } catch {}
+
+      let deletedIds = new Set<string>();
+      let archivedIds = new Set<string>();
+      try {
+        const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
+        if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
+        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
+        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
+      } catch {}
+
+      const allRaw = [...raw].filter((i: any) => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
+      const existingIds = new Set(allRaw.map((r: any) => String(r.id)));
+      customEvents.forEach((ce: any) => {
+        if (!existingIds.has(String(ce.id)) && !deletedIds.has(String(ce.id)) && !archivedIds.has(String(ce.id))) {
+          allRaw.unshift(ce);
+        }
+      });
+
+      const mapped = allRaw.map((d: any) => {
+        const mainImg = d.image
+          ? (String(d.image).startsWith('http') || String(d.image).startsWith('/assets') ? d.image : `${API_BASE}${d.image}`)
+          : '/assets/mansalay_hero_bg.jpg';
+        const imgList = Array.isArray(d.images) && d.images.length > 0
+          ? d.images.map((img: any) => String(img).startsWith('http') || String(img).startsWith('/assets') ? img : `${API_BASE}${img}`)
+          : [mainImg];
+
+        return {
+          ...d,
+          id: String(d.id),
+          name: d.name || 'Event',
+          date: d.date || '',
+          time: d.time || '',
+          location: d.location || 'Mansalay, Oriental Mindoro',
+          category: d.category || 'Festival',
+          rating: d.rating || 4.8,
+          description: d.description || '',
+          fullDescription: d.full_description ?? d.fullDescription ?? d.description ?? '',
+          image: mainImg,
+          images: imgList,
+          badges: d.category ? ['Upcoming', d.category] : ['Upcoming', 'Event'],
+          tags: [d.category || 'Event', 'Mansalay', 'Community']
+        };
+      });
+      setItems(mapped);
+    } catch (err) {
+      console.error('Error fetching real events:', err);
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadEvents();
+    window.addEventListener('contentUpdated', loadEvents);
+    window.addEventListener('storage', loadEvents);
+    return () => {
+      window.removeEventListener('contentUpdated', loadEvents);
+      window.removeEventListener('storage', loadEvents);
+    };
   }, []);
 
   const toggleSaveEvent = (event: EventType, e?: React.MouseEvent) => {

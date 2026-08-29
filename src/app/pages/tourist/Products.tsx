@@ -66,10 +66,16 @@ export function Products() {
         if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
       } catch {}
 
-      const allRaw = [...raw].filter((i: any) => !deletedIds.has(String(i.id)));
+      let archivedIds = new Set<string>();
+      try {
+        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
+        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
+      } catch {}
+
+      const allRaw = [...raw].filter((i: any) => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
       const existingIds = new Set(allRaw.map((r: any) => String(r.id)));
       customProducts.forEach((cp: any) => {
-        if (!existingIds.has(String(cp.id)) && !deletedIds.has(String(cp.id))) {
+        if (!existingIds.has(String(cp.id)) && !deletedIds.has(String(cp.id)) && !archivedIds.has(String(cp.id))) {
           allRaw.unshift(cp);
         }
       });
