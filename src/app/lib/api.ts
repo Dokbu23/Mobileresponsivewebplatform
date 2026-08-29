@@ -347,6 +347,10 @@ export interface PublicPaymentSettings {
     account_number: string;
     instructions: string | null;
   }>;
+  fee_amount?: number;
+  gcash_name?: string;
+  gcash_number?: string;
+  qr_code?: string | null;
 }
 
 export interface PaymentMethodInput {
@@ -395,7 +399,46 @@ export async function togglePaymentMethod(id: number): Promise<{ message: string
 
 // Public: Get payment settings for users (enterprise/resort)
 export async function getPublicPaymentSettings(): Promise<PublicPaymentSettings> {
-  return await getJSON('/subscription/settings');
+  try {
+    const res = await getPublicJSON('/subscription/settings');
+    if (res) {
+      return {
+        subscription_amount: res.subscription_amount ?? res.fee_amount ?? 500,
+        payment_methods: res.payment_methods ?? [
+          {
+            id: 1,
+            name: 'GCash',
+            account_name: res.gcash_name ?? 'Mansalay Tourism Office',
+            account_number: res.gcash_number ?? '09123456789',
+            instructions: 'Send subscription fee via GCash and upload receipt.',
+          },
+        ],
+        fee_amount: res.fee_amount ?? 500,
+        gcash_name: res.gcash_name ?? 'Mansalay Tourism Office',
+        gcash_number: res.gcash_number ?? '09123456789',
+        qr_code: res.qr_code ?? null,
+      };
+    }
+  } catch (err) {
+    console.warn('Could not load payment settings from API, using defaults:', err);
+  }
+
+  return {
+    subscription_amount: 500,
+    payment_methods: [
+      {
+        id: 1,
+        name: 'GCash',
+        account_name: 'Mansalay Tourism Office',
+        account_number: '09123456789',
+        instructions: 'Send subscription fee via GCash and upload receipt.',
+      },
+    ],
+    fee_amount: 500,
+    gcash_name: 'Mansalay Tourism Office',
+    gcash_number: '09123456789',
+    qr_code: null,
+  };
 }
 
 // Landmark API Functions

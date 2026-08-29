@@ -90,10 +90,10 @@ Route::group(['prefix' => 'public'], function () {
     Route::get('subscription/settings', function() {
         return response()->json([
             'success' => true,
-            'fee_amount' => 500,
-            'gcash_name' => 'Mansalay Tourism Office',
-            'gcash_number' => '09123456789',
-            'qr_code' => null
+            'fee_amount' => (float) \Illuminate\Support\Facades\Cache::get('subscription_fee', 500),
+            'gcash_name' => \Illuminate\Support\Facades\Cache::get('subscription_gcash_name', 'Mansalay Tourism Office'),
+            'gcash_number' => \Illuminate\Support\Facades\Cache::get('subscription_gcash_number', '09123456789'),
+            'qr_code' => \Illuminate\Support\Facades\Cache::get('subscription_qr', null)
         ]);
     });
 });
@@ -101,10 +101,10 @@ Route::group(['prefix' => 'public'], function () {
 Route::get('subscription/settings', function() {
     return response()->json([
         'success' => true,
-        'fee_amount' => 500,
-        'gcash_name' => 'Mansalay Tourism Office',
-        'gcash_number' => '09123456789',
-        'qr_code' => null
+        'fee_amount' => (float) \Illuminate\Support\Facades\Cache::get('subscription_fee', 500),
+        'gcash_name' => \Illuminate\Support\Facades\Cache::get('subscription_gcash_name', 'Mansalay Tourism Office'),
+        'gcash_number' => \Illuminate\Support\Facades\Cache::get('subscription_gcash_number', '09123456789'),
+        'qr_code' => \Illuminate\Support\Facades\Cache::get('subscription_qr', null)
     ]);
 });
 
@@ -379,6 +379,34 @@ Route::group(['middleware' => ['jwt.auth']], function () {
             \Illuminate\Support\Facades\Cache::forget('hero_video');
             \Illuminate\Support\Facades\Cache::forget('hero_video_title');
             return response()->json(['success' => true, 'message' => 'Hero video removed']);
+        });
+
+        // Subscription Settings Update (Admin)
+        Route::post('admin/subscription-settings', function (Request $request) {
+            $qrUrl = null;
+            if ($request->hasFile('qr_code')) {
+                $file = $request->file('qr_code');
+                $ext = $file->getClientOriginalExtension() ?: 'png';
+                $path = $file->storeAs('settings', 'qr_' . time() . '.' . $ext, 'public');
+                $qrUrl = '/storage/' . $path;
+                \Illuminate\Support\Facades\Cache::forever('subscription_qr', $qrUrl);
+            }
+            if ($request->filled('fee_amount')) {
+                \Illuminate\Support\Facades\Cache::forever('subscription_fee', $request->input('fee_amount'));
+            }
+            if ($request->filled('gcash_name')) {
+                \Illuminate\Support\Facades\Cache::forever('subscription_gcash_name', $request->input('gcash_name'));
+            }
+            if ($request->filled('gcash_number')) {
+                \Illuminate\Support\Facades\Cache::forever('subscription_gcash_number', $request->input('gcash_number'));
+            }
+            return response()->json([
+                'success' => true,
+                'fee_amount' => (float) \Illuminate\Support\Facades\Cache::get('subscription_fee', 500),
+                'gcash_name' => \Illuminate\Support\Facades\Cache::get('subscription_gcash_name', 'Mansalay Tourism Office'),
+                'gcash_number' => \Illuminate\Support\Facades\Cache::get('subscription_gcash_number', '09123456789'),
+                'qr_code' => $qrUrl ?? \Illuminate\Support\Facades\Cache::get('subscription_qr'),
+            ]);
         });
     });
 
