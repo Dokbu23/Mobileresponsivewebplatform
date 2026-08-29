@@ -160,6 +160,8 @@ export function ResortDashboard() {
     views_growth: string;
     wishlist_saves: number;
     saves_growth: string;
+    avg_rating: string;
+    rating_growth: string;
     active_rooms: number;
     total_posts: number;
     posts_this_month: number;
@@ -475,13 +477,12 @@ export function ResortDashboard() {
   };
 
   const totalViews = useMemo(() => {
-    const postViews = posts.reduce((sum, p) => sum + ((p.likes || 0) * 12 + (p.saves || 0) * 18), 0);
-    return (8450 + postViews).toLocaleString();
+    const postViews = posts.reduce((sum, p) => sum + ((p.likes || 0) * 5 + (p.saves || 0) * 8), 0);
+    return postViews;
   }, [posts]);
 
   const totalSaves = useMemo(() => {
-    const savesSum = posts.reduce((sum, p) => sum + (p.saves || 0), 0);
-    return 324 + savesSum;
+    return posts.reduce((sum, p) => sum + (p.saves || 0), 0);
   }, [posts]);
 
   const totalPostsCount = useMemo(() => {
@@ -570,11 +571,11 @@ export function ResortDashboard() {
             <Eye className="h-5 w-5" />
           </div>
           <div className="text-2xl font-bold text-gray-900">
-            {(dbStats?.total_views ?? Number(totalViews.replace(/,/g, ''))).toLocaleString()}
+            {(dbStats?.total_views ?? totalViews).toLocaleString()}
           </div>
           <div className="text-xs text-gray-500 mt-1">Total Views</div>
           <div className="text-[11px] font-semibold text-emerald-600 mt-1">
-            ↗ {dbStats?.views_growth || '+14%'}
+            ↗ {dbStats?.views_growth || '0%'}
           </div>
         </div>
 
@@ -588,7 +589,7 @@ export function ResortDashboard() {
           </div>
           <div className="text-xs text-gray-500 mt-1">Wishlist Saves</div>
           <div className="text-[11px] font-semibold text-emerald-600 mt-1">
-            ↗ {dbStats?.saves_growth || '+22%'}
+            ↗ {dbStats?.saves_growth || '0%'}
           </div>
         </div>
 
@@ -614,7 +615,7 @@ export function ResortDashboard() {
           </div>
           <div className="text-xs text-gray-500 mt-1">Total Posts</div>
           <div className="text-[11px] font-semibold text-emerald-600 mt-1">
-            ↗ +{dbStats?.posts_this_month ?? (posts.length || 0)}
+            ↗ +{dbStats?.posts_this_month ?? posts.length}
           </div>
         </div>
       </div>
