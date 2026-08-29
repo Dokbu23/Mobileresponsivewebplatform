@@ -60,29 +60,73 @@ class EmailVerificationController extends Controller
             'expires_at' => $verificationCode->expires_at,
         ]);
 
-        // Send email
+        // Send real email via Resend HTTPS API or SMTP
         try {
-            Mail::to($validated['email'])->send(new VerificationCodeMail($code, $user->name));
+            $this->deliverEmail($validated['email'], $user->name, $code, 'Email Verification Code - DiscoverMansalay');
 
             return response()->json([
                 'message' => 'Verification code sent to your email',
                 'expires_in' => 600, // 10 minutes in seconds
             ]);
         } catch (\Exception $e) {
-            \Log::warning('Failed to send verification email (SMTP blocked or misconfigured)', [
+            \Log::error('Failed to send verification email', [
                 'email' => $validated['email'],
-                'code' => $code,
                 'error' => $e->getMessage(),
             ]);
 
-            // If running on cloud free-tier (e.g. Render blocks SMTP) or local, do not crash with 500
             return response()->json([
-                'message' => 'Verification code generated. (Check email or use dev code)',
-                'dev_code' => $code,
-                'warning' => 'Mail server unreachable. Use the provided OTP code: ' . $code,
-                'expires_in' => 600,
-            ], 200);
+                'message' => 'Failed to send email. Please try again.',
+                'error' => $e->getMessage(),
+            ], 500);
         }
+    }
+
+    /**
+     * Send email via Resend HTTPS API (never blocked by Render) or fallback to Laravel Mail
+     */
+    private function deliverEmail(string $toEmail, ?string $userName, string $code, string $subject): void
+    {
+        $resendApiKey = env('RESEND_API_KEY');
+
+        $htmlContent = view('emails.verification-code', [
+            'code' => $code,
+            'userName' => $userName ?? 'User',
+        ])->render();
+
+        // 1. Try Resend HTTPS API (Works on Render cloud & localhost without SMTP port blocking)
+        if (!empty($resendApiKey)) {
+            try {
+                $response = \Illuminate\Support\Facades\Http::withHeaders([
+                    'Authorization' => 'Bearer ' . $resendApiKey,
+                    'Content-Type' => 'application/json',
+                ])->timeout(10)->post('https://api.resend.com/emails', [
+                    'from' => 'DiscoverMansalay <onboarding@resend.dev>',
+                    'to' => [$toEmail],
+                    'subject' => $subject,
+                    'html' => $htmlContent,
+                ]);
+
+                if ($response->successful()) {
+                    \Log::info('Email delivered successfully via Resend HTTPS API', [
+                        'email' => $toEmail,
+                        'resend_id' => $response->json('id'),
+                    ]);
+                    return;
+                }
+
+                \Log::warning('Resend API call returned non-200, trying Laravel Mail fallback', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+            } catch (\Throwable $e) {
+                \Log::warning('Resend API request failed, falling back to Laravel Mail', [
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        // 2. Fallback to standard Laravel Mail (SMTP / Log)
+        Mail::to($toEmail)->send(new VerificationCodeMail($code, $userName ?? 'User'));
     }
 
     /**
@@ -197,27 +241,24 @@ class EmailVerificationController extends Controller
             'is_used' => false,
         ]);
 
-        // Send email
+        // Send real email via Resend HTTPS API or SMTP
         try {
-            Mail::to($validated['email'])->send(new VerificationCodeMail($code, $user->name));
+            $this->deliverEmail($validated['email'], $user->name, $code, 'Password Reset Code - DiscoverMansalay');
 
             return response()->json([
                 'message' => 'Password reset code sent to your email',
                 'expires_in' => 600, // 10 minutes in seconds
             ]);
         } catch (\Exception $e) {
-            \Log::warning('Failed to send password reset email (SMTP blocked or misconfigured)', [
+            \Log::error('Failed to send password reset email', [
                 'email' => $validated['email'],
-                'code' => $code,
                 'error' => $e->getMessage(),
             ]);
 
             return response()->json([
-                'message' => 'Password reset code generated. (Check email or use dev code)',
-                'dev_code' => $code,
-                'warning' => 'Mail server unreachable. Use the provided OTP code: ' . $code,
-                'expires_in' => 600,
-            ], 200);
+                'message' => 'Failed to send email. Please try again.',
+                'error' => $e->getMessage(),
+            ], 500);
         }
     }
 
