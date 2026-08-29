@@ -257,6 +257,11 @@ export function MapExplore() {
 
   // Auto-acquire tourist GPS location on load and listen to content changes
   useEffect(() => {
+    if (!currentUser && !getAuthToken()) {
+      toast.info('Please log in or register to explore the Map');
+      navigate('/tourist/login');
+      return;
+    }
     handleGetLocation();
     window.addEventListener('contentUpdated', fetchAllData);
     window.addEventListener('storage', fetchAllData);
@@ -264,7 +269,7 @@ export function MapExplore() {
       window.removeEventListener('contentUpdated', fetchAllData);
       window.removeEventListener('storage', fetchAllData);
     };
-  }, []);
+  }, [currentUser, navigate]);
 
   const fetchAllData = async () => {
     try {

@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { Hotel, MapPin, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink } from 'lucide-react';
-import { API_BASE, getPublicJSON, formatImageUrl } from '../../lib/api';
+import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
+import { toast } from 'sonner';
 
 interface AccommodationItem {
   id: string;
@@ -192,8 +193,22 @@ export function Accommodations() {
     };
   }, []);
 
+  const handleAccCardClick = (acc: AccommodationItem) => {
+    if (!currentUser && !getAuthToken()) {
+      toast.info('Please log in or register to view stay details');
+      navigate('/tourist/login');
+      return;
+    }
+    setSelectedAcc(acc);
+  };
+
   const toggleSaveAcc = (acc: AccommodationItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (!currentUser && !getAuthToken()) {
+      toast.info('Please log in or register to save to wishlist');
+      navigate('/tourist/login');
+      return;
+    }
     if (isInWishlist(acc.id, 'accommodation')) {
       removeFromWishlist(acc.id, 'accommodation');
     } else {
@@ -219,6 +234,11 @@ export function Accommodations() {
 
   const handleResortClick = (resortName: string, userId?: number | string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (!currentUser && !getAuthToken()) {
+      toast.info('Please log in or register to view resort profile');
+      navigate('/tourist/login');
+      return;
+    }
     if (userId) {
       navigate(`/business/resort/${userId}`);
     } else {
@@ -326,7 +346,7 @@ export function Accommodations() {
             return (
               <div
                 key={acc.id}
-                onClick={() => setSelectedAcc(acc)}
+                onClick={() => handleAccCardClick(acc)}
                 className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-xs hover:shadow-xl transition-all cursor-pointer group flex flex-col justify-between"
               >
                 {/* Image Container */}

@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router';
 import { Calendar, MapPin, Clock, X, Star, Share2, Heart, Search, ChevronLeft, ChevronRight, Navigation, Filter, ChevronDown } from 'lucide-react';
-import { API_BASE, getPublicJSON, formatImageUrl } from '../../lib/api';
+import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken } from '../../lib/api';
 import { ShareModal } from '../../components/ShareModal';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { useApp } from '../../context/AppContext';
+import { toast } from 'sonner';
 
 interface EventType {
   id: string;
@@ -23,7 +25,8 @@ interface EventType {
 }
 
 export function Events() {
-  const { addToWishlist, removeFromWishlist, isInWishlist } = useApp();
+  const navigate = useNavigate();
+  const { currentUser, addToWishlist, removeFromWishlist, isInWishlist } = useApp();
   const [selectedEvent, setSelectedEvent] = useState<EventType | null>(null);
   const [items, setItems] = useState<EventType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,8 +109,22 @@ export function Events() {
     };
   }, []);
 
+  const handleEventCardClick = (event: EventType) => {
+    if (!currentUser && !getAuthToken()) {
+      toast.info('Please log in or register to view event details');
+      navigate('/tourist/login');
+      return;
+    }
+    setSelectedEvent(event);
+  };
+
   const toggleSaveEvent = (event: EventType, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (!currentUser && !getAuthToken()) {
+      toast.info('Please log in or register to save to wishlist');
+      navigate('/tourist/login');
+      return;
+    }
     if (isInWishlist(event.id, 'event')) {
       removeFromWishlist(event.id, 'event');
     } else {
@@ -222,7 +239,7 @@ export function Events() {
             return (
               <div
                 key={event.id}
-                onClick={() => setSelectedEvent(event)}
+                onClick={() => handleEventCardClick(event)}
                 className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-xs hover:shadow-xl transition-all cursor-pointer group flex flex-col justify-between"
               >
                 {/* Top Image Box */}

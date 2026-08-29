@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router';
 import { MapPin, Navigation, X, Star, Heart, ChevronLeft, ChevronRight, Share2, Search, Tag, Camera, Phone, Facebook, Instagram, MessageCircle, ArrowRight, Video, Play, Filter, ChevronDown } from 'lucide-react';
-import { API_BASE, getPublicJSON, formatImageUrl } from '../../lib/api';
+import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken } from '../../lib/api';
 import { VirtualTourModal } from '../../components/VirtualTourModal';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
 import { useApp } from '../../context/AppContext';
+import { toast } from 'sonner';
 
 interface AttractionType {
   id: string;
@@ -22,7 +24,8 @@ interface AttractionType {
 }
 
 export function Attractions() {
-  const { addToWishlist, removeFromWishlist, isInWishlist } = useApp();
+  const navigate = useNavigate();
+  const { currentUser, addToWishlist, removeFromWishlist, isInWishlist } = useApp();
   const [selectedAttraction, setSelectedAttraction] = useState<AttractionType | null>(null);
   const [isVirtualTourOpen, setIsVirtualTourOpen] = useState(false);
   const [modalImageIndex, setModalImageIndex] = useState(0);
@@ -186,6 +189,11 @@ export function Attractions() {
 
   const handleToggleLike = (e: React.MouseEvent, attraction: AttractionType) => {
     e.stopPropagation();
+    if (!currentUser && !getAuthToken()) {
+      toast.info('Please log in or register to save to wishlist');
+      navigate('/tourist/login');
+      return;
+    }
     if (isInWishlist(attraction.id, 'attraction')) {
       removeFromWishlist(attraction.id, 'attraction');
     } else {
@@ -227,6 +235,11 @@ export function Attractions() {
   };
 
   const handleOpenModal = (attraction: AttractionType) => {
+    if (!currentUser && !getAuthToken()) {
+      toast.info('Please log in or register to view attraction details');
+      navigate('/tourist/login');
+      return;
+    }
     setSelectedAttraction(attraction);
     setModalImageIndex(0);
   };

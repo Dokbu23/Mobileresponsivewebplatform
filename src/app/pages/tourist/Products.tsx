@@ -42,10 +42,24 @@ export function Products() {
 
   const handleStoreClick = (sellerName?: string, userId?: number | string | null, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (!currentUser && !getAuthToken()) {
+      toast.info('Please log in or register to view store profile');
+      navigate('/tourist/login');
+      return;
+    }
     if (selectedProduct) setSelectedProduct(null);
 
     const targetParam = userId ? String(userId) : encodeURIComponent(sellerName || 'Store');
     navigate(`/business/enterprise/${targetParam}`);
+  };
+
+  const handleProductCardClick = (product: ProductItem) => {
+    if (!currentUser && !getAuthToken()) {
+      toast.info('Please log in or register to view product details');
+      navigate('/tourist/login');
+      return;
+    }
+    setSelectedProduct(product);
   };
 
   const loadProducts = async () => {
@@ -159,6 +173,11 @@ export function Products() {
 
   const toggleSaveProduct = (product: ProductItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (!currentUser && !getAuthToken()) {
+      toast.info('Please log in or register to save to wishlist');
+      navigate('/tourist/login');
+      return;
+    }
     if (isInWishlist(product.id, 'product')) {
       removeFromWishlist(product.id, 'product');
     } else {
@@ -275,7 +294,7 @@ export function Products() {
             return (
               <div
                 key={product.id}
-                onClick={() => setSelectedProduct(product)}
+                onClick={() => handleProductCardClick(product)}
                 className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-xs hover:shadow-xl transition-all cursor-pointer group flex flex-col justify-between"
               >
                 {/* Top Image Box */}

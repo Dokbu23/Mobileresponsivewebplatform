@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import {
   MapPin, Calendar, Hotel, ArrowRight,
   Star, Package, Sparkles, Compass, Utensils,
@@ -7,11 +7,13 @@ import {
   Users, Waves, Trees, Info, Heart, Share2, Eye, Camera, CheckCircle, X
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { API_BASE, getPublicJSON, formatImageUrl } from '../../lib/api';
+import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken } from '../../lib/api';
 import { DetailModal, DetailModalItem } from '../../components/DetailModal';
 import { ShareModal } from '../../components/ShareModal';
+import { toast } from 'sonner';
 
 export function Dashboard() {
+  const navigate = useNavigate();
   const { userType, currentUser } = useApp();
   const [attractions, setAttractions] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -247,42 +249,63 @@ export function Dashboard() {
   };
 
   // Card click handlers
-  const openAttractionModal = (a: any) => setModalItem({
-    id: String(a.id),
-    type: 'attraction',
-    name: a.name,
-    image: getImageUrl(a.image, '/assets/mansalay_hero_bg.jpg'),
-    description: a.description,
-    fullDescription: a.full_description ?? a.fullDescription,
-    location: a.location,
-    category: a.category,
-  });
+  const openAttractionModal = (a: any) => {
+    if (!currentUser && !getAuthToken()) {
+      toast.info('Please log in or register to view attraction details');
+      navigate('/tourist/login');
+      return;
+    }
+    setModalItem({
+      id: String(a.id),
+      type: 'attraction',
+      name: a.name,
+      image: getImageUrl(a.image, '/assets/mansalay_hero_bg.jpg'),
+      description: a.description,
+      fullDescription: a.full_description ?? a.fullDescription,
+      location: a.location,
+      category: a.category,
+    });
+  };
 
-  const openAccommodationModal = (acc: any) => setModalItem({
-    id: String(acc.id),
-    type: 'accommodation',
-    name: acc.name || acc.resort_name || 'Accommodation',
-    image: getImageUrl(acc.image || (Array.isArray(acc.resort_images) ? acc.resort_images[0] : null)),
-    description: acc.description,
-    pricePerNight: Number(acc.pricePerNight || acc.price_per_night || 0),
-    location: acc.location,
-    user_id: acc.user_id,
-    is_registered: acc.is_registered,
-  });
+  const openAccommodationModal = (acc: any) => {
+    if (!currentUser && !getAuthToken()) {
+      toast.info('Please log in or register to view accommodation details');
+      navigate('/tourist/login');
+      return;
+    }
+    setModalItem({
+      id: String(acc.id),
+      type: 'accommodation',
+      name: acc.name || acc.resort_name || 'Accommodation',
+      image: getImageUrl(acc.image || (Array.isArray(acc.resort_images) ? acc.resort_images[0] : null)),
+      description: acc.description,
+      pricePerNight: Number(acc.pricePerNight || acc.price_per_night || 0),
+      location: acc.location,
+      user_id: acc.user_id,
+      is_registered: acc.is_registered,
+    });
+  };
 
-  const openEventModal = (e: any) => setModalItem({
-    id: String(e.id),
-    type: 'event',
-    name: e.name,
-    image: getImageUrl(e.image),
-    description: e.description,
-    fullDescription: e.full_description ?? e.fullDescription,
-    category: e.category,
-    date: e.date,
-    time: e.time,
-    location: e.location,
-    capacity: e.capacity,
-  });
+  const openEventModal = (e: any) => {
+    if (!currentUser && !getAuthToken()) {
+      toast.info('Please log in or register to view event details');
+      navigate('/tourist/login');
+      return;
+    }
+    setModalItem({
+      id: String(e.id),
+      type: 'event',
+      name: e.name,
+      image: getImageUrl(e.image),
+      description: e.description,
+      fullDescription: e.full_description ?? e.fullDescription,
+      category: e.category,
+      date: e.date,
+      time: e.time,
+      location: e.location,
+      capacity: e.capacity,
+    });
+  };
 
   return (
     <div className="min-h-screen bg-gray-50/50 text-gray-900 font-sans pb-16">

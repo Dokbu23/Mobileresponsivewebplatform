@@ -49,7 +49,7 @@ export function Navbar() {
     { path: '/products', label: 'Products' },
     { path: '/accommodations', label: 'Stays' },
     { path: '/map', label: 'Map' },
-    { path: '/itinerary', label: 'Itinerary' },
+    ...(currentUser && userType === 'tourist' ? [{ path: '/itinerary', label: 'Itinerary' }] : []),
   ];
 
   const roleMenuItems: Record<RoleType, RoleMenuItem[]> = {
