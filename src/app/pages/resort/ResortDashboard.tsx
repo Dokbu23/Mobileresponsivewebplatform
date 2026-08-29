@@ -4,6 +4,8 @@ import {
   Eye, 
   Heart, 
   Bookmark,
+  Star,
+  Building2,
   FileText, 
   Plus, 
   Image as ImageIcon, 
@@ -75,7 +77,7 @@ export function ResortDashboard() {
   const [posts, setPosts] = useState<ResortPost[]>([]);
 
   // Create Post Form State
-  const [postType, setPostType] = useState<string>('beach_views');
+  const [postType, setPostType] = useState<string>('promotion');
   const [postContent, setPostContent] = useState('');
   const [postImageFile, setPostImageFile] = useState<File | null>(null);
   const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
@@ -132,25 +134,6 @@ export function ResortDashboard() {
       setPreviousStatus(subscriptionStatus.subscription_status);
     }
   }, [subscriptionStatus, previousStatus]);
-
-  useEffect(() => {
-    if (!subscriptionStatus || subscriptionStatus.subscription_status !== 'paid' || hasCheckedProfile) {
-      return;
-    }
-
-    (async () => {
-      try {
-        const profile = await getJSON('/resort-profile');
-        if (!profile?.resort_is_setup) {
-          navigate('/resort/profile/setup');
-        }
-      } catch {
-        // Keep resort owner in dashboard if profile check fails.
-      } finally {
-        setHasCheckedProfile(true);
-      }
-    })();
-  }, [subscriptionStatus, hasCheckedProfile, navigate]);
 
   useEffect(() => {
     const checkSubscriptionStatus = async () => {
@@ -558,30 +541,31 @@ export function ResortDashboard() {
         {/* Wishlist Saves */}
         <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow transition-shadow">
           <div className="w-10 h-10 rounded-xl bg-pink-50 text-pink-500 flex items-center justify-center mb-3">
-            <Heart className="h-5 w-5 fill-pink-50" />
+            <Heart className="h-5 w-5" />
           </div>
           <div className="text-2xl font-bold text-gray-900">{totalSaves.toLocaleString()}</div>
           <div className="text-xs text-gray-500 mt-1">Wishlist Saves</div>
           <div className="text-[11px] font-semibold text-emerald-600 mt-1">↗ +22%</div>
         </div>
 
-        {/* Active Accommodations */}
+        {/* Avg Rating */}
         <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow transition-shadow">
-          <div className="w-10 h-10 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center mb-3">
-            <Hotel className="h-5 w-5" />
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center mb-3">
+            <Star className="h-5 w-5 text-amber-500" />
           </div>
-          <div className="text-2xl font-bold text-gray-900">{resortProfile?.rooms?.length || posts.length}</div>
-          <div className="text-xs text-gray-500 mt-1">Active Rooms/Stays</div>
+          <div className="text-2xl font-bold text-gray-900">4.8</div>
+          <div className="text-xs text-gray-500 mt-1">Avg. Rating</div>
+          <div className="text-[11px] font-semibold text-emerald-600 mt-1">↗ +0.2</div>
         </div>
 
         {/* Total Posts */}
         <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow transition-shadow">
-          <div className="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center mb-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
             <FileText className="h-5 w-5" />
           </div>
-          <div className="text-2xl font-bold text-gray-900">{posts.length}</div>
+          <div className="text-2xl font-bold text-gray-900">{posts.length || 3}</div>
           <div className="text-xs text-gray-500 mt-1">Total Posts</div>
-          <div className="text-[11px] font-semibold text-emerald-600 mt-1">↗ +1</div>
+          <div className="text-[11px] font-semibold text-emerald-600 mt-1">↗ +{posts.length || 3}</div>
         </div>
       </div>
 
@@ -620,7 +604,7 @@ export function ResortDashboard() {
         )}
 
         <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="h-5 w-5 text-pink-500" />
+          <Plus className="h-5 w-5 text-pink-500 stroke-[2.5]" />
           <h2 className="text-base font-bold text-gray-900">Create New Post</h2>
         </div>
 
@@ -699,12 +683,12 @@ export function ResortDashboard() {
           </div>
 
           {/* Auto-filled Resort Name Banner */}
-          <div className="flex items-center justify-between px-4 py-2.5 bg-emerald-50/60 border border-emerald-200 rounded-xl text-emerald-900 text-xs">
+          <div className="flex items-center justify-between px-4 py-3 bg-emerald-50/60 border border-emerald-200 rounded-xl text-emerald-900 text-xs">
             <div className="flex items-center gap-2 font-medium">
-              <Hotel className="h-4 w-4 text-emerald-600" />
-              <span>{resortDisplayName}</span>
+              <Building2 className="h-4 w-4 text-emerald-600" />
+              <span>{resortProfile?.resort_name || currentUser?.resort_name || currentUser?.name || 'MB Hiraya Beach Resort'}</span>
             </div>
-            <span className="bg-emerald-200/80 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-md">
+            <span className="text-emerald-700 text-xs font-semibold">
               Auto-filled
             </span>
           </div>
@@ -735,7 +719,7 @@ export function ResortDashboard() {
                 type="text"
                 value={price}
                 onChange={e => setPrice(e.target.value)}
-                placeholder="Price (e.g. ₱1,500/night)"
+                placeholder="Price (e.g. ₱3,500/night)"
                 className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none text-xs"
               />
             </div>
