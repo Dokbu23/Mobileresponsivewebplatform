@@ -6,25 +6,7 @@ import { useApp } from '../../context/AppContext';
 import { getAuthToken, getJSON, getPublicJSON, postJSON, putJSON, patchJSON, deleteJSON, API_BASE } from '../../lib/api';
 import { showPaymentMethodSuccess, showProductSuccess, showStatusUpdateSuccess } from '../../lib/sweetAlert';
 
-const MANSALAY_BARANGAYS = [
-  'Barangay I (Poblacion)',
-  'Barangay II (Poblacion)',
-  'B. Del Mundo',
-  'Balugo',
-  'Bonbon',
-  'Budburan',
-  'Buktot',
-  'Cabalwa',
-  'Don Pedro',
-  'Maliwanag',
-  'Manaul',
-  'Panaytayan',
-  'Poblacion',
-  'Santa Maria',
-  'Santa Maria II',
-  'Villa Cerveza',
-  'Waygan'
-];
+import { MANSALAY_BARANGAYS } from '../../lib/constants';
 
 interface ProductVariationForm {
   id?: number;

@@ -8,25 +8,7 @@ import { toast } from 'sonner';
 
 type AccountRole = 'tourist' | 'resort' | 'enterprise';
 
-const MANSALAY_BARANGAYS = [
-  'Barangay I (Poblacion)',
-  'Barangay II (Poblacion)',
-  'B. Del Mundo',
-  'Balugo',
-  'Bonbon',
-  'Budburan',
-  'Buktot',
-  'Cabalwa',
-  'Don Pedro',
-  'Maliwanag',
-  'Manaul',
-  'Panaytayan',
-  'Poblacion',
-  'Santa Maria',
-  'Santa Maria II',
-  'Villa Cerveza',
-  'Waygan'
-];
+import { MANSALAY_BARANGAYS } from '../lib/constants';
 
 interface ProfileSetupModalProps {
   isOpen: boolean;

@@ -64,7 +64,6 @@ export function Navbar() {
       { to: '/admin/users', label: 'Account Management', icon: User },
       { to: '/admin/subscriptions', label: 'Manage Subscriptions', icon: CreditCard },
       { to: '/admin/publish', label: 'Publish Content', icon: Plus },
-      { to: '/admin/events', label: 'Manage Events', icon: Calendar },
     ],
     resort: [
       { to: '/resort/dashboard', label: 'Dashboard', icon: LayoutDashboard },

@@ -33,32 +33,16 @@ import {
   Mail
 } from 'lucide-react';
 import { getPublicJSON, postJSON, deleteJSON, API_BASE } from '../../lib/api';
+import {
+  MANSALAY_BARANGAYS,
+  ATTRACTION_CATEGORIES,
+  ACCOMMODATION_CATEGORIES,
+  PRODUCT_CATEGORIES,
+  EVENT_CATEGORIES
+} from '../../lib/constants';
 
 type ContentTab = 'resort' | 'product' | 'attraction' | 'event' | 'itinerary';
 type MainMode = 'publish' | 'videos' | 'manage';
-
-const MANSALAY_BARANGAYS = [
-  'Barangay I (Poblacion)',
-  'Barangay II (Poblacion)',
-  'B. Del Mundo',
-  'Balugo',
-  'Bonbon',
-  'Budburan',
-  'Buktot',
-  'Cabalwa',
-  'Don Pedro',
-  'Maliwanag',
-  'Manaul',
-  'Panaytayan',
-  'Roma',
-  'Santa Brigida',
-  'Santa Maria',
-  'Santa Teresita',
-  'Sidell',
-  'Villa Celestial',
-  'Wasig',
-  'Waygan',
-];
 
 // 🛡️ SECURITY CONSTANTS & VALIDATORS FOR VIDEO UPLOADS
 const ALLOWED_VIDEO_MIME_TYPES = [
@@ -1354,40 +1338,30 @@ export function AdminContent() {
                         <option value="">Select category...</option>
                         {activeTab === 'resort' && (
                           <>
-                            <option value="Beach Resort">Beach Resort</option>
-                            <option value="Accommodation">Accommodation</option>
-                            <option value="Glamping">Glamping</option>
-                            <option value="Farm Resort">Farm Resort</option>
-                            <option value="Guesthouse">Guesthouse</option>
-                            <option value="Hotel">Hotel</option>
+                            {ACCOMMODATION_CATEGORIES.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
                           </>
                         )}
                         {activeTab === 'product' && (
                           <>
-                            <option value="Handicrafts">Handicrafts</option>
-                            <option value="Souvenirs">Souvenirs</option>
-                            <option value="Food & Beverages">Food & Beverages</option>
-                            <option value="Agricultural">Agricultural</option>
-                            <option value="Textiles & Weaving">Textiles & Weaving</option>
+                            {PRODUCT_CATEGORIES.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
                           </>
                         )}
                         {activeTab === 'attraction' && (
                           <>
-                            <option value="Beach">Beach</option>
-                            <option value="Cultural">Cultural</option>
-                            <option value="Heritage">Heritage</option>
-                            <option value="Adventure">Adventure</option>
-                            <option value="Landmark">Landmark</option>
-                            <option value="Accommodation">Accommodation</option>
+                            {ATTRACTION_CATEGORIES.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
                           </>
                         )}
                         {activeTab === 'event' && (
                           <>
-                            <option value="Festival">Festival</option>
-                            <option value="Cultural">Cultural</option>
-                            <option value="Environment">Environment</option>
-                            <option value="Adventure">Adventure</option>
-                            <option value="Entertainment">Entertainment</option>
+                            {EVENT_CATEGORIES.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
                           </>
                         )}
                       </select>

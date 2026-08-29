@@ -15,6 +15,8 @@ const MANSALAY_BARANGAY_COORDS: Record<string, [number, number]> = {
   'pgd': [12.4988, 121.4520],
   'panaytayan': [12.5185, 121.3980],
   'poblacion': [12.5311, 121.4394],
+  'brgy poblacion': [12.5311, 121.4394],
+  'brgy. poblacion': [12.5311, 121.4394],
   'b. del mundo': [12.5050, 121.4200],
   'balugo': [12.5300, 121.4450],
   'bonbon': [12.5400, 121.4100],

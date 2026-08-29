@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { MapPin, Navigation, X, Star, Heart, ChevronLeft, ChevronRight, Share2, Search, Tag, Camera, Phone, Facebook, Instagram, MessageCircle, ArrowRight, Video, Play, Filter, ChevronDown } from 'lucide-react';
 import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken } from '../../lib/api';
+import { ATTRACTION_CATEGORIES } from '../../lib/constants';
 import { VirtualTourModal } from '../../components/VirtualTourModal';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
@@ -37,8 +38,9 @@ export function Attractions() {
   const [shareData, setShareData] = useState<{ title: string; description?: string; image?: string; category?: string } | null>(null);
 
   const categoryFilters = useMemo(() => {
-    const cats = Array.from(new Set(items.map(a => a.category).filter((c): c is string => Boolean(c))));
-    return cats.filter(c => c && c.toLowerCase() !== 'static' && c.trim() !== '');
+    const dynamicCats = items.map(a => a.category).filter((c): c is string => Boolean(c));
+    const allCats = Array.from(new Set([...ATTRACTION_CATEGORIES, ...dynamicCats]));
+    return allCats.filter(c => c && c.toLowerCase() !== 'static' && c.trim() !== '');
   }, [items]);
 
   const loadAttractions = async () => {
