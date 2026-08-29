@@ -318,7 +318,7 @@ export function Navbar() {
 
           {/* Mobile Menu Button */}
           <div className="lg:hidden flex items-center gap-2">
-            <NotificationBell />
+            {currentUser && <NotificationBell />}
             <button
               onClick={() => setIsOpen(!isOpen)}
               className="p-2 text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl"

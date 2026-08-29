@@ -14,7 +14,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useNotifications } from '../context/NotificationContext';
-import type { ApiNotification } from '../lib/api';
+import { useApp } from '../context/AppContext';
+import { getAuthToken, type ApiNotification } from '../lib/api';
 
 function getIcon(type: string) {
   switch (type) {
@@ -60,6 +61,7 @@ function formatRelativeTime(timestamp: string) {
 }
 
 export function NotificationBell() {
+  const { currentUser } = useApp();
   const {
     notifications,
     unreadCount,
@@ -70,6 +72,10 @@ export function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
+
+  if (!currentUser && !getAuthToken()) {
+    return null;
+  }
 
   // Close on outside click
   useEffect(() => {

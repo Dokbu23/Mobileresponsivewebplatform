@@ -7,7 +7,7 @@ import {
   Users, Waves, Trees, Info, Heart, Share2, Eye, Camera, CheckCircle, X
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken } from '../../lib/api';
+import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken } from '../../lib/api';
 import { DetailModal, DetailModalItem } from '../../components/DetailModal';
 import { ShareModal } from '../../components/ShareModal';
 import { toast } from 'sonner';
@@ -265,6 +265,8 @@ export function Dashboard() {
       location: a.location,
       category: a.category,
     });
+    // Record view in database
+    postJSON(`/public/attractions/${a.id}/view`, {}, false).catch(() => {});
   };
 
   const openAccommodationModal = (acc: any) => {

@@ -219,6 +219,22 @@ class AttractionController extends Controller
     }
 
     /**
+     * Record a view for an attraction when viewed by a user.
+     */
+    public function recordView($id)
+    {
+        $item = \App\Models\Attraction::find($id);
+        if ($item) {
+            $item->increment('view_count');
+            return response()->json([
+                'success' => true,
+                'view_count' => (int) $item->view_count
+            ]);
+        }
+        return response()->json(['success' => false, 'message' => 'Attraction not found'], 404);
+    }
+
+    /**
      * Remove the specified resource from storage.
      * - Admin can delete any attraction.
      * - Resort can only delete their own attractions.

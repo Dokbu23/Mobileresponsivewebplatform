@@ -77,9 +77,9 @@ export function AdminDashboard() {
         if (e) customEvents = JSON.parse(e);
       } catch {}
 
-      const mergeSection = (apiList: any[], customList: any[]) => {
-        const raw = Array.isArray(apiList) ? apiList : apiList?.data ?? [];
-        const combined = [...raw];
+      const mergeSection = (apiList: any, customList: any[]) => {
+        const raw = Array.isArray(apiList) ? apiList : (apiList && typeof apiList === 'object' && 'data' in apiList ? (apiList as any).data : []);
+        const combined = [...(Array.isArray(raw) ? raw : [])];
         const existingIds = new Set(combined.map((i: any) => String(i.id)));
         customList.forEach((c: any) => {
           if (!existingIds.has(String(c.id))) combined.unshift(c);
@@ -98,11 +98,14 @@ export function AdminDashboard() {
       const numAttractions = activeAttractions.length;
       const numEvents = activeEvents.length;
       const numProducts = activeProducts.length;
-      const numBusinesses = Math.max(realStats?.businesses || 0, activeResorts.length + (numProducts > 0 ? 1 : 0));
+      const numBusinesses = realStats?.businesses || activeResorts.length;
       
-      const calcViews = activeAttractions.reduce((sum: number, a: any) => sum + (Number(a.view_count) || (Number(a.likes) * 15) || 45), 0);
-      const totalViewsCount = Math.max(realStats?.total_views || 0, calcViews, (numAttractions * 60) + (numProducts * 35) + 120);
-      const visitorCount = Math.max(realStats?.tourist_arrivals || realStats?.tourists || 0, Math.round(totalViewsCount * 0.4) + (numAttractions * 10) + 15);
+      const realAttractionViewsSum = activeAttractions.reduce((sum: number, a: any) => sum + (Number(a.view_count) || 0), 0);
+      const totalViewsCount = (realStats?.total_views && realStats.total_views > 0)
+        ? realStats.total_views
+        : realAttractionViewsSum;
+
+      const visitorCount = realStats?.tourists || realStats?.users || (totalViewsCount > 0 ? Math.max(1, Math.round(totalViewsCount * 0.4)) : 0);
 
       setCounts({
         attractions: numAttractions,
@@ -113,25 +116,31 @@ export function AdminDashboard() {
         totalViews: totalViewsCount,
       });
 
-      // Top Attractions
+      // Top Attractions / Most Viewed Destinations (sorted strictly by view_count)
       const sortedAttractions = [...activeAttractions]
-        .map((a: any, idx: number) => ({
+        .map((a: any) => ({
           name: a.name,
-          views: Number(a.view_count) || Math.max(25, 240 - (idx * 30)),
+          views: Number(a.view_count) || 0,
           image: a.image,
         }))
         .sort((a, b) => b.views - a.views)
         .slice(0, 5);
 
-      setTopAttractionsList(sortedAttractions.length > 0 ? sortedAttractions : (realStats?.top_attractions || []));
+      setTopAttractionsList(
+        (realStats?.top_attractions && realStats.top_attractions.length > 0)
+          ? realStats.top_attractions
+          : sortedAttractions
+      );
 
       // Popular Resorts
-      const sortedResorts = activeResorts.slice(0, 5).map((r: any, idx: number) => ({
-        name: r.name || r.resort_name || 'Resort',
-        bookings_count: 14 - (idx * 2),
-        image: r.image,
-      }));
-      setPopularResortsList(sortedResorts.length > 0 ? sortedResorts : (realStats?.popular_resorts || []));
+      const sortedResorts = (realStats?.popular_resorts && realStats.popular_resorts.length > 0)
+        ? realStats.popular_resorts
+        : activeResorts.slice(0, 5).map((r: any) => ({
+            name: r.name || r.resort_name || 'Resort',
+            bookings_count: 0,
+            image: r.image,
+          }));
+      setPopularResortsList(sortedResorts);
 
       // Popular Enterprises
       const enterpriseItems = (realStats?.popular_enterprises && realStats.popular_enterprises.length > 0)
