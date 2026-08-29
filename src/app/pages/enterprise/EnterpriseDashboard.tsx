@@ -19,7 +19,9 @@ import {
   Share2,
   Video,
   X,
-  Bookmark
+  Bookmark,
+  Lock,
+  Sparkles
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { getJSON, getPublicJSON, postJSON, deleteJSON, getStorageUrl } from '../../lib/api';
@@ -207,6 +209,22 @@ export function EnterpriseDashboard() {
 
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const isSubscriptionPaid = subscriptionStatus?.subscription_status === 'paid' || subscriptionStatus?.subscription_status === 'active';
+
+    if (!isSubscriptionPaid) {
+      if (subscriptionStatus?.subscription_status === 'pending') {
+        Swal.fire({
+          icon: 'info',
+          title: 'Payment Verification in Progress',
+          text: 'Your subscription receipt is currently under review by admin. You will gain full access to post and showcase products once verified.',
+          confirmButtonColor: '#ec4899',
+        });
+      } else {
+        setShowSubscriptionModal(true);
+      }
+      return;
+    }
 
     if (!postContent.trim() && !productName.trim() && !promoDetails.trim()) {
       toast.error('Please write some content or details for the post.');
@@ -588,7 +606,39 @@ export function EnterpriseDashboard() {
       </div>
 
       {/* Create Post Section (Saves Real Data to DB) */}
-      <div className="bg-white rounded-2xl p-6 border border-gray-100/80 shadow-[0_2px_10px_-3px_rgba(0,0,0,0.05)] space-y-5">
+      <div className="bg-white rounded-2xl p-6 border border-gray-100/80 shadow-[0_2px_10px_-3px_rgba(0,0,0,0.05)] space-y-5 relative overflow-hidden">
+        {subscriptionStatus && subscriptionStatus.subscription_status !== 'paid' && subscriptionStatus.subscription_status !== 'active' && (
+          <div className="absolute inset-0 bg-white/90 backdrop-blur-[2px] z-20 flex flex-col items-center justify-center p-6 text-center">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3 shadow-xs ${
+              subscriptionStatus.subscription_status === 'pending'
+                ? 'bg-amber-100 text-amber-600'
+                : 'bg-pink-100 text-pink-600'
+            }`}>
+              <Lock className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900 mb-1">
+              {subscriptionStatus.subscription_status === 'pending'
+                ? '⏳ Payment Verification in Progress'
+                : '🔒 Feature Locked: Subscription Required'}
+            </h3>
+            <p className="text-xs text-gray-600 max-w-md mb-4">
+              {subscriptionStatus.subscription_status === 'pending'
+                ? 'Admin is currently reviewing your payment receipt. Once verified, you will have full access to publish posts, add products, and manage your store showcase.'
+                : 'Subscribe now to unlock posting, product catalog management, and local enterprise showcase features on Discover Mansalay.'}
+            </p>
+            {subscriptionStatus.subscription_status === 'unpaid' && (
+              <button
+                type="button"
+                onClick={() => setShowSubscriptionModal(true)}
+                className="px-5 py-2.5 bg-[#ec4899] hover:bg-[#db2777] text-white text-xs font-bold rounded-xl shadow-sm transition-colors flex items-center gap-2"
+              >
+                <Sparkles className="w-4 h-4" />
+                Subscribe Now to Unlock
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           <Plus className="w-5 h-5 text-pink-500 stroke-[2.5]" />
           <h2 className="text-base font-bold text-gray-900">Create Post</h2>

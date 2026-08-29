@@ -29,7 +29,8 @@ import {
   Instagram,
   CheckCircle2,
   X,
-  Edit
+  Edit,
+  Lock
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { getJSON, getPublicJSON, postJSON, putJSON, deleteJSON, getStorageUrl, API_BASE, getAuthToken } from '../../lib/api';
@@ -267,6 +268,22 @@ export function ResortDashboard() {
   // Submit New Post Handler
   const handlePublishPost = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const isSubscriptionPaid = subscriptionStatus?.subscription_status === 'paid' || subscriptionStatus?.subscription_status === 'active';
+
+    if (!isSubscriptionPaid) {
+      if (subscriptionStatus?.subscription_status === 'pending') {
+        Swal.fire({
+          icon: 'info',
+          title: 'Payment Verification in Progress',
+          text: 'Your subscription receipt is currently under review by admin. You will gain full access to publish posts and add rooms once verified.',
+          confirmButtonColor: '#ec4899',
+        });
+      } else {
+        setShowSubscriptionModal(true);
+      }
+      return;
+    }
 
     if (!postContent.trim()) {
       toast.error('Please write a caption for your post');
@@ -569,7 +586,39 @@ export function ResortDashboard() {
       </div>
 
       {/* Create New Post Card */}
-      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+      <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm relative overflow-hidden">
+        {subscriptionStatus && subscriptionStatus.subscription_status !== 'paid' && subscriptionStatus.subscription_status !== 'active' && (
+          <div className="absolute inset-0 bg-white/90 backdrop-blur-[2px] z-20 flex flex-col items-center justify-center p-6 text-center">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3 shadow-xs ${
+              subscriptionStatus.subscription_status === 'pending'
+                ? 'bg-amber-100 text-amber-600'
+                : 'bg-pink-100 text-pink-600'
+            }`}>
+              <Lock className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900 mb-1">
+              {subscriptionStatus.subscription_status === 'pending'
+                ? '⏳ Payment Verification in Progress'
+                : '🔒 Feature Locked: Subscription Required'}
+            </h3>
+            <p className="text-xs text-gray-600 max-w-md mb-4">
+              {subscriptionStatus.subscription_status === 'pending'
+                ? 'Admin is currently verifying your subscription payment. Once approved, you will have full access to publish posts, add rooms, and showcase your resort.'
+                : 'Subscribe now to unlock posting, room management, and public resort showcase features on Discover Mansalay.'}
+            </p>
+            {subscriptionStatus.subscription_status === 'unpaid' && (
+              <button
+                type="button"
+                onClick={() => setShowSubscriptionModal(true)}
+                className="px-5 py-2.5 bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold rounded-xl shadow-sm transition-colors flex items-center gap-2"
+              >
+                <Sparkles className="w-4 h-4" />
+                Subscribe Now to Unlock
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center gap-2 mb-4">
           <Sparkles className="h-5 w-5 text-pink-500" />
           <h2 className="text-base font-bold text-gray-900">Create New Post</h2>

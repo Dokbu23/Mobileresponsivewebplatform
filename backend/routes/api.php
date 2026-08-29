@@ -402,12 +402,17 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::delete('products/{id}', [ProductController::class, 'destroy']);
     });
 
-    // Resort-only routes (admin allowed) - view/delete/store/update access without subscription
+    // Resort-only routes (admin allowed) - viewing permitted
     Route::group(['middleware' => ['role:resort,admin']], function () {
         Route::get('accommodations', [AccommodationController::class, 'index']); // Get all accommodations for resort owner
+    });
+
+    // Resort Accommodation management - PROTECTED BY SUBSCRIPTION
+    Route::group(['middleware' => ['role:resort,admin', 'check.subscription']], function () {
         Route::post('accommodations', [AccommodationController::class, 'store']);
         Route::post('accommodations/{id}', [AccommodationController::class, 'update']);
         Route::put('accommodations/{id}', [AccommodationController::class, 'update']);
+        Route::patch('accommodations/{id}', [AccommodationController::class, 'update']);
         Route::delete('accommodations/{id}', [AccommodationController::class, 'destroy']);
     });
 
@@ -417,25 +422,30 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::put('resort-profile', [App\Http\Controllers\Api\ResortProfileController::class, 'update']);
         Route::post('resort-profile', [App\Http\Controllers\Api\ResortProfileController::class, 'update']); // FormData upload support
         Route::post('resort-profile/setup', [App\Http\Controllers\Api\ResortProfileController::class, 'setup']);
-
-        // Room management
         Route::get('resort-rooms', [ResortRoomController::class, 'index']);
+        Route::get('resort-availability', [ResortAvailabilityController::class, 'index']);
+    });
+
+    // Resort Room & Availability modifications - PROTECTED BY SUBSCRIPTION
+    Route::group(['middleware' => ['role:resort', 'check.subscription']], function () {
         Route::post('resort-rooms', [ResortRoomController::class, 'store']);
         Route::post('resort-rooms/{id}', [ResortRoomController::class, 'update']); // FormData support
         Route::put('resort-rooms/{id}', [ResortRoomController::class, 'update']);
         Route::delete('resort-rooms/{id}', [ResortRoomController::class, 'destroy']);
 
-        // Availability calendar management
-        Route::get('resort-availability', [ResortAvailabilityController::class, 'index']);
         Route::post('resort-availability', [ResortAvailabilityController::class, 'store']);
         Route::post('resort-availability/bulk', [ResortAvailabilityController::class, 'storeBulk']);
         Route::delete('resort-availability/{id}', [ResortAvailabilityController::class, 'destroy']);
         Route::post('resort-availability-unblock', [ResortAvailabilityController::class, 'destroyByDate']);
     });
 
-    // Posts Management (Enterprise, Resort & Admin)
+    // Posts View (Enterprise, Resort & Admin)
     Route::group(['middleware' => ['role:enterprise,resort,admin']], function () {
         Route::get('enterprise-posts', [EnterprisePostController::class, 'index']);
+    });
+
+    // Posts Create/Delete - PROTECTED BY SUBSCRIPTION
+    Route::group(['middleware' => ['role:enterprise,resort,admin', 'check.subscription']], function () {
         Route::post('enterprise-posts', [EnterprisePostController::class, 'store']);
         Route::delete('enterprise-posts/{id}', [EnterprisePostController::class, 'destroy']);
     });
@@ -446,14 +456,6 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::put('enterprise-profile', [EnterpriseProfileController::class, 'update']);
         Route::post('enterprise-profile', [EnterpriseProfileController::class, 'update']); // FormData upload support
         Route::post('enterprise-profile/setup', [EnterpriseProfileController::class, 'setup']);
-    });
-
-    // Resort-only routes (admin allowed) - PROTECTED BY SUBSCRIPTION
-    Route::group(['middleware' => ['role:resort,admin', 'check.subscription']], function () {
-        Route::post('accommodations', [AccommodationController::class, 'store']);
-        Route::post('accommodations/{id}', [AccommodationController::class, 'update']); // FormData upload
-        Route::put('accommodations/{id}', [AccommodationController::class, 'update']);
-        Route::patch('accommodations/{id}', [AccommodationController::class, 'update']);
     });
 
     // Booking management - resort owners and admin (NO subscription gate - owners must always see bookings)
