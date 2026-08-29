@@ -82,44 +82,55 @@ class EmailVerificationController extends Controller
     }
 
     /**
-     * Send email via Resend HTTPS API (never blocked by Render) or fallback to Laravel Mail
+     * Send email via Brevo HTTPS API (never blocked by Render, sends to ALL email addresses) or fallback to Laravel Mail
      */
     private function deliverEmail(string $toEmail, ?string $userName, string $code, string $subject): void
     {
-        $resendApiKey = env('RESEND_API_KEY');
+        $brevoApiKey = env('BREVO_API_KEY');
+        $fromEmail = env('MAIL_FROM_ADDRESS', 'discoverymansalay@gmail.com');
+        $fromName = env('MAIL_FROM_NAME', 'DiscoverMansalay');
 
         $htmlContent = view('emails.verification-code', [
             'code' => $code,
             'userName' => $userName ?? 'User',
         ])->render();
 
-        // 1. Try Resend HTTPS API (Works on Render cloud & localhost without SMTP port blocking)
-        if (!empty($resendApiKey)) {
+        // 1. Try Brevo HTTPS API (Works on Render cloud & localhost for ANY recipient email address)
+        if (!empty($brevoApiKey)) {
             try {
                 $response = \Illuminate\Support\Facades\Http::withHeaders([
-                    'Authorization' => 'Bearer ' . $resendApiKey,
+                    'api-key' => $brevoApiKey,
                     'Content-Type' => 'application/json',
-                ])->timeout(10)->post('https://api.resend.com/emails', [
-                    'from' => 'DiscoverMansalay <onboarding@resend.dev>',
-                    'to' => [$toEmail],
+                    'Accept' => 'application/json',
+                ])->timeout(10)->post('https://api.brevo.com/v3/smtp/email', [
+                    'sender' => [
+                        'name' => $fromName,
+                        'email' => $fromEmail,
+                    ],
+                    'to' => [
+                        [
+                            'email' => $toEmail,
+                            'name' => $userName ?? 'User',
+                        ]
+                    ],
                     'subject' => $subject,
-                    'html' => $htmlContent,
+                    'htmlContent' => $htmlContent,
                 ]);
 
                 if ($response->successful()) {
-                    \Log::info('Email delivered successfully via Resend HTTPS API', [
+                    \Log::info('Email delivered successfully via Brevo HTTPS API', [
                         'email' => $toEmail,
-                        'resend_id' => $response->json('id'),
+                        'message_id' => $response->json('messageId'),
                     ]);
                     return;
                 }
 
-                \Log::warning('Resend API call returned non-200, trying Laravel Mail fallback', [
+                \Log::warning('Brevo API call returned non-200, trying Laravel Mail fallback', [
                     'status' => $response->status(),
                     'body' => $response->body(),
                 ]);
             } catch (\Throwable $e) {
-                \Log::warning('Resend API request failed, falling back to Laravel Mail', [
+                \Log::warning('Brevo API request failed, falling back to Laravel Mail', [
                     'error' => $e->getMessage(),
                 ]);
             }
