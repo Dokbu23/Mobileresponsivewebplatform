@@ -448,11 +448,21 @@ export function ResortDashboard() {
     }
   };
 
-  const totalSaves = useMemo(() => {
-    return posts.reduce((sum, p) => sum + (p.saves || 0), 324);
+  const totalViews = useMemo(() => {
+    const postViews = posts.reduce((sum, p) => sum + ((p.likes || 0) * 12 + (p.saves || 0) * 18), 0);
+    return (8450 + postViews).toLocaleString();
   }, [posts]);
 
-  const resortDisplayName = resortProfile?.resort_name || currentUser?.resort_name || currentUser?.name || 'MB Hinaya Beach Resort';
+  const totalSaves = useMemo(() => {
+    const savesSum = posts.reduce((sum, p) => sum + (p.saves || 0), 0);
+    return 324 + savesSum;
+  }, [posts]);
+
+  const totalPostsCount = useMemo(() => {
+    return posts.length;
+  }, [posts]);
+
+  const resortDisplayName = resortProfile?.resort_name || currentUser?.resort_name || currentUser?.name || 'MB Hiraya Beach Resort';
 
   if (loading) {
     return (
@@ -533,7 +543,7 @@ export function ResortDashboard() {
           <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center mb-3">
             <Eye className="h-5 w-5" />
           </div>
-          <div className="text-2xl font-bold text-gray-900">8,450</div>
+          <div className="text-2xl font-bold text-gray-900">{totalViews}</div>
           <div className="text-xs text-gray-500 mt-1">Total Views</div>
           <div className="text-[11px] font-semibold text-emerald-600 mt-1">↗ +14%</div>
         </div>
@@ -563,9 +573,9 @@ export function ResortDashboard() {
           <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
             <FileText className="h-5 w-5" />
           </div>
-          <div className="text-2xl font-bold text-gray-900">{posts.length || 3}</div>
+          <div className="text-2xl font-bold text-gray-900">{totalPostsCount || 3}</div>
           <div className="text-xs text-gray-500 mt-1">Total Posts</div>
-          <div className="text-[11px] font-semibold text-emerald-600 mt-1">↗ +{posts.length || 3}</div>
+          <div className="text-[11px] font-semibold text-emerald-600 mt-1">↗ +{totalPostsCount || 3}</div>
         </div>
       </div>
 
