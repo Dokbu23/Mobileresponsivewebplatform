@@ -14,6 +14,18 @@ class EnterprisePostController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
+
+        // Purge legacy auto-seeded sample posts if present
+        if ($user) {
+            EnterprisePost::where('user_id', $user->id)
+                ->where(function($q) {
+                    $q->where('content', 'like', '%Enjoy breathtaking sunsets%')
+                      ->orWhere('content', 'like', '%SUMMER SPECIAL%')
+                      ->orWhere('content', 'like', '%Introducing our new Glamping Suites%')
+                      ->orWhere('content', 'like', '%Introducing our NEW handwoven baskets%');
+                })->delete();
+        }
+
         $query = EnterprisePost::query()->with('user:id,name,store_name,store_logo,resort_name,resort_images');
 
         if ($request->has('user_id')) {

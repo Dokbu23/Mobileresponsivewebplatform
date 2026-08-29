@@ -615,7 +615,7 @@ export function ResortDashboard() {
           </div>
           <div className="text-xs text-gray-500 mt-1">Total Posts</div>
           <div className="text-[11px] font-semibold text-emerald-600 mt-1">
-            ↗ +{dbStats?.posts_this_month ?? posts.length}
+            ↗ +{dbStats?.posts_this_month ?? (posts.length || 0)}
           </div>
         </div>
       </div>

@@ -413,6 +413,15 @@ Route::group(['middleware' => ['jwt.auth']], function () {
                 return response()->json(['error' => 'Unauthenticated'], 401);
             }
 
+            // Purge legacy auto-seeded sample posts if present
+            \App\Models\EnterprisePost::where('user_id', $user->id)
+                ->where(function($q) {
+                    $q->where('content', 'like', '%Enjoy breathtaking sunsets%')
+                      ->orWhere('content', 'like', '%SUMMER SPECIAL%')
+                      ->orWhere('content', 'like', '%Introducing our new Glamping Suites%')
+                      ->orWhere('content', 'like', '%Introducing our NEW handwoven baskets%');
+                })->delete();
+
             $now = \Carbon\Carbon::now();
             $startOfMonth = $now->copy()->startOfMonth();
 
@@ -425,11 +434,10 @@ Route::group(['middleware' => ['jwt.auth']], function () {
             $totalPostSaves = (int) \App\Models\EnterprisePost::where('user_id', $user->id)->sum('saves');
 
             $roomsCount = \App\Models\ResortRoom::where('user_id', $user->id)->count();
-            $accommodationsCount = \App\Models\Accommodation::where('user_id', $user->id)->count();
-            $totalActiveRooms = max($roomsCount, $accommodationsCount);
+            $totalActiveRooms = $roomsCount;
 
-            $accommodationViews = (int) \App\Models\Accommodation::where('user_id', $user->id)->sum('view_count');
-            $totalViews = $accommodationViews + ($totalPostLikes * 2) + ($totalPostSaves * 3);
+            // Total Views: strictly from accommodations created by this resort
+            $totalViews = (int) \App\Models\Accommodation::where('user_id', $user->id)->sum('view_count');
 
             $viewsGrowth = $totalViews > 0 ? '+14%' : '0%';
             $savesGrowth = $totalPostSaves > 0 ? '+22%' : '0%';
