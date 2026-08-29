@@ -83,6 +83,50 @@ class EnterprisePostController extends Controller
     }
 
     /**
+     * Update an existing post.
+     */
+    public function update(Request $request, $id)
+    {
+        $user = $request->user();
+        $post = EnterprisePost::findOrFail($id);
+
+        if ($user && $user->role !== 'admin' && (int)$post->user_id !== (int)$user->id) {
+            return response()->json(['message' => 'Unauthorized to update this post.'], 403);
+        }
+
+        $data = $request->validate([
+            'type'           => 'nullable|string|max:50',
+            'content'        => 'nullable|string',
+            'product_name'   => 'nullable|string|max:255',
+            'price'          => 'nullable|string|max:255',
+            'category'       => 'nullable|string|max:255',
+            'seller_name'    => 'nullable|string|max:255',
+            'location'       => 'nullable|string|max:255',
+            'business_hours' => 'nullable|string|max:255',
+            'stock'          => 'nullable|string|max:255',
+            'tags'           => 'nullable',
+            'image'          => 'nullable',
+        ]);
+
+        if ($request->hasFile('image')) {
+            $folder = ($user && $user->role === 'resort') ? 'resort/posts' : 'enterprise/posts';
+            $path = $request->file('image')->store($folder, 'public');
+            $data['image'] = '/storage/' . $path;
+        } elseif ($request->filled('image_url')) {
+            $data['image'] = $request->input('image_url');
+        }
+
+        if (isset($data['tags']) && is_string($data['tags'])) {
+            $decoded = json_decode($data['tags'], true);
+            $data['tags'] = is_array($decoded) ? $decoded : array_map('trim', explode(',', $data['tags']));
+        }
+
+        $post->update(array_filter($data, fn($v) => !is_null($v)));
+
+        return response()->json($post);
+    }
+
+    /**
      * Delete a post.
      */
     public function destroy(Request $request, $id)

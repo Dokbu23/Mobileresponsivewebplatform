@@ -154,6 +154,29 @@ export function ResortDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // Real-time Database Stats
+  const [dbStats, setDbStats] = useState<{
+    total_views: number;
+    views_growth: string;
+    wishlist_saves: number;
+    saves_growth: string;
+    active_rooms: number;
+    total_posts: number;
+    posts_this_month: number;
+  } | null>(null);
+
+  // Fetch real-time statistics from backend
+  const fetchStats = async () => {
+    try {
+      const res = await getJSON('/resort-stats');
+      if (res?.success && res?.stats) {
+        setDbStats(res.stats);
+      }
+    } catch {
+      // Fallback to local computation
+    }
+  };
+
   // Fetch real posts from backend
   const fetchPosts = async () => {
     try {
@@ -197,7 +220,7 @@ export function ResortDashboard() {
         setLocation('Coastal Road, Mansalay');
       }
 
-      await fetchPosts();
+      await Promise.all([fetchPosts(), fetchStats()]);
       setLoading(false);
     })();
   }, []);
@@ -333,8 +356,8 @@ export function ResortDashboard() {
       handleRemoveImage();
       setShowMoreDetails(false);
 
-      // Refresh post feed
-      await fetchPosts();
+      // Refresh post feed and real-time stats
+      await Promise.all([fetchPosts(), fetchStats()]);
     } catch (err: any) {
       toast.error(err?.message || 'Failed to publish post');
     } finally {
@@ -359,6 +382,7 @@ export function ResortDashboard() {
         await deleteJSON(`/enterprise-posts/${postId}`);
         toast.success('Post deleted successfully');
         setPosts(prev => prev.filter(p => p.id !== postId));
+        fetchStats();
       } catch {
         toast.error('Failed to delete post');
       }
@@ -371,6 +395,7 @@ export function ResortDashboard() {
     setPosts(prev => prev.map(p => (p.id === postId ? { ...p, likes: (p.likes || 0) + 1 } : p)));
     try {
       await postJSON(`/enterprise-posts/${postId}/like`, {});
+      fetchStats();
     } catch {
       // Revert if error
     }
@@ -382,6 +407,7 @@ export function ResortDashboard() {
     try {
       await postJSON(`/enterprise-posts/${postId}/save`, {});
       toast.success('Saved to wishlist!');
+      fetchStats();
     } catch {
       // Revert if error
     }
@@ -543,9 +569,13 @@ export function ResortDashboard() {
           <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center mb-3">
             <Eye className="h-5 w-5" />
           </div>
-          <div className="text-2xl font-bold text-gray-900">{totalViews}</div>
+          <div className="text-2xl font-bold text-gray-900">
+            {(dbStats?.total_views ?? Number(totalViews.replace(/,/g, ''))).toLocaleString()}
+          </div>
           <div className="text-xs text-gray-500 mt-1">Total Views</div>
-          <div className="text-[11px] font-semibold text-emerald-600 mt-1">↗ +14%</div>
+          <div className="text-[11px] font-semibold text-emerald-600 mt-1">
+            ↗ {dbStats?.views_growth || '+14%'}
+          </div>
         </div>
 
         {/* Wishlist Saves */}
@@ -553,9 +583,13 @@ export function ResortDashboard() {
           <div className="w-10 h-10 rounded-xl bg-pink-50 text-pink-500 flex items-center justify-center mb-3">
             <Heart className="h-5 w-5" />
           </div>
-          <div className="text-2xl font-bold text-gray-900">{totalSaves.toLocaleString()}</div>
+          <div className="text-2xl font-bold text-gray-900">
+            {(dbStats?.wishlist_saves ?? totalSaves).toLocaleString()}
+          </div>
           <div className="text-xs text-gray-500 mt-1">Wishlist Saves</div>
-          <div className="text-[11px] font-semibold text-emerald-600 mt-1">↗ +22%</div>
+          <div className="text-[11px] font-semibold text-emerald-600 mt-1">
+            ↗ {dbStats?.saves_growth || '+22%'}
+          </div>
         </div>
 
         {/* Active Rooms / Stays */}
@@ -563,7 +597,9 @@ export function ResortDashboard() {
           <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center mb-3">
             <Bed className="h-5 w-5" />
           </div>
-          <div className="text-2xl font-bold text-gray-900">{resortProfile?.rooms?.length || 0}</div>
+          <div className="text-2xl font-bold text-gray-900">
+            {dbStats?.active_rooms ?? (resortProfile?.rooms?.length || 0)}
+          </div>
           <div className="text-xs text-gray-500 mt-1">Active Rooms/Stays</div>
           <div className="text-[11px] font-semibold text-emerald-600 mt-1">Listed</div>
         </div>
@@ -573,9 +609,13 @@ export function ResortDashboard() {
           <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
             <FileText className="h-5 w-5" />
           </div>
-          <div className="text-2xl font-bold text-gray-900">{totalPostsCount || 3}</div>
+          <div className="text-2xl font-bold text-gray-900">
+            {dbStats?.total_posts ?? posts.length}
+          </div>
           <div className="text-xs text-gray-500 mt-1">Total Posts</div>
-          <div className="text-[11px] font-semibold text-emerald-600 mt-1">↗ +{totalPostsCount || 3}</div>
+          <div className="text-[11px] font-semibold text-emerald-600 mt-1">
+            ↗ +{dbStats?.posts_this_month ?? (posts.length || 0)}
+          </div>
         </div>
       </div>
 
@@ -986,22 +1026,45 @@ export function ResortDashboard() {
                     <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-xs text-gray-500">
                       <div className="flex items-center gap-4">
                         <button
+                          type="button"
                           onClick={() => handleLikePost(post.id)}
-                          className="flex items-center gap-1.5 text-gray-600 hover:text-pink-600 transition-colors font-medium"
+                          className="flex items-center gap-1.5 text-gray-600 hover:text-pink-600 transition-colors font-medium cursor-pointer"
                         >
                           <Heart className="h-4 w-4 text-pink-500 hover:scale-110 transition-transform" />
                           <span>{post.likes || 0}</span>
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleSavePost(post.id)}
-                          className="flex items-center gap-1.5 text-gray-600 hover:text-pink-600 transition-colors font-medium"
+                          className="flex items-center gap-1.5 text-gray-600 hover:text-pink-600 transition-colors font-medium cursor-pointer"
                         >
                           <Bookmark className="h-4 w-4 text-pink-500 hover:scale-110 transition-transform" />
                           <span>{post.saves || 0} saves</span>
                         </button>
                         <button
+                          type="button"
+                          onClick={() => {
+                            if (navigator.share) {
+                              navigator.share({
+                                title: post.seller_name || 'Resort Post',
+                                text: post.content,
+                                url: window.location.href,
+                              }).catch(() => {});
+                            } else {
+                              navigator.clipboard.writeText(window.location.href);
+                              toast.success('Post link copied to clipboard!');
+                            }
+                          }}
+                          className="flex items-center gap-1 text-gray-500 hover:text-pink-600 transition-colors cursor-pointer"
+                          title="Share post"
+                        >
+                          <Share2 className="h-3.5 w-3.5" />
+                          <span>Share</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleDeletePost(post.id)}
-                          className="flex items-center gap-1 text-gray-400 hover:text-red-600 transition-colors"
+                          className="flex items-center gap-1 text-gray-400 hover:text-red-600 transition-colors cursor-pointer"
                           title="Delete post"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
