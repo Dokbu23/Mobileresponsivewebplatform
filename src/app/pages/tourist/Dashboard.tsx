@@ -7,7 +7,7 @@ import {
   Users, Waves, Trees, Info, Heart, Share2, Eye, Camera, CheckCircle, X
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { getPublicJSON, API_BASE } from '../../lib/api';
+import { API_BASE, getPublicJSON, formatImageUrl } from '../../lib/api';
 import { DetailModal, DetailModalItem } from '../../components/DetailModal';
 import { ShareModal } from '../../components/ShareModal';
 
@@ -139,11 +139,7 @@ export function Dashboard() {
 
   // Get image helper
   const getImageUrl = (img: string | null | undefined, fallback: string = '/assets/mansalay_hero_bg.jpg') => {
-    if (!img) return fallback;
-    const str = String(img).trim();
-    if (!str) return fallback;
-    if (str.startsWith('http') || str.startsWith('/assets')) return str;
-    return `${API_BASE}${str}`;
+    return formatImageUrl(img) || fallback;
   };
 
   // 1. Explore Mansalay (Top Picks) — show ALL items

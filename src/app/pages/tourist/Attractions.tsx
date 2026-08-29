@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { MapPin, Navigation, X, Star, Heart, ChevronLeft, ChevronRight, Share2, Search, Tag, Camera, Phone, Facebook, Instagram, MessageCircle, ArrowRight, Video, Play, Filter, ChevronDown } from 'lucide-react';
-import { API_BASE, getPublicJSON } from '../../lib/api';
+import { API_BASE, getPublicJSON, formatImageUrl } from '../../lib/api';
 import { VirtualTourModal } from '../../components/VirtualTourModal';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
@@ -99,13 +99,8 @@ export function Attractions() {
           }
         }
 
-        const cleanImages = parsedImages.map((img: string) => 
-          img.startsWith('http') || img.startsWith('/assets') ? img : `${API_BASE}${img}`
-        );
-
-        const mainImage = d.image
-          ? (String(d.image).startsWith('http') || String(d.image).startsWith('/assets') ? d.image : `${API_BASE}${d.image}`)
-          : (cleanImages[0] || '/assets/mansalay_hero_bg.jpg');
+        const cleanImages = parsedImages.map((img: string) => formatImageUrl(img)).filter(Boolean);
+        const mainImage = formatImageUrl(d.image) || cleanImages[0] || '/assets/mansalay_hero_bg.jpg';
 
         const videoUrl = d.video
           ? (String(d.video).startsWith('http') ? d.video : `${API_BASE}${d.video}`)

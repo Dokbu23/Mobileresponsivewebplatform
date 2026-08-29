@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { Hotel, MapPin, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink } from 'lucide-react';
-import { API_BASE, getPublicJSON } from '../../lib/api';
+import { API_BASE, getPublicJSON, formatImageUrl } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
@@ -99,25 +99,23 @@ export function Accommodations() {
       const mapped = allRaw.map((d: any, idx: number) => {
         let parsedImages: string[] = [];
         if (Array.isArray(d.images)) {
-          parsedImages = d.images.map((img: any) => String(img).startsWith('http') ? img : `${API_BASE}${img}`);
+          parsedImages = d.images.map((img: any) => formatImageUrl(img)).filter(Boolean);
         } else if (typeof d.images === 'string' && d.images.trim()) {
           try {
             const arr = JSON.parse(d.images);
             if (Array.isArray(arr)) {
-              parsedImages = arr.map((img: any) => String(img).startsWith('http') || String(img).startsWith('/assets') ? img : `${API_BASE}${img}`);
+              parsedImages = arr.map((img: any) => formatImageUrl(img)).filter(Boolean);
             }
           } catch { }
         }
-        const mainImg = d.image
-          ? (String(d.image).startsWith('http') || String(d.image).startsWith('/assets') ? d.image : `${API_BASE}${d.image}`)
-          : '';
+        const mainImg = formatImageUrl(d.image);
         if (parsedImages.length === 0 && mainImg) {
           parsedImages = [mainImg];
         }
 
         const parsedRooms = Array.isArray(d.rooms) ? d.rooms.map((r: any) => ({
           ...r,
-          image: r.image ? (String(r.image).startsWith('http') ? r.image : `${API_BASE}${r.image}`) : '',
+          image: formatImageUrl(r.image),
         })) : [];
 
         return {

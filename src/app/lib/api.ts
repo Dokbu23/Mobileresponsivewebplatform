@@ -11,10 +11,21 @@ export const API_BASE = rawApiBase.replace(/\/api\/?$/, '').replace(/\/+$/, '');
 
 export function getStorageUrl(path: string | null | undefined): string {
   if (!path) return '';
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const str = String(path).trim();
+  if (
+    str.startsWith('http://') ||
+    str.startsWith('https://') ||
+    str.startsWith('data:') ||
+    str.startsWith('blob:') ||
+    str.startsWith('/assets')
+  ) {
+    return str;
+  }
+  const cleanPath = str.startsWith('/') ? str : `/${str}`;
   return `${API_BASE}${cleanPath}`;
 }
+
+export const formatImageUrl = getStorageUrl;
 
 // Token management
 export function getAuthToken(): string | null {

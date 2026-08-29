@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Calendar, MapPin, Clock, X, Star, Share2, Heart, Search, ChevronLeft, ChevronRight, Navigation, Filter, ChevronDown } from 'lucide-react';
-import { API_BASE, getPublicJSON } from '../../lib/api';
+import { API_BASE, getPublicJSON, formatImageUrl } from '../../lib/api';
 import { ShareModal } from '../../components/ShareModal';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { useApp } from '../../context/AppContext';
@@ -65,11 +65,9 @@ export function Events() {
       });
 
       const mapped = allRaw.map((d: any) => {
-        const mainImg = d.image
-          ? (String(d.image).startsWith('http') || String(d.image).startsWith('/assets') ? d.image : `${API_BASE}${d.image}`)
-          : '/assets/mansalay_hero_bg.jpg';
+        const mainImg = formatImageUrl(d.image) || '/assets/mansalay_hero_bg.jpg';
         const imgList = Array.isArray(d.images) && d.images.length > 0
-          ? d.images.map((img: any) => String(img).startsWith('http') || String(img).startsWith('/assets') ? img : `${API_BASE}${img}`)
+          ? d.images.map((img: any) => formatImageUrl(img)).filter(Boolean)
           : [mainImg];
 
         return {

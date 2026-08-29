@@ -70,6 +70,13 @@ export function AutoSwipeCarousel({
             src={src}
             alt={`${alt} ${idx + 1}`}
             className={`flex-shrink-0 w-full h-full ${imageClassName}`}
+            onError={(e) => {
+              // Fallback to a placeholder or default image if broken
+              const target = e.currentTarget;
+              if (!target.src.includes('/assets/mansalay_hero_bg.jpg')) {
+                target.src = '/assets/mansalay_hero_bg.jpg';
+              }
+            }}
           />
         ))}
       </div>

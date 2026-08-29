@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { Store, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, MessageSquare, Facebook, Navigation, MapPin, ExternalLink, Lock, Filter, ChevronDown } from 'lucide-react';
-import { API_BASE, getPublicJSON } from '../../lib/api';
+import { API_BASE, getPublicJSON, formatImageUrl } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
@@ -83,18 +83,16 @@ export function Products() {
       const mapped = allRaw.map((p: any, idx: number) => {
         let parsedImages: string[] = [];
         if (Array.isArray(p.images)) {
-          parsedImages = p.images.map((img: any) => String(img).startsWith('http') ? img : `${API_BASE}${img}`);
+          parsedImages = p.images.map((img: any) => formatImageUrl(img)).filter(Boolean);
         } else if (typeof p.images === 'string' && p.images.trim()) {
           try {
             const arr = JSON.parse(p.images);
             if (Array.isArray(arr)) {
-              parsedImages = arr.map((img: any) => String(img).startsWith('http') ? img : `${API_BASE}${img}`);
+              parsedImages = arr.map((img: any) => formatImageUrl(img)).filter(Boolean);
             }
           } catch {}
         }
-        const mainImg = p.image
-          ? (String(p.image).startsWith('http') ? p.image : `${API_BASE}${p.image}`)
-          : '';
+        const mainImg = formatImageUrl(p.image);
         if (parsedImages.length === 0 && mainImg) {
           parsedImages = [mainImg];
         }
