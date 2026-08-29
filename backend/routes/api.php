@@ -196,9 +196,12 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::delete('products/{id}', [ProductController::class, 'destroy']);
     });
 
-    // Resort-only routes (admin allowed) - view/delete access without subscription
+    // Resort-only routes (admin allowed) - view/delete/store/update access without subscription
     Route::group(['middleware' => ['role:resort,admin']], function () {
         Route::get('accommodations', [AccommodationController::class, 'index']); // Get all accommodations for resort owner
+        Route::post('accommodations', [AccommodationController::class, 'store']);
+        Route::post('accommodations/{id}', [AccommodationController::class, 'update']);
+        Route::put('accommodations/{id}', [AccommodationController::class, 'update']);
         Route::delete('accommodations/{id}', [AccommodationController::class, 'destroy']);
     });
 

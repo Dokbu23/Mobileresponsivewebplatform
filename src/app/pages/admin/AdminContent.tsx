@@ -685,8 +685,8 @@ export function AdminContent() {
     };
 
     try {
-      let endpoint = '/accommodations';
-      if (activeTab === 'product') endpoint = '/products';
+      let endpoint = '/admin/accommodations';
+      if (activeTab === 'product') endpoint = '/admin/products';
       if (activeTab === 'attraction') endpoint = '/attractions';
       if (activeTab === 'event') endpoint = '/events';
       if (activeTab === 'itinerary') endpoint = '/attractions';
@@ -738,9 +738,9 @@ export function AdminContent() {
           apiResult = await postJSON(endpoint, formData);
         } catch (apiErr) {
           if (activeTab === 'resort') {
-            apiResult = await postJSON(editingId ? `/admin/accommodations/${editingId}` : '/admin/accommodations', formData);
+            apiResult = await postJSON(editingId ? `/accommodations/${editingId}` : '/accommodations', formData);
           } else if (activeTab === 'product') {
-            apiResult = await postJSON(editingId ? `/admin/products/${editingId}` : '/admin/products', formData);
+            apiResult = await postJSON(editingId ? `/products/${editingId}` : '/products', formData);
           } else {
             throw apiErr;
           }
@@ -754,9 +754,9 @@ export function AdminContent() {
           apiResult = await postJSON(endpoint, payload);
         } catch (apiErr) {
           if (activeTab === 'resort') {
-            apiResult = await postJSON(editingId ? `/admin/accommodations/${editingId}` : '/admin/accommodations', payload);
+            apiResult = await postJSON(editingId ? `/accommodations/${editingId}` : '/accommodations', payload);
           } else if (activeTab === 'product') {
-            apiResult = await postJSON(editingId ? `/admin/products/${editingId}` : '/admin/products', payload);
+            apiResult = await postJSON(editingId ? `/products/${editingId}` : '/products', payload);
           } else {
             throw apiErr;
           }
@@ -815,7 +815,8 @@ export function AdminContent() {
       console.warn('LocalStorage error:', e);
     }
 
-    // Dispatch global events so all pages (Accommodations, Attractions, Itinerary, etc.) refresh
+    // Reload posts and dispatch global events so all pages (Accommodations, Attractions, Itinerary, etc.) refresh
+    await loadManagePosts();
     window.dispatchEvent(new Event('contentUpdated'));
     window.dispatchEvent(new Event('storage'));
 

@@ -59,8 +59,12 @@ export function EmailVerification() {
 
   const sendVerificationCode = async () => {
     try {
-      await postJSON('/email/send-code', { email }, false);
-      toast.success('Verification code sent to your email');
+      const res = await postJSON('/email/send-code', { email }, false);
+      if (res?.dev_code) {
+        toast.info(`Verification code: ${res.dev_code}`, { duration: 10000 });
+      } else {
+        toast.success('Verification code sent to your email');
+      }
       setCountdown(60);
       setCanResend(false);
     } catch (error: any) {
