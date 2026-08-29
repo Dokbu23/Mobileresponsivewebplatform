@@ -126,6 +126,8 @@ export function AdminContent() {
 
   // Form states
   const [name, setName] = useState('');
+  const [productOwner, setProductOwner] = useState('');
+  const [shopName, setShopName] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [fullDescription, setFullDescription] = useState('');
@@ -590,6 +592,8 @@ export function AdminContent() {
   const handleEditPost = (item: any) => {
     setEditingId(item.id);
     setName(item.name || '');
+    setProductOwner(item.product_owner || item.owner_name || item.seller_name || '');
+    setShopName(item.shop_name || item.store_name || item.sellerName || '');
     setCategory(item.category || '');
     setDescription(item.description || '');
     setFullDescription(item.full_description || item.description || '');
@@ -663,6 +667,11 @@ export function AdminContent() {
       price: numPrice,
       price_per_night: numPrice,
       stock: Number(stock || 10),
+      product_owner: productOwner,
+      shop_name: shopName,
+      store_name: shopName,
+      seller_name: productOwner || shopName,
+      sellerName: shopName || productOwner,
       date: eventDate || new Date().toISOString().split('T')[0],
       time: eventTime || '9:00 AM – 5:00 PM',
       image: finalImageUrl || '',
@@ -1308,10 +1317,41 @@ export function AdminContent() {
               ) : (
                 /* ── STANDARD FORM (RESORT / PRODUCT / ATTRACTION / EVENT) ── */
                 <>
+                  {activeTab === 'product' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                          Product Owner / Artisan Name <span className="text-pink-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={productOwner}
+                          onChange={(e) => setProductOwner(e.target.value)}
+                          placeholder="e.g. Maria Santos"
+                          className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium focus:border-pink-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                          Shop Name / Enterprise Store <span className="text-pink-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={shopName}
+                          onChange={(e) => setShopName(e.target.value)}
+                          placeholder="e.g. Mansalay Mangyan Handicrafts"
+                          className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium focus:border-pink-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-gray-800 mb-1.5">
-                        Name <span className="text-pink-500">*</span>
+                        {activeTab === 'product' ? 'Product Name' : 'Name'} <span className="text-pink-500">*</span>
                       </label>
                       <input
                         type="text"

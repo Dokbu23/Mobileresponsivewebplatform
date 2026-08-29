@@ -721,9 +721,6 @@ export function Dashboard() {
                       <MapPin className="h-3 w-3" />
                       <span className="line-clamp-1">{item.location || 'Mansalay'}</span>
                     </span>
-                    {item.price_per_night || item.pricePerNight ? (
-                      <span className="font-bold text-gray-900">₱{item.price_per_night || item.pricePerNight}/night</span>
-                    ) : null}
                   </div>
                 </div>
               </div>

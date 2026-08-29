@@ -19,6 +19,8 @@ interface ProductItem {
   rating?: number;
   likes?: number;
   sellerName?: string;
+  shopName?: string;
+  productOwner?: string;
   user_id?: number | null;
   is_registered?: boolean;
   owner?: any;
@@ -123,7 +125,9 @@ export function Products() {
           badge: p.badge || (idx % 2 === 0 ? 'Best Seller' : 'Top Rated'),
           rating: p.rating || 4.8,
           likes: p.likes || 0,
-          sellerName: p.owner?.store_name || p.owner?.resort_name || p.seller_name || p.owner?.name || 'Mansalay Artisan Co-op',
+          sellerName: p.shop_name || p.store_name || p.owner?.store_name || p.owner?.resort_name || p.seller_name || p.owner?.name || 'Mansalay Artisan Co-op',
+          shopName: p.shop_name || p.store_name || p.owner?.store_name || 'Mansalay Artisan Store',
+          productOwner: p.product_owner || p.owner_name || p.owner?.name || p.seller_name || '',
           user_id: p.user_id,
           is_registered: p.is_registered,
         };
@@ -364,12 +368,19 @@ export function Products() {
 
                   <div
                     onClick={(e) => handleStoreClick(product.sellerName, product.user_id, e)}
-                    className="flex items-center gap-1.5 text-[11px] text-pink-600 hover:text-pink-700 font-semibold mt-4 pt-3 border-t border-gray-100 group/store cursor-pointer transition-colors"
+                    className="flex flex-col gap-0.5 text-[11px] text-pink-600 hover:text-pink-700 font-semibold mt-4 pt-3 border-t border-gray-100 group/store cursor-pointer transition-colors"
                     title={`Click to view all products from ${product.sellerName || 'this store'}`}
                   >
-                    <Store className="h-3.5 w-3.5 text-pink-500 group-hover/store:scale-110 transition-transform flex-shrink-0" />
-                    <span className="truncate group-hover/store:underline">{product.sellerName || 'Mansalay Artisan Store'}</span>
-                    <ExternalLink className="h-2.5 w-2.5 opacity-60 ml-auto flex-shrink-0 group-hover/store:opacity-100 text-pink-500" />
+                    <div className="flex items-center gap-1.5">
+                      <Store className="h-3.5 w-3.5 text-pink-500 group-hover/store:scale-110 transition-transform flex-shrink-0" />
+                      <span className="truncate group-hover/store:underline">{product.shopName || product.sellerName || 'Mansalay Artisan Store'}</span>
+                      <ExternalLink className="h-2.5 w-2.5 opacity-60 ml-auto flex-shrink-0 group-hover/store:opacity-100 text-pink-500" />
+                    </div>
+                    {product.productOwner && (
+                      <span className="text-[10px] text-gray-400 font-normal pl-5 truncate">
+                        Owner: {product.productOwner}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -399,34 +410,40 @@ export function Products() {
                 showArrows={true}
               />
 
+              {/* Close Button */}
               <button
                 onClick={() => setSelectedProduct(null)}
-                className="absolute top-4 right-4 w-8 h-8 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all z-20"
+                className="absolute top-4 right-4 z-10 w-9 h-9 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
 
-              {selectedProduct.badge && (
-                <span className="absolute top-4 left-4 px-3 py-1 bg-pink-500 text-white text-xs font-bold rounded-full uppercase">
-                  {selectedProduct.badge}
+              {/* Category & Badge */}
+              <div className="absolute bottom-4 left-4 flex gap-2">
+                <span className="px-3 py-1 bg-pink-500 text-white text-[11px] font-bold rounded-full shadow-md">
+                  {selectedProduct.category}
                 </span>
-              )}
-
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-white"></span>
-                <span className="w-2 h-2 rounded-full bg-white/50"></span>
+                {selectedProduct.badge && (
+                  <span className="px-3 py-1 bg-black/70 text-white text-[11px] font-bold rounded-full backdrop-blur-md">
+                    {selectedProduct.badge}
+                  </span>
+                )}
               </div>
             </div>
 
             {/* Modal Body */}
             <div className="p-6 overflow-y-auto space-y-4">
-              <div className="flex items-start justify-between">
+              {/* Title & Price & Actions */}
+              <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-xl font-extrabold text-gray-900">{selectedProduct.name}</h2>
-                  <p className="text-pink-500 text-lg font-black mt-0.5">
+                  <h3 className="text-xl font-bold text-gray-900 leading-tight">
+                    {selectedProduct.name}
+                  </h3>
+                  <div className="text-2xl font-black text-pink-600 mt-1">
                     ₱{Number(selectedProduct.price).toLocaleString()}
-                  </p>
+                  </div>
                 </div>
+
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
@@ -448,7 +465,7 @@ export function Products() {
 
               {/* Sub-info bar */}
               <div className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 p-3 rounded-2xl border border-gray-100 text-xs">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="flex items-center gap-1 font-bold text-amber-500">
                     <Star className="h-3.5 w-3.5 fill-amber-400" /> {selectedProduct.rating || '4.8'}
                   </span>
@@ -461,10 +478,18 @@ export function Products() {
                   >
                     <Store className="h-3.5 w-3.5 text-pink-500 group-hover/modalstore:scale-110 transition-transform" />
                     <span className="underline decoration-pink-300 underline-offset-2 group-hover/modalstore:decoration-pink-600">
-                      {selectedProduct.sellerName || 'Mansalay Seller'}
+                      {selectedProduct.shopName || selectedProduct.sellerName || 'Mansalay Seller'}
                     </span>
                     <ExternalLink className="h-3 w-3 opacity-60 group-hover/modalstore:opacity-100" />
                   </button>
+                  {selectedProduct.productOwner && (
+                    <>
+                      <span>•</span>
+                      <span className="text-gray-600 font-medium">
+                        Owner: <strong className="text-gray-900">{selectedProduct.productOwner}</strong>
+                      </span>
+                    </>
+                  )}
                 </div>
                 <button
                   onClick={() => {

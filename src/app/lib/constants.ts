@@ -40,6 +40,7 @@ export const ATTRACTION_CATEGORIES = [
 export const ACCOMMODATION_CATEGORIES = [
   'Beach Resort',
   'Rooms & Suites',
+  'Dining',
   'Glamping',
   'Farm Resort',
   'Guesthouse',

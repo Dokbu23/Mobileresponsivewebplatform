@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { Hotel, MapPin, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink } from 'lucide-react';
 import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken } from '../../lib/api';
+import { ACCOMMODATION_CATEGORIES } from '../../lib/constants';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
@@ -223,14 +224,7 @@ export function Accommodations() {
     }
   };
 
-  const predefinedStaysCategories = [
-    'Beach Resort',
-    'Rooms & Suites',
-    'Glamping',
-    'Farm Resort',
-    'Guesthouse',
-    'Hotel',
-  ];
+  const predefinedStaysCategories = ACCOMMODATION_CATEGORIES;
 
   const handleResortClick = (resortName: string, userId?: number | string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -409,13 +403,6 @@ export function Accommodations() {
                     </div>
 
                     <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-0.5">{acc.name}</h3>
-
-                    {acc.pricePerNight > 0 ? (
-                      <p className="text-pink-500 font-extrabold text-sm mt-1">
-                        ₱{Number(acc.pricePerNight).toLocaleString()}
-                        <span className="text-[10px] font-normal text-gray-400"> / night</span>
-                      </p>
-                    ) : null}
 
                     <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 min-h-[32px]">{acc.description}</p>
                   </div>
