@@ -85,6 +85,27 @@ Route::group(['prefix' => 'public'], function () {
     Route::get('enterprise-posts', [EnterprisePostController::class, 'index']);
     Route::post('enterprise-posts/{id}/like', [EnterprisePostController::class, 'like']);
     Route::post('enterprise-posts/{id}/save', [EnterprisePostController::class, 'save']);
+
+    // Public Subscription / Payment Settings
+    Route::get('subscription/settings', function() {
+        return response()->json([
+            'success' => true,
+            'fee_amount' => 500,
+            'gcash_name' => 'Mansalay Tourism Office',
+            'gcash_number' => '09123456789',
+            'qr_code' => null
+        ]);
+    });
+});
+
+Route::get('subscription/settings', function() {
+    return response()->json([
+        'success' => true,
+        'fee_amount' => 500,
+        'gcash_name' => 'Mansalay Tourism Office',
+        'gcash_number' => '09123456789',
+        'qr_code' => null
+    ]);
 });
 
 // Authentication routes

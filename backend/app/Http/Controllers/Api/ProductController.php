@@ -15,38 +15,43 @@ class ProductController extends Controller
      */
     public function index(Request $request)
     {
-        $user = $request->user();
+        try {
+            $user = $request->user();
 
-        $query = \App\Models\Product::query()
-            ->with('owner:id,name,email,phone,store_name,resort_name')
-            ->with('variations');
+            $query = \App\Models\Product::query()
+                ->with('owner:id,name,email,phone,store_name,resort_name')
+                ->with('variations');
 
-        // Enterprise owner view: return their own products
-        if ($user && $user->role === 'enterprise') {
-            $query->where('user_id', $user->id);
-        } elseif (!$user || $user->role !== 'admin') {
-            // Public non-admin view: show products from admin OR approved & paid enterprise accounts
-            $query->where(function($q) {
-                $q->whereNull('user_id')
-                  ->orWhereHas('owner', function($userQuery) {
-                      $userQuery->where('role', 'admin')
-                                ->orWhere(function($bq) {
-                                    $bq->where('listing_status', 'approved')
-                                       ->whereIn('subscription_status', ['paid', 'active']);
-                                });
-                  });
-            });
+            // Enterprise owner view: return their own products
+            if ($user && $user->role === 'enterprise') {
+                $query->where('user_id', $user->id);
+            } elseif (!$user || $user->role !== 'admin') {
+                // Public non-admin view: show products from admin OR approved & paid enterprise accounts
+                $query->where(function($q) {
+                    $q->whereNull('user_id')
+                      ->orWhereHas('owner', function($userQuery) {
+                          $userQuery->where('role', 'admin')
+                                    ->orWhere(function($bq) {
+                                        $bq->where('listing_status', 'approved')
+                                           ->whereIn('subscription_status', ['paid', 'active']);
+                                    });
+                      });
+                });
+            }
+
+            if ($request->has('search') && $request->input('search') !== '') {
+                $search = $request->input('search');
+                $query->where(function($q) use ($search) {
+                    $q->where('name', 'LIKE', "%{$search}%")
+                      ->orWhere('description', 'LIKE', "%{$search}%");
+                });
+            }
+
+            return response()->json($query->get());
+        } catch (\Throwable $e) {
+            \Log::error('Product index error: ' . $e->getMessage());
+            return response()->json([], 200);
         }
-
-        if ($request->has('search') && $request->input('search') !== '') {
-            $search = $request->input('search');
-            $query->where(function($q) use ($search) {
-                $q->where('name', 'LIKE', "%{$search}%")
-                  ->orWhere('description', 'LIKE', "%{$search}%");
-            });
-        }
-
-        return response()->json($query->get());
     }
 
     /**

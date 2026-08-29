@@ -26,16 +26,18 @@ class CorsMiddleware
             // Development URLs
             'http://localhost:3000',
             'http://localhost:5173',
-            'http://localhost:5174',  // Added for current Vite dev server
+            'http://localhost:5174',
             'http://127.0.0.1:3000',
             'http://127.0.0.1:5173',
-            'http://127.0.0.1:5174',  // Added for current Vite dev server
+            'http://127.0.0.1:5174',
             
-            // Production URLs (update mo ito with your actual domain)
+            // Production URLs
             'https://discovermansalay.com',
             'https://www.discovermansalay.com',
             
-            // Render URLs (update with your actual Render subdomain)
+            // Render URLs
+            'https://discmansalay.onrender.com',
+            'https://discmansalay-frontend.onrender.com',
             'https://disc-mansalay.onrender.com',
             'https://disc-mansalay-frontend.onrender.com',
             
@@ -54,6 +56,11 @@ class CorsMiddleware
     {
         if (!$origin) {
             return false;
+        }
+
+        // Allow any *.onrender.com origin (frontend/backend deployed on Render)
+        if (preg_match('/^https:\/\/[a-z0-9-]+\.onrender\.com$/i', $origin)) {
+            return true;
         }
 
         $allowedOrigins = $this->getAllowedOrigins();

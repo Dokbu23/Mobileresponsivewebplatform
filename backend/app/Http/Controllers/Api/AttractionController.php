@@ -18,48 +18,41 @@ class AttractionController extends Controller
      */
     public function index(Request $request)
     {
-        $user = $request->user();
-        
-        // Admin sees all attractions
-        if ($user && $user->role === 'admin') {
-            $query = \App\Models\Attraction::with('creator:id,name,role');
-        }
-        // Resort owners see only their attractions
-        elseif ($user && $user->role === 'resort') {
-            $query = \App\Models\Attraction::where('user_id', $user->id);
-        }
-        // Public/Tourists see attractions created by Admin OR approved & paid resort accounts
-        else {
-            $query = \App\Models\Attraction::query()
-                ->where(function($q) {
-                    $q->whereNull('user_id')
-                      ->orWhereHas('creator', function($userQuery) {
-                          $userQuery->where('role', 'admin')
-                                    ->orWhere(function($bq) {
-                                        $bq->where('listing_status', 'approved')
-                                           ->whereIn('subscription_status', ['paid', 'active']);
-                                    });
-                      });
+        try {
+            $user = $request->user();
+            
+            // Admin sees all attractions
+            if ($user && $user->role === 'admin') {
+                $query = \App\Models\Attraction::with('creator:id,name,role');
+            }
+            // Resort owners see only their attractions
+            elseif ($user && $user->role === 'resort') {
+                $query = \App\Models\Attraction::where('user_id', $user->id);
+            }
+            // Public/Tourists see all published attractions
+            else {
+                $query = \App\Models\Attraction::query();
+            }
+
+            // Apply search filter (case-insensitive search on name and description)
+            if ($request->has('search') && $request->input('search') !== '') {
+                $search = $request->input('search');
+                $query->where(function($q) use ($search) {
+                    $q->where('name', 'LIKE', "%{$search}%")
+                      ->orWhere('description', 'LIKE', "%{$search}%");
                 });
+            }
+
+            // Apply barangay filter (exact match on location)
+            if ($request->has('barangay') && $request->input('barangay') !== '') {
+                $query->where('location', $request->input('barangay'));
+            }
+
+            return response()->json($query->orderBy('id', 'desc')->get());
+        } catch (\Throwable $e) {
+            \Log::error('Attraction index error: ' . $e->getMessage());
+            return response()->json([], 200);
         }
-
-        // Apply search filter (case-insensitive search on name and description)
-        if ($request->has('search') && $request->input('search') !== '') {
-            $search = $request->input('search');
-            $query->where(function($q) use ($search) {
-                $q->where('name', 'LIKE', "%{$search}%")
-                  ->orWhere('description', 'LIKE', "%{$search}%");
-            });
-        }
-
-        // Apply barangay filter (exact match on location)
-        if ($request->has('barangay') && $request->input('barangay') !== '') {
-            $query->where('location', $request->input('barangay'));
-        }
-
-        // Attractions do not support date filters
-
-        return response()->json($query->get());
     }
     
     /**
@@ -216,22 +209,6 @@ class AttractionController extends Controller
         $item->update($data);
 
         return response()->json($item->load('creator:id,name,role'));
-    }
-
-    /**
-     * Record a view for an attraction when viewed by a user.
-     */
-    public function recordView($id)
-    {
-        $item = \App\Models\Attraction::find($id);
-        if ($item) {
-            $item->increment('view_count');
-            return response()->json([
-                'success' => true,
-                'view_count' => (int) $item->view_count
-            ]);
-        }
-        return response()->json(['success' => false, 'message' => 'Attraction not found'], 404);
     }
 
     /**

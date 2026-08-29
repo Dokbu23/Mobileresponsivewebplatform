@@ -15,52 +15,47 @@ class EventController extends Controller
      */
     public function index(Request $request)
     {
-        $user = $request->user();
-        
-        // Admin sees all events
-        if ($user && $user->role === 'admin') {
-            $query = \App\Models\Event::with('creator:id,name,role');
-        }
-        // Business owners see only their events
-        elseif ($user && in_array($user->role, ['enterprise', 'resort'])) {
-            $query = \App\Models\Event::where('user_id', $user->id);
-        }
-        // Tourists/Public see events created by Admin OR approved & paid business accounts
-        else {
-            $query = \App\Models\Event::query()
-                ->where(function($q) {
-                    $q->whereNull('user_id')
-                      ->orWhereHas('creator', function($userQuery) {
-                          $userQuery->where('role', 'admin')
-                                    ->orWhere(function($bq) {
-                                        $bq->where('listing_status', 'approved')
-                                           ->whereIn('subscription_status', ['paid', 'active']);
-                                    });
-                      });
+        try {
+            $user = $request->user();
+            
+            // Admin sees all events
+            if ($user && $user->role === 'admin') {
+                $query = \App\Models\Event::with('creator:id,name,role');
+            }
+            // Business owners see only their events
+            elseif ($user && in_array($user->role, ['enterprise', 'resort'])) {
+                $query = \App\Models\Event::where('user_id', $user->id);
+            }
+            // Tourists/Public see all events
+            else {
+                $query = \App\Models\Event::query();
+            }
+
+            if ($request->has('search') && $request->input('search') !== '') {
+                $search = $request->input('search');
+                $query->where(function($q) use ($search) {
+                    $q->where('name', 'LIKE', "%{$search}%")
+                      ->orWhere('description', 'LIKE', "%{$search}%");
                 });
-        }
+            }
 
-        if ($request->has('search') && $request->input('search') !== '') {
-            $search = $request->input('search');
-            $query->where(function($q) use ($search) {
-                $q->where('name', 'LIKE', "%{$search}%")
-                  ->orWhere('description', 'LIKE', "%{$search}%");
-            });
-        }
+            if ($request->has('barangay') && $request->input('barangay') !== '') {
+                $query->where('location', $request->input('barangay'));
+            }
 
-        if ($request->has('barangay') && $request->input('barangay') !== '') {
-            $query->where('location', $request->input('barangay'));
-        }
+            if ($request->has('month') && $request->input('month') !== '') {
+                $query->whereMonth('date', $request->input('month'));
+            }
 
-        if ($request->has('month') && $request->input('month') !== '') {
-            $query->whereMonth('date', $request->input('month'));
-        }
+            if ($request->has('year') && $request->input('year') !== '') {
+                $query->whereYear('date', $request->input('year'));
+            }
 
-        if ($request->has('year') && $request->input('year') !== '') {
-            $query->whereYear('date', $request->input('year'));
+            return response()->json($query->orderBy('date', 'asc')->get());
+        } catch (\Throwable $e) {
+            \Log::error('Event index error: ' . $e->getMessage());
+            return response()->json([], 200);
         }
-
-        return response()->json($query->orderBy('date', 'asc')->get());
     }
 
     /**
