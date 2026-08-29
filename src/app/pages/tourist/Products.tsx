@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { Store, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, MessageSquare, Facebook, Navigation, MapPin, ExternalLink, Lock, Filter, ChevronDown } from 'lucide-react';
-import { API_BASE, getPublicJSON, formatImageUrl } from '../../lib/api';
+import { toast } from 'sonner';
+import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
@@ -342,12 +343,11 @@ export function Products() {
                     </button>
                   </div>
 
-                  {/* Dark Overlay Rating & Likes */}
+                  {/* Dark Overlay Category & Likes */}
                   <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-[11px] font-bold">
-                    <div className="flex items-center gap-1 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full">
-                      <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                      <span>{product.rating || '4.8'}</span>
-                    </div>
+                    <span className="px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-[10px]">
+                      {product.category || 'Product'}
+                    </span>
                     <div className="flex items-center gap-1 text-white/90">
                       <Heart className="h-3 w-3 fill-pink-500 text-pink-500" />
                       <span>{product.likes || 189}</span>
@@ -358,29 +358,48 @@ export function Products() {
                 {/* Content Below Image */}
                 <div className="p-4 flex-1 flex flex-col justify-between">
                   <div>
-                    <p className="text-[10px] uppercase font-bold text-gray-400">{product.category}</p>
-                    <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-0.5">{product.name}</h3>
-                    <p className="text-pink-500 font-extrabold text-sm mt-1">
-                      ₱{Number(product.price).toLocaleString()}
-                    </p>
-                    <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 min-h-[32px]">{product.description}</p>
+                    <h3 className="font-extrabold text-gray-900 text-sm mb-1 group-hover:text-pink-600 transition-colors line-clamp-1">
+                      {product.name}
+                    </h3>
+                    
+                    {/* Enterprise Store / Shop Name & Owner */}
+                    {(product.shopName || product.sellerName || product.productOwner) && (
+                      <div className="mb-2 space-y-0.5">
+                        <button
+                          onClick={(e) => handleStoreClick(product.shopName || product.sellerName, product.user_id, e)}
+                          className="text-[11px] font-bold text-pink-600 hover:text-pink-700 flex items-center gap-1 cursor-pointer transition-colors text-left group/shop"
+                          title={`Click to view all products by ${product.shopName || product.sellerName || 'this shop'}`}
+                        >
+                          <Store className="h-3 w-3 text-pink-500 flex-shrink-0 group-hover/shop:scale-110 transition-transform" />
+                          <span className="underline decoration-pink-300 underline-offset-2 group-hover/shop:decoration-pink-600 line-clamp-1">
+                            {product.shopName || product.sellerName || 'Local Artisan Shop'}
+                          </span>
+                        </button>
+                        {product.productOwner && (
+                          <p className="text-[10px] text-gray-500 font-medium pl-4 line-clamp-1">
+                            Owner: <span className="text-gray-700 font-semibold">{product.productOwner}</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <p className="text-xs text-gray-500 line-clamp-2 mb-3 leading-relaxed">{product.description}</p>
                   </div>
 
-                  <div
-                    onClick={(e) => handleStoreClick(product.sellerName, product.user_id, e)}
-                    className="flex flex-col gap-0.5 text-[11px] text-pink-600 hover:text-pink-700 font-semibold mt-4 pt-3 border-t border-gray-100 group/store cursor-pointer transition-colors"
-                    title={`Click to view all products from ${product.sellerName || 'this store'}`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <Store className="h-3.5 w-3.5 text-pink-500 group-hover/store:scale-110 transition-transform flex-shrink-0" />
-                      <span className="truncate group-hover/store:underline">{product.shopName || product.sellerName || 'Mansalay Artisan Store'}</span>
-                      <ExternalLink className="h-2.5 w-2.5 opacity-60 ml-auto flex-shrink-0 group-hover/store:opacity-100 text-pink-500" />
+                  {/* Price & Action Button */}
+                  <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                    <div>
+                      <span className="text-xs text-gray-400 font-medium">Price</span>
+                      <p className="text-sm font-black text-gray-900">
+                        {typeof product.price === 'number' ? `₱${product.price.toLocaleString()}` : (product.price ? `₱${product.price}` : '₱0')}
+                      </p>
                     </div>
-                    {product.productOwner && (
-                      <span className="text-[10px] text-gray-400 font-normal pl-5 truncate">
-                        Owner: {product.productOwner}
-                      </span>
-                    )}
+                    <button
+                      onClick={() => setSelectedProduct(product)}
+                      className="px-3.5 py-1.5 bg-gray-900 hover:bg-pink-500 text-white rounded-full text-xs font-bold transition-colors"
+                    >
+                      View Details
+                    </button>
                   </div>
                 </div>
               </div>
@@ -389,18 +408,12 @@ export function Products() {
         </div>
       </div>
 
-      {/* ── PRODUCT DETAIL MODAL (Exact FIGMA Screenshot 2 Design) ── */}
+      {/* ── PRODUCT DETAIL MODAL ── */}
       {selectedProduct && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
-          onClick={() => setSelectedProduct(null)}
-        >
-          <div
-            className="bg-white rounded-3xl overflow-hidden max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Image Slider Header */}
-            <div className="relative h-64 bg-gray-900 flex-shrink-0">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            {/* Modal Image Slider */}
+            <div className="relative h-64 sm:h-72 bg-gray-900">
               <AutoSwipeCarousel
                 images={selectedProduct.images && selectedProduct.images.length > 0 ? selectedProduct.images : [selectedProduct.image]}
                 alt={selectedProduct.name}
@@ -409,41 +422,26 @@ export function Products() {
                 showDots={true}
                 showArrows={true}
               />
-
-              {/* Close Button */}
+              
               <button
                 onClick={() => setSelectedProduct(null)}
-                className="absolute top-4 right-4 z-10 w-9 h-9 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center backdrop-blur-md hover:bg-black/70 transition-colors z-10"
               >
-                <X className="h-5 w-5" />
+                <X className="h-4 w-4" />
               </button>
-
-              {/* Category & Badge */}
-              <div className="absolute bottom-4 left-4 flex gap-2">
-                <span className="px-3 py-1 bg-pink-500 text-white text-[11px] font-bold rounded-full shadow-md">
-                  {selectedProduct.category}
-                </span>
-                {selectedProduct.badge && (
-                  <span className="px-3 py-1 bg-black/70 text-white text-[11px] font-bold rounded-full backdrop-blur-md">
-                    {selectedProduct.badge}
-                  </span>
-                )}
-              </div>
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-4">
-              {/* Title & Price & Actions */}
-              <div className="flex items-start justify-between gap-4">
+            <div className="p-6">
+              <div className="flex items-start justify-between gap-4 mb-3">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900 leading-tight">
+                  <span className="px-3 py-1 bg-pink-100 text-pink-700 text-xs font-bold rounded-full">
+                    {selectedProduct.category}
+                  </span>
+                  <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mt-2">
                     {selectedProduct.name}
-                  </h3>
-                  <div className="text-2xl font-black text-pink-600 mt-1">
-                    ₱{Number(selectedProduct.price).toLocaleString()}
-                  </div>
+                  </h2>
                 </div>
-
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
@@ -454,8 +452,7 @@ export function Products() {
                         category: selectedProduct.category || 'Product',
                       });
                     }}
-                    className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-pink-50 hover:text-pink-600 transition-colors"
-                    title="Share product"
+                    className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-pink-50"
                   >
                     <Share2 className="h-4 w-4" />
                   </button>
@@ -466,10 +463,7 @@ export function Products() {
               {/* Sub-info bar */}
               <div className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 p-3 rounded-2xl border border-gray-100 text-xs">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="flex items-center gap-1 font-bold text-amber-500">
-                    <Star className="h-3.5 w-3.5 fill-amber-400" /> {selectedProduct.rating || '4.8'}
-                  </span>
-                  <span className="text-gray-400">({selectedProduct.likes || 267} saves)</span>
+                  <span className="text-gray-500 font-bold">({selectedProduct.likes || 267} saves)</span>
                   <span>•</span>
                   <button
                     onClick={(e) => handleStoreClick(selectedProduct.sellerName, selectedProduct.user_id, e)}

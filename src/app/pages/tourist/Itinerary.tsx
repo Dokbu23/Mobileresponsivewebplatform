@@ -18,10 +18,13 @@ import {
   Check,
   Navigation,
   BookmarkCheck,
+  Compass,
+  BookmarkPlus,
+  Tag,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
-import { getAuthToken } from '../../lib/api';
+import { getAuthToken, getPublicJSON, formatImageUrl, API_BASE } from '../../lib/api';
 
 interface ActivityItem {
   time: string;
@@ -47,6 +50,7 @@ interface ItineraryCard {
   description: string;
   highlights: string[];
   days: DailyPlan[];
+  isOfficial?: boolean;
 }
 
 const MANASALAY_LOCATIONS = [
@@ -84,6 +88,8 @@ export function Itinerary() {
     }
   });
 
+  const [officialItineraries, setOfficialItineraries] = useState<ItineraryCard[]>([]);
+  const [loadingOfficial, setLoadingOfficial] = useState(false);
   const [selectedItinerary, setSelectedItinerary] = useState<ItineraryCard | null>(null);
 
   // Modals
@@ -119,6 +125,137 @@ export function Itinerary() {
       ]
     }
   ]);
+
+  // Load Admin Published Itineraries
+  const loadOfficialItineraries = async () => {
+    setLoadingOfficial(true);
+    try {
+      let apiItems: any[] = [];
+      try {
+        const data = await getPublicJSON('/attractions');
+        if (Array.isArray(data)) {
+          apiItems = data.filter((a: any) => 
+            a.category === 'Itinerary' || 
+            a.days_count || 
+            a.schedule || 
+            (typeof a.name === 'string' && a.name.includes('(Itinerary)'))
+          );
+        }
+      } catch (err) {
+        console.warn('API fetch notice:', err);
+      }
+
+      let localItins: any[] = [];
+      try {
+        const p1 = localStorage.getItem('discover-mansalay:published_itineraries');
+        const p2 = localStorage.getItem('discover-mansalay:custom_itinerarys');
+        if (p1) localItins = [...localItins, ...JSON.parse(p1)];
+        if (p2) localItins = [...localItins, ...JSON.parse(p2)];
+      } catch {}
+
+      let deletedIds = new Set<string>();
+      try {
+        const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
+        if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
+      } catch {}
+
+      let archivedIds = new Set<string>();
+      try {
+        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
+        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
+      } catch {}
+
+      const combinedRaw = [...localItins, ...apiItems].filter((item: any) => {
+        const sId = String(item.id);
+        return !deletedIds.has(sId) && !archivedIds.has(sId);
+      });
+
+      const seenIds = new Set<string>();
+      const uniqueItems: any[] = [];
+      for (const item of combinedRaw) {
+        const sId = String(item.id);
+        if (!seenIds.has(sId)) {
+          seenIds.add(sId);
+          uniqueItems.push(item);
+        }
+      }
+
+      const mapped: ItineraryCard[] = uniqueItems.map((item: any) => {
+        let days: DailyPlan[] = [];
+        if (Array.isArray(item.days) && item.days.length > 0) {
+          days = item.days;
+        } else if (Array.isArray(item.schedule) && item.schedule.length > 0) {
+          days = item.schedule.map((ds: any) => ({
+            day: ds.day || 1,
+            title: `Day ${ds.day || 1} Schedule`,
+            activities: [
+              ds.morning ? { time: '08:30 AM', activity: ds.morning, location: item.location || 'Mansalay' } : null,
+              ds.afternoon ? { time: '01:30 PM', activity: ds.afternoon, location: item.location || 'Mansalay' } : null,
+              ds.evening ? { time: '06:30 PM', activity: ds.evening, location: item.location || 'Mansalay' } : null,
+            ].filter(Boolean) as ActivityItem[],
+          }));
+        } else {
+          const count = Number(item.days_count || 2);
+          for (let d = 1; d <= count; d++) {
+            days.push({
+              day: d,
+              title: `Day ${d} Exploration`,
+              activities: [
+                { time: '09:00 AM', activity: `Morning Tour - Day ${d}`, location: item.location || 'Mansalay' },
+                { time: '02:00 PM', activity: `Afternoon Sightseeing & Local Experience`, location: item.location || 'Mansalay' },
+                { time: '06:00 PM', activity: `Evening Sunset & Dinner`, location: item.location || 'Mansalay' },
+              ]
+            });
+          }
+        }
+
+        let parsedHighlights: string[] = [];
+        if (Array.isArray(item.highlights)) {
+          parsedHighlights = item.highlights;
+        } else if (typeof item.highlights === 'string' && item.highlights.trim()) {
+          parsedHighlights = item.highlights.split('\n').filter((h: string) => h.trim().length > 0);
+        } else if (item.description) {
+          parsedHighlights = [item.description.slice(0, 60)];
+        }
+
+        const rawImg = item.image || (Array.isArray(item.images) ? item.images[0] : '');
+        const finalImg = formatImageUrl(rawImg) || '/assets/mansalay_hero_bg.jpg';
+
+        return {
+          id: String(item.id),
+          title: item.title || item.name || 'Official Mansalay Itinerary',
+          badge: item.badge || 'Official Tourism Plan',
+          category: item.category || 'Travel Itinerary',
+          duration: item.duration || `${item.days_count || days.length || 2} days`,
+          saves: Number(item.saves || item.likes || 128),
+          image: finalImg,
+          description: item.description || item.full_description || 'Curated travel plan by the Mansalay Tourism Office.',
+          highlights: parsedHighlights.length > 0 ? parsedHighlights : ['Mansalay Coastal Highlights', 'Cultural Experience', 'Local Cuisine'],
+          days,
+          isOfficial: true,
+        };
+      });
+
+      setOfficialItineraries(mapped);
+    } catch (e) {
+      console.error('Error loading official itineraries:', e);
+    } finally {
+      setLoadingOfficial(false);
+    }
+  };
+
+  useEffect(() => {
+    loadOfficialItineraries();
+    const handleRefresh = () => loadOfficialItineraries();
+    window.addEventListener('contentUpdated', handleRefresh);
+    window.addEventListener('storage', handleRefresh);
+    window.addEventListener('itineraryUpdated', handleRefresh);
+    return () => {
+      window.removeEventListener('contentUpdated', handleRefresh);
+      window.removeEventListener('storage', handleRefresh);
+      window.removeEventListener('itineraryUpdated', handleRefresh);
+    };
+  }, []);
 
   // Persist custom trips
   useEffect(() => {
@@ -276,6 +413,22 @@ export function Itinerary() {
     toast.success('Trip deleted');
   };
 
+  const handleSaveOfficialToMyTrips = (officialTrip: ItineraryCard, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const isAlreadySaved = myCustomTrips.some(t => t.id === `saved-${officialTrip.id}` || t.title === officialTrip.title);
+    if (isAlreadySaved) {
+      toast.info('This itinerary is already in your My Trips list!');
+      return;
+    }
+    const copiedTrip: ItineraryCard = {
+      ...officialTrip,
+      id: `saved-${officialTrip.id}-${Date.now()}`,
+      badge: 'Saved Official Plan',
+    };
+    setMyCustomTrips(prev => [copiedTrip, ...prev]);
+    toast.success(`"${officialTrip.title}" saved to your trips!`);
+  };
+
   const handlePrintItinerary = () => {
     window.print();
   };
@@ -293,9 +446,116 @@ export function Itinerary() {
             Trip Itinerary Planner
           </h1>
           <p className="text-xs sm:text-sm text-gray-500 font-medium mt-2">
-            Plan your perfect Mansalay adventure — use our AI auto-generator or build your custom schedule.
+            Explore official recommended itineraries curated by the Tourism Office, or generate your custom schedule.
           </p>
         </div>
+
+        {/* ── 1. OFFICIAL TOURISM ITINERARIES (PUBLISHED BY ADMIN) ── */}
+        <section className="mb-16">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <div className="flex items-center gap-2 text-pink-500 text-xs font-bold uppercase tracking-wider mb-1">
+                <Compass className="h-4 w-4" />
+                <span>Official Tourism Routes</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">
+                Official Mansalay Itineraries ({officialItineraries.length})
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">Handcrafted recommended itineraries created by the Mansalay Tourism Office</p>
+            </div>
+          </div>
+
+          {loadingOfficial ? (
+            <div className="py-12 text-center">
+              <div className="w-8 h-8 border-3 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              <p className="text-xs text-gray-400 font-medium">Loading official itineraries...</p>
+            </div>
+          ) : officialItineraries.length === 0 ? (
+            <div className="bg-white border border-gray-100 rounded-3xl p-8 text-center max-w-md mx-auto shadow-xs">
+              <Compass className="h-10 w-10 text-pink-300 mx-auto mb-3" />
+              <h3 className="text-sm font-bold text-gray-800">No Official Itineraries Yet</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                The Tourism Office is preparing exciting new travel routes for Mansalay.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {officialItineraries.map(trip => (
+                <div
+                  key={trip.id}
+                  onClick={() => setSelectedItinerary(trip)}
+                  className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl hover:border-pink-200 transition-all cursor-pointer flex flex-col justify-between group"
+                >
+                  <div className="relative h-48 bg-gray-100 overflow-hidden">
+                    <img
+                      src={trip.image}
+                      alt={trip.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                    
+                    <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+                      <span className="px-3 py-1 bg-pink-500 text-white text-[10px] font-extrabold rounded-full shadow-md uppercase tracking-wider">
+                        {trip.badge || 'Official Plan'}
+                      </span>
+                    </div>
+
+                    <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-xs font-bold">
+                      <span className="flex items-center gap-1 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px]">
+                        <Clock className="h-3 w-3 text-pink-400" />
+                        {trip.duration}
+                      </span>
+                      <span className="bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px]">
+                        {trip.days?.length || 2} Days Schedule
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-5 flex-1 flex flex-col justify-between">
+                    <div>
+                      <h3 className="text-base font-extrabold text-gray-900 group-hover:text-pink-600 transition-colors mb-1.5 line-clamp-1">
+                        {trip.title}
+                      </h3>
+                      <p className="text-xs text-gray-500 line-clamp-2 mb-4 leading-relaxed">
+                        {trip.description}
+                      </p>
+
+                      {trip.highlights && trip.highlights.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-4">
+                          {trip.highlights.slice(0, 3).map((h, i) => (
+                            <span key={i} className="text-[10px] bg-pink-50 text-pink-700 font-semibold px-2.5 py-0.5 rounded-full border border-pink-100 line-clamp-1">
+                              ✓ {h}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedItinerary(trip);
+                        }}
+                        className="flex-1 py-2.5 bg-gray-900 hover:bg-pink-600 text-white font-bold rounded-full text-xs transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <span>View Schedule</span>
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => handleSaveOfficialToMyTrips(trip, e)}
+                        className="p-2.5 bg-pink-50 hover:bg-pink-100 text-pink-600 rounded-full border border-pink-200 transition-colors flex-shrink-0"
+                        title="Save copy to My Trips"
+                      >
+                        <BookmarkPlus className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* ── MY TRIPS & SAVED ITINERARIES ── */}
         <section className="mb-16">
@@ -528,8 +788,20 @@ export function Itinerary() {
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-              <span className="text-xs text-gray-400 font-medium">Mansalay Tourism Travel Guide</span>
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-2">
+              {selectedItinerary.isOfficial ? (
+                <button
+                  onClick={(e) => {
+                    handleSaveOfficialToMyTrips(selectedItinerary, e);
+                  }}
+                  className="px-4 py-2 bg-pink-50 hover:bg-pink-100 text-pink-600 border border-pink-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5"
+                >
+                  <BookmarkPlus className="h-4 w-4" />
+                  <span>Save to My Trips</span>
+                </button>
+              ) : (
+                <span className="text-xs text-gray-400 font-medium">Mansalay Tourism Travel Guide</span>
+              )}
               <button
                 onClick={() => setSelectedItinerary(null)}
                 className="px-5 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-full text-xs font-bold"

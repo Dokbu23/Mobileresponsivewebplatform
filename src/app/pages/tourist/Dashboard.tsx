@@ -496,8 +496,6 @@ export function Dashboard() {
                     <div className="absolute bottom-4 left-4 right-4 text-white">
                       <h3 className="text-lg font-bold">{item.name || item.resort_name}</h3>
                       <div className="flex items-center gap-2 text-xs text-gray-300 mt-1">
-                        <span className="flex items-center gap-1 text-yellow-400 font-semibold"><Star className="h-3 w-3 fill-yellow-400" /> {item.rating || '4.8'}</span>
-                        <span>•</span>
                         <span className="flex items-center gap-1"><MapPin className="h-3 w-3 text-pink-400" /> {item.location || 'Mansalay'}</span>
                       </div>
                     </div>
@@ -597,7 +595,7 @@ export function Dashboard() {
                 </div>
 
                 <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-start gap-2.5">
-                  <Star className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <Sparkles className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-[10px] uppercase font-bold text-gray-400">Known For</p>
                     <p className="text-xs font-bold text-gray-800">Mangyan culture, pristine beaches, eco-tourism</p>
@@ -661,10 +659,6 @@ export function Dashboard() {
                       <Share2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-white text-[11px] font-bold">
-                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                    <span>{item.rating || '4.8'}</span>
-                  </div>
                 </div>
                 <div className="p-4">
                   <p className="text-[10px] uppercase font-bold text-gray-400">{item.category || 'Beach'}</p>
@@ -707,10 +701,6 @@ export function Dashboard() {
                 <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
                   <img src={getImageUrl(item.image || item.resort_images?.[0] || item.images?.[0])} alt={item.name || item.resort_name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   <span className="absolute top-3 left-3 px-3 py-1 bg-pink-500 text-white text-[10px] font-bold rounded-full">{(item.type === 'resort_profile' || item.category === 'resort_profile') ? 'Beach Resort' : (item.category || item.type || 'Beach Resort')}</span>
-                  <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-white text-[11px] font-bold">
-                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                    <span>{item.rating || '4.8'}</span>
-                  </div>
                 </div>
                 <div className="p-4">
                   <p className="text-[10px] uppercase font-bold text-gray-400">{(item.type === 'resort_profile' || item.category === 'resort_profile') ? 'Beach Resort' : (item.category || item.type || 'Beach Resort')}</p>
@@ -755,10 +745,6 @@ export function Dashboard() {
                 <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
                   <img src={getImageUrl(item.image)} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   <span className="absolute top-3 left-3 px-3 py-1 bg-pink-500 text-white text-[10px] font-bold rounded-full">{item.category || 'Attraction'}</span>
-                  <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-white text-[11px] font-bold">
-                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                    <span>{item.rating || '4.8'}</span>
-                  </div>
                 </div>
                 <div className="p-4">
                   <h3 className="font-bold text-gray-900 text-sm line-clamp-1">{item.name}</h3>

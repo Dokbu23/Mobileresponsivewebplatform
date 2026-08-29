@@ -413,11 +413,11 @@ export function Attractions() {
                     </>
                   )}
 
-                  {/* Rating & Likes overlay at bottom of image */}
+                  {/* Category & Likes overlay at bottom of image */}
                   <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between z-10">
                     <div className="flex items-center gap-1 bg-black/50 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[11px] font-semibold">
-                      <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                      <span>{attraction.rating?.toFixed(1)}</span>
+                      <Tag className="h-3 w-3 text-pink-400" />
+                      <span>{attraction.category}</span>
                     </div>
                     <div className="flex items-center gap-1 text-white text-[11px] font-medium">
                       <Heart className="h-3 w-3 text-pink-400 fill-pink-400/50" />
@@ -526,11 +526,10 @@ export function Attractions() {
                 </>
               )}
 
-              {/* Bottom-Left Rating & Saves Overlay */}
+              {/* Bottom-Left Saves Overlay */}
               <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md text-white px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 z-10">
-                <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                <span className="font-bold">{selectedAttraction.rating?.toFixed(1)}</span>
-                <span className="text-gray-300">· {selectedAttraction.likes} saves</span>
+                <Heart className="h-3.5 w-3.5 text-pink-400 fill-pink-400" />
+                <span className="font-bold">{selectedAttraction.likes} saves</span>
               </div>
 
               {/* Bottom-Center Dots Indicator if multiple images */}

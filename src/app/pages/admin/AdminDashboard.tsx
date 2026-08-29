@@ -209,9 +209,19 @@ export function AdminDashboard() {
               <div className="w-10 h-10 bg-blue-50 text-blue-500 rounded-xl flex items-center justify-center">
                 <Users className="h-5 w-5" />
               </div>
-              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[11px] font-extrabold flex items-center gap-0.5">
-                <TrendingUp className="h-3 w-3" /> +12%
-              </span>
+              {stats?.tourists_growth_pct && stats.tourists_growth_pct > 0 ? (
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[11px] font-extrabold flex items-center gap-0.5">
+                  <TrendingUp className="h-3 w-3" /> +{stats.tourists_growth_pct}%
+                </span>
+              ) : stats?.tourists_this_month && stats.tourists_this_month > 0 ? (
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[11px] font-extrabold flex items-center gap-0.5">
+                  <TrendingUp className="h-3 w-3" /> +{stats.tourists_this_month} new
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-[11px] font-bold flex items-center gap-0.5">
+                  0%
+                </span>
+              )}
             </div>
             <p className="text-xs text-gray-500 font-medium">Visitor Count</p>
             <h3 className="text-2xl font-extrabold text-gray-900 mt-0.5">
@@ -225,9 +235,15 @@ export function AdminDashboard() {
               <div className="w-10 h-10 bg-emerald-50 text-emerald-500 rounded-xl flex items-center justify-center">
                 <MapPin className="h-5 w-5" />
               </div>
-              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[11px] font-extrabold flex items-center gap-0.5">
-                <TrendingUp className="h-3 w-3" /> +2
-              </span>
+              {(stats?.attractions_this_month ?? 0) > 0 ? (
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[11px] font-extrabold flex items-center gap-0.5">
+                  <TrendingUp className="h-3 w-3" /> +{stats.attractions_this_month} new
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-[11px] font-bold flex items-center gap-0.5">
+                  0 new
+                </span>
+              )}
             </div>
             <p className="text-xs text-gray-500 font-medium">Total Attractions</p>
             <h3 className="text-2xl font-extrabold text-gray-900 mt-0.5">{attractionsCount}</h3>
@@ -239,9 +255,15 @@ export function AdminDashboard() {
               <div className="w-10 h-10 bg-purple-50 text-purple-500 rounded-xl flex items-center justify-center">
                 <Calendar className="h-5 w-5" />
               </div>
-              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[11px] font-extrabold flex items-center gap-0.5">
-                <TrendingUp className="h-3 w-3" /> +1
-              </span>
+              {eventsCount > 0 ? (
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[11px] font-extrabold flex items-center gap-0.5">
+                  <TrendingUp className="h-3 w-3" /> {eventsCount} active
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-[11px] font-bold flex items-center gap-0.5">
+                  0 active
+                </span>
+              )}
             </div>
             <p className="text-xs text-gray-500 font-medium">Events This Month</p>
             <h3 className="text-2xl font-extrabold text-gray-900 mt-0.5">{loading ? '—' : eventsCount}</h3>
@@ -253,9 +275,15 @@ export function AdminDashboard() {
               <div className="w-10 h-10 bg-pink-50 text-pink-500 rounded-xl flex items-center justify-center">
                 <Store className="h-5 w-5" />
               </div>
-              <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[11px] font-extrabold flex items-center gap-0.5">
-                <TrendingUp className="h-3 w-3" /> +3
-              </span>
+              {(stats?.businesses_this_month ?? 0) > 0 ? (
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[11px] font-extrabold flex items-center gap-0.5">
+                  <TrendingUp className="h-3 w-3" /> +{stats.businesses_this_month} new
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-[11px] font-bold flex items-center gap-0.5">
+                  0 new
+                </span>
+              )}
             </div>
             <p className="text-xs text-gray-500 font-medium">Active Businesses</p>
             <h3 className="text-2xl font-extrabold text-gray-900 mt-0.5">{loading ? '—' : businessesCount}</h3>

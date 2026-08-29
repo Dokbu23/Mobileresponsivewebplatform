@@ -208,11 +208,6 @@ export function DetailModal({ item, onClose }: DetailModalProps) {
                     ₱{Number(item.price ?? 0).toLocaleString()}
                   </p>
                 </div>
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <Star key={s} className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                  ))}
-                </div>
               </div>
               {item.description && (
                 <div>
@@ -233,10 +228,6 @@ export function DetailModal({ item, onClose }: DetailModalProps) {
                     <p className="text-xs text-muted-foreground font-semibold">Resort & Accommodation</p>
                     <p className="text-sm font-bold text-gray-900">{item.name}</p>
                   </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                  <span className="text-sm font-medium">4.8</span>
                 </div>
               </div>
 

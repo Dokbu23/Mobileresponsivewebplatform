@@ -96,6 +96,102 @@ Route::group(['prefix' => 'public'], function () {
             'qr_code' => \Illuminate\Support\Facades\Cache::get('subscription_qr', null)
         ]);
     });
+
+    // Real-time Platform Statistics for Admin & Public Dashboard
+    Route::get('stats', function() {
+        try {
+            $now = \Carbon\Carbon::now();
+            $startOfMonth = $now->copy()->startOfMonth();
+            $startOfLastMonth = $now->copy()->subMonth()->startOfMonth();
+            $endOfLastMonth = $now->copy()->subMonth()->endOfMonth();
+
+            // 1. Users / Visitors
+            $totalTourists = \App\Models\User::where('role', 'tourist')->count();
+            $allUsers = \App\Models\User::count();
+            $touristsThisMonth = \App\Models\User::where('created_at', '>=', $startOfMonth)->count();
+            $touristsLastMonth = \App\Models\User::whereBetween('created_at', [$startOfLastMonth, $endOfLastMonth])->count();
+            
+            $visitorGrowthPct = 0;
+            if ($touristsLastMonth > 0) {
+                $visitorGrowthPct = round((($touristsThisMonth - $touristsLastMonth) / $touristsLastMonth) * 100, 1);
+            } elseif ($touristsThisMonth > 0) {
+                $visitorGrowthPct = round(($touristsThisMonth / max(1, $allUsers)) * 100, 1);
+            }
+
+            // 2. Attractions
+            $attractionsCount = \App\Models\Attraction::count();
+            $attractionsThisMonth = \App\Models\Attraction::where('created_at', '>=', $startOfMonth)->count();
+
+            // 3. Events
+            $eventsThisMonth = \App\Models\Event::whereMonth('date', $now->month)
+                ->whereYear('date', $now->year)
+                ->count();
+            $eventsUpcoming = \App\Models\Event::where('date', '>=', $now->toDateString())->count();
+
+            // 4. Businesses (Resort & Enterprise)
+            $businessesCount = \App\Models\User::whereIn('role', ['resort', 'enterprise'])
+                ->where('status', 'approved')
+                ->count();
+            if ($businessesCount === 0) {
+                $businessesCount = \App\Models\User::whereIn('role', ['resort', 'enterprise'])->count();
+            }
+            $businessesThisMonth = \App\Models\User::whereIn('role', ['resort', 'enterprise'])
+                ->where('created_at', '>=', $startOfMonth)
+                ->count();
+
+            // 5. Views
+            $totalViews = (int) \App\Models\Attraction::sum('view_count');
+
+            // 6. Top Attractions
+            $topAttractions = \App\Models\Attraction::orderBy('view_count', 'desc')
+                ->take(5)
+                ->get(['id', 'name', 'view_count', 'image', 'location'])
+                ->map(function($a) {
+                    return [
+                        'id' => $a->id,
+                        'name' => $a->name,
+                        'views' => (int) $a->view_count,
+                        'image' => $a->image,
+                        'location' => $a->location
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'stats' => [
+                    'tourists' => max($totalTourists, $allUsers),
+                    'tourists_this_month' => $touristsThisMonth,
+                    'tourists_growth_pct' => $visitorGrowthPct,
+                    'attractions' => $attractionsCount,
+                    'attractions_this_month' => $attractionsThisMonth,
+                    'events' => $eventsThisMonth,
+                    'events_upcoming' => $eventsUpcoming,
+                    'businesses' => $businessesCount,
+                    'businesses_this_month' => $businessesThisMonth,
+                    'total_views' => $totalViews,
+                    'top_attractions' => $topAttractions,
+                ]
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('Stats API error: ' . $e->getMessage());
+            return response()->json([
+                'success' => true,
+                'stats' => [
+                    'tourists' => 1,
+                    'tourists_this_month' => 0,
+                    'tourists_growth_pct' => 0,
+                    'attractions' => 0,
+                    'attractions_this_month' => 0,
+                    'events' => 0,
+                    'events_upcoming' => 0,
+                    'businesses' => 0,
+                    'businesses_this_month' => 0,
+                    'total_views' => 0,
+                    'top_attractions' => [],
+                ]
+            ]);
+        }
+    });
 });
 
 Route::get('subscription/settings', function() {
@@ -106,6 +202,95 @@ Route::get('subscription/settings', function() {
         'gcash_number' => \Illuminate\Support\Facades\Cache::get('subscription_gcash_number', '09123456789'),
         'qr_code' => \Illuminate\Support\Facades\Cache::get('subscription_qr', null)
     ]);
+});
+
+Route::get('stats', function() {
+    try {
+        $now = \Carbon\Carbon::now();
+        $startOfMonth = $now->copy()->startOfMonth();
+        $startOfLastMonth = $now->copy()->subMonth()->startOfMonth();
+        $endOfLastMonth = $now->copy()->subMonth()->endOfMonth();
+
+        $totalTourists = \App\Models\User::where('role', 'tourist')->count();
+        $allUsers = \App\Models\User::count();
+        $touristsThisMonth = \App\Models\User::where('created_at', '>=', $startOfMonth)->count();
+        $touristsLastMonth = \App\Models\User::whereBetween('created_at', [$startOfLastMonth, $endOfLastMonth])->count();
+        
+        $visitorGrowthPct = 0;
+        if ($touristsLastMonth > 0) {
+            $visitorGrowthPct = round((($touristsThisMonth - $touristsLastMonth) / $touristsLastMonth) * 100, 1);
+        } elseif ($touristsThisMonth > 0) {
+            $visitorGrowthPct = round(($touristsThisMonth / max(1, $allUsers)) * 100, 1);
+        }
+
+        $attractionsCount = \App\Models\Attraction::count();
+        $attractionsThisMonth = \App\Models\Attraction::where('created_at', '>=', $startOfMonth)->count();
+
+        $eventsThisMonth = \App\Models\Event::whereMonth('date', $now->month)
+            ->whereYear('date', $now->year)
+            ->count();
+        $eventsUpcoming = \App\Models\Event::where('date', '>=', $now->toDateString())->count();
+
+        $businessesCount = \App\Models\User::whereIn('role', ['resort', 'enterprise'])
+            ->where('status', 'approved')
+            ->count();
+        if ($businessesCount === 0) {
+            $businessesCount = \App\Models\User::whereIn('role', ['resort', 'enterprise'])->count();
+        }
+        $businessesThisMonth = \App\Models\User::whereIn('role', ['resort', 'enterprise'])
+            ->where('created_at', '>=', $startOfMonth)
+            ->count();
+
+        $totalViews = (int) \App\Models\Attraction::sum('view_count');
+
+        $topAttractions = \App\Models\Attraction::orderBy('view_count', 'desc')
+            ->take(5)
+            ->get(['id', 'name', 'view_count', 'image', 'location'])
+            ->map(function($a) {
+                return [
+                    'id' => $a->id,
+                    'name' => $a->name,
+                    'views' => (int) $a->view_count,
+                    'image' => $a->image,
+                    'location' => $a->location
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'stats' => [
+                'tourists' => max($totalTourists, $allUsers),
+                'tourists_this_month' => $touristsThisMonth,
+                'tourists_growth_pct' => $visitorGrowthPct,
+                'attractions' => $attractionsCount,
+                'attractions_this_month' => $attractionsThisMonth,
+                'events' => $eventsThisMonth,
+                'events_upcoming' => $eventsUpcoming,
+                'businesses' => $businessesCount,
+                'businesses_this_month' => $businessesThisMonth,
+                'total_views' => $totalViews,
+                'top_attractions' => $topAttractions,
+            ]
+        ]);
+    } catch (\Throwable $e) {
+        \Log::error('Stats API error: ' . $e->getMessage());
+        return response()->json([
+            'success' => true,
+            'stats' => [
+                'tourists' => 1,
+                'tourists_this_month' => 0,
+                'tourists_growth_pct' => 0,
+                'attractions' => 0,
+                'attractions_this_month' => 0,
+                'events' => 0,
+                'events_upcoming' => 0,
+                'businesses' => 0,
+                'businesses_this_month' => 0,
+                'total_views' => 0,
+                'top_attractions' => [],
+            ]
+        ]);
+    }
 });
 
 // Authentication routes

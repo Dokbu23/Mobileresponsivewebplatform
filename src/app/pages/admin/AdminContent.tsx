@@ -685,10 +685,21 @@ export function AdminContent() {
       website,
       created_at: new Date().toISOString(),
       // Itinerary Specific Fields
-      badge: itineraryBadge || (activeTab === 'itinerary' ? 'Most Popular' : undefined),
+      badge: itineraryBadge || (activeTab === 'itinerary' ? 'Official Tourism Itinerary' : undefined),
       days_count: numberOfDays,
+      duration: `${numberOfDays} days`,
+      title: activeTab === 'itinerary' ? name : undefined,
       highlights: highlightsText.split('\n').filter((h) => h.trim().length > 0),
       schedule: daySchedules,
+      days: activeTab === 'itinerary' ? daySchedules.map((ds) => ({
+        day: ds.day,
+        title: `Day ${ds.day} Schedule`,
+        activities: [
+          ds.morning ? { time: '08:30 AM', activity: ds.morning, location: 'Mansalay' } : null,
+          ds.afternoon ? { time: '01:30 PM', activity: ds.afternoon, location: 'Mansalay' } : null,
+          ds.evening ? { time: '06:30 PM', activity: ds.evening, location: 'Mansalay' } : null,
+        ].filter(Boolean) as any[],
+      })) : undefined,
     };
 
     try {
@@ -805,9 +816,15 @@ export function AdminContent() {
       }
 
       if (activeTab === 'itinerary') {
-        const tripsStr = localStorage.getItem('discover-mansalay:custom-trips');
-        const existingTrips = tripsStr ? JSON.parse(tripsStr) : [];
-        localStorage.setItem('discover-mansalay:custom-trips', JSON.stringify([newItemPayload, ...existingTrips]));
+        const itinKey = 'discover-mansalay:published_itineraries';
+        const curItinStr = localStorage.getItem(itinKey);
+        const curItin = curItinStr ? JSON.parse(curItinStr) : [];
+        const nextItin = editingId
+          ? curItin.map((i: any) => i.id === editingId ? newItemPayload : i)
+          : [newItemPayload, ...curItin.filter((i: any) => String(i.id) !== String(newItemPayload.id))];
+        localStorage.setItem(itinKey, JSON.stringify(nextItin));
+        localStorage.setItem('discover-mansalay:custom_itinerarys', JSON.stringify(nextItin));
+        window.dispatchEvent(new Event('itineraryUpdated'));
       }
 
       if (newItemPayload.category === 'Accommodation' || newItemPayload.category === 'Accommodations') {

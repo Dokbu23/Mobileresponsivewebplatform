@@ -382,11 +382,10 @@ export function Accommodations() {
                     </button>
                   </div>
 
-                  {/* Dark Overlay Rating */}
+                  {/* Dark Overlay Saves */}
                   <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-white text-[11px] font-bold">
-                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                    <span>{acc.rating || '4.8'}</span>
-                    <span className="text-gray-300 font-normal">({acc.likes || 89} saves)</span>
+                    <Heart className="h-3 w-3 text-pink-400 fill-pink-400" />
+                    <span>{acc.likes || 89} saves</span>
                   </div>
                 </div>
 
@@ -452,11 +451,10 @@ export function Accommodations() {
                 <X className="h-4 w-4" />
               </button>
 
-              {/* Rating Pill on Bottom Left */}
+              {/* Saves Pill on Bottom Left */}
               <div className="absolute bottom-3 left-4 flex items-center gap-1 px-3 py-1 bg-black/60 backdrop-blur-md rounded-full text-white text-xs font-bold">
-                <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                <span>{selectedAcc.rating || '4.7'}</span>
-                <span className="text-gray-300 font-normal">• {selectedAcc.likes || 89} saves</span>
+                <Heart className="h-3.5 w-3.5 text-pink-400 fill-pink-400" />
+                <span>{selectedAcc.likes || 89} saves</span>
               </div>
             </div>
 

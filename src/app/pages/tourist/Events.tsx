@@ -302,10 +302,6 @@ export function Events() {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1 text-xs font-bold text-gray-700">
-                      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                      <span>{event.rating || '4.8'}</span>
-                    </div>
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -412,11 +408,6 @@ export function Events() {
                   <div className="flex items-center gap-1 text-gray-500">
                     <Clock className="h-3.5 w-3.5" />
                     <span>{selectedEvent.time || '9:00 AM – 9:00 PM'}</span>
-                  </div>
-                  <span>•</span>
-                  <div className="flex items-center gap-1 text-amber-500">
-                    <Star className="h-3.5 w-3.5 fill-amber-400" />
-                    <span>{selectedEvent.rating || '4.9'}</span>
                   </div>
                 </div>
               </div>
