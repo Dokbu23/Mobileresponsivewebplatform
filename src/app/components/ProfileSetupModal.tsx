@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { MapPin, Hotel, Store, User, Building, CheckCircle2, ChevronRight, Sparkles, Loader2, ShieldCheck, AlertCircle, Phone, ExternalLink } from 'lucide-react';
-import { postJSON, setAuthToken } from '../lib/api';
+import { MapPin, Hotel, Store, User, Building, CheckCircle2, ChevronRight, Sparkles, Loader2, ShieldCheck, AlertCircle, Phone, ExternalLink, LogOut } from 'lucide-react';
+import { postJSON, setAuthToken, removeAuthToken } from '../lib/api';
 import { useApp } from '../context/AppContext';
+import { showLogoutConfirm, showLogoutSuccess } from '../lib/sweetAlert';
 import { toast } from 'sonner';
 
 type AccountRole = 'tourist' | 'resort' | 'enterprise';
@@ -122,9 +123,41 @@ export function ProfileSetupModal({ isOpen, onComplete }: ProfileSetupModalProps
     }
   };
 
+  const handleLogout = async () => {
+    const result = await showLogoutConfirm();
+    if (!result.isConfirmed) {
+      return;
+    }
+
+    removeAuthToken();
+    setUserType(null);
+    setIsAdmin(false);
+    setCurrentUser(null);
+    window.localStorage.removeItem('discover-mansalay:userType');
+    window.localStorage.removeItem('discover-mansalay:isAdmin');
+    window.localStorage.removeItem('discover-mansalay:user');
+    window.localStorage.removeItem('discover-mansalay:currentUser');
+    window.localStorage.removeItem('user');
+    await showLogoutSuccess();
+    navigate('/login');
+  };
+
   return (
     <div className="fixed inset-0 z-[100] overflow-y-auto bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 font-sans animate-in fade-in duration-300">
       <div className="relative w-full max-w-xl bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/20 p-6 sm:p-9 my-auto">
+        
+        {/* Top-Right Logout Button */}
+        {step !== 'splash' && (
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="absolute top-5 right-5 z-20 flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-extrabold text-rose-500 hover:text-rose-600 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 rounded-full transition-all border border-rose-200/80 dark:border-rose-900/50 cursor-pointer shadow-xs active:scale-95"
+            title="Logout"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span>Logout</span>
+          </button>
+        )}
         
         {/* ── STEP 1: SPLASH ANIMATION ── */}
         {step === 'splash' && (
