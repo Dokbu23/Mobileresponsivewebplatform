@@ -428,8 +428,8 @@ Route::group(['middleware' => ['jwt.auth']], function () {
             $accommodationsCount = \App\Models\Accommodation::where('user_id', $user->id)->count();
             $totalActiveRooms = max($roomsCount, $accommodationsCount);
 
-            $attractionViews = (int) \App\Models\Attraction::where('user_id', $user->id)->sum('view_count');
-            $totalViews = $attractionViews + ($totalPostLikes * 5) + ($totalPostSaves * 8);
+            $accommodationViews = (int) \App\Models\Accommodation::where('user_id', $user->id)->sum('view_count');
+            $totalViews = $accommodationViews + ($totalPostLikes * 2) + ($totalPostSaves * 3);
 
             $viewsGrowth = $totalViews > 0 ? '+14%' : '0%';
             $savesGrowth = $totalPostSaves > 0 ? '+22%' : '0%';
