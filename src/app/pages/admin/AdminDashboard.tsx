@@ -12,7 +12,6 @@ import {
   Eye,
   FileText,
   Download,
-  Star,
   Printer,
   X,
   Check,
@@ -566,12 +565,11 @@ export function AdminDashboard() {
                       </div>
                       <div className="min-w-0">
                         <h4 className="text-xs font-bold text-gray-900 truncate group-hover:text-purple-600 transition-colors">{resort.name}</h4>
-                        <p className="text-[10px] text-gray-400 font-medium">{resort.views} views</p>
+                        <p className="text-[10px] text-gray-400 font-medium">Resort & Accommodation</p>
                       </div>
                     </div>
-                    <span className="px-2 py-0.5 bg-amber-50 text-amber-600 border border-amber-200/60 text-[10px] font-extrabold rounded-md flex items-center gap-1 flex-shrink-0 ml-2">
-                      <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                      {resort.rating || '5.0'}
+                    <span className="text-[11px] font-semibold text-gray-400 whitespace-nowrap flex-shrink-0 ml-2">
+                      {resort.views} views
                     </span>
                   </div>
                 ))}

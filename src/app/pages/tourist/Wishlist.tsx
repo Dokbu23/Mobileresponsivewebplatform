@@ -1,51 +1,191 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import {
   Heart, TrendingUp, BarChart2, MapPin, Star,
-  Compass, Hotel, Package, Calendar, Trash2
+  Compass, Hotel, Package, Calendar, Trash2, ArrowRight, Eye
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { getPublicJSON, API_BASE, decodeHtml } from '../../lib/api';
+import { getPublicJSON, API_BASE, decodeHtml, formatImageUrl } from '../../lib/api';
 
 export function Wishlist() {
-  const { wishlist, removeFromWishlist, userType } = useApp();
+  const navigate = useNavigate();
+  const { wishlist, addToWishlist, removeFromWishlist, isInWishlist, userType } = useApp();
   const [stats, setStats] = useState<any>(null);
+  const [topAttractions, setTopAttractions] = useState<any[]>([]);
+  const [counts, setCounts] = useState({
+    attractions: 0,
+    resorts: 0,
+    products: 0,
+    events: 0,
+  });
+  const [loading, setLoading] = useState(true);
 
   const isBusinessUser = userType === 'resort' || userType === 'enterprise';
 
-  useEffect(() => {
-    (async () => {
+  const loadData = async () => {
+    try {
+      const [statsRes, attrRes, accRes, prodRes, evtRes] = await Promise.all([
+        getPublicJSON('/stats').catch(() => null),
+        getPublicJSON('/attractions').catch(() => []),
+        getPublicJSON('/accommodations').catch(() => []),
+        getPublicJSON('/products').catch(() => []),
+        getPublicJSON('/events').catch(() => []),
+      ]);
+
+      let deletedIds = new Set<string>();
+      let archivedIds = new Set<string>();
       try {
-        const res = await getPublicJSON('/stats');
-        if (res?.success && res?.stats) {
-          setStats(res.stats);
-        }
-      } catch {
-        // ignore
+        const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
+        if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
+        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
+        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
+      } catch {}
+
+      // Custom local items
+      let customAttractions: any[] = [];
+      let customResorts: any[] = [];
+      let customProducts: any[] = [];
+      let customEvents: any[] = [];
+      try {
+        const a = localStorage.getItem('discover-mansalay:custom_attractions');
+        if (a) customAttractions = JSON.parse(a);
+        const r = localStorage.getItem('discover-mansalay:custom_resorts');
+        if (r) customResorts = JSON.parse(r);
+        const p = localStorage.getItem('discover-mansalay:custom_products');
+        if (p) customProducts = JSON.parse(p);
+        const e = localStorage.getItem('discover-mansalay:custom_events');
+        if (e) customEvents = JSON.parse(e);
+      } catch {}
+
+      const mergeSection = (apiList: any, customList: any[]) => {
+        const raw = Array.isArray(apiList) ? apiList : (apiList && typeof apiList === 'object' && 'data' in apiList ? (apiList as any).data : []);
+        const combined = [...(Array.isArray(raw) ? raw : [])];
+        const existingIds = new Set(combined.map((i: any) => String(i.id)));
+        customList.forEach((c: any) => {
+          if (!existingIds.has(String(c.id))) combined.unshift(c);
+        });
+        return combined.filter((i: any) => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
+      };
+
+      const activeAttractions = mergeSection(attrRes, customAttractions);
+      const activeResorts = mergeSection(accRes, customResorts);
+      const activeProducts = mergeSection(prodRes, customProducts);
+      const activeEvents = mergeSection(evtRes, customEvents);
+
+      const realStats = statsRes?.stats;
+      if (realStats) {
+        setStats(realStats);
       }
-    })();
+
+      setCounts({
+        attractions: activeAttractions.length || (realStats?.attractions || 0),
+        resorts: activeResorts.length || (realStats?.resorts || realStats?.businesses || 0),
+        products: activeProducts.length || (realStats?.products || 0),
+        events: activeEvents.length || (realStats?.events || 0),
+      });
+
+      if (Array.isArray(realStats?.top_attractions) && realStats.top_attractions.length > 0) {
+        setTopAttractions(realStats.top_attractions.map((a: any) => ({
+          id: a.id,
+          name: decodeHtml(a.name),
+          views: Number(a.views) || Number(a.view_count) || 0,
+          image: a.image,
+          category: a.category || 'Attraction',
+        })));
+      } else if (activeAttractions.length > 0) {
+        const sorted = [...activeAttractions]
+          .map((a: any) => ({
+            id: a.id,
+            name: decodeHtml(a.name),
+            views: Number(a.view_count) || 0,
+            image: a.image,
+            category: a.category || 'Attraction',
+          }))
+          .sort((a, b) => b.views - a.views)
+          .slice(0, 5);
+        setTopAttractions(sorted);
+      }
+    } catch (err) {
+      console.error('Error loading wishlist data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+    const handleUpdate = () => loadData();
+    window.addEventListener('wishlistUpdated', handleUpdate);
+    window.addEventListener('contentUpdated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('wishlistUpdated', handleUpdate);
+      window.removeEventListener('contentUpdated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, []);
 
-  // Most wishlisted / top attractions from real API
-  const topAttractions: any[] = Array.isArray(stats?.top_attractions)
-    ? stats.top_attractions.slice(0, 5)
-    : [];
+  const getImgUrl = (img?: string) => formatImageUrl(img) || '/assets/mansalay_hero_bg.jpg';
 
-  const getImgUrl = (img?: string) =>
-    img ? (img.startsWith('http') ? img : `${API_BASE}${img}`) : '/assets/mansalay_hero_bg.jpg';
-
-  const totalAttractions = stats?.attractions ?? 0;
-  const totalResorts     = stats?.resorts ?? 0;
-  const totalProducts    = stats?.products ?? 0;
-  const totalEvents      = stats?.events ?? 0;
+  const totalAttractions = counts.attractions;
+  const totalResorts     = counts.resorts;
+  const totalProducts    = counts.products;
+  const totalEvents      = counts.events;
   const grandTotal       = totalAttractions + totalResorts + totalProducts + totalEvents || 1;
 
   const trendCategories = [
-    { label: 'Attractions', count: totalAttractions, width: Math.round((totalAttractions / grandTotal) * 100), color: 'bg-violet-400' },
-    { label: 'Resorts & Stays', count: totalResorts, width: Math.round((totalResorts / grandTotal) * 100), color: 'bg-blue-400' },
-    { label: 'Local Products', count: totalProducts, width: Math.round((totalProducts / grandTotal) * 100), color: 'bg-emerald-400' },
-    { label: 'Events', count: totalEvents, width: Math.round((totalEvents / grandTotal) * 100), color: 'bg-pink-400' },
+    {
+      label: 'Attractions & Nature',
+      count: totalAttractions,
+      width: Math.round((totalAttractions / grandTotal) * 100),
+      color: 'bg-violet-500',
+      bgLight: 'bg-violet-50 text-violet-700',
+      to: '/attractions',
+      icon: Compass
+    },
+    {
+      label: 'Resorts & Accommodations',
+      count: totalResorts,
+      width: Math.round((totalResorts / grandTotal) * 100),
+      color: 'bg-blue-500',
+      bgLight: 'bg-blue-50 text-blue-700',
+      to: '/accommodations',
+      icon: Hotel
+    },
+    {
+      label: 'Local Products & Delicacies',
+      count: totalProducts,
+      width: Math.round((totalProducts / grandTotal) * 100),
+      color: 'bg-emerald-500',
+      bgLight: 'bg-emerald-50 text-emerald-700',
+      to: '/products',
+      icon: Package
+    },
+    {
+      label: 'Events & Festivals',
+      count: totalEvents,
+      width: Math.round((totalEvents / grandTotal) * 100),
+      color: 'bg-pink-500',
+      bgLight: 'bg-pink-50 text-pink-700',
+      to: '/events',
+      icon: Calendar
+    },
   ];
+
+  const handleToggleWishlist = (e: React.MouseEvent, item: any) => {
+    e.stopPropagation();
+    if (isInWishlist(item.id, 'attraction')) {
+      removeFromWishlist(item.id, 'attraction');
+    } else {
+      addToWishlist({
+        id: item.id,
+        title: item.name,
+        type: 'attraction',
+        category: item.category || 'Attraction',
+        image: item.image,
+      });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50/60 pb-20">
@@ -73,69 +213,146 @@ export function Wishlist() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
           {/* Most Viewed Panel */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingUp className="h-4 w-4 text-amber-500" />
-              <h2 className="text-sm font-extrabold text-gray-900">Most Viewed in Mansalay</h2>
-            </div>
-            <div className="space-y-3">
-              {topAttractions.length === 0 ? (
-                <p className="text-xs text-gray-400 py-4 text-center">Loading recommendations...</p>
-              ) : (
-                topAttractions.map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-3 hover:bg-gray-50 rounded-xl px-2 py-1.5 transition-colors cursor-pointer group">
-                    <span className="text-[11px] font-bold text-gray-400 w-5 flex-shrink-0">#{idx + 1}</span>
-
-                    <img
-                      src={getImgUrl(item.image)}
-                      alt={decodeHtml(item.name)}
-                      className="w-10 h-10 rounded-xl object-cover flex-shrink-0 group-hover:scale-105 transition-transform"
-                      onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
-                    />
-
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-gray-900 truncate">{decodeHtml(item.name)}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                          Attraction
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 text-pink-500 flex-shrink-0">
-                      <Heart className="h-3.5 w-3.5 fill-pink-500" />
-                      <span className="text-xs font-bold">{item.views} views</span>
-                    </div>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center">
+                    <TrendingUp className="h-4 w-4" />
                   </div>
-                ))
-              )}
+                  <div>
+                    <h2 className="text-sm font-extrabold text-gray-900">Most Viewed in Mansalay</h2>
+                    <p className="text-[11px] text-gray-400 font-medium">Top tourist attractions by page views</p>
+                  </div>
+                </div>
+                <Link to="/attractions" className="text-xs font-bold text-pink-600 hover:text-pink-700 flex items-center gap-0.5">
+                  View All <ArrowRight className="h-3 w-3" />
+                </Link>
+              </div>
+
+              <div className="space-y-2.5">
+                {loading ? (
+                  <div className="py-8 text-center text-xs text-gray-400">Loading top destinations...</div>
+                ) : topAttractions.length === 0 ? (
+                  <p className="text-xs text-gray-400 py-6 text-center">No attraction records found</p>
+                ) : (
+                  topAttractions.map((item, idx) => {
+                    const isSaved = isInWishlist(item.id, 'attraction');
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => navigate('/attractions')}
+                        className="flex items-center gap-3 p-2 hover:bg-pink-50/40 rounded-xl transition-all border border-transparent hover:border-pink-100 cursor-pointer group"
+                      >
+                        <span className={`text-[11px] font-black w-5 text-center flex-shrink-0 ${idx === 0 ? 'text-amber-500 font-extrabold' : idx === 1 ? 'text-slate-500' : 'text-gray-400'}`}>
+                          #{idx + 1}
+                        </span>
+
+                        <img
+                          src={getImgUrl(item.image)}
+                          alt={item.name}
+                          className="w-11 h-11 rounded-xl object-cover flex-shrink-0 group-hover:scale-105 transition-transform border border-gray-100 shadow-xs"
+                          onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                        />
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-gray-900 truncate group-hover:text-pink-600 transition-colors">
+                            {item.name}
+                          </p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                              {item.category || 'Attraction'}
+                            </span>
+                            <span className="text-[10px] text-gray-400 font-medium flex items-center gap-1">
+                              <Eye className="h-3 w-3" /> {item.views.toLocaleString()} views
+                            </span>
+                          </div>
+                        </div>
+
+                        {!isBusinessUser && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleToggleWishlist(e, item)}
+                            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
+                              isSaved
+                                ? 'bg-pink-50 text-pink-500 hover:bg-pink-100'
+                                : 'bg-gray-50 text-gray-400 hover:bg-pink-50 hover:text-pink-500'
+                            }`}
+                            title={isSaved ? 'Remove from wishlist' : 'Add to wishlist'}
+                          >
+                            <Heart className={`h-4 w-4 ${isSaved ? 'fill-pink-500 text-pink-500' : ''}`} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
+
+            <p className="text-[10px] text-gray-400 mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+              <span>Updated in real-time based on visitor engagement</span>
+              <span className="font-bold text-pink-500">Discover Mansalay</span>
+            </p>
           </div>
 
           {/* Platform Content Distribution Panel */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <BarChart2 className="h-4 w-4 text-blue-500" />
-              <h2 className="text-sm font-extrabold text-gray-900">Platform Content Insights</h2>
-            </div>
-            <div className="space-y-4">
-              {trendCategories.map((cat) => (
-                <div key={cat.label}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-gray-700">{cat.label}</span>
-                    <span className="text-[11px] text-gray-400 font-medium">{cat.count} items</span>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center">
+                    <BarChart2 className="h-4 w-4" />
                   </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${cat.color} transition-all duration-700`}
-                      style={{ width: `${Math.max(5, cat.width)}%` }}
-                    />
+                  <div>
+                    <h2 className="text-sm font-extrabold text-gray-900">Platform Content Insights</h2>
+                    <p className="text-[11px] text-gray-400 font-medium">Distribution of published tourism listings</p>
                   </div>
                 </div>
-              ))}
+                <span className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-full text-[10px] font-bold">
+                  {grandTotal} total items
+                </span>
+              </div>
+
+              <div className="space-y-3.5">
+                {trendCategories.map((cat) => {
+                  const Icon = cat.icon;
+                  return (
+                    <div
+                      key={cat.label}
+                      onClick={() => navigate(cat.to)}
+                      className="p-2.5 rounded-xl hover:bg-gray-50/80 transition-colors border border-transparent hover:border-gray-100 cursor-pointer group"
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-6 h-6 rounded-lg ${cat.bgLight} flex items-center justify-center`}>
+                            <Icon className="h-3.5 w-3.5" />
+                          </div>
+                          <span className="text-xs font-bold text-gray-800 group-hover:text-pink-600 transition-colors">
+                            {cat.label}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-black text-gray-900">
+                            {cat.count} <span className="text-[10px] font-normal text-gray-400">({cat.width}%)</span>
+                          </span>
+                          <ArrowRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-pink-500 group-hover:translate-x-0.5 transition-all" />
+                        </div>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${cat.color} transition-all duration-700`}
+                          style={{ width: `${Math.max(4, cat.width)}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <p className="text-[10px] text-gray-400 mt-5 leading-relaxed">
-              Based on active listings across Discover Mansalay.
+
+            <p className="text-[10px] text-gray-400 mt-4 pt-3 border-t border-gray-100">
+              Click any category to explore its active destinations, stays, and items.
             </p>
           </div>
         </div>
