@@ -42,6 +42,8 @@ export function Navbar() {
 
   const toggleDark = () => setIsDark(prev => !prev);
 
+  const isBusinessUser = userType === 'resort' || userType === 'enterprise';
+
   const navLinks = [
     { path: '/dashboard', label: 'Home' },
     { path: '/attractions', label: 'Attractions' },
@@ -49,7 +51,7 @@ export function Navbar() {
     { path: '/products', label: 'Products' },
     { path: '/accommodations', label: 'Stays' },
     { path: '/map', label: 'Map' },
-    { path: '/itinerary', label: 'Itinerary' },
+    ...(!isBusinessUser ? [{ path: '/itinerary', label: 'Itinerary' }] : []),
   ];
 
   const roleMenuItems: Record<RoleType, RoleMenuItem[]> = {
@@ -64,16 +66,19 @@ export function Navbar() {
       { to: '/admin/users', label: 'Account Management', icon: User },
       { to: '/admin/subscriptions', label: 'Manage Subscriptions', icon: CreditCard },
       { to: '/admin/publish', label: 'Publish Content', icon: Plus },
+      { to: '/wishlist', label: 'Most Saved & Trends', icon: Heart },
     ],
     resort: [
       { to: '/resort/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: `/business/resort/${currentUser?.id ?? ''}?manage=true`, label: 'My Shop Profile', icon: Hotel },
       { to: '/resort/profile', label: 'Manage Rooms', icon: Bed },
+      { to: '/wishlist', label: 'Most Saved & Trends', icon: Heart },
     ],
     enterprise: [
       { to: '/enterprise/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: `/business/enterprise/${currentUser?.id ?? ''}?manage=true`, label: 'My Shop Profile', icon: Store },
       { to: '/enterprise/profile', label: 'Manage Products', icon: Package },
+      { to: '/wishlist', label: 'Most Saved & Trends', icon: Heart },
     ],
   };
 

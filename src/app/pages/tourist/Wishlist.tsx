@@ -8,8 +8,10 @@ import { useApp } from '../../context/AppContext';
 import { getPublicJSON, API_BASE } from '../../lib/api';
 
 export function Wishlist() {
-  const { wishlist, removeFromWishlist } = useApp();
+  const { wishlist, removeFromWishlist, userType } = useApp();
   const [stats, setStats] = useState<any>(null);
+
+  const isBusinessUser = userType === 'resort' || userType === 'enterprise';
 
   useEffect(() => {
     (async () => {
@@ -54,9 +56,13 @@ export function Wishlist() {
             <Heart className="h-5 w-5 text-pink-500 fill-pink-500" />
           </div>
           <div>
-            <h1 className="text-2xl font-extrabold text-gray-900">My Saved</h1>
-            <p className="text-xs text-gray-400 font-medium">
-              {wishlist.length} saved places & experiences · <span className="text-gray-400">visible only to you</span>
+            <h1 className="text-2xl font-extrabold text-gray-900">
+              {isBusinessUser ? 'Most Saved & Community Trends' : 'My Saved & Wishlist'}
+            </h1>
+            <p className="text-xs text-gray-500 font-medium">
+              {isBusinessUser
+                ? 'Insights on top-saved destinations, stays, and products in Discover Mansalay'
+                : `${wishlist.length} saved places & experiences · visible only to you`}
             </p>
           </div>
         </div>
@@ -136,7 +142,34 @@ export function Wishlist() {
       </div>
 
       {/* ── Saved Items Grid or Empty State ── */}
-      {wishlist.length === 0 ? (
+      {/* ── Saved Items Grid or Empty / Business State ── */}
+      {isBusinessUser ? (
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+            <h3 className="text-base font-bold text-gray-900 mb-2">Explore Mansalay Offerings</h3>
+            <p className="text-xs text-muted-foreground mb-6 max-w-lg mx-auto">
+              Monitor active public listings and tourist attractions to align your business offerings with what visitors are looking for.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full max-w-2xl mx-auto">
+              {[
+                { label: 'Attractions', icon: Compass, to: '/attractions', color: 'bg-blue-50 text-blue-600 border-blue-100' },
+                { label: 'Resorts & Stays', icon: Hotel, to: '/accommodations', color: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
+                { label: 'Local Products', icon: Package, to: '/products', color: 'bg-amber-50 text-amber-600 border-amber-100' },
+                { label: 'Events', icon: Calendar, to: '/events', color: 'bg-pink-50 text-pink-600 border-pink-100' },
+              ].map(({ label, icon: Icon, to, color }) => (
+                <Link
+                  key={to}
+                  to={to}
+                  className={`flex flex-col items-center gap-2 p-5 rounded-2xl ${color} border hover:scale-105 transition-all font-bold text-xs shadow-xs`}
+                >
+                  <Icon className="h-6 w-6" />
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : wishlist.length === 0 ? (
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-16 flex flex-col items-center text-center">
             <div className="relative mb-6">

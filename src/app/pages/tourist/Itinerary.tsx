@@ -70,14 +70,17 @@ const MANASALAY_LOCATIONS = [
 
 export function Itinerary() {
   const navigate = useNavigate();
-  const { currentUser } = useApp();
+  const { currentUser, userType } = useApp();
 
   useEffect(() => {
     if (!currentUser && !getAuthToken()) {
-      toast.error('Please log in to access your Itinerary');
+      toast.error('Please log in as a tourist to access the Itinerary planner');
       navigate('/login');
+    } else if (userType === 'resort' || userType === 'enterprise' || currentUser?.role === 'resort' || currentUser?.role === 'enterprise') {
+      toast.error('Itinerary creation is available for tourists and admins only.');
+      navigate(userType === 'resort' ? '/resort/dashboard' : '/enterprise/dashboard');
     }
-  }, [currentUser, navigate]);
+  }, [currentUser, userType, navigate]);
 
   const [myCustomTrips, setMyCustomTrips] = useState<ItineraryCard[]>(() => {
     try {

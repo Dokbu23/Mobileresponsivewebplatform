@@ -330,6 +330,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addToWishlist = (item: WishlistItem) => {
+    if (userType === 'resort' || userType === 'enterprise') {
+      return;
+    }
     setWishlist(prev => {
       if (prev.some(w => String(w.id) === String(item.id) && w.type === item.type)) {
         return prev;
