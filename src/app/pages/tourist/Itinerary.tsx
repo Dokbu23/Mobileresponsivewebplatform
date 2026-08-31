@@ -68,6 +68,12 @@ const MANASALAY_LOCATIONS = [
   'MB Hiraya Beachfront'
 ];
 
+const getUserTripStorageKey = (user: any) => {
+  if (user?.id) return `discover-mansalay:custom-trips:user_${user.id}`;
+  if (user?.email) return `discover-mansalay:custom-trips:user_${user.email}`;
+  return 'discover-mansalay:custom-trips:anonymous';
+};
+
 export function Itinerary() {
   const navigate = useNavigate();
   const { currentUser, userType } = useApp();
@@ -82,14 +88,7 @@ export function Itinerary() {
     }
   }, [currentUser, userType, navigate]);
 
-  const [myCustomTrips, setMyCustomTrips] = useState<ItineraryCard[]>(() => {
-    try {
-      const stored = localStorage.getItem('discover-mansalay:custom-trips');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [myCustomTrips, setMyCustomTrips] = useState<ItineraryCard[]>([]);
 
   const [officialItineraries, setOfficialItineraries] = useState<ItineraryCard[]>([]);
   const [loadingOfficial, setLoadingOfficial] = useState(false);
@@ -260,14 +259,44 @@ export function Itinerary() {
     };
   }, []);
 
-  // Persist custom trips
+  // Load tourist personal saved trips for CURRENT logged-in user only
   useEffect(() => {
+    if (!currentUser && !getAuthToken()) {
+      setMyCustomTrips([]);
+      return;
+    }
+    const key = getUserTripStorageKey(currentUser);
     try {
-      localStorage.setItem('discover-mansalay:custom-trips', JSON.stringify(myCustomTrips));
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        setMyCustomTrips(JSON.parse(stored));
+      } else {
+        // One-time migration for current user if old shared storage exists
+        const legacyStored = localStorage.getItem('discover-mansalay:custom-trips');
+        if (legacyStored && currentUser?.id) {
+          const parsed = JSON.parse(legacyStored);
+          setMyCustomTrips(parsed);
+          localStorage.setItem(key, JSON.stringify(parsed));
+          localStorage.removeItem('discover-mansalay:custom-trips');
+        } else {
+          setMyCustomTrips([]);
+        }
+      }
+    } catch {
+      setMyCustomTrips([]);
+    }
+  }, [currentUser?.id, currentUser?.email]);
+
+  // Persist only to the current user's specific storage key
+  useEffect(() => {
+    if (!currentUser && !getAuthToken()) return;
+    const key = getUserTripStorageKey(currentUser);
+    try {
+      localStorage.setItem(key, JSON.stringify(myCustomTrips));
     } catch (e) {
       console.error(e);
     }
-  }, [myCustomTrips]);
+  }, [myCustomTrips, currentUser?.id, currentUser?.email]);
 
   // AI Itinerary Generator Logic
   const handleGenerateAiItinerary = () => {
@@ -564,12 +593,14 @@ export function Itinerary() {
         <section className="mb-16">
           <div className="flex items-center gap-2 text-pink-500 text-xs font-bold uppercase tracking-wider mb-1">
             <BookmarkCheck className="h-4 w-4" />
-            <span>Personalized Plans</span>
+            <span>Private Itinerary Collection</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-1">
-            My Trips & Itineraries ({myCustomTrips.length})
+            My Saved Trips & Itineraries ({myCustomTrips.length})
           </h2>
-          <p className="text-xs text-gray-400 mb-6">Manage and view your generated and custom trip schedules</p>
+          <p className="text-xs text-gray-400 mb-6">
+            Private to your tourist account ({currentUser?.name || currentUser?.email || 'My Account'}) — only you can view and manage these saved schedules.
+          </p>
 
           {myCustomTrips.length === 0 ? (
             <div className="bg-white border border-gray-100 rounded-3xl p-8 text-center max-w-md mx-auto shadow-xs">

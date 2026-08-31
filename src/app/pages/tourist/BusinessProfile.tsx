@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router';
 import {
   Hotel, Store, MapPin, Phone, Mail, Star,
   ArrowLeft, Package, Search, CreditCard,
   MessageCircle, Heart,
   CheckCircle, ShoppingBag, ExternalLink,
   Pencil, Upload, X, Image as ImageIcon, Loader2,
-  Ticket, Tag, Copy, Check
+  Ticket, Tag, Copy, Check, Plus, MessageSquare,
+  Bookmark, Share2, ThumbsUp, Send, Bed, Waves,
+  Compass, Palmtree, Megaphone, Calendar, FileText, Clock
 } from 'lucide-react';
 import { getPublicJSON, getAuthToken, API_BASE } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
@@ -332,6 +334,10 @@ export function BusinessProfile() {
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
   const [storeLocation, setStoreLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [copiedPromoCode, setCopiedPromoCode] = useState<string | null>(null);
+  const [posts, setPosts] = useState<any[]>([]);
+  const [activeProfileTab, setActiveProfileTab] = useState<'listings' | 'posts'>('listings');
+  const [selectedPostCategory, setSelectedPostCategory] = useState<string>('all');
+  const [viewingPost, setViewingPost] = useState<any | null>(null);
 
   const handleCopyPromo = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -340,6 +346,26 @@ export function BusinessProfile() {
     setTimeout(() => {
       setCopiedPromoCode(prev => (prev === code ? null : prev));
     }, 2500);
+  };
+
+  const handleLikePost = async (postId: number | string) => {
+    try {
+      await fetch(`${API_BASE}/api/public/enterprise-posts/${postId}/like`, { method: 'POST' });
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, likes: (p.likes || 0) + 1 } : p));
+      toast.success('Liked post!');
+    } catch {
+      toast.error('Failed to like post');
+    }
+  };
+
+  const handleSavePost = async (postId: number | string) => {
+    try {
+      await fetch(`${API_BASE}/api/public/enterprise-posts/${postId}/save`, { method: 'POST' });
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, saves: (p.saves || 0) + 1 } : p));
+      toast.success('Saved post!');
+    } catch {
+      toast.error('Failed to save post');
+    }
   };
 
   useEffect(() => {
@@ -370,6 +396,17 @@ export function BusinessProfile() {
           } else {
             setError(type === 'resort' ? 'Resort profile is not available or not yet registered.' : 'Shop is not available or not yet registered.');
           }
+        }
+
+        // Fetch posts created by this business owner
+        try {
+          const ownerId = result?.owner?.id || targetUserId;
+          const postsRes = await getPublicJSON(`/enterprise-posts?user_id=${ownerId}`);
+          if (Array.isArray(postsRes)) {
+            setPosts(postsRes);
+          }
+        } catch {
+          // ignore
         }
       } catch {
         const fallback = createFallbackBusinessProfile(targetUserId);
@@ -876,239 +913,512 @@ export function BusinessProfile() {
           </div>
         </div>
 
-        {/* 🎨 PROMO BANNERS REMOVED */}
+        {/* 🌟 PROFILE NAVIGATION TABS */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-2 mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 overflow-x-auto">
+            <button
+              onClick={() => setActiveProfileTab('listings')}
+              className={`px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer ${
+                activeProfileTab === 'listings'
+                  ? 'bg-pink-500 text-white shadow-md shadow-pink-500/20'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {isResort ? <Hotel className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
+              <span>{isResort ? 'Rooms & Stays' : 'All Products'} ({items.length})</span>
+            </button>
 
-        {/* 📁 CATEGORIES */}
-        {!isResort && categories.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
-            <div className="border-b border-gray-100 px-5 py-3 flex items-center justify-between">
-              <h2 className="text-sm font-bold text-gray-800 tracking-widest">CATEGORIES</h2>
-              {selectedCategory !== 'all' && (
-                <button
-                  onClick={() => setSelectedCategory('all')}
-                  className="text-xs text-pink-500 hover:text-pink-600 font-semibold"
-                >
-                  View All
-                </button>
+            <button
+              onClick={() => setActiveProfileTab('posts')}
+              className={`px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer ${
+                activeProfileTab === 'posts'
+                  ? 'bg-pink-500 text-white shadow-md shadow-pink-500/20'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              <span>Posts & Updates ({posts.length})</span>
+              {posts.length > 0 && (
+                <span className={`px-2 py-0.5 text-[10px] rounded-full font-extrabold ${
+                  activeProfileTab === 'posts' ? 'bg-white text-pink-600' : 'bg-pink-100 text-pink-700'
+                }`}>
+                  {posts.length}
+                </span>
               )}
-            </div>
-            <div className="p-4">
-              <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3 md:gap-4">
-                {/* All Products */}
-                <div
-                  onClick={() => setSelectedCategory('all')}
-                  className="flex flex-col items-center gap-2 cursor-pointer group"
-                >
-                  <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden border-2 transition-all shadow-sm ${
-                    selectedCategory === 'all'
-                      ? 'border-pink-500 ring-4 ring-pink-100 scale-110'
-                      : 'border-gray-200 group-hover:border-pink-300 group-hover:scale-105'
-                  } bg-gradient-to-br from-pink-100 to-pink-50 flex items-center justify-center`}>
-                    <ShoppingBag className={`h-7 w-7 md:h-8 md:w-8 ${selectedCategory === 'all' ? 'text-pink-600' : 'text-pink-500'}`} />
-                  </div>
-                  <span className={`text-[10px] md:text-xs text-center font-medium leading-tight ${
-                    selectedCategory === 'all' ? 'text-pink-500 font-bold' : 'text-gray-700'
-                  }`}>
-                    All Products
-                    <div className="text-[9px] text-gray-400">({products.length})</div>
-                  </span>
-                </div>
+            </button>
+          </div>
 
-                {/* Dynamic Categories */}
-                {categories.map((category) => {
-                  const isSelected = selectedCategory === category.name;
-                  return (
+          {isOwner && (
+            <Link
+              to={isResort ? '/resort/dashboard' : '/enterprise/dashboard'}
+              className="px-4 py-2 bg-gradient-to-r from-pink-500 to-rose-500 hover:opacity-90 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 whitespace-nowrap ml-auto"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Create New Post</span>
+            </Link>
+          )}
+        </div>
+
+        {/* ── TAB 1: LISTINGS (ROOMS / PRODUCTS) ── */}
+        {activeProfileTab === 'listings' && (
+          <>
+            {/* 📁 CATEGORIES */}
+            {!isResort && categories.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
+                <div className="border-b border-gray-100 px-5 py-3 flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-gray-800 tracking-widest">CATEGORIES</h2>
+                  {selectedCategory !== 'all' && (
+                    <button
+                      onClick={() => setSelectedCategory('all')}
+                      className="text-xs text-pink-500 hover:text-pink-600 font-semibold"
+                    >
+                      View All
+                    </button>
+                  )}
+                </div>
+                <div className="p-4">
+                  <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3 md:gap-4">
+                    {/* All Products */}
                     <div
-                      key={category.name}
-                      onClick={() => setSelectedCategory(category.name)}
+                      onClick={() => setSelectedCategory('all')}
                       className="flex flex-col items-center gap-2 cursor-pointer group"
                     >
                       <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden border-2 transition-all shadow-sm ${
-                        isSelected
+                        selectedCategory === 'all'
                           ? 'border-pink-500 ring-4 ring-pink-100 scale-110'
                           : 'border-gray-200 group-hover:border-pink-300 group-hover:scale-105'
-                      } bg-gray-100`}>
-                        <img
-                          src={getImageUrl(category.image)}
-                          alt={category.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.currentTarget.onerror = null;
-                            e.currentTarget.src = '/assets/default-product.jpg';
-                          }}
-                        />
+                      } bg-gradient-to-br from-pink-100 to-pink-50 flex items-center justify-center`}>
+                        <ShoppingBag className={`h-7 w-7 md:h-8 md:w-8 ${selectedCategory === 'all' ? 'text-pink-600' : 'text-pink-500'}`} />
                       </div>
-                      <span className={`text-[10px] md:text-xs text-center font-medium leading-tight line-clamp-1 ${
-                        isSelected ? 'text-pink-500 font-bold' : 'text-gray-700'
+                      <span className={`text-[10px] md:text-xs text-center font-medium leading-tight ${
+                        selectedCategory === 'all' ? 'text-pink-500 font-bold' : 'text-gray-700'
                       }`}>
-                        {category.name}
-                        <div className="text-[9px] text-gray-400">({category.count})</div>
+                        All Products
+                        <div className="text-[9px] text-gray-400">({products.length})</div>
                       </span>
                     </div>
+
+                    {/* Dynamic Categories */}
+                    {categories.map((category) => {
+                      const isSelected = selectedCategory === category.name;
+                      return (
+                        <div
+                          key={category.name}
+                          onClick={() => setSelectedCategory(category.name)}
+                          className="flex flex-col items-center gap-2 cursor-pointer group"
+                        >
+                          <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden border-2 transition-all shadow-sm ${
+                            isSelected
+                              ? 'border-pink-500 ring-4 ring-pink-100 scale-110'
+                              : 'border-gray-200 group-hover:border-pink-300 group-hover:scale-105'
+                          } bg-gray-100`}>
+                            <img
+                              src={getImageUrl(category.image)}
+                              alt={category.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = '/assets/default-product.jpg';
+                              }}
+                            />
+                          </div>
+                          <span className={`text-[10px] md:text-xs text-center font-medium leading-tight line-clamp-1 ${
+                            isSelected ? 'text-pink-500 font-bold' : 'text-gray-700'
+                          }`}>
+                            {category.name}
+                            <div className="text-[9px] text-gray-400">({category.count})</div>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 🏷️ ACTIVE VOUCHERS / PROMO CODES */}
+            {data?.promo_codes && data.promo_codes.length > 0 && (
+              <div className="bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 rounded-2xl p-4 sm:p-5 mb-4 text-white shadow-md shadow-pink-500/10">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-xs">
+                      <Ticket className="h-4 w-4 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold tracking-wide uppercase">
+                        Available Shop Vouchers & Promo Discounts
+                      </h3>
+                      <p className="text-[11px] text-white/90 font-medium">Use these exclusive promo codes at checkout for instant discounts!</p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] bg-white/20 backdrop-blur-xs px-2.5 py-0.5 rounded-full font-bold">
+                    {data.promo_codes.length} Active {data.promo_codes.length === 1 ? 'Voucher' : 'Vouchers'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {data.promo_codes.map((promo) => {
+                    const discountText = promo.type === 'percent' ? `${promo.value}% OFF` : `₱${Number(promo.value).toLocaleString()} OFF`;
+                    const isCopied = copiedPromoCode === promo.code;
+
+                    return (
+                      <div
+                        key={promo.id}
+                        className="bg-white rounded-xl p-3.5 text-gray-800 shadow-sm border border-white/50 flex items-center justify-between gap-3 relative overflow-hidden group"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="px-2 py-0.5 bg-pink-100 text-pink-700 font-extrabold text-xs rounded-md">
+                              {discountText}
+                            </span>
+                            {promo.min_amount && promo.min_amount > 0 ? (
+                              <span className="text-[10px] text-gray-500 font-medium truncate">
+                                Min. ₱{Number(promo.min_amount).toLocaleString()}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="font-mono font-bold text-sm tracking-wider text-gray-900">
+                            {promo.code}
+                          </div>
+                          {promo.description && (
+                            <p className="text-[11px] text-gray-500 truncate mt-0.5">
+                              {promo.description}
+                            </p>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={() => handleCopyPromo(promo.code)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 flex-shrink-0 active:scale-95 ${
+                            isCopied
+                              ? 'bg-emerald-500 text-white'
+                              : 'bg-gradient-to-r from-pink-500 to-rose-500 text-white hover:opacity-90 shadow-xs'
+                          }`}
+                        >
+                          {isCopied ? (
+                            <>
+                              <Check className="h-3.5 w-3.5" />
+                              <span>Copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-3.5 w-3.5" />
+                              <span>Copy Code</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 🔍 SEARCH BAR */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 mb-4">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder={isResort ? "Search rooms in this resort..." : "Search products in this shop..."}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-11 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm bg-gray-50 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* 📦 PRODUCTS / ROOMS GRID */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="border-b border-gray-100 px-5 py-4 flex items-center justify-between">
+                <h2 className="text-sm font-bold text-gray-800 tracking-widest">
+                  {selectedCategory === 'all' 
+                    ? (isResort ? 'ALL ROOMS & COTTAGES' : 'ALL PRODUCTS')
+                    : selectedCategory.toUpperCase()}
+                </h2>
+                <span className="text-xs text-gray-500 font-medium">
+                  {isResort ? filteredAccommodations.length : filteredProducts.length} items
+                </span>
+              </div>
+
+              <div className="p-4">
+                {isResort ? (
+                  filteredAccommodations.length === 0 ? (
+                    <div className="py-16 text-center">
+                      <Hotel className="h-16 w-16 mx-auto text-gray-300 mb-3" />
+                      <p className="text-gray-500">No rooms or cottages added yet by this resort.</p>
+                      {isOwner && (
+                        <Link
+                          to="/resort/profile"
+                          className="mt-3 inline-block px-4 py-2 bg-pink-500 text-white rounded-xl text-xs font-bold"
+                        >
+                          + Add Rooms in Room Management
+                        </Link>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
+                      {filteredAccommodations.map((accommodation: any) => (
+                        <AccommodationCard
+                          key={accommodation.id}
+                          accommodation={accommodation}
+                        />
+                      ))}
+                    </div>
+                  )
+                ) : (
+                  filteredProducts.length === 0 ? (
+                    <div className="py-16 text-center">
+                      <Package className="h-16 w-16 mx-auto text-gray-300 mb-3" />
+                      <p className="text-gray-500 font-medium mb-4">
+                        {searchQuery || selectedCategory !== 'all' 
+                          ? 'No products match your search' 
+                          : 'No products available'}
+                      </p>
+                      {isOwner && (
+                        <Link
+                          to="/enterprise/profile"
+                          className="mt-3 inline-block px-4 py-2 bg-pink-500 text-white rounded-xl text-xs font-bold"
+                        >
+                          + Add Products in Product Management
+                        </Link>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
+                      {filteredProducts.map((product: any) => (
+                        <ProductCard
+                          key={product.id}
+                          product={product}
+                          userType={userType}
+                        />
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── TAB 2: POSTS & UPDATES FEED ── */}
+        {activeProfileTab === 'posts' && (
+          <div className="space-y-4">
+            {/* Category Filter Chips */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                {[
+                  { key: 'all', label: 'All Posts' },
+                  { key: 'promotion', label: '🏷️ Promotion' },
+                  { key: 'rooms', label: '🛏️ Rooms' },
+                  { key: 'amenities', label: '🌊 Amenities' },
+                  { key: 'activities', label: '🧭 Activities' },
+                  { key: 'beach_views', label: '🌴 Beach Views' },
+                  { key: 'announcement', label: '📢 Announcement' },
+                ].map((cat) => {
+                  const count = cat.key === 'all'
+                    ? posts.length
+                    : posts.filter(p => p.type === cat.key).length;
+                  const isSelected = selectedPostCategory === cat.key;
+
+                  return (
+                    <button
+                      key={cat.key}
+                      onClick={() => setSelectedPostCategory(cat.key)}
+                      className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                        isSelected
+                          ? 'bg-pink-500 text-white shadow-xs'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      <span>{cat.label}</span>
+                      <span className={`px-1.5 py-0.2 text-[10px] rounded-full font-extrabold ${
+                        isSelected ? 'bg-white/30 text-white' : 'bg-gray-200 text-gray-700'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
                   );
                 })}
               </div>
             </div>
-          </div>
-        )}
 
-        {/* 🏷️ ACTIVE VOUCHERS / PROMO CODES */}
-        {data?.promo_codes && data.promo_codes.length > 0 && (
-          <div className="bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 rounded-2xl p-4 sm:p-5 mb-4 text-white shadow-md shadow-pink-500/10">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-xs">
-                  <Ticket className="h-4 w-4 text-white" />
+            {posts.length === 0 ? (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
+                <div className="w-16 h-16 bg-pink-50 text-pink-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <FileText className="h-8 w-8" />
                 </div>
-                <div>
-                  <h3 className="text-sm font-extrabold tracking-wide uppercase">
-                    Available Shop Vouchers & Promo Discounts
-                  </h3>
-                  <p className="text-[11px] text-white/90 font-medium">Use these exclusive promo codes at checkout for instant discounts!</p>
-                </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-1">No Posts Yet</h3>
+                <p className="text-xs text-gray-500 max-w-md mx-auto mb-5">
+                  {isOwner 
+                    ? 'You have not created any posts or updates yet. Create announcements, room highlights, or promotions from your dashboard.' 
+                    : 'This host has not published any posts or promotional updates yet.'}
+                </p>
+                {isOwner && (
+                  <Link
+                    to={isResort ? '/resort/dashboard' : '/enterprise/dashboard'}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold rounded-xl shadow-md transition-all"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Create Your First Post</span>
+                  </Link>
+                )}
               </div>
-              <span className="text-[11px] bg-white/20 backdrop-blur-xs px-2.5 py-0.5 rounded-full font-bold">
-                {data.promo_codes.length} Active {data.promo_codes.length === 1 ? 'Voucher' : 'Vouchers'}
-              </span>
-            </div>
+            ) : (
+              (() => {
+                const filteredPosts = posts.filter(post => {
+                  if (selectedPostCategory === 'all') return true;
+                  return post.type === selectedPostCategory;
+                });
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {data.promo_codes.map((promo) => {
-                const discountText = promo.type === 'percent' ? `${promo.value}% OFF` : `₱${Number(promo.value).toLocaleString()} OFF`;
-                const isCopied = copiedPromoCode === promo.code;
+                if (filteredPosts.length === 0) {
+                  return (
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 text-center">
+                      <p className="text-xs text-gray-500 font-medium">No posts in this category.</p>
+                      <button
+                        onClick={() => setSelectedPostCategory('all')}
+                        className="mt-2 text-xs font-bold text-pink-500 hover:underline"
+                      >
+                        View All Posts
+                      </button>
+                    </div>
+                  );
+                }
+
+                const postTypeLabelMap: Record<string, string> = {
+                  promotion: '🏷️ Promotion',
+                  rooms: '🛏️ Rooms',
+                  amenities: '🌊 Amenities',
+                  activities: '🧭 Activities',
+                  beach_views: '🌴 Beach Views',
+                  announcement: '📢 Announcement',
+                };
 
                 return (
-                  <div
-                    key={promo.id}
-                    className="bg-white rounded-xl p-3.5 text-gray-800 shadow-sm border border-white/50 flex items-center justify-between gap-3 relative overflow-hidden group"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="px-2 py-0.5 bg-pink-100 text-pink-700 font-extrabold text-xs rounded-md">
-                          {discountText}
-                        </span>
-                        {promo.min_amount && promo.min_amount > 0 ? (
-                          <span className="text-[10px] text-gray-500 font-medium truncate">
-                            Min. ₱{Number(promo.min_amount).toLocaleString()}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="font-mono font-bold text-sm tracking-wider text-gray-900">
-                        {promo.code}
-                      </div>
-                      {promo.description && (
-                        <p className="text-[11px] text-gray-500 truncate mt-0.5">
-                          {promo.description}
-                        </p>
-                      )}
-                    </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {filteredPosts.map((post) => {
+                      const postTypeLabel = postTypeLabelMap[post.type] || '📢 Announcement';
 
-                    <button
-                      onClick={() => handleCopyPromo(promo.code)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 flex-shrink-0 active:scale-95 ${
-                        isCopied
-                          ? 'bg-emerald-500 text-white'
-                          : 'bg-gradient-to-r from-pink-500 to-rose-500 text-white hover:opacity-90 shadow-xs'
-                      }`}
-                    >
-                      {isCopied ? (
-                        <>
-                          <Check className="h-3.5 w-3.5" />
-                          <span>Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-3.5 w-3.5" />
-                          <span>Copy Code</span>
-                        </>
-                      )}
-                    </button>
+                      const formattedDate = post.created_at
+                        ? new Date(post.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })
+                        : 'Recent';
+
+                      return (
+                        <div
+                          key={post.id}
+                          onClick={() => setViewingPost(post)}
+                          className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-lg hover:border-pink-200 transition-all flex flex-col justify-between cursor-pointer group"
+                        >
+                          {/* Post Header */}
+                          <div className="p-4 border-b border-gray-50 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={getImageUrl(shopLogo || '')}
+                                alt={shopName}
+                                className="w-10 h-10 rounded-full object-cover border border-gray-100"
+                                onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                              />
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <h4 className="text-xs font-bold text-gray-900 leading-tight group-hover:text-pink-600 transition-colors">{shopName}</h4>
+                                  <CheckCircle className="h-3 w-3 text-emerald-500 flex-shrink-0" />
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] text-gray-400 font-medium mt-0.5">
+                                  <Clock className="h-3 w-3 text-gray-400" />
+                                  <span>{formattedDate}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <span className="px-2.5 py-1 bg-pink-50 text-pink-600 text-[10px] font-extrabold rounded-full">
+                              {postTypeLabel}
+                            </span>
+                          </div>
+
+                          {/* Post Content */}
+                          <div className="p-4 space-y-3 flex-1">
+                            <p className="text-xs sm:text-sm text-gray-800 whitespace-pre-line leading-relaxed line-clamp-4">
+                              {post.content}
+                            </p>
+
+                            {/* Optional Product / Price Badge */}
+                            {post.price && (
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold border border-emerald-100">
+                                <span>Price: {post.price}</span>
+                              </div>
+                            )}
+
+                            {/* Post Image */}
+                            {post.image && (
+                              <div className="rounded-xl overflow-hidden bg-gray-100 border border-gray-100 max-h-72">
+                                <img
+                                  src={getImageUrl(post.image)}
+                                  alt="Post"
+                                  className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
+                                  onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                                />
+                              </div>
+                            )}
+
+                            {/* Tags */}
+                            {Array.isArray(post.tags) && post.tags.length > 0 && (
+                              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                                {post.tags.map((tag: string, tidx: number) => (
+                                  <span
+                                    key={tidx}
+                                    className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-semibold rounded-md"
+                                  >
+                                    #{tag.replace(/^#/, '')}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Post Footer Actions */}
+                          <div
+                            className="px-4 py-3 bg-gray-50/60 border-t border-gray-100 flex items-center justify-between text-xs text-gray-600"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => handleLikePost(post.id)}
+                                className="flex items-center gap-1 hover:text-pink-600 active:scale-95 transition-all font-semibold cursor-pointer"
+                              >
+                                <Heart className="h-4 w-4 text-pink-500 fill-pink-50" />
+                                <span>{post.likes || 0} Likes</span>
+                              </button>
+
+                              <button
+                                onClick={() => handleSavePost(post.id)}
+                                className="flex items-center gap-1 hover:text-purple-600 active:scale-95 transition-all font-semibold cursor-pointer"
+                              >
+                                <Bookmark className="h-4 w-4 text-purple-500 fill-purple-50" />
+                                <span>{post.saves || 0} Saves</span>
+                              </button>
+                            </div>
+
+                            <button
+                              onClick={() => setViewingPost(post)}
+                              className="text-[11px] text-pink-500 font-bold hover:underline cursor-pointer flex items-center gap-0.5"
+                            >
+                              <span>View Full Post</span>
+                              <span>→</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* 🔍 SEARCH BAR */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3 mb-4">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder={isResort ? "Search rooms in this resort..." : "Search products in this shop..."}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-11 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-sm bg-gray-50 outline-none"
-            />
-          </div>
-        </div>
-
-        {/* 📦 PRODUCTS / ROOMS GRID */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="border-b border-gray-100 px-5 py-4 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-gray-800 tracking-widest">
-              {selectedCategory === 'all' 
-                ? (isResort ? 'ALL ROOMS & COTTAGES' : 'ALL PRODUCTS')
-                : selectedCategory.toUpperCase()}
-            </h2>
-            <span className="text-xs text-gray-500 font-medium">
-              {isResort ? filteredAccommodations.length : filteredProducts.length} items
-            </span>
-          </div>
-
-          <div className="p-4">
-            {isResort ? (
-              filteredAccommodations.length === 0 ? (
-                <div className="py-16 text-center">
-                  <Hotel className="h-16 w-16 mx-auto text-gray-300 mb-3" />
-                  <p className="text-gray-500">No rooms or cottages added yet by this resort.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
-                  {filteredAccommodations.map((accommodation: any) => (
-                    <AccommodationCard
-                      key={accommodation.id}
-                      accommodation={accommodation}
-                    />
-                  ))}
-                </div>
-              )
-            ) : (
-              filteredProducts.length === 0 ? (
-                <div className="py-16 text-center">
-                  <Package className="h-16 w-16 mx-auto text-gray-300 mb-3" />
-                  <p className="text-gray-500 font-medium mb-4">
-                    {searchQuery || selectedCategory !== 'all' 
-                      ? 'No products match your search' 
-                      : 'No products available'}
-                  </p>
-                  {(searchQuery || selectedCategory !== 'all') && (
-                    <button
-                      onClick={() => {
-                        setSearchQuery('');
-                        setSelectedCategory('all');
-                      }}
-                      className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors text-sm"
-                    >
-                      Clear Filters
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
-                  {filteredProducts.map((product: any) => (
-                    <ProductCard
-                      key={product.id}
-                      product={product}
-                      userType={userType}
-                    />
-                  ))}
-                </div>
-              )
+              })()
             )}
           </div>
-        </div>
+        )}
 
         {/* 📍 SHOP LOCATION & CONTACT INFO SECTION */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
@@ -1213,6 +1523,132 @@ export function BusinessProfile() {
           </div>
         </div>
       </div>
+
+      {/* ── MODAL: VIEW FULL POST DETAIL ── */}
+      {viewingPost && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
+          onClick={() => setViewingPost(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/80">
+              <div className="flex items-center gap-3">
+                <img
+                  src={getImageUrl(shopLogo || '')}
+                  alt={shopName}
+                  className="w-11 h-11 rounded-full object-cover border border-gray-200"
+                  onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                />
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h4 className="text-sm font-extrabold text-gray-900 leading-tight">{shopName}</h4>
+                    <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-gray-400 font-medium mt-0.5">
+                    <Clock className="h-3.5 w-3.5" />
+                    <span>
+                      {viewingPost.created_at
+                        ? new Date(viewingPost.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                        : 'Recent'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 bg-pink-50 text-pink-600 text-xs font-bold rounded-full">
+                  {{
+                    promotion: '🏷️ Promotion',
+                    rooms: '🛏️ Rooms',
+                    amenities: '🌊 Amenities',
+                    activities: '🧭 Activities',
+                    beach_views: '🌴 Beach Views',
+                    announcement: '📢 Announcement',
+                  }[viewingPost.type as string] || '📢 Announcement'}
+                </span>
+                <button
+                  onClick={() => setViewingPost(null)}
+                  className="w-8 h-8 rounded-full bg-white hover:bg-gray-100 text-gray-500 flex items-center justify-center transition-colors shadow-2xs cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
+              <p className="text-sm text-gray-800 whitespace-pre-line leading-relaxed">
+                {viewingPost.content}
+              </p>
+
+              {viewingPost.price && (
+                <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-extrabold border border-emerald-200">
+                  <span>Price / Rate: {viewingPost.price}</span>
+                </div>
+              )}
+
+              {viewingPost.image && (
+                <div className="rounded-2xl overflow-hidden bg-gray-100 border border-gray-100">
+                  <img
+                    src={getImageUrl(viewingPost.image)}
+                    alt="Post Full View"
+                    className="w-full h-auto max-h-[380px] object-cover"
+                    onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                  />
+                </div>
+              )}
+
+              {Array.isArray(viewingPost.tags) && viewingPost.tags.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap pt-2">
+                  {viewingPost.tags.map((t: string, idx: number) => (
+                    <span key={idx} className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs font-semibold rounded-lg">
+                      #{t.replace(/^#/, '')}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-gray-50/80 border-t border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => handleLikePost(viewingPost.id)}
+                  className="flex items-center gap-1.5 text-xs font-bold text-pink-600 hover:text-pink-700 active:scale-95 transition-all cursor-pointer"
+                >
+                  <Heart className="h-4 w-4 fill-pink-500 text-pink-500" />
+                  <span>{viewingPost.likes || 0} Likes</span>
+                </button>
+
+                <button
+                  onClick={() => handleSavePost(viewingPost.id)}
+                  className="flex items-center gap-1.5 text-xs font-bold text-purple-600 hover:text-purple-700 active:scale-95 transition-all cursor-pointer"
+                >
+                  <Bookmark className="h-4 w-4 fill-purple-500 text-purple-500" />
+                  <span>{viewingPost.saves || 0} Saves</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setViewingPost(null);
+                    handleChat();
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-pink-500 to-rose-500 hover:opacity-90 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  <span>Inquire / Message Host</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── MODAL: EDIT SHOP / RESORT PROFILE ── */}
       {isEditModalOpen && (
