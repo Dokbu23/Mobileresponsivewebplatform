@@ -230,13 +230,13 @@ export function Accommodations() {
     if (e) e.stopPropagation();
     if (!currentUser && !getAuthToken()) {
       toast.info('Please log in or register to view resort profile');
-      navigate('/tourist/login');
+      navigate('/login');
       return;
     }
     if (userId) {
       navigate(`/business/resort/${userId}`);
     } else {
-      setSelectedResortFilter(resortName);
+      toast.info(`Resort profile for "${resortName}" is not yet available or registered.`);
     }
   };
 
@@ -513,9 +513,18 @@ export function Accommodations() {
                 </div>
                 <button
                   onClick={() => {
-                    const hostId = selectedAcc.user_id || selectedAcc.id;
+                    const hostId = selectedAcc.user_id;
+                    if (!hostId) {
+                      toast.info(`Resort profile for "${selectedAcc.resort_name || selectedAcc.name}" is not yet available or registered.`);
+                      return;
+                    }
+                    if (!currentUser && !getAuthToken()) {
+                      toast.info('Please log in or register to view resort profile');
+                      navigate('/login');
+                      return;
+                    }
                     setSelectedAcc(null);
-                    if (hostId) navigate(`/business/resort/${hostId}`);
+                    navigate(`/business/resort/${hostId}`);
                   }}
                   className="px-3.5 py-1.5 bg-white hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-full text-xs font-bold transition-all flex items-center gap-1 shadow-2xs flex-shrink-0"
                 >

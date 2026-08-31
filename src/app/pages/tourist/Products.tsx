@@ -47,19 +47,22 @@ export function Products() {
     if (e) e.stopPropagation();
     if (!currentUser && !getAuthToken()) {
       toast.info('Please log in or register to view store profile');
-      navigate('/tourist/login');
+      navigate('/login');
+      return;
+    }
+    if (!userId) {
+      toast.info(`Shop profile for "${sellerName || 'this shop'}" is not yet registered on the platform.`);
       return;
     }
     if (selectedProduct) setSelectedProduct(null);
 
-    const targetParam = userId ? String(userId) : encodeURIComponent(sellerName || 'Store');
-    navigate(`/business/enterprise/${targetParam}`);
+    navigate(`/business/enterprise/${userId}`);
   };
 
   const handleProductCardClick = (product: ProductItem) => {
     if (!currentUser && !getAuthToken()) {
       toast.info('Please log in or register to view product details');
-      navigate('/tourist/login');
+      navigate('/login');
       return;
     }
     setSelectedProduct(product);

@@ -263,32 +263,32 @@ const mockStoresList: Record<string, {
   }
 };
 
-function createFallbackBusinessProfile(rawId: string): BusinessProfileData {
-  const decoded = decodeURIComponent(rawId).toLowerCase();
+function createFallbackBusinessProfile(rawId: string): BusinessProfileData | null {
+  const decoded = decodeURIComponent(rawId).toLowerCase().trim();
 
-  let storeKey = 'wati';
-  if (decoded.includes('pasalubong') || decoded.includes('delicacies')) storeKey = 'pasalubong';
-  else if (decoded.includes('honey')) storeKey = 'honey';
-  else if (decoded.includes('eco') || decoded.includes('bamboo')) storeKey = 'eco';
-  else if (decoded.includes('fish') || decoded.includes('coastal') || decoded.includes('tinapa')) storeKey = 'fish';
-  else if (decoded.includes('wati') || decoded.includes('basket') || decoded.includes('mangyan')) storeKey = 'wati';
+  let storeKey: string | null = null;
+  if (decoded === 'pasalubong' || decoded === 'delicacies' || decoded === 'community pasalubong') storeKey = 'pasalubong';
+  else if (decoded === 'honey' || decoded === 'wild honey') storeKey = 'honey';
+  else if (decoded === 'eco' || decoded === 'bamboo' || decoded === 'eco crafters') storeKey = 'eco';
+  else if (decoded === 'fish' || decoded === 'tinapa' || decoded === 'coastal fishermen') storeKey = 'fish';
+  else if (decoded === 'wati' || decoded === 'awati' || decoded === 'mangyan artisans') storeKey = 'wati';
 
-  const mock = mockStoresList[storeKey] || mockStoresList.wati;
-  const storeName = decodeURIComponent(rawId).length > 3 && !rawId.startsWith('prod-') && !/^\d+$/.test(rawId)
-    ? decodeURIComponent(rawId)
-    : mock.name;
+  if (!storeKey || !mockStoresList[storeKey]) {
+    return null;
+  }
 
+  const mock = mockStoresList[storeKey];
   return {
     is_registered: true,
     owner: {
       id: 999,
-      name: storeName,
+      name: mock.name,
       email: mock.email,
       phone: mock.phone,
       address: `${mock.barangay}, Mansalay, Oriental Mindoro`,
       barangay: mock.barangay,
       description: mock.description,
-      store_name: storeName,
+      store_name: mock.name,
       store_description: mock.description,
       store_logo: mock.logo,
       store_banner: mock.banner,
@@ -346,7 +346,11 @@ export function BusinessProfile() {
     if (!type) return;
 
     const targetUserId = userId || (currentUser?.id ? String(currentUser.id) : null);
-    if (!targetUserId) return;
+    if (!targetUserId) {
+      setLoading(false);
+      setError(type === 'resort' ? 'Resort profile is not available.' : 'Shop is not available.');
+      return;
+    }
 
     (async () => {
       try {
@@ -359,17 +363,21 @@ export function BusinessProfile() {
           setData(result);
           setError(null);
         } else {
-          if (type === 'resort') {
-            setData(createFallbackBusinessProfile(targetUserId));
+          const fallback = createFallbackBusinessProfile(targetUserId);
+          if (fallback) {
+            setData(fallback);
+            setError(null);
           } else {
-            setError('Shop not found.');
+            setError(type === 'resort' ? 'Resort profile is not available or not yet registered.' : 'Shop is not available or not yet registered.');
           }
         }
       } catch {
-        if (type === 'resort') {
-          setData(createFallbackBusinessProfile(targetUserId));
+        const fallback = createFallbackBusinessProfile(targetUserId);
+        if (fallback) {
+          setData(fallback);
+          setError(null);
         } else {
-          setError('Shop not found or not yet approved.');
+          setError(type === 'resort' ? 'Resort profile is not available or not yet registered.' : 'Shop is not available or not yet registered.');
         }
       } finally {
         setLoading(false);
@@ -392,18 +400,33 @@ export function BusinessProfile() {
   }
 
   if (error || !data) {
+    const isResort = type === 'resort';
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="text-center">
-          <Store className="h-16 w-16 mx-auto text-gray-300 mb-4" />
-          <h2 className="text-2xl font-bold mb-2 text-gray-900">Shop Not Found</h2>
-          <p className="text-gray-600 mb-6">{error}</p>
-          <button
-            onClick={() => navigate(-1)}
-            className="px-6 py-2.5 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors font-medium"
-          >
-            Go Back
-          </button>
+      <div className="min-h-screen bg-gray-50/80 flex items-center justify-center px-4 py-12">
+        <div className="max-w-md w-full text-center bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+          <div className="w-20 h-20 rounded-full bg-pink-50 flex items-center justify-center mx-auto mb-5 text-pink-500 shadow-xs">
+            {isResort ? <Hotel className="h-10 w-10 text-pink-500" /> : <Store className="h-10 w-10 text-pink-500" />}
+          </div>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-2">
+            {isResort ? 'Resort Profile Not Available' : 'Shop Not Available'}
+          </h2>
+          <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+            {error || (isResort ? 'This resort does not have an active registered profile yet.' : 'This shop does not have an active registered profile yet.')}
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={() => navigate(isResort ? '/accommodations' : '/products')}
+              className="w-full sm:w-auto px-6 py-2.5 bg-pink-500 hover:bg-pink-600 active:scale-95 text-white rounded-full text-xs sm:text-sm font-bold shadow-md shadow-pink-500/25 transition-all"
+            >
+              {isResort ? 'Explore Stays & Resorts' : 'Explore All Products'}
+            </button>
+            <button
+              onClick={() => navigate(-1)}
+              className="w-full sm:w-auto px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-xs sm:text-sm font-semibold transition-colors"
+            >
+              Go Back
+            </button>
+          </div>
         </div>
       </div>
     );
