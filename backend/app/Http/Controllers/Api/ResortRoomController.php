@@ -48,15 +48,38 @@ class ResortRoomController extends Controller
             'price_per_night'=> 'required|numeric|min:1',
             'capacity'       => 'nullable|integer|min:1',
             'description'    => 'nullable|string',
-            'image'          => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'image'          => 'nullable',
+            'images.*'       => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
             'is_available'   => 'nullable|boolean',
         ]);
+
+        $imagePaths = [];
+
+        if ($request->hasFile('images')) {
+            foreach ((array) $request->file('images') as $file) {
+                if ($file) {
+                    $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                    $path = $file->storeAs('resort-rooms', $filename, 'public');
+                    $imagePaths[] = '/storage/' . $path;
+                }
+            }
+        }
 
         if ($request->hasFile('image')) {
             $image = $request->file('image');
             $filename = time() . '_' . uniqid() . '.' . $image->getClientOriginalExtension();
             $path = $image->storeAs('resort-rooms', $filename, 'public');
-            $data['image'] = '/storage/' . $path;
+            $singlePath = '/storage/' . $path;
+            if (!in_array($singlePath, $imagePaths)) {
+                array_unshift($imagePaths, $singlePath);
+            }
+            $data['image'] = $singlePath;
+        } elseif (!empty($imagePaths)) {
+            $data['image'] = $imagePaths[0];
+        }
+
+        if (!empty($imagePaths)) {
+            $data['images'] = $imagePaths;
         }
 
         $data['user_id'] = $user->id;
@@ -81,24 +104,54 @@ class ResortRoomController extends Controller
             'price_per_night'=> 'required|numeric|min:1',
             'capacity'       => 'nullable|integer|min:1',
             'description'    => 'nullable|string',
-            'image'          => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'image'          => 'nullable',
+            'images.*'       => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
             'is_available'   => 'nullable|boolean',
         ]);
 
-        if ($request->hasFile('image')) {
-            // Delete old image
-            if ($room->image) {
-                $oldPath = str_replace('/storage/', '', $room->image);
-                if (Storage::disk('public')->exists($oldPath)) {
-                    Storage::disk('public')->delete($oldPath);
+        $imagePaths = [];
+
+        // Check if existing_images passed
+        if ($request->has('existing_images')) {
+            $existing = $request->input('existing_images');
+            if (is_string($existing)) {
+                try {
+                    $parsed = json_decode($existing, true);
+                    if (is_array($parsed)) $imagePaths = $parsed;
+                    else $imagePaths = [$existing];
+                } catch (\Throwable $e) {
+                    $imagePaths = [$existing];
+                }
+            } elseif (is_array($existing)) {
+                $imagePaths = $existing;
+            }
+        }
+
+        if ($request->hasFile('images')) {
+            foreach ((array) $request->file('images') as $file) {
+                if ($file) {
+                    $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                    $path = $file->storeAs('resort-rooms', $filename, 'public');
+                    $imagePaths[] = '/storage/' . $path;
                 }
             }
+        }
+
+        if ($request->hasFile('image')) {
             $image = $request->file('image');
             $filename = time() . '_' . uniqid() . '.' . $image->getClientOriginalExtension();
             $path = $image->storeAs('resort-rooms', $filename, 'public');
-            $data['image'] = '/storage/' . $path;
-        } else {
-            unset($data['image']);
+            $singlePath = '/storage/' . $path;
+            if (!in_array($singlePath, $imagePaths)) {
+                array_unshift($imagePaths, $singlePath);
+            }
+            $data['image'] = $singlePath;
+        } elseif (!empty($imagePaths)) {
+            $data['image'] = $imagePaths[0];
+        }
+
+        if (!empty($imagePaths)) {
+            $data['images'] = $imagePaths;
         }
 
         $room->update($data);

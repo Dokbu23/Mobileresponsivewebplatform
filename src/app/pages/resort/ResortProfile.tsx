@@ -94,8 +94,9 @@ export function ResortProfile() {
     description: '',
     is_available: true,
   });
-  const [roomImageFile, setRoomImageFile] = useState<File | null>(null);
-  const [roomImagePreview, setRoomImagePreview] = useState<string | null>(null);
+  const [roomImageFiles, setRoomImageFiles] = useState<File[]>([]);
+  const [roomImagePreviews, setRoomImagePreviews] = useState<string[]>([]);
+  const [existingRoomImages, setExistingRoomImages] = useState<string[]>([]);
 
   const fetchRooms = async () => {
     try {
@@ -108,8 +109,9 @@ export function ResortProfile() {
 
   const resetRoomForm = () => {
     setRoomForm({ name: '', type: '', price_per_night: '', capacity: '2', description: '', is_available: true });
-    setRoomImageFile(null);
-    setRoomImagePreview(null);
+    setRoomImageFiles([]);
+    setRoomImagePreviews([]);
+    setExistingRoomImages([]);
     setEditingRoomId(null);
     setShowRoomForm(false);
   };
@@ -128,7 +130,17 @@ export function ResortProfile() {
       formData.append('capacity', roomForm.capacity || '2');
       if (roomForm.description.trim()) formData.append('description', roomForm.description.trim());
       formData.append('is_available', roomForm.is_available ? '1' : '0');
-      if (roomImageFile) formData.append('image', roomImageFile);
+
+      // Append multiple images
+      roomImageFiles.forEach((file) => {
+        formData.append('images[]', file);
+      });
+      if (roomImageFiles.length > 0) {
+        formData.append('image', roomImageFiles[0]);
+      }
+      if (existingRoomImages.length > 0) {
+        formData.append('existing_images', JSON.stringify(existingRoomImages));
+      }
 
       if (editingRoomId) {
         formData.append('_method', 'PUT');
@@ -157,11 +169,16 @@ export function ResortProfile() {
       description: room.description || '',
       is_available: room.is_available !== false,
     });
-    const imgUrl = room.image
-      ? (String(room.image).startsWith('http') ? room.image : `${API_BASE}${room.image}`)
-      : null;
-    setRoomImagePreview(imgUrl);
-    setRoomImageFile(null);
+    
+    let existingImgs: string[] = [];
+    if (Array.isArray(room.images) && room.images.length > 0) {
+      existingImgs = room.images.map((img: string) => String(img).startsWith('http') ? img : `${API_BASE}${img}`);
+    } else if (room.image) {
+      existingImgs = [String(room.image).startsWith('http') ? room.image : `${API_BASE}${room.image}`];
+    }
+    setExistingRoomImages(existingImgs);
+    setRoomImageFiles([]);
+    setRoomImagePreviews([]);
     setShowRoomForm(true);
   };
 
@@ -172,6 +189,25 @@ export function ResortProfile() {
       await fetchRooms();
     } catch {
       toast.error('Failed to delete room');
+    }
+  };
+
+  const handleToggleRoomAvailability = async (room: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const newStatus = !room.is_available;
+      const formData = new FormData();
+      formData.append('name', room.name);
+      formData.append('price_per_night', String(room.price_per_night));
+      formData.append('capacity', String(room.capacity || 2));
+      formData.append('is_available', newStatus ? '1' : '0');
+      formData.append('_method', 'PUT');
+
+      await postJSON(`/resort-rooms/${room.id}`, formData, true);
+      setRooms(prev => prev.map(r => r.id === room.id ? { ...r, is_available: newStatus } : r));
+      toast.success(`Room "${room.name}" marked as ${newStatus ? 'Active & Available' : 'Inactive / Hidden'}`);
+    } catch {
+      toast.error('Failed to update room availability');
     }
   };
 
@@ -303,12 +339,7 @@ export function ResortProfile() {
     })();
   }, []);
 
-  const stats = [
-    { icon: Calendar, label: 'Total Bookings', value: bookings.length.toString(), color: 'bg-blue-50', iconColor: 'text-blue-600' },
-    { icon: DollarSign, label: 'Revenue (Live)', value: `₱${bookings.reduce((sum, booking) => sum + Number(booking.total || 0), 0).toLocaleString()}`, color: 'bg-green-50', iconColor: 'text-green-600' },
-    { icon: Users, label: 'Stays Listed', value: resortProfile?.resort_is_setup ? '1' : '0', color: 'bg-purple-50', iconColor: 'text-purple-600' },
-    { icon: TrendingUp, label: 'Occupancy Rate', value: `${resortProfile?.resort_is_setup ? Math.round((bookings.length / 1) * 100) : 0}%`, color: 'bg-pink-50', iconColor: 'text-pink-600' },
-  ];
+
 
   const bookingSummary = useMemo(() => {
     const summary = new Map<string, number>();
@@ -604,42 +635,31 @@ export function ResortProfile() {
         )}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <div
-              key={stat.label}
-              className="bg-white border-2 border-primary/20 rounded-lg p-6"
-            >
-              <div className={`${stat.color} p-3 rounded-lg w-fit mb-4`}>
-                <Icon className={`h-6 w-6 ${stat.iconColor}`} />
-              </div>
-              <p className="text-sm text-muted-foreground mb-1">{stat.label}</p>
-              <p className="text-2xl text-primary">{stat.value}</p>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Room Management */}
-      <div className="bg-white border-2 border-primary/20 rounded-2xl overflow-hidden mb-8">
+      {/* Room Management Header & Controls */}
+      <div className="bg-white border-2 border-primary/20 rounded-2xl overflow-hidden mb-8 shadow-sm">
         {/* Section Header */}
-        <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 py-5 flex items-center justify-between border-b border-primary/10">
+        <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 py-5 flex flex-wrap items-center justify-between gap-4 border-b border-primary/10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center">
-              <Hotel className="h-5 w-5 text-primary" />
+            <div className="w-11 h-11 bg-primary/20 rounded-2xl flex items-center justify-center">
+              <Hotel className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h2 className="text-lg font-bold">Room Management</h2>
-              <p className="text-xs text-muted-foreground">Tourists pick a room when booking your resort</p>
+              <h2 className="text-xl font-extrabold text-gray-900">Room Management</h2>
+              <p className="text-xs text-muted-foreground">Manage your resort rooms, prices, capacity, and active availability</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs bg-primary/10 text-primary px-3 py-1 rounded-full font-medium">
-              {rooms.length} room{rooms.length !== 1 ? 's' : ''}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs bg-gray-100 text-gray-700 px-3 py-1.5 rounded-full font-bold">
+              Total: {rooms.length}
             </span>
+            <span className="text-xs bg-green-100 text-green-700 px-3 py-1.5 rounded-full font-bold">
+              ✓ Active: {rooms.filter(r => r.is_available).length}
+            </span>
+            {rooms.filter(r => !r.is_available).length > 0 && (
+              <span className="text-xs bg-red-100 text-red-700 px-3 py-1.5 rounded-full font-bold">
+                ✗ Inactive: {rooms.filter(r => !r.is_available).length}
+              </span>
+            )}
             <button
               onClick={() => {
                 if (showRoomForm && !editingRoomId) {
@@ -649,7 +669,7 @@ export function ResortProfile() {
                   setShowRoomForm(true);
                 }
               }}
-              className="px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors inline-flex items-center gap-2 text-sm font-medium shadow-sm"
+              className="px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors inline-flex items-center gap-1.5 text-xs font-bold shadow-sm"
             >
               <Plus className="h-4 w-4" />
               Add Room
@@ -735,36 +755,87 @@ export function ResortProfile() {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Room Photo</label>
-                  {!roomImagePreview ? (
-                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-primary/30 rounded-xl cursor-pointer hover:border-primary hover:bg-primary/5 transition-all bg-white">
-                      <Upload className="h-8 w-8 text-primary/40 mb-2" />
-                      <span className="text-sm text-muted-foreground">Click to upload room photo</span>
-                      <span className="text-xs text-muted-foreground">PNG, JPG up to 5MB</span>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Room Photos (Multiple Photos Allowed)
+                    </label>
+                    <span className="text-xs text-muted-foreground font-medium">
+                      {existingRoomImages.length + roomImagePreviews.length} photos selected
+                    </span>
+                  </div>
+
+                  {/* Thumbnail Grid for Existing & New Previews */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-3">
+                    {/* Existing Uploaded Images */}
+                    {existingRoomImages.map((imgUrl, idx) => (
+                      <div key={`existing-${idx}`} className="relative group rounded-xl overflow-hidden border-2 border-primary/20 bg-gray-100 aspect-video">
+                        <img src={imgUrl} alt={`Existing room ${idx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setExistingRoomImages(prev => prev.filter((_, i) => i !== idx))}
+                          className="absolute top-1.5 right-1.5 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-transform hover:scale-110"
+                          title="Remove photo"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                        <span className="absolute bottom-1 left-1.5 px-1.5 py-0.5 bg-black/60 text-white text-[10px] rounded font-bold">Saved</span>
+                      </div>
+                    ))}
+
+                    {/* New Upload Previews */}
+                    {roomImagePreviews.map((previewUrl, idx) => (
+                      <div key={`new-${idx}`} className="relative group rounded-xl overflow-hidden border-2 border-primary/40 bg-gray-100 aspect-video ring-2 ring-primary/20">
+                        <img src={previewUrl} alt={`New upload ${idx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRoomImageFiles(prev => prev.filter((_, i) => i !== idx));
+                            setRoomImagePreviews(prev => prev.filter((_, i) => i !== idx));
+                          }}
+                          className="absolute top-1.5 right-1.5 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-transform hover:scale-110"
+                          title="Remove photo"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                        <span className="absolute bottom-1 left-1.5 px-1.5 py-0.5 bg-primary text-white text-[10px] rounded font-bold">New</span>
+                      </div>
+                    ))}
+
+                    {/* Add More Photos Box */}
+                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-primary/30 rounded-xl cursor-pointer hover:border-primary hover:bg-primary/5 transition-all bg-white aspect-video min-h-[90px] p-2 text-center">
+                      <Upload className="h-6 w-6 text-primary/60 mb-1" />
+                      <span className="text-xs font-semibold text-primary">
+                        {existingRoomImages.length + roomImagePreviews.length > 0 ? '+ Add More Photos' : 'Upload Photos'}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">Select multiple (PNG/JPG)</span>
                       <input
                         type="file"
                         accept="image/*"
+                        multiple
                         onChange={e => {
-                          const f = e.target.files?.[0] ?? null;
-                          if (f && f.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return; }
-                          setRoomImageFile(f);
-                          setRoomImagePreview(f ? URL.createObjectURL(f) : null);
+                          const files = Array.from(e.target.files ?? []);
+                          if (files.length === 0) return;
+                          
+                          const validFiles: File[] = [];
+                          const validPreviews: string[] = [];
+
+                          files.forEach(f => {
+                            if (f.size > 5 * 1024 * 1024) {
+                              toast.error(`"${f.name}" is over 5MB`);
+                            } else {
+                              validFiles.push(f);
+                              validPreviews.push(URL.createObjectURL(f));
+                            }
+                          });
+
+                          setRoomImageFiles(prev => [...prev, ...validFiles]);
+                          setRoomImagePreviews(prev => [...prev, ...validPreviews]);
+                          e.target.value = '';
                         }}
                         className="hidden"
                       />
                     </label>
-                  ) : (
-                    <div className="relative w-full max-w-sm">
-                      <img src={roomImagePreview} alt="Room preview" className="w-full h-40 object-cover rounded-xl border-2 border-primary/20 shadow-sm" />
-                      <button
-                        type="button"
-                        onClick={() => { setRoomImageFile(null); setRoomImagePreview(null); }}
-                        className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-md"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )}
+                  </div>
                 </div>
                 <div className="md:col-span-2">
                   <label className="flex items-center gap-3 cursor-pointer group">
@@ -825,53 +896,83 @@ export function ResortProfile() {
                 const imgUrl = room.image
                   ? (String(room.image).startsWith('http') ? room.image : `${API_BASE}${room.image}`)
                   : null;
+                const roomImagesCount = Array.isArray(room.images) ? room.images.length : (room.image ? 1 : 0);
+
                 return (
-                  <div key={room.id} className="group border-2 border-primary/10 rounded-2xl overflow-hidden hover:border-primary hover:shadow-md transition-all">
+                  <div key={room.id} className={`group border-2 rounded-2xl overflow-hidden hover:shadow-md transition-all ${room.is_available ? 'border-primary/20 bg-white' : 'border-gray-300 bg-gray-50/70 opacity-90'}`}>
                     {/* Room Image */}
                     <div className="relative">
                       {imgUrl ? (
-                        <img src={imgUrl} alt={room.name} className="w-full h-40 object-cover" />
+                        <img src={imgUrl} alt={room.name} className="w-full h-44 object-cover" />
                       ) : (
-                        <div className="w-full h-40 bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+                        <div className="w-full h-44 bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
                           <Hotel className="h-12 w-12 text-primary/20" />
                         </div>
                       )}
-                      {/* Availability badge */}
-                      <span className={`absolute top-3 right-3 text-xs px-2.5 py-1 rounded-full font-semibold shadow-sm ${room.is_available ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
-                        {room.is_available ? '✓ Available' : '✗ Unavailable'}
+                      {/* Availability status badge */}
+                      <span className={`absolute top-3 right-3 text-xs px-2.5 py-1 rounded-full font-bold shadow-md ${room.is_available ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
+                        {room.is_available ? '✓ Active & Available' : '✗ Inactive (Hidden)'}
                       </span>
                       {/* Type badge */}
                       {room.type && (
-                        <span className="absolute top-3 left-3 text-xs bg-black/50 text-white px-2.5 py-1 rounded-full backdrop-blur-sm">
+                        <span className="absolute top-3 left-3 text-xs bg-black/60 text-white px-2.5 py-1 rounded-full backdrop-blur-sm font-medium">
                           {room.type}
+                        </span>
+                      )}
+                      {/* Photos Count Badge */}
+                      {roomImagesCount > 1 && (
+                        <span className="absolute bottom-3 right-3 text-[11px] bg-black/70 text-white px-2 py-0.5 rounded-lg backdrop-blur-sm font-semibold flex items-center gap-1">
+                          📷 {roomImagesCount} photos
                         </span>
                       )}
                     </div>
 
                     {/* Room Info */}
                     <div className="p-4">
-                      <h4 className="font-bold text-base mb-1">{room.name}</h4>
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <h4 className="font-bold text-base text-gray-900 leading-snug">{room.name}</h4>
+                      </div>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-primary font-bold text-lg">₱{Number(room.price_per_night).toLocaleString()}<span className="text-xs font-normal text-muted-foreground">/night</span></span>
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <span className="text-primary font-bold text-lg">
+                          ₱{Number(room.price_per_night).toLocaleString()}
+                          <span className="text-xs font-normal text-muted-foreground">/night</span>
+                        </span>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1 font-medium bg-gray-100 px-2 py-1 rounded-md">
                           <Users className="h-3.5 w-3.5" />
-                          Up to {room.capacity}
+                          Capacity: {room.capacity}
                         </span>
                       </div>
                       {room.description && (
                         <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{room.description}</p>
                       )}
-                      <div className="flex gap-2 pt-3 border-t border-primary/10">
+
+                      {/* Quick Status Toggle */}
+                      <div className="mb-3 pt-2 border-t border-gray-100">
+                        <button
+                          type="button"
+                          onClick={(e) => handleToggleRoomAvailability(room, e)}
+                          className={`w-full py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border ${
+                            room.is_available
+                              ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                              : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                          }`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${room.is_available ? 'bg-green-500' : 'bg-red-500'}`} />
+                          {room.is_available ? 'Status: Active (Click to Deactivate)' : 'Status: Inactive (Click to Activate)'}
+                        </button>
+                      </div>
+
+                      <div className="flex gap-2 pt-2 border-t border-primary/10">
                         <button
                           onClick={() => handleEditRoom(room)}
-                          className="flex-1 px-3 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-white transition-colors text-xs font-semibold inline-flex items-center justify-center gap-1"
+                          className="flex-1 px-3 py-2 bg-primary/10 text-primary rounded-xl hover:bg-primary hover:text-white transition-colors text-xs font-bold inline-flex items-center justify-center gap-1"
                         >
                           <Edit className="h-3.5 w-3.5" />
-                          Edit
+                          Edit Room
                         </button>
                         <button
                           onClick={() => handleDeleteRoom(room.id)}
-                          className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-500 hover:text-white transition-colors text-xs font-semibold inline-flex items-center justify-center gap-1"
+                          className="px-3 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-500 hover:text-white transition-colors text-xs font-bold inline-flex items-center justify-center gap-1"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                           Delete

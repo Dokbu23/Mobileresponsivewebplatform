@@ -47,11 +47,71 @@ class AccommodationController extends Controller
                 return $item;
             });
 
-            // Resort profiles query (only approved & paid resorts)
+            // Resort rooms query (from registered resort accounts)
+            $roomsQuery = \App\Models\ResortRoom::with('owner')
+                ->where('is_available', true);
+
+            if ($search !== null && $search !== '') {
+                $roomsQuery->where(function($q) use ($search) {
+                    $q->where('name', 'LIKE', "%{$search}%")
+                      ->orWhere('description', 'LIKE', "%{$search}%")
+                      ->orWhere('type', 'LIKE', "%{$search}%");
+                });
+            }
+
+            $allRooms = $roomsQuery->orderBy('created_at', 'desc')->get();
+            $individualRooms = collect();
+            $handledResortIds = [];
+
+            foreach ($allRooms as $room) {
+                $owner = $room->owner;
+                $ownerImages = $owner && is_array($owner->resort_images) ? $owner->resort_images : [];
+                $primaryOwnerImage = count($ownerImages) > 0 ? $ownerImages[0] : '';
+                
+                $roomImages = $room->images ?? ($room->image ? [$room->image] : ($primaryOwnerImage ? [$primaryOwnerImage] : []));
+                if (is_string($roomImages)) {
+                    try {
+                        $parsed = json_decode($roomImages, true);
+                        if (is_array($parsed)) $roomImages = $parsed;
+                        else $roomImages = [$roomImages];
+                    } catch (\Throwable $e) {
+                        $roomImages = [$roomImages];
+                    }
+                }
+
+                $handledResortIds[] = $room->user_id;
+
+                $individualRooms->push([
+                    'id' => 'room-' . $room->id,
+                    'room_id' => $room->id,
+                    'name' => $room->name,
+                    'resort_name' => $owner ? ($owner->resort_name ?? $owner->name) : 'Resort Stay',
+                    'description' => $room->description ?: ($owner ? ($owner->resort_description ?? '') : ''),
+                    'price_per_night' => (float) $room->price_per_night,
+                    'price' => (float) $room->price_per_night,
+                    'image' => $room->image ?: ($primaryOwnerImage ?: (is_array($roomImages) && count($roomImages) > 0 ? $roomImages[0] : '')),
+                    'images' => is_array($roomImages) && count($roomImages) > 0 ? $roomImages : ($room->image ? [$room->image] : $ownerImages),
+                    'resort_amenities' => $owner ? ($owner->resort_amenities ?? []) : [],
+                    'user_id' => $room->user_id,
+                    'is_registered' => true,
+                    'type' => $room->type ?: 'Resort Room',
+                    'category' => $room->type ?: 'Rooms & Suites',
+                    'badge' => $owner ? ($owner->resort_name ?? 'Resort Stay') : 'Resort Stay',
+                    'capacity' => $room->capacity,
+                    'is_room' => true,
+                    'barangay' => $owner ? $owner->barangay : null,
+                    'latitude' => $owner ? $owner->latitude : null,
+                    'longitude' => $owner ? $owner->longitude : null,
+                ]);
+            }
+
+            // Also check for registered resorts that haven't added individual rooms yet
             $resortQuery = \App\Models\User::where('role', 'resort')
-                ->where('resort_is_setup', true)
-                ->where('listing_status', 'approved')
-                ->whereIn('subscription_status', ['paid', 'active']);
+                ->where('resort_is_setup', true);
+
+            if (!empty($handledResortIds)) {
+                $resortQuery->whereNotIn('id', array_unique($handledResortIds));
+            }
 
             if ($search !== null && $search !== '') {
                 $resortQuery->where(function($q) use ($search) {
@@ -60,68 +120,32 @@ class AccommodationController extends Controller
                 });
             }
 
-            $resortsList = $resortQuery->get();
+            $resortsWithoutRooms = $resortQuery->get();
 
-            // Resort rooms query (only from approved & paid resorts)
-            $individualRooms = collect();
-            foreach ($resortsList as $user) {
-                $rooms = \App\Models\ResortRoom::where('user_id', $user->id)
-                    ->where('is_available', true)
-                    ->orderBy('price_per_night', 'asc')
-                    ->get();
-
-                $images = $user->resort_images ?? [];
+            foreach ($resortsWithoutRooms as $resortOwner) {
+                $images = $resortOwner->resort_images ?? [];
                 $primaryImage = is_array($images) && count($images) > 0 ? $images[0] : '';
-
-                if ($rooms->count() > 0) {
-                    foreach ($rooms as $room) {
-                        $individualRooms->push([
-                            'id' => 'room-' . $room->id,
-                            'room_id' => $room->id,
-                            'name' => $room->name,
-                            'resort_name' => $user->resort_name ?? $user->name,
-                            'description' => $room->description ?: ($user->resort_description ?? ''),
-                            'price_per_night' => (float) $room->price_per_night,
-                            'price' => (float) $room->price_per_night,
-                            'image' => $room->image ?: $primaryImage,
-                            'images' => $room->image ? [$room->image] : $images,
-                            'resort_amenities' => $user->resort_amenities ?? [],
-                            'user_id' => $user->id,
-                            'is_registered' => true,
-                            'type' => $room->type ?: 'Resort Room',
-                            'category' => $room->type ?: 'Rooms & Suites',
-                            'badge' => $user->resort_name ?? 'Resort Stay',
-                            'capacity' => $room->capacity,
-                            'is_room' => true,
-                            'barangay' => $user->barangay,
-                            'latitude' => $user->latitude,
-                            'longitude' => $user->longitude,
-                        ]);
-                    }
-                } else {
-                    // If resort has not uploaded rooms yet, show resort stay
-                    $individualRooms->push([
-                        'id' => $user->id,
-                        'name' => $user->resort_name ?? $user->name,
-                        'resort_name' => $user->resort_name ?? $user->name,
-                        'description' => $user->resort_description ?? $user->description,
-                        'price_per_night' => (float) ($user->resort_price_per_night ?: 0),
-                        'price' => (float) ($user->resort_price_per_night ?: 0),
-                        'image' => $primaryImage,
-                        'images' => $images,
-                        'resort_amenities' => $user->resort_amenities ?? [],
-                        'user_id' => $user->id,
-                        'is_registered' => true,
-                        'type' => 'Beach Resort',
-                        'category' => 'Beach Resort',
-                        'badge' => $user->resort_name ?? 'Resort Stay',
-                        'capacity' => 2,
-                        'is_room' => false,
-                        'barangay' => $user->barangay,
-                        'latitude' => $user->latitude,
-                        'longitude' => $user->longitude,
-                    ]);
-                }
+                $individualRooms->push([
+                    'id' => $resortOwner->id,
+                    'name' => $resortOwner->resort_name ?? $resortOwner->name,
+                    'resort_name' => $resortOwner->resort_name ?? $resortOwner->name,
+                    'description' => $resortOwner->resort_description ?? $resortOwner->description,
+                    'price_per_night' => (float) ($resortOwner->resort_price_per_night ?: 0),
+                    'price' => (float) ($resortOwner->resort_price_per_night ?: 0),
+                    'image' => $primaryImage,
+                    'images' => $images,
+                    'resort_amenities' => $resortOwner->resort_amenities ?? [],
+                    'user_id' => $resortOwner->id,
+                    'is_registered' => true,
+                    'type' => 'Beach Resort',
+                    'category' => 'Beach Resort',
+                    'badge' => $resortOwner->resort_name ?? 'Resort Stay',
+                    'capacity' => 2,
+                    'is_room' => false,
+                    'barangay' => $resortOwner->barangay,
+                    'latitude' => $resortOwner->latitude,
+                    'longitude' => $resortOwner->longitude,
+                ]);
             }
 
             $merged = $staticAccommodations

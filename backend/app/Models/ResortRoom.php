@@ -17,6 +17,7 @@ class ResortRoom extends Model
         'capacity',
         'description',
         'image',
+        'images',
         'is_available',
     ];
 
@@ -24,6 +25,7 @@ class ResortRoom extends Model
         'is_available' => 'boolean',
         'price_per_night' => 'float',
         'capacity' => 'integer',
+        'images' => 'array',
     ];
 
     public function owner()
