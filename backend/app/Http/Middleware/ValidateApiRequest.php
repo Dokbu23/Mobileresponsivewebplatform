@@ -60,9 +60,8 @@ class ValidateApiRequest
         
         array_walk_recursive($input, function (&$value) {
             if (is_string($value)) {
-                // Remove potentially dangerous characters
+                // Remove potentially dangerous HTML tags while keeping natural characters like &, ', "
                 $value = strip_tags($value);
-                $value = htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
             }
         });
 

@@ -75,7 +75,7 @@ export function Itinerary() {
   useEffect(() => {
     if (!currentUser && !getAuthToken()) {
       toast.error('Please log in to access your Itinerary');
-      navigate('/tourist/login');
+      navigate('/login');
     }
   }, [currentUser, navigate]);
 

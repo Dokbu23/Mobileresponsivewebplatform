@@ -27,6 +27,26 @@ export function getStorageUrl(path: string | null | undefined): string {
 
 export const formatImageUrl = getStorageUrl;
 
+/**
+ * Clean & decode HTML entities (e.g., &amp; -> &, &#039; -> ', &quot; -> ")
+ */
+export function decodeHtml(str: string | null | undefined): string {
+  if (!str) return '';
+  let result = String(str);
+  // Handle double encoded entities (e.g. &amp;amp;)
+  for (let i = 0; i < 2; i++) {
+    if (!result.includes('&')) break;
+    result = result
+      .replace(/&amp;/g, '&')
+      .replace(/&#039;|&apos;/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&nbsp;/g, ' ');
+  }
+  return result;
+}
+
 // Token management
 export function getAuthToken(): string | null {
   return localStorage.getItem('discover-mansalay:token') || localStorage.getItem('token');

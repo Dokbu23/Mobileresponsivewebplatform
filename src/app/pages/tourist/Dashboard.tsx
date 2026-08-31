@@ -7,7 +7,7 @@ import {
   Users, Waves, Trees, Info, Heart, Share2, Eye, Camera, CheckCircle, X
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken } from '../../lib/api';
+import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken, decodeHtml } from '../../lib/api';
 import { DetailModal, DetailModalItem } from '../../components/DetailModal';
 import { ShareModal } from '../../components/ShareModal';
 import { toast } from 'sonner';
@@ -98,7 +98,15 @@ export function Dashboard() {
         customList.forEach(c => {
           if (!existingIds.has(String(c.id))) combined.unshift(c);
         });
-        return combined.filter(i => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
+        return combined
+          .filter(i => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)))
+          .map(i => ({
+            ...i,
+            name: i.name ? decodeHtml(i.name) : i.name,
+            title: i.title ? decodeHtml(i.title) : i.title,
+            resort_name: i.resort_name ? decodeHtml(i.resort_name) : i.resort_name,
+            description: i.description ? decodeHtml(i.description) : i.description,
+          }));
       };
 
       setAttractions(mergeSection(rawAttr, customAttractions));
@@ -991,7 +999,14 @@ export function Dashboard() {
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4">
               <Link
-                to="/map"
+                to="/itinerary"
+                onClick={(e) => {
+                  if (!currentUser) {
+                    e.preventDefault();
+                    toast.error('Please log in to access your Itinerary');
+                    navigate('/login');
+                  }
+                }}
                 className="px-7 py-3.5 bg-white hover:bg-pink-50 text-pink-600 font-bold rounded-full text-xs sm:text-sm shadow-md transition-all flex items-center gap-2"
               >
                 <Calendar className="h-4 w-4 text-pink-500" />

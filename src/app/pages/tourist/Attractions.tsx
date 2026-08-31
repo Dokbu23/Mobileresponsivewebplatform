@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { MapPin, Navigation, X, Star, Heart, ChevronLeft, ChevronRight, Share2, Search, Tag, Camera, Phone, Facebook, Instagram, MessageCircle, ArrowRight, Video, Play, Filter, ChevronDown } from 'lucide-react';
-import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken } from '../../lib/api';
+import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken, decodeHtml } from '../../lib/api';
 import { ATTRACTION_CATEGORIES } from '../../lib/constants';
 import { VirtualTourModal } from '../../components/VirtualTourModal';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
@@ -113,14 +113,14 @@ export function Attractions() {
 
         return {
           id: String(d.id),
-          name: d.name,
-          description: d.description,
-          fullDescription: d.full_description ?? d.fullDescription,
+          name: decodeHtml(d.name),
+          description: decodeHtml(d.description),
+          fullDescription: decodeHtml(d.full_description ?? d.fullDescription),
           image: mainImage,
           images: cleanImages.length > 0 ? cleanImages : (mainImage ? [mainImage] : []),
           video: videoUrl,
-          location: d.location,
-          category: d.category || 'General',
+          location: decodeHtml(d.location),
+          category: decodeHtml(d.category || 'General'),
           view_count: Number(d.view_count) || 0,
           rating: d.rating || 4.8,
           likes: d.likes || 0,

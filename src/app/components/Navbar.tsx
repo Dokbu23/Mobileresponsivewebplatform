@@ -49,7 +49,7 @@ export function Navbar() {
     { path: '/products', label: 'Products' },
     { path: '/accommodations', label: 'Stays' },
     { path: '/map', label: 'Map' },
-    ...(currentUser && userType === 'tourist' ? [{ path: '/itinerary', label: 'Itinerary' }] : []),
+    { path: '/itinerary', label: 'Itinerary' },
   ];
 
   const roleMenuItems: Record<RoleType, RoleMenuItem[]> = {
@@ -161,7 +161,7 @@ export function Navbar() {
                     if (isProtectedLink && !currentUser) {
                       e.preventDefault();
                       toast.error(`Please log in to access ${link.label}`);
-                      navigate('/tourist/login');
+                      navigate('/login');
                     }
                   }}
                   className={`text-xs xl:text-sm font-semibold transition-all px-3 py-1.5 rounded-full ${
@@ -339,7 +339,7 @@ export function Navbar() {
                   if ((link.path === '/map' || link.path === '/itinerary') && !currentUser) {
                     e.preventDefault();
                     toast.error(`Please log in to access ${link.label}`);
-                    navigate('/tourist/login');
+                    navigate('/login');
                   }
                 }}
                 className={`block px-4 py-2.5 rounded-xl text-xs font-semibold ${

@@ -56,8 +56,7 @@ export function Wishlist() {
           <div>
             <h1 className="text-2xl font-extrabold text-gray-900">My Saved</h1>
             <p className="text-xs text-gray-400 font-medium">
-              {wishlist.length} saved places &amp; experiences &nbsp;·&nbsp;
-              <span className="text-gray-400">visible only to you</span>
+              {wishlist.length} saved places & experiences · <span className="text-gray-400">visible only to you</span>
             </p>
           </div>
         </div>

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { Store, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, MessageSquare, Facebook, Navigation, MapPin, ExternalLink, Lock, Filter, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
-import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken } from '../../lib/api';
+import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
@@ -116,19 +116,19 @@ export function Products() {
 
         return {
           id: String(p.id),
-          name: p.name ?? 'Product',
-          description: p.description ?? '',
+          name: decodeHtml(p.name ?? 'Product'),
+          description: decodeHtml(p.description ?? ''),
           price: Number(p.price ?? 0),
           stock: Number(p.stock ?? 0),
           image: mainImg,
           images: parsedImages,
-          category: p.category ?? 'General',
+          category: decodeHtml(p.category ?? 'General'),
           badge: p.badge || (idx % 2 === 0 ? 'Best Seller' : 'Top Rated'),
           rating: p.rating || 4.8,
           likes: p.likes || 0,
-          sellerName: p.shop_name || p.store_name || p.owner?.store_name || p.owner?.resort_name || p.seller_name || p.owner?.name || 'Mansalay Artisan Co-op',
-          shopName: p.shop_name || p.store_name || p.owner?.store_name || 'Mansalay Artisan Store',
-          productOwner: p.product_owner || p.owner_name || p.owner?.name || p.seller_name || '',
+          sellerName: decodeHtml(p.shop_name || p.store_name || p.owner?.store_name || p.owner?.resort_name || p.seller_name || p.owner?.name || 'Mansalay Artisan Co-op'),
+          shopName: decodeHtml(p.shop_name || p.store_name || p.owner?.store_name || 'Mansalay Artisan Store'),
+          productOwner: decodeHtml(p.product_owner || p.owner_name || p.owner?.name || p.seller_name || ''),
           user_id: p.user_id,
           is_registered: p.is_registered,
         };

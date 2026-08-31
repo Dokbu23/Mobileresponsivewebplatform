@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { MapPin, Hotel, Store, Mountain, Filter, Navigation, Compass, Crosshair, ExternalLink, X, Clock, Search, CheckCircle2, Plus, PlusCircle, Building2, Activity, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
-import { getPublicJSON, getPublicLandmarks, createLandmark, isPointInMansalayPolygon, getOSRMRoute, getCurrentUserRole, getAuthToken } from '../../lib/api';
+import { getPublicJSON, getPublicLandmarks, createLandmark, isPointInMansalayPolygon, getOSRMRoute, getCurrentUserRole, getAuthToken, decodeHtml } from '../../lib/api';
 import { MansalayMap, MapMarker, UserGpsData } from '../../components/MansalayMap';
 import { InAppNavigationModal } from '../../components/InAppNavigationModal';
 import { useApp } from '../../context/AppContext';
@@ -298,30 +298,30 @@ export function MapExplore() {
         id: `attraction-${a.id}`,
         lat: getCoords(a.location)[0],
         lng: getCoords(a.location)[1],
-        name: a.name,
+        name: decodeHtml(a.name),
         type: 'attraction',
-        description: a.description,
-        location: a.location,
+        description: decodeHtml(a.description),
+        location: decodeHtml(a.location),
       }));
 
       const resortMarkers: MapMarker[] = rawAccommodations.map((a: any) => ({
         id: `resort-${a.id}`,
         lat: getCoords(a.location)[0],
         lng: getCoords(a.location)[1],
-        name: a.name || a.resort_name,
+        name: decodeHtml(a.name || a.resort_name),
         type: 'resort',
-        description: a.description,
-        location: a.location,
+        description: decodeHtml(a.description),
+        location: decodeHtml(a.location),
       }));
 
       const dbLandmarkMarkers: MapMarker[] = rawLandmarks.map((l: any) => ({
         id: `db-landmark-${l.id}`,
         lat: Number(l.latitude),
         lng: Number(l.longitude),
-        name: l.name,
+        name: decodeHtml(l.name),
         type: l.type || 'resort',
-        description: l.description,
-        location: l.address,
+        description: decodeHtml(l.description),
+        location: decodeHtml(l.address),
         image: l.image,
       }));
 
@@ -330,29 +330,29 @@ export function MapExplore() {
       // Dynamic Directory Locations
       const mappedAttractionsDirs: DirectoryLocation[] = rawAttractions.map((a: any) => ({
         id: `att-${a.id}`,
-        name: a.name,
-        category: a.category || 'Beach',
+        name: decodeHtml(a.name),
+        category: decodeHtml(a.category || 'Beach'),
         icon: a.category === 'Beach' ? '🌊' : a.category === 'Cultural' ? '🏛️' : '🏔️',
         iconBg: 'bg-blue-50 text-blue-600',
-        description: a.description || 'Attraction in Mansalay',
-        address: a.location || 'Mansalay, Oriental Mindoro',
+        description: decodeHtml(a.description || 'Attraction in Mansalay'),
+        address: decodeHtml(a.location || 'Mansalay, Oriental Mindoro'),
         coords: getCoords(a.location),
       }));
 
       const mappedResortDirs: DirectoryLocation[] = rawAccommodations.map((a: any) => ({
         id: `res-${a.id}`,
-        name: a.name || a.resort_name,
+        name: decodeHtml(a.name || a.resort_name),
         category: 'Resort',
         icon: '🏨',
         iconBg: 'bg-rose-50 text-rose-600',
-        description: a.description || 'Resort in Mansalay',
-        address: a.location || 'Mansalay, Oriental Mindoro',
+        description: decodeHtml(a.description || 'Resort in Mansalay'),
+        address: decodeHtml(a.location || 'Mansalay, Oriental Mindoro'),
         coords: getCoords(a.location),
       }));
 
       const mappedLandmarkDirs: DirectoryLocation[] = rawLandmarks.map((l: any) => ({
         id: `lm-${l.id}`,
-        name: l.name,
+        name: decodeHtml(l.name),
         category: (l.type === 'resort' ? 'Resort' : l.type === 'enterprise' ? 'Market' : 'Landmark') as any,
         icon: l.type === 'resort' ? '🏨' : l.type === 'enterprise' ? '🛍️' : '📍',
         iconBg: l.type === 'resort' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600',

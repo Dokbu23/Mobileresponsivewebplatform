@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { Hotel, MapPin, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink } from 'lucide-react';
-import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken } from '../../lib/api';
+import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml } from '../../lib/api';
 import { ACCOMMODATION_CATEGORIES } from '../../lib/constants';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
@@ -122,9 +122,9 @@ export function Accommodations() {
 
         return {
           id: String(d.id),
-          name: d.name || d.resort_name || 'Accommodation',
-          resort_name: d.resort_name || d.name || '',
-          description: d.description || '',
+          name: decodeHtml(d.name || d.resort_name || 'Accommodation'),
+          resort_name: decodeHtml(d.resort_name || d.name || ''),
+          description: decodeHtml(d.description || ''),
           pricePerNight: Number(d.price_per_night ?? d.pricePerNight ?? d.price ?? 0),
           location: d.location || (d.barangay ? `${d.barangay}, Mansalay, Oriental Mindoro` : 'Mansalay, Oriental Mindoro'),
           type: d.is_room ? (d.type || 'Rooms & Suites') : (d.type === 'resort_profile' || d.category === 'resort_profile') ? 'Beach Resort' : (d.category || d.type || 'Beach Resort'),
