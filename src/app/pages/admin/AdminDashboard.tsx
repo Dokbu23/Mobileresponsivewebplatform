@@ -146,20 +146,32 @@ export function AdminDashboard() {
         setPopularEnterprisesList(derivedEnterprises);
       }
 
-      // If most wishlisted is empty, derive from top viewed active attractions
-      if ((!realStats?.most_wishlisted || realStats.most_wishlisted.length === 0) && activeAttractions.length > 0) {
-        const derivedWishlisted = [...activeAttractions]
-          .sort((a, b) => (Number(b.view_count) || 0) - (Number(a.view_count) || 0))
-          .slice(0, 5)
-          .map((a: any) => ({
-            id: a.id,
-            name: a.name,
-            category: a.category || 'Attraction',
-            saves: Number(a.view_count) || 0,
-            image: a.image,
-          }));
-        setMostWishlistedList(derivedWishlisted);
-      }
+      // ── REAL-TIME WISHLIST SAVES CALCULATION ──
+      let localWishlistCounts: Record<string, number> = {};
+      try {
+        const cStr = localStorage.getItem('discover-mansalay:wishlist_counts');
+        if (cStr) localWishlistCounts = JSON.parse(cStr);
+      } catch {}
+
+      const allCandidates = [
+        ...activeAttractions.map(a => ({ ...a, itemType: 'attraction' })),
+        ...activeResorts.map(r => ({ ...r, itemType: 'accommodation' })),
+        ...activeProducts.map(p => ({ ...p, itemType: 'product' }))
+      ];
+
+      const rankedWishlisted = allCandidates.map((item) => {
+        const key = `${item.itemType || 'attraction'}_${item.id}`;
+        const realSaves = (localWishlistCounts[key] != null) ? localWishlistCounts[key] : (Number(item.view_count) || 0);
+        return {
+          id: item.id,
+          name: item.name || item.store_name || item.title || 'Destination',
+          category: item.category || (item.itemType === 'accommodation' ? 'Resort' : (item.itemType === 'product' ? 'Product' : 'Attraction')),
+          saves: realSaves,
+          image: item.image || (Array.isArray(item.images) && item.images[0]) || null,
+        };
+      }).sort((a, b) => b.saves - a.saves);
+
+      setMostWishlistedList(rankedWishlisted.slice(0, 5));
 
       const numAttractions = activeAttractions.length || (realStats?.attractions || 0);
       const numEvents = activeEvents.length || (realStats?.events || 0);
@@ -200,11 +212,14 @@ export function AdminDashboard() {
 
   useEffect(() => {
     loadDashboardData();
-    window.addEventListener('contentUpdated', loadDashboardData);
-    window.addEventListener('storage', loadDashboardData);
+    const handleUpdate = () => loadDashboardData();
+    window.addEventListener('wishlistUpdated', handleUpdate);
+    window.addEventListener('contentUpdated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
     return () => {
-      window.removeEventListener('contentUpdated', loadDashboardData);
-      window.removeEventListener('storage', loadDashboardData);
+      window.removeEventListener('wishlistUpdated', handleUpdate);
+      window.removeEventListener('contentUpdated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
     };
   }, []);
 

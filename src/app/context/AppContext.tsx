@@ -339,10 +339,58 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       return [...prev, item];
     });
+
+    // Real-time Wishlist Counter updates & instant broadcast
+    try {
+      const countsStr = window.localStorage.getItem('discover-mansalay:wishlist_counts');
+      const counts = countsStr ? JSON.parse(countsStr) : {};
+      const key = `${item.type || 'attraction'}_${item.id}`;
+      counts[key] = (counts[key] || 0) + 1;
+      window.localStorage.setItem('discover-mansalay:wishlist_counts', JSON.stringify(counts));
+
+      // Non-blocking backend sync
+      fetch(`${API_BASE}/api/public/wishlist/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_id: item.id,
+          item_type: item.type || 'attraction',
+          action: 'save',
+        }),
+      }).catch(() => {});
+
+      // Real-time reactive notification
+      window.dispatchEvent(new CustomEvent('wishlistUpdated', { detail: { item, action: 'save', newCount: counts[key] } }));
+      window.dispatchEvent(new Event('contentUpdated'));
+    } catch {}
   };
 
   const removeFromWishlist = (id: string | number, type: string) => {
     setWishlist(prev => prev.filter(w => !(String(w.id) === String(id) && w.type === type)));
+
+    // Real-time Wishlist Counter updates & instant broadcast
+    try {
+      const countsStr = window.localStorage.getItem('discover-mansalay:wishlist_counts');
+      const counts = countsStr ? JSON.parse(countsStr) : {};
+      const key = `${type || 'attraction'}_${id}`;
+      counts[key] = Math.max(0, (counts[key] || 1) - 1);
+      window.localStorage.setItem('discover-mansalay:wishlist_counts', JSON.stringify(counts));
+
+      // Non-blocking backend sync
+      fetch(`${API_BASE}/api/public/wishlist/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_id: id,
+          item_type: type || 'attraction',
+          action: 'unsave',
+        }),
+      }).catch(() => {});
+
+      // Real-time reactive notification
+      window.dispatchEvent(new CustomEvent('wishlistUpdated', { detail: { id, type, action: 'unsave', newCount: counts[key] } }));
+      window.dispatchEvent(new Event('contentUpdated'));
+    } catch {}
   };
 
   const isInWishlist = (id: string | number, type: string) => {

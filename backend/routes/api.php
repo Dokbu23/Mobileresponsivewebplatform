@@ -254,6 +254,10 @@ Route::group(['prefix' => 'public'], function () {
                     'most_wishlisted' => [],
                     'visitor_trend' => [],
                 ]
+            ]);
+        }
+    });
+
     // Real-time Wishlist Counter Increment / Decrement Endpoint
     Route::post('wishlist/toggle', function(\Illuminate\Http\Request $request) {
         $itemId = $request->input('item_id');
