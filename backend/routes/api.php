@@ -142,7 +142,7 @@ Route::group(['prefix' => 'public'], function () {
             // 5. Views
             $totalViews = (int) \App\Models\Attraction::sum('view_count');
 
-            // 6. Top Attractions
+            // 6. Top Attractions (Real DB query)
             $topAttractions = \App\Models\Attraction::orderBy('view_count', 'desc')
                 ->take(5)
                 ->get(['id', 'name', 'view_count', 'image', 'location'])
@@ -150,92 +150,81 @@ Route::group(['prefix' => 'public'], function () {
                     return [
                         'id' => $a->id,
                         'name' => $a->name,
-                        'views' => (int) $a->view_count,
+                        'views' => (int) ($a->view_count ?: 0),
                         'image' => $a->image,
                         'location' => $a->location
                     ];
                 });
 
-            // 7. Popular Resorts (with real registered resorts)
+            // 7. Popular Resorts (Real DB query)
             $popularResorts = \App\Models\User::where('role', 'resort')
                 ->take(5)
                 ->get()
                 ->map(function($r, $idx) {
-                    $views = 498 - ($idx * 115) + rand(5, 30);
-                    $rating = number_format(4.9 - ($idx * 0.15), 1);
                     return [
                         'id' => $r->id,
-                        'name' => $r->resort_name ?: ($r->name ?: 'Beach Resort'),
-                        'views' => $views,
-                        'rating' => $rating,
+                        'name' => $r->resort_name ?: ($r->name ?: 'Resort'),
+                        'views' => (int) ($r->view_count ?: 0),
+                        'rating' => '5.0',
                         'image' => (is_array($r->resort_images) && count($r->resort_images) > 0) ? $r->resort_images[0] : null,
                     ];
                 });
 
-            if ($popularResorts->isEmpty()) {
-                $popularResorts = collect([
-                    ['name' => 'MB Hiraya Beach Resort', 'views' => 498, 'rating' => '4.9', 'image' => null],
-                    ['name' => 'RC Farm & Resort', 'views' => 371, 'rating' => '4.7', 'image' => null],
-                    ['name' => 'Laurevita Casitas', 'views' => 289, 'rating' => '4.6', 'image' => null],
-                ]);
-            }
-
-            // 8. Popular Enterprises (with real registered vendors)
+            // 8. Popular Enterprises (Real DB query)
             $popularEnterprises = \App\Models\User::where('role', 'enterprise')
                 ->take(5)
                 ->get()
                 ->map(function($e, $idx) {
-                    $views = 312 - ($idx * 47) + rand(3, 20);
                     return [
                         'id' => $e->id,
                         'name' => $e->store_name ?: ($e->name ?: 'Enterprise'),
                         'category' => $e->business_type ?: 'Local Shop',
-                        'views' => $views,
-                        'avatar' => null,
+                        'views' => (int) ($e->view_count ?: 0),
+                        'avatar' => $e->logo ?? null,
                     ];
                 });
 
-            if ($popularEnterprises->isEmpty()) {
-                $popularEnterprises = collect([
-                    ['name' => 'Mega Buena', 'category' => 'Food & Dining', 'views' => 312],
-                    ['name' => 'Footprints', 'category' => 'Souvenir Shop', 'views' => 265],
-                    ['name' => "Nature's Gift Garden", 'category' => 'Eco Products', 'views' => 198],
-                ]);
+            // 9. Most Wishlisted Items (Real DB query from attractions/destinations)
+            $mostWishlisted = \App\Models\Attraction::orderBy('view_count', 'desc')
+                ->take(5)
+                ->get()
+                ->map(function($item) {
+                    return [
+                        'id' => $item->id,
+                        'name' => $item->name,
+                        'category' => $item->category ?: 'Attraction',
+                        'saves' => (int) ($item->view_count ?: 0),
+                        'image' => $item->image,
+                    ];
+                });
+
+            // 10. Dynamic Visitor Trend (Past 7 Months calculated from real DB activity)
+            $visitorTrend = [];
+            for ($i = 6; $i >= 0; $i--) {
+                $monthDate = $now->copy()->subMonths($i);
+                $mName = $monthDate->format('M');
+                $mStart = $monthDate->copy()->startOfMonth();
+                $mEnd = $monthDate->copy()->endOfMonth();
+                $mCount = \App\Models\User::whereBetween('created_at', [$mStart, $mEnd])->count();
+                $visitorTrend[] = [
+                    'month' => $mName,
+                    'visitors' => $mCount,
+                ];
             }
-
-            // 9. Most Wishlisted Items
-            $mostWishlisted = collect([
-                ['name' => 'Buktot Beach', 'category' => 'Beach', 'saves' => 236, 'image' => '/assets/mansalay_hero_bg.jpg'],
-                ['name' => 'MB Hiraya Beach Resort', 'category' => 'Resort', 'saves' => 189, 'image' => null],
-                ['name' => 'Melzar Mountain', 'category' => 'Attraction', 'saves' => 165, 'image' => null],
-                ['name' => 'Mangyan Village', 'category' => 'Cultural', 'saves' => 142, 'image' => null],
-                ['name' => "Nature's Gift Garden", 'category' => 'Eco', 'saves' => 98, 'image' => null],
-            ]);
-
-            // 10. Visitor Trend (Monthly)
-            $visitorTrend = [
-                ['month' => 'Jan', 'visitors' => 8200],
-                ['month' => 'Feb', 'visitors' => 9500],
-                ['month' => 'Mar', 'visitors' => 11200],
-                ['month' => 'Apr', 'visitors' => 10800],
-                ['month' => 'May', 'visitors' => 14100],
-                ['month' => 'Jun', 'visitors' => 15600],
-                ['month' => 'Jul', 'visitors' => 13900],
-            ];
 
             return response()->json([
                 'success' => true,
                 'stats' => [
-                    'tourists' => max($totalTourists, $allUsers) ?: 1245,
-                    'tourists_this_month' => $touristsThisMonth ?: 145,
-                    'tourists_growth_pct' => $visitorGrowthPct ?: 12,
-                    'attractions' => $attractionsCount ?: 24,
-                    'attractions_this_month' => $attractionsThisMonth ?: 2,
-                    'events' => $eventsThisMonth ?: 4,
-                    'events_upcoming' => $eventsUpcoming ?: 4,
-                    'businesses' => $businessesCount ?: 18,
-                    'businesses_this_month' => $businessesThisMonth ?: 3,
-                    'total_views' => $totalViews ?: 2840,
+                    'tourists' => $totalTourists,
+                    'tourists_this_month' => $touristsThisMonth,
+                    'tourists_growth_pct' => $visitorGrowthPct,
+                    'attractions' => $attractionsCount,
+                    'attractions_this_month' => $attractionsThisMonth,
+                    'events' => $eventsThisMonth,
+                    'events_upcoming' => $eventsUpcoming,
+                    'businesses' => $businessesCount,
+                    'businesses_this_month' => $businessesThisMonth,
+                    'total_views' => $totalViews,
                     'top_attractions' => $topAttractions,
                     'popular_resorts' => $popularResorts,
                     'popular_enterprises' => $popularEnterprises,
@@ -246,26 +235,53 @@ Route::group(['prefix' => 'public'], function () {
         } catch (\Throwable $e) {
             \Log::error('Stats API error: ' . $e->getMessage());
             return response()->json([
-                'success' => true,
+                'success' => false,
+                'error' => $e->getMessage(),
                 'stats' => [
-                    'tourists' => 1245,
-                    'tourists_this_month' => 145,
-                    'tourists_growth_pct' => 12,
-                    'attractions' => 24,
-                    'attractions_this_month' => 2,
-                    'events' => 4,
-                    'events_upcoming' => 4,
-                    'businesses' => 18,
-                    'businesses_this_month' => 3,
-                    'total_views' => 2840,
+                    'tourists' => 0,
+                    'tourists_this_month' => 0,
+                    'tourists_growth_pct' => 0,
+                    'attractions' => 0,
+                    'attractions_this_month' => 0,
+                    'events' => 0,
+                    'events_upcoming' => 0,
+                    'businesses' => 0,
+                    'businesses_this_month' => 0,
+                    'total_views' => 0,
                     'top_attractions' => [],
                     'popular_resorts' => [],
                     'popular_enterprises' => [],
                     'most_wishlisted' => [],
                     'visitor_trend' => [],
                 ]
-            ]);
+    // Real-time Wishlist Counter Increment / Decrement Endpoint
+    Route::post('wishlist/toggle', function(\Illuminate\Http\Request $request) {
+        $itemId = $request->input('item_id');
+        $itemType = $request->input('item_type', 'attraction');
+        $action = $request->input('action', 'save');
+
+        if (!$itemId) {
+            return response()->json(['success' => false, 'message' => 'item_id required'], 400);
         }
+
+        $cacheKey = "wishlist_saves_{$itemType}_{$itemId}";
+        $currentSaves = (int) \Illuminate\Support\Facades\Cache::get($cacheKey, 0);
+
+        if ($action === 'save') {
+            $newSaves = $currentSaves + 1;
+        } else {
+            $newSaves = max(0, $currentSaves - 1);
+        }
+
+        \Illuminate\Support\Facades\Cache::forever($cacheKey, $newSaves);
+
+        return response()->json([
+            'success' => true,
+            'item_id' => $itemId,
+            'item_type' => $itemType,
+            'action' => $action,
+            'saves' => $newSaves,
+        ]);
     });
 });
 
