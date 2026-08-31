@@ -5,7 +5,7 @@ import {
   Compass, Hotel, Package, Calendar, Trash2
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { getPublicJSON, API_BASE } from '../../lib/api';
+import { getPublicJSON, API_BASE, decodeHtml } from '../../lib/api';
 
 export function Wishlist() {
   const { wishlist, removeFromWishlist, userType } = useApp();
@@ -88,13 +88,13 @@ export function Wishlist() {
 
                     <img
                       src={getImgUrl(item.image)}
-                      alt={item.name}
+                      alt={decodeHtml(item.name)}
                       className="w-10 h-10 rounded-xl object-cover flex-shrink-0 group-hover:scale-105 transition-transform"
                       onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
                     />
 
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-gray-900 truncate">{item.name}</p>
+                      <p className="text-xs font-bold text-gray-900 truncate">{decodeHtml(item.name)}</p>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
                           Attraction
@@ -141,7 +141,6 @@ export function Wishlist() {
         </div>
       </div>
 
-      {/* ── Saved Items Grid or Empty State ── */}
       {/* ── Saved Items Grid or Empty / Business State ── */}
       {isBusinessUser ? (
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -170,54 +169,27 @@ export function Wishlist() {
           </div>
         </div>
       ) : wishlist.length === 0 ? (
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm py-16 flex flex-col items-center text-center">
-            <div className="relative mb-6">
-              <div className="w-20 h-20 rounded-full bg-pink-50 flex items-center justify-center">
-                <Heart className="h-9 w-9 text-pink-400" />
-              </div>
-              <span className="absolute inset-0 rounded-full bg-pink-100 animate-ping opacity-30" />
-            </div>
-
-            <h3 className="text-lg font-extrabold text-gray-900 mb-1">Your wishlist is empty</h3>
-            <p className="text-sm text-gray-400 mb-8">
-              Start exploring Mansalay and save the places you love!
-            </p>
-
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <Link
-                to="/attractions"
-                className="flex items-center gap-2 px-6 py-2.5 bg-pink-500 hover:bg-pink-600 text-white font-bold rounded-full text-sm shadow-md shadow-pink-500/25 transition-all"
-              >
-                <Compass className="h-4 w-4" />
-                Explore Attractions
-              </Link>
-              <Link
-                to="/accommodations"
-                className="flex items-center gap-2 px-6 py-2.5 border-2 border-pink-300 text-pink-600 hover:bg-pink-50 font-bold rounded-full text-sm transition-all"
-              >
-                <Hotel className="h-4 w-4" />
-                Find Resorts
-              </Link>
-            </div>
-
-            <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-3 w-full max-w-xl px-4">
-              {[
-                { label: 'Attractions', icon: Compass, to: '/attractions', color: 'bg-blue-50 text-blue-600' },
-                { label: 'Resorts & Stays', icon: Hotel, to: '/accommodations', color: 'bg-emerald-50 text-emerald-600' },
-                { label: 'Local Products', icon: Package, to: '/products', color: 'bg-amber-50 text-amber-600' },
-                { label: 'Events', icon: Calendar, to: '/events', color: 'bg-pink-50 text-pink-600' },
-              ].map(({ label, icon: Icon, to, color }) => (
-                <Link
-                  key={to}
-                  to={to}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-2xl ${color} hover:scale-105 transition-all font-semibold text-xs`}
-                >
-                  <Icon className="h-5 w-5" />
-                  {label}
-                </Link>
-              ))}
-            </div>
+        <div className="max-w-md mx-auto text-center px-4 py-16">
+          <div className="w-16 h-16 rounded-full bg-pink-50 text-pink-500 flex items-center justify-center mx-auto mb-4">
+            <Heart className="h-8 w-8 text-pink-400 stroke-1" />
+          </div>
+          <h3 className="text-lg font-extrabold text-gray-900 mb-1">Your wishlist is empty</h3>
+          <p className="text-xs text-gray-500 mb-6">
+            Explore destinations, beach stays, and products in Mansalay and save them to your personal collection.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Link
+              to="/attractions"
+              className="px-4 py-2 rounded-xl bg-pink-500 text-white text-xs font-bold hover:bg-pink-600 transition-colors shadow-sm"
+            >
+              Explore Attractions
+            </Link>
+            <Link
+              to="/accommodations"
+              className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-bold hover:bg-gray-200 transition-colors"
+            >
+              Browse Resorts
+            </Link>
           </div>
         </div>
       ) : (
@@ -228,7 +200,7 @@ export function Wishlist() {
                 <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
                   <img
                     src={getImgUrl(item.image)}
-                    alt={item.title}
+                    alt={decodeHtml(item.title)}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
                   />
@@ -244,10 +216,10 @@ export function Wishlist() {
                   </button>
                 </div>
                 <div className="p-4">
-                  <h3 className="font-bold text-gray-900 text-sm line-clamp-1">{item.title}</h3>
+                  <h3 className="font-bold text-gray-900 text-sm line-clamp-1">{decodeHtml(item.title)}</h3>
                   {item.category && (
                     <span className="text-[11px] text-gray-400 font-medium block mt-1">
-                      {item.category}
+                      {decodeHtml(item.category)}
                     </span>
                   )}
                   {item.price !== undefined && item.price > 0 && (
@@ -264,4 +236,3 @@ export function Wishlist() {
     </div>
   );
 }
-

@@ -30,7 +30,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { toast } from 'sonner';
-import { getPublicJSON, formatImageUrl, API_BASE } from '../../lib/api';
+import { getPublicJSON, formatImageUrl, API_BASE, decodeHtml } from '../../lib/api';
 
 export function AdminDashboard() {
   const navigate = useNavigate();
@@ -112,13 +112,24 @@ export function AdminDashboard() {
           setVisitorTrendData(realStats.visitor_trend);
         }
         if (Array.isArray(realStats.most_wishlisted) && realStats.most_wishlisted.length > 0) {
-          setMostWishlistedList(realStats.most_wishlisted);
+          setMostWishlistedList(realStats.most_wishlisted.map((item: any) => ({
+            ...item,
+            name: decodeHtml(item.name),
+            category: decodeHtml(item.category),
+          })));
         }
         if (Array.isArray(realStats.popular_resorts) && realStats.popular_resorts.length > 0) {
-          setPopularResortsList(realStats.popular_resorts);
+          setPopularResortsList(realStats.popular_resorts.map((r: any) => ({
+            ...r,
+            name: decodeHtml(r.name),
+          })));
         }
         if (Array.isArray(realStats.popular_enterprises) && realStats.popular_enterprises.length > 0) {
-          setPopularEnterprisesList(realStats.popular_enterprises);
+          setPopularEnterprisesList(realStats.popular_enterprises.map((e: any) => ({
+            ...e,
+            name: decodeHtml(e.name),
+            category: decodeHtml(e.category),
+          })));
         }
       }
 
@@ -126,7 +137,7 @@ export function AdminDashboard() {
       if ((!realStats?.popular_resorts || realStats.popular_resorts.length === 0) && activeResorts.length > 0) {
         const derivedResorts = activeResorts.slice(0, 5).map((r: any, idx: number) => ({
           id: r.id,
-          name: r.name || r.resort_name || 'Resort',
+          name: decodeHtml(r.name || r.resort_name || 'Resort'),
           views: Number(r.view_count) || (100 - idx * 15),
           rating: r.rating || '5.0',
           image: r.image || (Array.isArray(r.images) && r.images[0]) || null,
@@ -138,8 +149,8 @@ export function AdminDashboard() {
       if ((!realStats?.popular_enterprises || realStats.popular_enterprises.length === 0) && activeProducts.length > 0) {
         const derivedEnterprises = activeProducts.slice(0, 5).map((p: any, idx: number) => ({
           id: p.id,
-          name: p.store_name || p.brand || p.name || 'Enterprise',
-          category: p.category || 'Local Shop',
+          name: decodeHtml(p.store_name || p.brand || p.name || 'Enterprise'),
+          category: decodeHtml(p.category || 'Local Shop'),
           views: Number(p.view_count) || (80 - idx * 10),
           avatar: p.image || null,
         }));
@@ -164,8 +175,8 @@ export function AdminDashboard() {
         const realSaves = (localWishlistCounts[key] != null) ? localWishlistCounts[key] : (Number(item.view_count) || 0);
         return {
           id: item.id,
-          name: item.name || item.store_name || item.title || 'Destination',
-          category: item.category || (item.itemType === 'accommodation' ? 'Resort' : (item.itemType === 'product' ? 'Product' : 'Attraction')),
+          name: decodeHtml(item.name || item.store_name || item.title || 'Destination'),
+          category: decodeHtml(item.category || (item.itemType === 'accommodation' ? 'Resort' : (item.itemType === 'product' ? 'Product' : 'Attraction'))),
           saves: realSaves,
           image: item.image || (Array.isArray(item.images) && item.images[0]) || null,
         };
@@ -190,11 +201,14 @@ export function AdminDashboard() {
       });
 
       if (Array.isArray(realStats?.top_attractions) && realStats.top_attractions.length > 0) {
-        setTopAttractionsList(realStats.top_attractions);
+        setTopAttractionsList(realStats.top_attractions.map((a: any) => ({
+          ...a,
+          name: decodeHtml(a.name),
+        })));
       } else if (activeAttractions.length > 0) {
         const sorted = [...activeAttractions]
           .map((a: any) => ({
-            name: a.name,
+            name: decodeHtml(a.name),
             views: Number(a.view_count) || 0,
             image: a.image,
           }))

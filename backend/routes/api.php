@@ -149,10 +149,10 @@ Route::group(['prefix' => 'public'], function () {
                 ->map(function($a) {
                     return [
                         'id' => $a->id,
-                        'name' => $a->name,
+                        'name' => html_entity_decode($a->name ?: '', ENT_QUOTES | ENT_HTML5, 'UTF-8'),
                         'views' => (int) ($a->view_count ?: 0),
                         'image' => $a->image,
-                        'location' => $a->location
+                        'location' => html_entity_decode($a->location ?: '', ENT_QUOTES | ENT_HTML5, 'UTF-8')
                     ];
                 });
 
@@ -161,9 +161,10 @@ Route::group(['prefix' => 'public'], function () {
                 ->take(5)
                 ->get()
                 ->map(function($r, $idx) {
+                    $rawName = $r->resort_name ?: ($r->name ?: 'Resort');
                     return [
                         'id' => $r->id,
-                        'name' => $r->resort_name ?: ($r->name ?: 'Resort'),
+                        'name' => html_entity_decode($rawName, ENT_QUOTES | ENT_HTML5, 'UTF-8'),
                         'views' => (int) ($r->view_count ?: 0),
                         'rating' => '5.0',
                         'image' => (is_array($r->resort_images) && count($r->resort_images) > 0) ? $r->resort_images[0] : null,
@@ -175,10 +176,11 @@ Route::group(['prefix' => 'public'], function () {
                 ->take(5)
                 ->get()
                 ->map(function($e, $idx) {
+                    $rawName = $e->store_name ?: ($e->name ?: 'Enterprise');
                     return [
                         'id' => $e->id,
-                        'name' => $e->store_name ?: ($e->name ?: 'Enterprise'),
-                        'category' => $e->business_type ?: 'Local Shop',
+                        'name' => html_entity_decode($rawName, ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                        'category' => html_entity_decode($e->business_type ?: 'Local Shop', ENT_QUOTES | ENT_HTML5, 'UTF-8'),
                         'views' => (int) ($e->view_count ?: 0),
                         'avatar' => $e->logo ?? null,
                     ];
@@ -191,8 +193,8 @@ Route::group(['prefix' => 'public'], function () {
                 ->map(function($item) {
                     return [
                         'id' => $item->id,
-                        'name' => $item->name,
-                        'category' => $item->category ?: 'Attraction',
+                        'name' => html_entity_decode($item->name ?: '', ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                        'category' => html_entity_decode($item->category ?: 'Attraction', ENT_QUOTES | ENT_HTML5, 'UTF-8'),
                         'saves' => (int) ($item->view_count ?: 0),
                         'image' => $item->image,
                     ];
