@@ -268,6 +268,24 @@ export function AdminDashboard() {
     <div className="min-h-screen bg-[#F8FAFC] p-4 sm:p-6 md:p-8 font-sans text-gray-800">
       <div className="max-w-7xl mx-auto space-y-6">
 
+        {/* ── HEADER: ADMIN DASHBOARD TITLE & MANAGE LISTINGS BUTTON ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
+              Admin Dashboard
+            </h1>
+            <p className="text-xs text-gray-500 font-medium mt-0.5">
+              Discover Mansalay — platform overview and content management
+            </p>
+          </div>
+          <Link
+            to="/admin/content"
+            className="px-5 py-2.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 active:scale-95 text-white font-bold text-xs rounded-xl shadow-md shadow-pink-500/20 flex items-center justify-center gap-2 transition-all self-start sm:self-auto"
+          >
+            <span>Manage Listings</span>
+          </Link>
+        </div>
+
         {/* ── ROW 1: 4 STATS METRIC CARDS ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {/* Card 1: Visitor Count */}
