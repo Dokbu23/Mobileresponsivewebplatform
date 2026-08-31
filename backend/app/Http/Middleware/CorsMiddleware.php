@@ -41,8 +41,8 @@ class CorsMiddleware
             'https://disc-mansalay.onrender.com',
             'https://disc-mansalay-frontend.onrender.com',
             
-            // Environment variable override (most flexible)
-            env('FRONTEND_URL', 'http://localhost:3000'),
+            // Environment variable override (supports comma-separated list)
+            ...array_filter(array_map('trim', explode(',', env('FRONTEND_URL', 'http://localhost:3000')))),
         ];
     }
 
@@ -60,6 +60,11 @@ class CorsMiddleware
 
         // Allow any *.onrender.com origin (frontend/backend deployed on Render)
         if (preg_match('/^https:\/\/[a-z0-9-]+\.onrender\.com$/i', $origin)) {
+            return true;
+        }
+
+        // Allow any *.vercel.app origin (frontend deployed on Vercel)
+        if (preg_match('/^https:\/\/[a-z0-9-]+\.vercel\.app$/i', $origin)) {
             return true;
         }
 
