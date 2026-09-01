@@ -11,18 +11,62 @@ export const API_BASE = rawApiBase.replace(/\/api\/?$/, '').replace(/\/+$/, '');
 
 export function getStorageUrl(path: string | null | undefined): string {
   if (!path) return '';
-  const str = String(path).trim();
+  let str = String(path).trim();
+
+  // Strip wrapping quotes if any
+  str = str.replace(/^["']|["']$/g, '');
+
+  // If path is a JSON stringified array/object (e.g. '["attractions/image.jpg"]')
+  if ((str.startsWith('[') && str.endsWith(']')) || (str.startsWith('{') && str.endsWith('}'))) {
+    try {
+      const parsed = JSON.parse(str);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        str = String(parsed[0]).trim();
+      } else if (typeof parsed === 'string') {
+        str = parsed.trim();
+      }
+    } catch {}
+  }
+
+  if (!str) return '';
+
+  // Return absolute web or data/blob URLs directly
   if (
     str.startsWith('http://') ||
     str.startsWith('https://') ||
     str.startsWith('data:') ||
-    str.startsWith('blob:') ||
-    str.startsWith('/assets')
+    str.startsWith('blob:')
   ) {
     return str;
   }
-  const cleanPath = str.startsWith('/') ? str : `/${str}`;
-  return `${API_BASE}${cleanPath}`;
+
+  // Handle frontend public assets (assets/..., /assets/..., images/..., /images/...)
+  if (
+    str.startsWith('/assets') ||
+    str.startsWith('assets/') ||
+    str.startsWith('/images') ||
+    str.startsWith('images/') ||
+    str.startsWith('/favicon') ||
+    str.startsWith('favicon')
+  ) {
+    return str.startsWith('/') ? str : `/${str}`;
+  }
+
+  // If path already starts with /storage/ or storage/
+  if (str.startsWith('/storage/') || str.startsWith('storage/')) {
+    const cleanStorage = str.startsWith('/') ? str : `/${str}`;
+    return `${API_BASE}${cleanStorage}`;
+  }
+
+  // If path starts with public/ (e.g. public/attractions/...)
+  if (str.startsWith('/public/') || str.startsWith('public/')) {
+    const stripped = str.replace(/^\/?public\//, '');
+    return `${API_BASE}/storage/${stripped}`;
+  }
+
+  // Uploaded backend files (attractions/, products/, accommodations/, events/, etc.)
+  const cleanPath = str.replace(/^\/+/, '');
+  return `${API_BASE}/storage/${cleanPath}`;
 }
 
 export const formatImageUrl = getStorageUrl;

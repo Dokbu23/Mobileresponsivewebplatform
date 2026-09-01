@@ -145,13 +145,14 @@ Route::group(['prefix' => 'public'], function () {
             // 6. Top Attractions (Real DB query)
             $topAttractions = \App\Models\Attraction::orderBy('view_count', 'desc')
                 ->take(5)
-                ->get(['id', 'name', 'view_count', 'image', 'location'])
+                ->get()
                 ->map(function($a) {
+                    $img = $a->image ?: ((is_array($a->images) && count($a->images) > 0) ? $a->images[0] : null);
                     return [
                         'id' => $a->id,
                         'name' => html_entity_decode($a->name ?: '', ENT_QUOTES | ENT_HTML5, 'UTF-8'),
                         'views' => (int) ($a->view_count ?: 0),
-                        'image' => $a->image,
+                        'image' => $img,
                         'location' => html_entity_decode($a->location ?: '', ENT_QUOTES | ENT_HTML5, 'UTF-8')
                     ];
                 });
@@ -165,11 +166,20 @@ Route::group(['prefix' => 'public'], function () {
                     $cachedAccViews = (int) \Illuminate\Support\Facades\Cache::get("view_count_accommodation_{$r->id}", 0);
                     $dbViews = (int) ($r->view_count ?: 0);
                     $views = max($dbViews, $cachedViews, $cachedAccViews);
+
+                    $img = (is_array($r->resort_images) && count($r->resort_images) > 0) ? $r->resort_images[0] : ($r->logo ?: $r->banner);
+                    if (!$img && class_exists('\App\Models\Accommodation')) {
+                        $acc = \App\Models\Accommodation::where('user_id', $r->id)->first();
+                        if ($acc) {
+                            $img = $acc->image ?: ((is_array($acc->images) && count($acc->images) > 0) ? $acc->images[0] : null);
+                        }
+                    }
+
                     return [
                         'id' => $r->id,
                         'name' => html_entity_decode($rawName, ENT_QUOTES | ENT_HTML5, 'UTF-8'),
                         'views' => $views,
-                        'image' => (is_array($r->resort_images) && count($r->resort_images) > 0) ? $r->resort_images[0] : null,
+                        'image' => $img,
                     ];
                 })
                 ->sortByDesc('views')
@@ -184,12 +194,21 @@ Route::group(['prefix' => 'public'], function () {
                     $cachedViews = (int) \Illuminate\Support\Facades\Cache::get("view_count_enterprise_{$e->id}", 0);
                     $dbViews = (int) ($e->view_count ?: 0);
                     $views = max($dbViews, $cachedViews);
+
+                    $img = $e->logo ?: $e->banner;
+                    if (!$img && class_exists('\App\Models\Product')) {
+                        $prod = \App\Models\Product::where('user_id', $e->id)->first();
+                        if ($prod) {
+                            $img = $prod->image ?: ((is_array($prod->images) && count($prod->images) > 0) ? $prod->images[0] : null);
+                        }
+                    }
+
                     return [
                         'id' => $e->id,
                         'name' => html_entity_decode($rawName, ENT_QUOTES | ENT_HTML5, 'UTF-8'),
                         'category' => html_entity_decode($e->business_type ?: 'Local Shop', ENT_QUOTES | ENT_HTML5, 'UTF-8'),
                         'views' => $views,
-                        'avatar' => $e->logo ?? null,
+                        'avatar' => $img,
                     ];
                 })
                 ->sortByDesc('views')
@@ -201,12 +220,13 @@ Route::group(['prefix' => 'public'], function () {
                 ->take(5)
                 ->get()
                 ->map(function($item) {
+                    $img = $item->image ?: ((is_array($item->images) && count($item->images) > 0) ? $item->images[0] : null);
                     return [
                         'id' => $item->id,
                         'name' => html_entity_decode($item->name ?: '', ENT_QUOTES | ENT_HTML5, 'UTF-8'),
                         'category' => html_entity_decode($item->category ?: 'Attraction', ENT_QUOTES | ENT_HTML5, 'UTF-8'),
                         'saves' => (int) ($item->view_count ?: 0),
-                        'image' => $item->image,
+                        'image' => $img,
                     ];
                 });
 
