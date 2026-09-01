@@ -361,6 +361,11 @@ Route::group(['prefix' => 'public'], function () {
             'saves' => $newSaves,
         ]);
     });
+
+    // Public Tourism Assistant Chat Routes
+    Route::get('chat/history', [\App\Http\Controllers\Api\ChatController::class, 'index']);
+    Route::post('chat/send', [\App\Http\Controllers\Api\ChatController::class, 'send']);
+    Route::post('chat/feedback', [\App\Http\Controllers\Api\ChatController::class, 'feedback']);
 });
 
 Route::get('subscription/settings', function() {

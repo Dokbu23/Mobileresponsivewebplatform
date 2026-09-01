@@ -1,42 +1,78 @@
 {
   "tourist": [
     {
-      "question": "How do I book an accommodation?",
-      "answer": "Pumunta sa accommodation page, piliin ang petsa ng check-in at check-out, ilagay ang bilang ng bisita, at i-click ang 'Book Now'. Kung kailangan ng tulong, magbigay ng detalye ng inaasam mong petsa at lokasyon at tutulungan ka namin."
+      "question": "Ano ang mga magagandang tourist spots at pasyalan sa Mansalay?",
+      "answer": "Ang mga pangunahing tourist spots sa Mansalay ay:\n• **Buktot Beach** — Tanyag sa pino at puting buhangin, malinaw na asul na tubig, at tahimik na kapaligiran.\n• **PGD Beach Marine Sanctuary** — Protektadong coral reef para sa snorkeling, swimming, at diving.\n• **Mangyan Cultural Village (Panaytayan)** — Sentro ng katutubong kultura at tradisyon ng Hanunuo Mangyan kasama ang kanilang Surat Mangyan at Ambahan.\n• **Mangyan Burial Cave** — Makasaysayang kweba ng sinaunang pamana ng Mansalay.\n• **Melzar Mountain Viewpoint** — Trekking trail na nag-aalok ng magandang 360-degree view ng baybayin at kabundukan.\n• **Cabaglat River** — Malamig at malinis na ilog para sa family picnics."
     },
     {
-      "question": "What payment methods are accepted?",
-      "answer": "Tumatanggap kami ng online payments, over-the-counter (OTC), at cash on delivery (kung available). Tingnan ang payment methods sa payment settings page para sa detalyadong instruksyon."
+      "question": "Saan matatagpuan ang Buktot Beach at ano ang mayroon doon?",
+      "answer": "**Buktot Beach** ay matatagpuan sa Mansalay, Oriental Mindoro. Ito ay tanyag sa kanyang mala-pulbos na puting buhangin, malinis na karagatan, at mga kubo (cottages) para sa day-tour at family picnic. Ligtas ito para sa swimming, snorkeling, at pagre-relax sa ilalim ng mga puno ng niyog."
+    },
+    {
+      "question": "Anong mga resort at matutulugan ang available sa Mansalay?",
+      "answer": "Mga rekomendadong matutulugan sa Mansalay:\n• **MB Hiraya Beach Resort** — Beachfront resort na may swimming pool, modernong kwarto, at seaside dining.\n• **Mahalta Glamping** — Premium hillside glamping tents na may magandang tanawin ng Mansalay Bay.\n• **RC Farm and Resort** — Agri-tourism farmstay na may pool at luntiang hardin na angkop sa pamilya.\n• **Nature's Gift Garden** — Payapang garden guesthouse para sa nature-lovers.\n\n*Pumunta sa **Stays** page upang makita ang exact rates, availability, at direct phone/Facebook contact!*"
+    },
+    {
+      "question": "Magkano ang presyo ng rooms sa MB Hiraya o mga resorts?",
+      "answer": "Ang room rates sa mga resort sa Mansalay ay karaniwang naglalaro mula **₱1,200 hanggang ₱5,500+ bawat gabi** depende sa uri ng kwarto (Standard, Deluxe, Family Villa, o Glamping Tent). Maaari mong tingnan ang updated na rates sa aming **Stays** page at direktang tawagan ang resort para sa inquiries."
+    },
+    {
+      "question": "Ano ang mga sikat na lokal na produkto at pasalubong mula sa Mansalay?",
+      "answer": "Mga katutubo at lokal na pasalubong sa Mansalay:\n• **AWATI Hanunuo Woven Baskets & Bags** — Tradisyunal na gawang-kamay ng kababaihang Mangyan mula sa uway at nito.\n• **Pure Wild Forest Honey (Pukyutan)** — 100% natural na pulot mula sa kabundukan ng Mansalay.\n• **Crispy Banana Chips & Kakanin** — Masasarap na lokal na meryenda.\n• **Coconut Vinegar (Sukang Tuba)** — Likas na fermented coconut sap vinegar na may sili at bawang.\n• **Mangyan Beaded Jewelry & Accessories** — Makukulay na kwintas, pulseras, at keychains."
+    },
+    {
+      "question": "Ano ang AWATI?",
+      "answer": "Ang **AWATI** (Association of Women Artisans of Mansalay) ay samahan ng mga katutubong kababaihang Hanunuo Mangyan na gumagawa ng mga tradisyunal na habi, basket, bag, at ramit. Ang bawat produkto ay simbolo ng mayamang kultura at nagbibigay ng pangkabuhayan sa komunidad."
+    },
+    {
+      "question": "Paano pumunta sa Mansalay mula Maynila o Batangas?",
+      "answer": "Narito ang gabay sa biyahe patungong Mansalay:\n1. Mula Maynila (PITX / Buendia / Cubao), sumakay ng bus papuntang **Batangas Port**.\n2. Sumakay ng RORO o FastCat papuntang **Calapan Port** (approx. 2 oras).\n3. Mula Calapan, sumakay ng Van o Bus (ALPS / Ceres / RORO Bus) patungong **Mansalay** (approx. 3 hanggang 3.5 oras).\n\n*Alternatibo: Kung galing sa Caticlan/Panay o Romblon via RORO papuntang Roxas (Dangay Port), 15-20 minuto na lang ang biyahe patungong Mansalay.*"
+    },
+    {
+      "question": "Ano ang mga piyesta at festivals sa Mansalay?",
+      "answer": "Mga tanyag na pista sa bayan ng Mansalay:\n• **Mansalay Town Fiesta & Feast of St. Joseph the Worker** — Ipinagdiriwang tuwing buwan ng Mayo na may mga parada, trade fair, at cultural shows.\n• **Sidell Kite Flying Festival** — Masayang taunang festival ng pagpapalipad ng saranggola sa baybayin.\n• **Mangyan Cultural Day** — Pagdiriwang ng katutubong musika, sayaw, at kasuotan ng Mangyan."
+    },
+    {
+      "question": "Paano gamitin ang Wishlist?",
+      "answer": "Upang mag-save ng paboritong lugar o produkto:\n1. I-click ang **Heart (Puso)** icon sa anumang Attraction, Stay, o Product card.\n2. Awtomatikong mase-save ito sa iyong personal na **Wishlist** (naka-isolate sa iyong account).\n3. I-click ang **Wishlist** sa navigation menu upang balikan ang iyong saved collection anumang oras."
+    },
+    {
+      "question": "Paano mag-inquire o mag-book sa mga resort at tindahan?",
+      "answer": "Ang Discover Mansalay ay isang direktang tourism portal. Sa bawat listing sa **Stays** o **Products**, i-click ang detalye para makita ang direct phone number, Facebook link, o message button ng resort owner o merchant upang direktang makapag-usap."
     }
   ],
   "resort": [
     {
-      "question": "How do I set up my resort profile?",
-      "answer": "Pumunta sa Resort Profile sa dashboard, punan ang pangalan, deskripsyon, presyo per night, at mag-upload ng mga larawan. Siguraduhin na sumunod sa image requirements (JPG/JPEG/PNG/WebP/AVIF, max 5MB)."
+      "question": "Paano makikita ang Wishlist Analytics para sa aking resort?",
+      "answer": "I-click ang **Wishlist Analytics & Trends** sa navbar o dashboard. Makikita mo ang: Total Tourist Wishlist Saves sa iyong mga rooms, Total Views, Top Performing Room, at platform-wide rankings sa buong Mansalay."
     },
     {
-      "question": "How do I view my bookings?",
-      "answer": "Pumunta sa Bookings sa iyong dashboard para makita ang listahan ng bookings, status, at contact details ng guests. Maaari mong i-confirm o i-update ang status ng booking mula rito."
+      "question": "Paano mag-update ng resort profile, rooms, at rates?",
+      "answer": "Pumunta sa **Manage Rooms / Resort Profile** sa iyong dashboard. Punan ang room title, description, presyo bawat gabi, amenities, contact number, at mag-upload ng mga bagong larawan."
+    },
+    {
+      "question": "Paano mag-verify ng payment receipt o subscription?",
+      "answer": "Pumunta sa **Subscription Management** sa dashboard. I-upload ang GCash proof of payment at hintayin ang verification mula sa Tourism Admin."
     }
   ],
   "enterprise": [
     {
-      "question": "How do I add products?",
-      "answer": "Pumunta sa Products > Add Product, punan ang detalye, presyo, stock, at mag-upload ng larawan. Siguraduhin naka-subscribe ang iyong account kung kinakailangan."
+      "question": "Paano makikita ang Product Wishlist Analytics?",
+      "answer": "Pumunta sa **Wishlist Analytics & Trends** sa navigation bar. Makikita mo kung ilang turista ang nag-save ng bawat produkto mo sa kanilang wishlist at ang kabuuang views ng iyong tindahan."
     },
     {
-      "question": "How is stock managed?",
-      "answer": "Ang stock ay naka-save sa product record. Kapag nagdagdag ka ng stock sa enterprise dashboard, ia-update nito ang database. Kung may discrepancy, i-check ang audit logs o i-contact ang admin para ma-verify ang update."
+      "question": "Paano mag-add ng bagong produkto o souvenir?",
+      "answer": "Pumunta sa **Enterprise Profile > Manage Products** sa dashboard. I-click ang 'Add Product', ilagay ang pangalan, presyo, stock, kategorya, at mag-upload ng malinaw na larawan."
     }
   ],
   "admin": [
     {
-      "question": "How do I approve a listing?",
-      "answer": "Pumunta sa Admin > Listings, buksan ang profile ng business at gamitin ang 'Approve' button. Pag na-approve, makikita na ang resort/enterprise sa public listings."
+      "question": "Paano mag-manage ng users, listings, at subscriptions?",
+      "answer": "Pumunta sa **Admin Dashboard**. Gamitin ang **Account Management** para sa users, **Manage Listings** para mag-approve o mag-edit ng attractions at resorts, at **Manage Subscriptions** para mag-verify ng GCash receipts."
     },
     {
-      "question": "How do I manage users?",
-      "answer": "Pumunta sa Admin > Users para i-edit, i-patch, o i-delete ang user accounts. Huwag i-delete ang sariling admin account habang naka-login."
+      "question": "Saan makikita ang kabuuang platform analytics ng Mansalay?",
+      "answer": "Buksan ang **Most Saved & Analytics** sa navbar upang makita ang real-time municipal metrics: Total Community Saves, #1 Top Saved Destination, at category distribution progress bars."
     }
   ]
 }

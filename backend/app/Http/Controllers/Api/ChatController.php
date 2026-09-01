@@ -27,7 +27,10 @@ class ChatController extends Controller
             return response()->json(['message' => 'Invalid chat room'], 422);
         }
 
-        $history = $this->readHistory();
+        $authUser = $request->user();
+        $userId = $authUser->id ?? null;
+
+        $history = $this->readHistory($userId, $room);
         $filtered = array_values(array_filter($history, function ($m) use ($room) {
             return ($m['room'] ?? null) === $room;
         }));
@@ -47,12 +50,12 @@ class ChatController extends Controller
         $message = $data['message'];
         $language = $data['language'] ?? 'filipino';
 
-        $history = $this->readHistory();
-
         // Get authenticated user
         $authUser = $request->user();
         $userName = $authUser->name ?? null;
         $userId = $authUser->id ?? null;
+
+        $history = $this->readHistory($userId, $room);
 
         $userMessage = [
             'id' => Str::uuid()->toString(),
@@ -79,7 +82,7 @@ class ChatController extends Controller
 
         $history[] = $botMessage;
 
-        $this->writeHistory($history);
+        $this->writeHistory($history, $userId, $room);
         
         // Store in conversation memory
         $this->addToConversationMemory($room, $userId, $message, $botReplyText);
@@ -239,9 +242,110 @@ class ChatController extends Controller
             }
         }
 
+        // Live Database Query Fallback
+        $dbAnswer = $this->generateDatabaseBackedAnswer($text, $language);
+        if ($dbAnswer) {
+            Cache::put($cacheKey, $dbAnswer, $this->cacheDuration);
+            return $dbAnswer;
+        }
+
         return $language === 'filipino'
-            ? "Pasensya na, hindi ako sigurado. Ipapaabot namin ang iyong tanong sa support. Para sa agarang tulong, kontakin ang admin o tumawag sa support number."
-            : "Sorry, I'm not sure. We'll forward your question to support. For immediate help, contact the admin or call the support number.";
+            ? "Salamat sa iyong pagtatanong! Ako ang iyong **Mansalay Tourism Assistant**. Maaari mo akong tanungin tungkol sa mga magagandang beach (tulad ng Buktot), resorts (MB Hiraya, Mahalta Glamping), katutubong produkto ng AWATI, at direksyon sa biyahe."
+            : "Thank you for asking! I'm your **Mansalay Tourism Assistant**. You can ask me about top beaches (like Buktot), resorts (MB Hiraya, Mahalta Glamping), authentic AWATI handicrafts, and travel directions.";
+    }
+
+    protected function generateDatabaseBackedAnswer(string $text, string $language = 'filipino'): ?string
+    {
+        $lower = mb_strtolower($text, 'UTF-8');
+
+        // 1. Check for Beach / Attractions
+        if (preg_match('/\b(spot|spots|attraction|attractions|pasyalan|beach|dagat|buktot|bundok|mountain|falls|cave|kweba|melzar|mangyan|sanctuary|pgd|ilog|river|cabaglat|lugar)\b/ui', $lower)) {
+            try {
+                $attractions = \App\Models\Attraction::take(6)->get();
+                if ($attractions->count() > 0) {
+                    $reply = $language === 'filipino'
+                        ? "**🏖️ Mga Sikat na Pasyalan at Tourist Spots sa Mansalay:**\n\n"
+                        : "**🏖️ Top Tourist Spots & Attractions in Mansalay:**\n\n";
+
+                    foreach ($attractions as $att) {
+                        $desc = mb_substr(trim(strip_tags($att->description ?? '')), 0, 110);
+                        $reply .= "• **{$att->name}**" . ($att->category ? " ({$att->category})" : "") . ($desc ? " — {$desc}..." : "") . "\n";
+                    }
+                    $reply .= $language === 'filipino'
+                        ? "\n*Tingnan ang **Attractions** page para sa kumpletong larawan, detalye, at lokasyon sa mapa!*"
+                        : "\n*Visit the **Attractions** page for full photos, descriptions, and interactive map locations!*";
+                    return $reply;
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        // 2. Check for Resorts / Stays / Accommodations
+        if (preg_match('/\b(resort|resorts|hotel|tulugan|stay|stays|matutulugan|room|kwarto|hiraya|glamping|mahalta|presyo ng room|rate|accommodat|tulog)\b/ui', $lower)) {
+            try {
+                $resorts = \App\Models\Accommodation::take(6)->get();
+                if ($resorts->count() > 0) {
+                    $reply = $language === 'filipino'
+                        ? "**🏨 Mga Matutulugang Resort at Akomodasyon sa Mansalay:**\n\n"
+                        : "**🏨 Recommended Resorts & Stays in Mansalay:**\n\n";
+
+                    foreach ($resorts as $r) {
+                        $price = $r->price_per_night ? "₱" . number_format($r->price_per_night) . "/night" : "";
+                        $desc = mb_substr(trim(strip_tags($r->description ?? '')), 0, 90);
+                        $reply .= "• **{$r->name}**" . ($price ? " ({$price})" : "") . ($desc ? " — {$desc}..." : "") . "\n";
+                    }
+                    $reply .= $language === 'filipino'
+                        ? "\n*Pumunta sa **Stays** page upang makita ang availability at direktang tawagan ang may-ari ng resort!*"
+                        : "\n*Visit the **Stays** page to check live availability and connect directly with resort hosts!*";
+                    return $reply;
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        // 3. Check for Products / Souvenirs / AWATI
+        if (preg_match('/\b(product|products|pasalubong|bili|mabili|craft|crafts|souvenir|delicacy|kakanin|honey|pukyutan|awati|basket|sukang tuba|banana chips|paninda)\b/ui', $lower)) {
+            try {
+                $products = \App\Models\Product::take(6)->get();
+                if ($products->count() > 0) {
+                    $reply = $language === 'filipino'
+                        ? "**🎁 Mga Lokal na Produkto at Pasalubong sa Mansalay:**\n\n"
+                        : "**🎁 Local Products & Pasalubong in Mansalay:**\n\n";
+
+                    foreach ($products as $p) {
+                        $price = $p->price ? "₱" . number_format($p->price) : "";
+                        $reply .= "• **{$p->name}**" . ($price ? " — {$price}" : "") . ($p->category ? " ({$p->category})" : "") . "\n";
+                    }
+                    $reply .= $language === 'filipino'
+                        ? "\n*Bisitahin ang **Products** page para makipag-ugnayan sa mga lokal na tindahan at sa AWATI Mangyan Artisans!*"
+                        : "\n*Visit the **Products** page to contact local stores and AWATI Mangyan Artisans directly!*";
+                    return $reply;
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        // 4. Commute / Directions
+        if (preg_match('/\b(paano pumunta|sakay|byahe|biyahe|direksyon|commute|how to get|bus|van|roro|barko|calapan|batangas|roxas)\b/ui', $lower)) {
+            return $language === 'filipino'
+                ? "**🚌 Gabay sa Pagpunta sa Mansalay, Oriental Mindoro:**\n\n" .
+                  "1. **Mula Maynila / Batangas Port:**\n" .
+                  "   • Sumakay ng bus patungong Batangas Port (PITX/Buendia/Cubao).\n" .
+                  "   • Sumakay ng FastCat o RORO papuntang Calapan Port (approx. 2 oras).\n" .
+                  "   • Mula Calapan, sumakay ng Van o Bus (ALPS / Ceres) patungong Mansalay (approx. 3 - 3.5 oras).\n\n" .
+                  "2. **Via Roxas Dangay Port:**\n" .
+                  "   • Kung galing Caticlan/Panay o Romblon via RORO papuntang Roxas, 15-20 minuto na lang ang layo papuntang Mansalay.\n\n" .
+                  "3. **Via San Jose Airport:**\n" .
+                  "   • Flight papuntang San Jose Airport, pagkatapos ay van patungong Mansalay (approx. 1.5 - 2 oras)."
+                : "**🚌 How to Get to Mansalay, Oriental Mindoro:**\n\n" .
+                  "1. **From Manila / Batangas:**\n" .
+                  "   • Take a bus to Batangas Port from PITX, Buendia, or Cubao.\n" .
+                  "   • Board a RORO or FastCat to Calapan Port (~2 hours).\n" .
+                  "   • From Calapan, take a southward Van or Bus directly to Mansalay (~3 - 3.5 hours).\n\n" .
+                  "2. **Via Roxas Dangay Port:**\n" .
+                  "   • If arriving from Panay/Caticlan or Romblon to Roxas, Mansalay is just a 15-20 minute ride away.\n\n" .
+                  "3. **Via San Jose Airport:**\n" .
+                  "   • Commercial flight to San Jose Airport, followed by a 1.5 - 2 hr van ride to Mansalay.";
+        }
+
+        return null;
     }
 
     protected function callGroq(string $text, string $room, array $entries, string $apiKey, string $modelId = 'llama-3.1-8b-instant', string $apiUrl = 'https://api.groq.com', array $conversationContext = [], string $language = 'filipino'): ?string
@@ -710,20 +814,22 @@ PROMPT;
         return trim($s);
     }
 
-    protected function readHistory(): array
+    protected function readHistory(?int $userId = null, ?string $room = null): array
     {
-        $path = storage_path('app/chat_history.json');
+        $fileKey = $userId ? "chat_history_user_{$userId}.json" : ($room ? "chat_history_{$room}.json" : "chat_history.json");
+        $path = storage_path("app/{$fileKey}");
         if (!file_exists($path)) {
             return [];
         }
-        $json = file_get_contents($path);
+        $json = @file_get_contents($path);
         $arr = json_decode($json, true);
         return is_array($arr) ? $arr : [];
     }
 
-    protected function writeHistory(array $history): void
+    protected function writeHistory(array $history, ?int $userId = null, ?string $room = null): void
     {
-        $path = storage_path('app/chat_history.json');
-        file_put_contents($path, json_encode($history, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        $fileKey = $userId ? "chat_history_user_{$userId}.json" : ($room ? "chat_history_{$room}.json" : "chat_history.json");
+        $path = storage_path("app/{$fileKey}");
+        @file_put_contents($path, json_encode(array_slice($history, -50), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     }
 }

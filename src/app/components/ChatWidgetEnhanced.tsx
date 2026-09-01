@@ -2,6 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { getAuthToken, getChatHistory, sendChatMessage, getJSON } from '../lib/api';
 import { useNavigate } from 'react-router';
+import {
+  MessageSquare, Send, Sparkles, X, RotateCcw,
+  Compass, Hotel, Package, Calendar, MapPin, Navigation,
+  Globe, Shield, ChevronRight, Phone, Bot, Check, ArrowUpRight
+} from 'lucide-react';
 
 type ChatMessage = {
   id: string;
@@ -16,114 +21,207 @@ type QuickReply = {
   icon: string;
 };
 
+// ── SMART KNOWLEDGE-BASED CLIENT & FALLBACK AI FOR MANSALAY TOURISM ──
 function generateTourismAiReply(text: string, currentLang: 'filipino' | 'english'): string {
   const lower = text.toLowerCase();
   
-  // Smart detection of Tagalog/Filipino keywords vs English
-  const isTagalogInput = /\b(ano|saano|saan|magkano|paano|kailan|sino|may|ba|mga|ang|ng|sa|ako|kami|tayong|tayo|pasyal|ganda|tulugan|bili|kainan|pagkain|masarap|paano|saan)\b/i.test(lower);
+  // Smart detection of Tagalog keywords
+  const isTagalogInput = /\b(ano|saano|saan|magkano|paano|kailan|sino|may|ba|mga|ang|ng|sa|ako|kami|tayong|tayo|pasyal|ganda|tulugan|bili|kainan|pagkain|masarap|sakay|biyahe|pamasahe|kotse|bus|punta|resort|beach|mangyan)\b/i.test(lower);
   const lang = isTagalogInput ? 'filipino' : (currentLang || 'filipino');
 
-  // 1. Attractions & Tourist Spots
-  if (/\b(spot|spots|attraction|attractions|pasyalan|ganda|pasyal|tanawin|beach|dagat|bundok|mountain|falls|cave|kweba|lugar|pupuntahan)\b/.test(lower)) {
+  // 1. Buktot Beach / Specific Beaches
+  if (/\b(buktot|beach|dagat|baybayin|white sand|snorkeling|pgd|marine sanctuary|bonbon)\b/.test(lower)) {
     return lang === 'filipino'
-      ? `**Mga Sikat na Tourist Spots sa Mansalay, Oriental Mindoro:**\n\n` +
-        `• **Buktot Beach** — Kilala sa malinis at puting buhangin, malinaw na tubig-dagat, at tahimik na kapaligiran.\n` +
-        `• **Sidell Kite Festival Grounds** — Magandang pwesto para sa kite flying, sunset viewing, at mga lokal na pagtitipon.\n` +
-        `• **PGD Beach Marine Sanctuary** — Ligtas at magandang lugar para sa swimming, snorkeling, at pagmamasid sa marine life.\n` +
-        `• **Mangyan Cultural Village** — Makasaysayang pamayanan kung saan makikilala ang katutubong pamumuhay at sining ng Mangyan.\n` +
-        `• **Mangyan Burial Cave** — Kweba ng sinaunang pamana at tradisyon ng Mansalay.\n` +
-        `• **Melzar Mountain** — Subok na hiking trail na nag-aalok ng magandang panoramic view sa buong bayan.\n\n` +
-        `*Maaari mong tingnan ang **Attractions** page sa aming menu para sa mga larawan at eksaktong lokasyon sa mapa!*`
-      : `**Top Tourist Spots in Mansalay, Oriental Mindoro:**\n\n` +
-        `• **Buktot Beach** — Renowned for white sand beaches, turquoise waters, and peaceful surroundings.\n` +
-        `• **Sidell Kite Festival Grounds** — Famous for kite flying events, sunset views, and community gatherings.\n` +
-        `• **PGD Beach Marine Sanctuary** — Great for snorkeling, swimming, and exploring vibrant marine life.\n` +
-        `• **Mangyan Cultural Village** — Authentic indigenous village highlighting Mangyan heritage and traditional crafts.\n` +
+      ? `**🏖️ Mga Magagandang Beach at Marine Spots sa Mansalay:**\n\n` +
+        `• **Buktot Beach** — Ang pinakatanyag na white sand beach sa Mansalay! May malinaw na asul na tubig-dagat, mga kubo para sa picnic, at tahimik na paligid.\n` +
+        `• **PGD Beach Marine Sanctuary** — Protektadong santuwaryo na perpekto para sa snorkeling, swimming, at pagmamasid sa makukulay na isda at corals.\n` +
+        `• **Bonbon Beach & Coastal Waters** — Payapang baybayin para sa relaxing beach walks at sunset watching.\n\n` +
+        `💡 *Tip: Maaari mong puntahan ang **Attractions** page para sa mga larawan at direksyon sa mapa!*`
+      : `**🏖️ Beautiful Beaches & Marine Spots in Mansalay:**\n\n` +
+        `• **Buktot Beach** — The premier white sand beach destination in Mansalay featuring crystal turquoise waters, seaside cottages, and peaceful coastal scenery.\n` +
+        `• **PGD Beach Marine Sanctuary** — A protected marine reserve ideal for snorkeling, diving, and observing vibrant coral reefs.\n` +
+        `• **Bonbon Beach** — A tranquil coastline ideal for relaxing beach strolls and stunning sunset views.\n\n` +
+        `💡 *Tip: Visit the **Attractions** section for photos, details, and interactive map routes!*`;
+  }
+
+  // 2. Attractions & Nature Spots (Melzar, Caves, Mangyan)
+  if (/\b(spot|spots|attraction|attractions|pasyalan|tanawin|bundok|mountain|falls|cave|kweba|lugar|melzar|mangyan|cultural|heritage|bundok halcon)\b/.test(lower)) {
+    return lang === 'filipino'
+      ? `**⛰️ Mga Sikat na Pasyalan at Heritage Sites sa Mansalay:**\n\n` +
+        `• **Mangyan Cultural Village (Panaytayan)** — Makasaysayang pamayanan kung saan mararanasan ang tradisyunal na kultura, pamumuhay, at ang Surat Mangyan / Ambahan poetry ng Hanunuo Mangyan.\n` +
+        `• **Mangyan Burial Cave** — Sinaunang kweba na nagpapatunay sa mayamang kasaysayan at tradisyon ng Mansalay.\n` +
+        `• **Melzar Mountain Viewpoint** — Popular na trail para sa hiking na may 360-degree panoramic view ng dagat at kabundukan.\n` +
+        `• **Cabaglat River** — Likas na malinis at malamig na ilog para sa family picnics at swimming.\n` +
+        `• **Sidell Kite Festival Grounds** — Pwesto para sa kite flying, coastal events, at sunset viewing.\n\n` +
+        `👉 *Tingnan ang lahat sa aming **Attractions** page!*`
+      : `**⛰️ Top Attractions & Heritage Sites in Mansalay:**\n\n` +
+        `• **Mangyan Cultural Village (Panaytayan)** — Cultural heritage community showcasing the indigenous traditions, lifestyle, and Hanunuo Mangyan Surat / Ambahan script.\n` +
         `• **Mangyan Burial Cave** — Historical cave site offering heritage insights into ancient traditions.\n` +
-        `• **Melzar Mountain** — Excellent trekking trail with panoramic mountain-to-sea views.\n\n` +
-        `*Visit the **Attractions** page for full descriptions, photos, and map locations!*`;
+        `• **Melzar Mountain Viewpoint** — Rewarding trekking trail offering 360-degree panoramic views of mountains and sea.\n` +
+        `• **Cabaglat River** — Refreshing freshwater river spot ideal for nature walks and picnics.\n` +
+        `• **Sidell Kite Festival Grounds** — Open coastal venue famous for kite flying and community gatherings.\n\n` +
+        `👉 *Browse the full directory on our **Attractions** page!*`;
   }
 
-  // 2. Accommodations & Resorts
-  if (/\b(accommodation|accommodations|resort|resorts|hotel|tulugan|stay|matutulugan|room|kwarto|farmstand|glamping|matulog)\b/.test(lower)) {
+  // 3. Accommodations, Resorts, and Stays
+  if (/\b(accommodation|accommodations|resort|resorts|hotel|tulugan|stay|stays|matutulugan|room|kwarto|hiraya|glamping|homestay|matulog|rate|presyo ng room)\b/.test(lower)) {
     return lang === 'filipino'
-      ? `**Mga Rekomendadong Akomodasyon at Resort sa Mansalay:**\n\n` +
-        `• **MB Hiraya Beach Resort** — Beachfront resort na may swimming pool, cabanas, at restaurant.\n` +
-        `• **RC Farm and Resort** — Agri-tourism at farm stay na angkop sa pamilya at kalikasan.\n` +
-        `• **Mahalta Glamping** — Premium hillside glamping tents na may magandang tanawin ng baybayin.\n` +
-        `• **Nature's Gift Garden** — Serene garden guesthouse para sa tahimik na pahinga.\n\n` +
-        `*Bisitahin ang **Stays** page upang makita ang direct phone number, Facebook page, at contact info ng bawat negosyo!*`
-      : `**Recommended Accommodations & Resorts in Mansalay:**\n\n` +
-        `• **MB Hiraya Beach Resort** — Beachfront resort with pools, cabanas, and oceanfront dining.\n` +
-        `• **RC Farm and Resort** — Agri-tourism farmstay ideal for families and nature lovers.\n` +
-        `• **Mahalta Glamping** — Luxury hillside glamping tents with scenic bay views.\n` +
-        `• **Nature's Gift Garden** — Serene garden guesthouse surrounded by tropical flora.\n\n` +
-        `*Visit the **Stays** page to access direct contact numbers, Facebook pages, and inquiries!*`;
+      ? `**🏨 Mga Rekomendadong Akomodasyon at Resort sa Mansalay:**\n\n` +
+        `• **MB Hiraya Beach Resort** — Beachfront accommodation na may swimming pool, modern rooms, seaside cabanas, at restaurant.\n` +
+        `• **Mahalta Glamping** — Premium hillside glamping tents na may magandang view sa Mansalay bay.\n` +
+        `• **RC Farm and Resort** — Family-friendly farm stay at nature resort na may pool at lush gardens.\n` +
+        `• **Nature's Gift Garden** — Serene garden guesthouse para sa tahimik at relaxing na bakasyon.\n\n` +
+        `📞 *Paano Mag-book / Mag-inquire:*\n` +
+        `Buksan ang **Stays** page sa menu upang makita ang direct phone number, Facebook link, at room rates ng bawat resort!`
+      : `**🏨 Recommended Accommodations & Stays in Mansalay:**\n\n` +
+        `• **MB Hiraya Beach Resort** — Modern beachfront resort with swimming pool, cozy rooms, and oceanfront dining.\n` +
+        `• **Mahalta Glamping** — Scenic hillside glamping tents with panoramic bay views.\n` +
+        `• **RC Farm and Resort** — Agri-tourism farmstay with swimming pool and lush tropical gardens.\n` +
+        `• **Nature's Gift Garden** — Tranquil garden retreat ideal for relaxation.\n\n` +
+        `📞 *How to Inquire / Book:*\n` +
+        `Visit the **Stays** section to access direct phone numbers, Facebook pages, and room amenities!`;
   }
 
-  // 3. Products / Souvenirs / AWATI / Pasalubong
-  if (/\b(product|products|pasalubong|bili|mabili|craft|crafts|souvenir|delicacy|kakanin|honey|puwede bilhin|awati|baskte|hablon)\b/.test(lower)) {
+  // 4. Products, Souvenirs, AWATI & Delicacies
+  if (/\b(product|products|pasalubong|bili|mabili|craft|crafts|souvenir|delicacy|kakanin|honey|awati|basket|ramit|hablon|sukang tuba|banana chips|presyo)\b/.test(lower)) {
     return lang === 'filipino'
-      ? `**Lokal na Produkto at Pasalubong sa Mansalay:**\n\n` +
-        `• **AWATI Hanunuo Woven Basket & Crafts** — Tradisyunal na gawang-kamay ng kababaihang Mangyan ng AWATI (Association of Women Artisans).\n` +
-        `• **Mansalay Community Pasalubong Sampler** — Mga katutubong kakanin, wild forest honey, at saging chips mula sa mga lokal na negosyo.\n` +
-        `• **Coconut Vinegar (Sukang Tuba)** — Likas na fermented vinegar na may sili at bawang.\n` +
-        `• **Mangyan Beaded Jewelry** — Kwintas, pulseras, at hikaw na gawa sa makukulay na beads.\n\n` +
-        `*I-click ang **Products** page para makipag-ugnayan sa AWATI at Pasalubong Center via Phone o Facebook!*`
-      : `**Local Products & Souvenirs in Mansalay:**\n\n` +
-        `• **AWATI Hanunuo Woven Basket & Crafts** — Authentic handwoven crafts by the Mangyan Women Artisans (AWATI).\n` +
-        `• **Mansalay Community Pasalubong Sampler** — Local delicacies, wild forest honey, and banana chips from micro-enterprises.\n` +
-        `• **Coconut Vinegar (Sukang Tuba)** — Naturally fermented coconut sap vinegar with chili & garlic.\n` +
-        `• **Mangyan Beaded Jewelry** — Intricate handmade beaded necklaces & bracelets.\n\n` +
-        `*Visit the **Products** page to contact AWATI and Pasalubong Center directly via Phone or Facebook!*`;
+      ? `**🎁 Mga Katutubong Produkto at Pasalubong sa Mansalay:**\n\n` +
+        `• **AWATI Hanunuo Woven Baskets & Bags** — Tunay na gawang-kamay ng kababaihang Mangyan (Association of Women Artisans of Mansalay). Matibay at makasining na gawa sa uway at nito.\n` +
+        `• **Pure Wild Forest Honey (Pukyutan)** — Likas at organikong pulot-pukyutan na inani mula sa kagubatan ng Mansalay.\n` +
+        `• **Crispy Banana Chips & Native Delicacies** — Masasarap na meryenda na gawa ng mga lokal na kooperatiba.\n` +
+        `• **Coconut Vinegar (Sukang Tuba)** — Katutubong suka na may natural na sili at bawang.\n` +
+        `• **Mangyan Beaded Jewelry & Accessories** — Makukulay na pulseras, kwintas, at keychains.\n\n` +
+        `🛒 *Bisitahin ang **Products** page para sa listahan ng mga tindahan at direct seller contact!*`
+      : `**🎁 Local Products & Souvenirs in Mansalay:**\n\n` +
+        `• **AWATI Hanunuo Woven Baskets & Crafts** — Authentic handwoven bags and storage crafts made by the Mangyan Women Artisans (AWATI).\n` +
+        `• **Pure Wild Forest Honey** — 100% natural, raw honey harvested from the mountains of Mansalay.\n` +
+        `• **Crispy Banana Chips & Local Treats** — Locally prepared savory and sweet snacks.\n` +
+        `• **Coconut Vinegar (Sukang Tuba)** — Traditional spiced coconut sap vinegar.\n` +
+        `• **Mangyan Beaded Jewelry** — Handcrafted colorful beadwork bracelets & necklaces.\n\n` +
+        `🛒 *Visit the **Products** page to explore local shops and contact artisans directly!*`;
   }
 
-  // 4. Booking / Inquiries
-  if (/\b(book|booking|paano|how|inquire|inquiry|contact|tawag|chat|order|reserve)\b/.test(lower)) {
+  // 5. How to Get to Mansalay / Transportation & Directions
+  if (/\b(paano pumunta|sakay|transportasyon|direksyon|how to get|commute|bus|van|roro|barko|byahe|airport|puerto galera|calapan|roxas|san jose|manila)\b/.test(lower)) {
     return lang === 'filipino'
-      ? `Ang **Discover Mansalay** ay isang *promotional portal* na naglalayong itaguyod ang turismo at mga lokal na negosyo sa Mansalay.\n\n` +
-        `**Paano Mag-inquire o Makipag-ugnayan:**\n` +
-        `1. Pumunta sa **Stays** o **Products** page.\n` +
-        `2. I-click ang detalye ng resort o produkto.\n` +
-        `3. Gamitin ang mga button na **Phone**, **Facebook**, o **Message** upang direktang makausap ang may-ari ng negosyo o ang Pasalubong Center.`
-      : `**Discover Mansalay** is a *promotional portal* designed to showcase local tourism and community enterprises.\n\n` +
-        `**How to Inquire or Connect:**\n` +
-        `1. Go to the **Stays** or **Products** section.\n` +
-        `2. Select any accommodation or local product listing.\n` +
-        `3. Use the **Phone**, **Facebook**, or **Message** buttons to connect directly with the enterprise owners or Pasalubong Center.`;
+      ? `**🚌 Paano Pumunta sa Mansalay, Oriental Mindoro:**\n\n` +
+        `1. **Galing Maynila (Manila) / Batangas:**\n` +
+        `   • Sumakay ng bus papuntang **Batangas Port** (PITX, Buendia, o Cubao).\n` +
+        `   • Sumakay ng RORO o FastCat papuntang **Calapan Port** (approx. 2 hours).\n` +
+        `   • Mula Calapan City, sumakay ng Van o Bus (ALPS / RORO Bus) patungong **Mansalay** (approx. 3 hanggang 3.5 oras).\n\n` +
+        `2. **Via Roxas Port (Dangay):**\n` +
+        `   • Kung galing Caticlan o Romblon via RORO papuntang Roxas, 15-20 minuto na lang ang layo papuntang Mansalay.\n\n` +
+        `3. **Via San Jose Airport (Occidental Mindoro):**\n` +
+        `   • Sumakay ng commercial flight papuntang San Jose Airport, pagkatapos ay van patungong Mansalay (approx. 1.5 - 2 oras).\n\n` +
+        `🗺️ *Maaari mong buksan ang **Map** page upang makita ang interactive route at live GPS navigation!*`
+      : `**🚌 How to Get to Mansalay, Oriental Mindoro:**\n\n` +
+        `1. **From Manila / Batangas:**\n` +
+        `   • Take a bus to **Batangas Port** from major terminals (PITX, Buendia, Cubao).\n` +
+        `   • Board a RORO ferry or FastCat to **Calapan Port** (~2 hours).\n` +
+        `   • From Calapan, take a southward Van or Bus (ALPS / Ceres) directly to **Mansalay** (~3 to 3.5 hours).\n\n` +
+        `2. **Via Roxas Dangay Port:**\n` +
+        `   • If arriving via ferry from Caticlan/Panay or Romblon, Mansalay is just a 15-20 minute van/jeep ride from Roxas.\n\n` +
+        `3. **Via San Jose Airport (Occidental Mindoro):**\n` +
+        `   • Fly to San Jose Airport, then take a passenger van overland to Mansalay (~1.5 to 2 hours).\n\n` +
+        `🗺️ *Check our **Map** section for full interactive directions and landmarks!*`;
   }
 
-  // 5. Itinerary / Travel Planning
-  if (/\b(itinerary|plan|biyahe|trip|gawin|schedule|araw|days|tour)\b/.test(lower)) {
+  // 6. Itinerary & Trip Planning
+  if (/\b(itinerary|plano|plan|trip|gawin|schedule|araw|days|ilang araw|1 day|2 days|3 days)\b/.test(lower)) {
     return lang === 'filipino'
-      ? `**Trip Itinerary Planner sa Mansalay:**\n\n` +
-        `Maaari mong gamitin ang aming **Itinerary** page sa menu para sa:\n` +
-        `• **Curated Trip Guides** — Handang 2-3 araw na itinerary (Beaches & Sunsets, Culture Explorer, Adventure Trek).\n` +
-        `• **AI Smart Generator** — Awtomatikong pagbuo ng itinerary batay sa iyong pamamasyal at paboritong estilo.\n` +
-        `• **Custom Builder** — Sariling pag-aayos ng iyong mga pupuntahang lugar at pagsave nito.`
-      : `**Mansalay Trip Itinerary Planner:**\n\n` +
-        `You can use our **Itinerary** page to explore:\n` +
-        `• **Curated Trip Guides** — Ready-to-use 2-3 day itineraries (Beaches & Sunsets, Culture Explorer, Adventure Trek).\n` +
-        `• **AI Smart Generator** — Auto-generate custom trip schedules based on your preferred style & duration.\n` +
-        `• **Custom Builder** — Hand-pick your destinations and print/save your personalized trip plan.`;
+      ? `**🗺️ Mungkahi na 2-3 Araw na Itinerary sa Mansalay:**\n\n` +
+        `• **Day 1 (Sun & Sand):**\n` +
+        `  - Umaga: Buktot Beach (swimming, sunbathing, snorkeling)\n` +
+        `  - Hapon: Cabaglat River & Sunset at Sidell Grounds\n` +
+        `  - Gabi: Check-in sa MB Hiraya o Mahalta Glamping\n\n` +
+        `• **Day 2 (Culture & Crafts):**\n` +
+        `  - Umaga: Bisitahin ang Panaytayan Mangyan Cultural Village & Burial Caves\n` +
+        `  - Hapon: Pasalubong shopping sa AWATI Handwoven Crafts & Local Delicacies\n` +
+        `  - Gabi: Seafood dinner sa Mansalay Baywalk\n\n` +
+        `• **Day 3 (Adventure & Scenic Views):**\n` +
+        `  - Umaga: Melzar Mountain Trekking & Photo Session\n` +
+        `  - Hapon: Souvenir pick-up at pagbiyahe pauwi\n\n` +
+        `✨ *Pumunta sa **Itinerary** page sa menu upang mag-generate o mag-customize ng sarili mong trip schedule!*`
+      : `**🗺️ Suggested 2-3 Day Mansalay Travel Itinerary:**\n\n` +
+        `• **Day 1 (Sun & Coastal Adventure):**\n` +
+        `  - Morning: Swim and relax at pristine Buktot Beach\n` +
+        `  - Afternoon: Refresh at Cabaglat River and catch the sunset at Sidell Grounds\n` +
+        `  - Evening: Stay at MB Hiraya Beach Resort or Mahalta Glamping\n\n` +
+        `• **Day 2 (Cultural Immersion & Crafts):**\n` +
+        `  - Morning: Explore Panaytayan Mangyan Cultural Village & Historic Burial Caves\n` +
+        `  - Afternoon: Shop authentic souvenirs at AWATI Handicrafts & Pasalubong Centers\n` +
+        `  - Evening: Seaside dining along Mansalay coastal baywalk\n\n` +
+        `• **Day 3 (Nature Trekking & Departure):**\n` +
+        `  - Morning: Melzar Mountain trail trek for scenic vistas\n` +
+        `  - Afternoon: Final pasalubong collection and departure\n\n` +
+        `✨ *Visit the **Itinerary** tab to customize and save your personal itinerary!*`;
   }
 
-  // General Default Response
+  // 7. Wishlist & Saved Analytics / Features
+  if (/\b(wishlist|saved|save|bookmark|analytics|paborito|puso|heart)\b/.test(lower)) {
+    return lang === 'filipino'
+      ? `**❤️ Paano Gumagana ang Wishlist at Analytics:**\n\n` +
+        `• **Para sa mga Turista:** I-click ang Heart icon sa anumang Attraction, Stay, o Product upang i-save ito sa iyong personal na **Wishlist**. Naka-save ito exclusively sa iyong account!\n` +
+        `• **Para sa Resort at Enterprise Partners:** Sa inyong **Wishlist Analytics** page, makikita ninyo ang live data kung ilang turista ang nag-save ng inyong mga rooms at produkto, kasama ang platform-wide trends!\n` +
+        `• **Para sa Admin:** Comprehensive overview ng most wishlisted destinations at visitor interest sa buong Mansalay.\n\n` +
+        `*Buksan ang **Wishlist** sa navigation bar para makita ang iyong collection o analytics!*`
+      : `**❤️ How the Wishlist & Analytics System Works:**\n\n` +
+        `• **For Tourists:** Click the Heart icon on any Attraction, Resort, or Product to save it to your personal **Wishlist**. Your saved items are securely isolated to your account!\n` +
+        `• **For Resort & Enterprise Partners:** In your **Wishlist Analytics** dashboard, view real-time statistics on how many visitors have saved your rooms and products, alongside platform trends.\n` +
+        `• **For Administrators:** Comprehensive leaderboard of most saved places and community engagement.\n\n` +
+        `*Click the **Wishlist** icon in the navbar to view your collection or analytics!*`;
+  }
+
+  // 8. Events & Festivals
+  if (/\b(event|events|festival|fiesta|piyesta|handaan|kailan|petsa|date|selebrasyon)\b/.test(lower)) {
+    return lang === 'filipino'
+      ? `**🎉 Mga Pista at Pagdiriwang sa Mansalay:**\n\n` +
+        `• **Mansalay Town Fiesta & St. Joseph the Worker Feast** — Ipinagdiriwang tuwing Mayo na may makukulay na parada, cultural presentations, at trade fairs.\n` +
+        `• **Sidell Kite Flying Festival** — Masayang taunang pagpapalipad ng saranggola sa tabi ng baybayin.\n` +
+        `• **Mangyan Cultural Day** — Pagdiriwang at pagtatanghal ng katutubong sayaw, musika, at tradisyon ng Hanunuo Mangyan.\n\n` +
+        `📅 *Tingnan ang **Events** page sa menu para sa updated na iskedyul ng mga darating na aktibidad!*`
+      : `**🎉 Festivals & Events in Mansalay:**\n\n` +
+        `• **Mansalay Town Fiesta & Feast of St. Joseph the Worker** — Celebrated every May featuring vibrant street parades, cultural shows, and agro-tourism fairs.\n` +
+        `• **Sidell Kite Flying Festival** — Annual summer kite flying competition and beach festival.\n` +
+        `• **Mangyan Cultural Day** — Special celebrations highlighting Hanunuo Mangyan music, dances, and folklore.\n\n` +
+        `📅 *Check the **Events** section in the menu for the full upcoming calendar!*`;
+  }
+
+  // 9. Contact / Direct Inquiry Support
+  if (/\b(contact|telepono|phone|facebook|email|tulong|help|support|chat|inquire|inquiry|tanong|book)\b/.test(lower)) {
+    return lang === 'filipino'
+      ? `**📞 Pakikipag-ugnayan at Direct Inquiries:**\n\n` +
+        `Ang **Discover Mansalay** ay nagbibigay ng direktang access sa mga may-ari ng resort at negosyo:\n` +
+        `• **Resort Bookings:** Sa **Stays** page, i-click ang resort para makuha ang kanilang direct Phone number, Facebook Messenger, o website.\n` +
+        `• **Pasalubong & Products:** Sa **Products** page, maaari mong direktang tawagan o i-message ang AWATI at mga lokal na producer.\n` +
+        `• **Municipal Tourism Office:** Maaaring mag-inquire sa Mansalay Municipal Hall para sa guided cultural tours at permits.\n\n` +
+        `May partikular ka bang negosyo o lugar na nais kontakin?`
+      : `**📞 Contact & Direct Inquiries:**\n\n` +
+        `**Discover Mansalay** connects you directly with local operators:\n` +
+        `• **Resort Stays:** On the **Stays** page, click any resort to find their direct phone number, Facebook page, and location.\n` +
+        `• **Local Products:** On the **Products** page, contact AWATI artisans and stores directly via phone or message.\n` +
+        `• **Tourism Information:** Visit the Mansalay Municipal Tourism Office for local guidance and cultural tour assistance.\n\n` +
+        `Is there a specific resort or attraction you need assistance with?`;
+  }
+
+  // General Conversational Fallback
   return lang === 'filipino'
     ? `Salamat sa iyong pagtatanong tungkol sa **"${text}"**!\n\n` +
-      `Ako ang iyong **Tourism Assistant** para sa Mansalay, Oriental Mindoro. Maaari mong itanong sa akin ang:\n` +
-      `• Mga Magagandang Tourist Spots (Buktot Beach, Caves, Mountains)\n` +
-      `• Mga Matutulugang Resort at Glamping Sites\n` +
-      `• Lokal na Produkto ng AWATI at Pasalubong Center\n` +
-      `• Pagbuo ng Trip Itinerary\n\n` +
-      `Ano pa ang gusto mong malaman tungkol sa Mansalay?`
+      `Ako ang iyong **Discover Mansalay Tourism Assistant**. Narito ang mga pwede kong maitulong:\n` +
+      `• **🏖️ Mga Tourist Spots** (Buktot Beach, PGD Sanctuary, Caves, Melzar Mountain)\n` +
+      `• **🏨 Matutulugan & Resorts** (MB Hiraya, Mahalta Glamping, RC Farm)\n` +
+      `• **🎁 AWATI Pasalubong & Delicacies** (Woven Baskets, Wild Honey, Banana Chips)\n` +
+      `• **🚌 Direksyon & Sakayan** (Mula Maynila, Batangas Port, Calapan, o Roxas)\n` +
+      `• **🗺️ Trip Itinerary Planning** (2-3 day custom travel plans)\n\n` +
+      `Ano pa ang nais mong malaman tungkol sa Mansalay?`
     : `Thank you for asking about **"${text}"**!\n\n` +
-      `I'm your **Tourism Assistant** for Mansalay, Oriental Mindoro. You can ask me about:\n` +
-      `• Top Tourist Spots (Buktot Beach, Caves, Mountains)\n` +
-      `• Accommodations & Glamping Sites\n` +
-      `• Local Products by AWATI & Pasalubong Center\n` +
-      `• Planning your Trip Itinerary\n\n` +
-      `How else can I assist your visit to Mansalay?`;
+      `I'm your **Discover Mansalay Tourism Assistant**. Here is what I can help you with:\n` +
+      `• **🏖️ Tourist Attractions** (Buktot Beach, PGD Sanctuary, Caves, Melzar Mountain)\n` +
+      `• **🏨 Resorts & Accommodations** (MB Hiraya, Mahalta Glamping, RC Farm)\n` +
+      `• **🎁 AWATI Pasalubong & Delicacies** (Handwoven Crafts, Wild Honey, Native Treats)\n` +
+      `• **🚌 Directions & Commute** (From Manila, Batangas Port, Calapan, or Roxas)\n` +
+      `• **🗺️ Travel Itinerary Planning** (2-3 day trip schedules)\n\n` +
+      `How else may I assist your visit to Mansalay?`;
 }
 
 export default function ChatWidgetEnhanced() {
@@ -136,61 +234,63 @@ export default function ChatWidgetEnhanced() {
   const [userName, setUserName] = useState<string | null>(currentUser?.name ?? null);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [showQuickReplies, setShowQuickReplies] = useState(true);
   const [language, setLanguage] = useState<'filipino' | 'english'>('filipino');
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Authentication status check (token OR currentUser OR userType)
-  const isAuthenticated = Boolean(userType || currentUser || getAuthToken());
-
-  // Quick replies based on room and language
+  // Quick reply pills
   const quickReplies: Record<string, Record<string, QuickReply[]>> = {
     tourist: {
       filipino: [
-        { text: 'Ano ang mga tourist spots?', icon: '🏖️' },
-        { text: 'Magkano ang accommodation?', icon: '🏨' },
-        { text: 'Ano ang sikat na pasalubong?', icon: '🎁' },
-        { text: 'Paano mag-inquire?', icon: '📝' },
+        { text: 'Ano ang magagandang tourist spots?', icon: '🏖️' },
+        { text: 'Saan may magandang resort o tulugan?', icon: '🏨' },
+        { text: 'Ano ang sikat na pasalubong at AWATI?', icon: '🎁' },
+        { text: 'Paano pumunta sa Mansalay?', icon: '🚌' },
+        { text: 'Magmungkahi ng 3-Day Itinerary', icon: '🗺️' },
       ],
       english: [
-        { text: 'What are the tourist spots?', icon: '🏖️' },
-        { text: 'How much is accommodation?', icon: '🏨' },
-        { text: 'What are popular souvenirs?', icon: '🎁' },
-        { text: 'How to inquire?', icon: '📝' },
+        { text: 'What are the top tourist spots?', icon: '🏖️' },
+        { text: 'Where to stay in Mansalay?', icon: '🏨' },
+        { text: 'Popular AWATI souvenirs & crafts', icon: '🎁' },
+        { text: 'How to get to Mansalay?', icon: '🚌' },
+        { text: 'Suggest a 3-Day Travel Itinerary', icon: '🗺️' },
       ],
     },
     resort: {
       filipino: [
-        { text: 'Paano mag-update ng resort profile?', icon: '✏️' },
-        { text: 'Paano mag-upload ng images?', icon: '📸' },
-        { text: 'Paano mag-set ng price?', icon: '💰' },
+        { text: 'Paano makikita ang Wishlist Analytics?', icon: '📊' },
+        { text: 'Paano mag-update ng rooms at presyo?', icon: '🏨' },
+        { text: 'Paano mag-upload ng mga larawan?', icon: '📸' },
       ],
       english: [
-        { text: 'How to update profile?', icon: '✏️' },
-        { text: 'How to upload images?', icon: '📸' },
-        { text: 'How to set price?', icon: '💰' },
+        { text: 'How to view Wishlist Analytics?', icon: '📊' },
+        { text: 'How to update rooms & pricing?', icon: '🏨' },
+        { text: 'How to upload listing photos?', icon: '📸' },
       ],
     },
     enterprise: {
       filipino: [
-        { text: 'Paano mag-add ng product?', icon: '➕' },
-        { text: 'Paano mag-update ng inventory?', icon: '📊' },
+        { text: 'Paano makikita ang Product Wishlist Analytics?', icon: '📊' },
+        { text: 'Paano mag-add ng bagong produkto?', icon: '🛍️' },
+        { text: 'Paano mag-update ng inventory?', icon: '📦' },
       ],
       english: [
-        { text: 'How to add product?', icon: '➕' },
-        { text: 'How to update inventory?', icon: '📊' },
+        { text: 'How to view Product Wishlist Analytics?', icon: '📊' },
+        { text: 'How to add new products?', icon: '🛍️' },
+        { text: 'How to update inventory?', icon: '📦' },
       ],
     },
     admin: {
       filipino: [
-        { text: 'Paano mag-approve ng listings?', icon: '✅' },
-        { text: 'Paano mag-manage ng users?', icon: '👥' },
+        { text: 'Paano mag-manage ng users at listings?', icon: '👥' },
+        { text: 'Paano mag-verify ng subscription receipts?', icon: '💳' },
+        { text: 'Tingnan ang platform wishlist analytics', icon: '📈' },
       ],
       english: [
-        { text: 'How to approve listings?', icon: '✅' },
-        { text: 'How to manage users?', icon: '👥' },
+        { text: 'How to manage users & listings?', icon: '👥' },
+        { text: 'How to verify subscription receipts?', icon: '💳' },
+        { text: 'View platform wishlist analytics', icon: '📈' },
       ],
     },
   };
@@ -207,45 +307,15 @@ export default function ChatWidgetEnhanced() {
 
   useEffect(() => {
     if (open) {
-      loadHistory();
       inputRef.current?.focus();
     }
-  }, [open, room]);
+  }, [open]);
 
-  useEffect(() => {
-    let mounted = true;
-    async function fetchMe() {
-      if (currentUser?.name) {
-        setUserName(currentUser.name);
-        return;
-      }
-      if (!getAuthToken()) {
-        const storedUser = localStorage.getItem('discover-mansalay:currentUser');
-        if (storedUser) {
-          try {
-            const parsed = JSON.parse(storedUser);
-            if (parsed?.name && mounted) setUserName(parsed.name);
-          } catch {}
-        }
-        return;
-      }
-      try {
-        const data: any = await getJSON('/me');
-        if (!mounted) return;
-        setUserName(data?.user?.name ?? currentUser?.name ?? null);
-      } catch (e) {
-        console.warn('Failed to fetch user info', e);
-        if (mounted && currentUser?.name) setUserName(currentUser.name);
-      }
-    }
-    fetchMe();
-    return () => { mounted = false; };
-  }, [currentUser]);
-
+  // Initial welcome greeting
   useEffect(() => {
     if (!open) return;
     if (messages.length === 0) {
-      const displayUser = userName || (currentUser?.name?.split(' ')[0]) || (userType ? userType.charAt(0).toUpperCase() + userType.slice(1) : 'Guest');
+      const displayUser = userName || (currentUser?.name?.split(' ')[0]) || (userType ? userType.charAt(0).toUpperCase() + userType.slice(1) : (language === 'filipino' ? 'Kababayan' : 'Traveler'));
       const hour = new Date().getHours();
       let greeting = language === 'filipino' ? 'Kumusta' : 'Hello';
       if (language === 'filipino') {
@@ -259,8 +329,8 @@ export default function ChatWidgetEnhanced() {
       }
       
       const welcomeMsg = language === 'filipino' 
-        ? `${greeting}, ${displayUser}! 👋\n\nAko ang iyong Tourism Assistant para sa Mansalay, Oriental Mindoro. Paano kita matutulungan ngayon?`
-        : `${greeting}, ${displayUser}! 👋\n\nI'm your Tourism Assistant for Mansalay, Oriental Mindoro. How can I help you today?`;
+        ? `${greeting}, **${displayUser}**! 👋\n\nAko ang iyong **Discover Mansalay AI Assistant**. Narito ako upang tulungan kang galugarin ang mga magagandang tanawin, beach tulad ng Buktot, mga resort, katutubong produkto ng AWATI, at direksyon sa bayan ng Mansalay.\n\nAno ang nais mong malaman?`
+        : `${greeting}, **${displayUser}**! 👋\n\nI'm your **Discover Mansalay AI Assistant**. I'm here to help you explore tourist spots, Buktot Beach, resorts, authentic AWATI handicrafts, travel directions, and itineraries.\n\nHow can I help you today?`;
       
       const greet: ChatMessage = { 
         id: 'greet-bot', 
@@ -277,76 +347,32 @@ export default function ChatWidgetEnhanced() {
     if (!el) return;
     try {
       el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-    } catch (e) {
+    } catch {
       el.scrollTop = el.scrollHeight;
     }
   }, [messages, sending, loading, open]);
-
-  async function loadHistory() {
-    if (!getAuthToken()) {
-      return;
-    }
-    setLoading(true);
-    try {
-      const data: any = await getChatHistory(room);
-      const incoming = Array.isArray(data?.messages) ? data.messages : [];
-      if (incoming.length > 0) {
-        setMessages(incoming);
-      }
-      setTimeout(() => {
-        listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
-      }, 50);
-    } catch (err) {
-      console.warn('Failed to load online chat history, using assistant session', err);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function handleSend(e?: React.FormEvent, quickReplyText?: string) {
     e?.preventDefault();
     const text = (quickReplyText || input).trim();
     if (!text) return;
-    if (!isAuthenticated) {
-      navigate('/select-role');
-      return;
-    }
 
-    setShowQuickReplies(false);
     const tempId = `temp-${Date.now()}`;
-    
     const tempMsg: ChatMessage = { id: tempId, sender: 'user', message: text, created_at: new Date().toISOString() };
     setMessages(prev => [...prev, tempMsg]);
     setInput('');
     setSending(true);
     
     try {
-      if (getAuthToken()) {
-        const res: any = await sendChatMessage(room, text, language);
-        if (res?.user_message) {
-          setMessages(prev => prev.map(m => (m.id === tempId ? res.user_message : m)));
-        }
-        if (res?.reply) {
-          setMessages(prev => [...prev, res.reply]);
-        }
-      } else {
-        // Fallback intelligent tourism assistant response
-        setTimeout(() => {
-          const replyText = generateTourismAiReply(text, language);
-          const botReply: ChatMessage = {
-            id: `bot-${Date.now()}`,
-            sender: 'bot',
-            message: replyText,
-            created_at: new Date().toISOString()
-          };
-          setMessages(prev => [...prev, botReply]);
-          setSending(false);
-        }, 500);
+      // 1. Try sending to backend AI endpoint
+      const res: any = await sendChatMessage(room, text, language).catch(() => null);
+      if (res?.reply?.message) {
+        setMessages(prev => [...prev, res.reply]);
+        setSending(false);
         return;
       }
-      setTimeout(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }), 50);
-    } catch (err) {
-      console.warn('send failed, falling back to AI Tourism Assistant response', err);
+      
+      // 2. Intelligent local Tourism AI response
       setTimeout(() => {
         const replyText = generateTourismAiReply(text, language);
         const botReply: ChatMessage = {
@@ -358,295 +384,259 @@ export default function ChatWidgetEnhanced() {
         setMessages(prev => [...prev, botReply]);
         setSending(false);
       }, 400);
-    } finally {
-      setSending(false);
+    } catch {
+      setTimeout(() => {
+        const replyText = generateTourismAiReply(text, language);
+        const botReply: ChatMessage = {
+          id: `bot-${Date.now()}`,
+          sender: 'bot',
+          message: replyText,
+          created_at: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, botReply]);
+        setSending(false);
+      }, 400);
     }
   }
 
-  function handleQuickReply(text: string) {
-    handleSend(undefined, text);
+  function handleResetChat() {
+    setMessages([]);
   }
 
   function formatMessage(text: string) {
-    text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    text = text.replace(/^• (.+)$/gm, '<li>$1</li>');
-    text = text.replace(/(<li>.*<\/li>)/s, '<ul class="list-disc ml-4 my-2">$1</ul>');
-    text = text.replace(/\n/g, '<br/>');
-    return text;
+    let formatted = text;
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    formatted = formatted.replace(/^• (.+)$/gm, '<li class="ml-2 mb-1">$1</li>');
+    formatted = formatted.replace(/(<li.*<\/li>)/s, '<ul class="list-disc pl-3 my-2 space-y-1">$1</ul>');
+    formatted = formatted.replace(/\n/g, '<br/>');
+    return formatted;
   }
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
       <div className="flex items-end flex-col-reverse">
         {open && (
-          <div className="mb-3 w-[400px] max-w-[calc(100vw-3rem)] h-[600px] max-h-[80vh] bg-white border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-slideUp">
-            {/* Header */}
-            <div className="px-5 py-4 bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white flex items-center justify-between">
+          <div className="mb-3 w-[420px] max-w-[calc(100vw-2.5rem)] h-[620px] max-h-[82vh] bg-white border border-gray-200 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-slideUp">
+            
+            {/* ── Chat Header ── */}
+            <div className="px-5 py-4 bg-gradient-to-r from-pink-600 via-rose-600 to-indigo-700 text-white flex items-center justify-between shadow-md">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="flex items-center justify-center h-10 w-10 rounded-full bg-white/20 backdrop-blur-sm">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2C6.48 2 2 6.48 2 12c0 1.54.36 3 .97 4.29L2 22l5.71-.97C9 21.64 10.46 22 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18c-1.38 0-2.68-.29-3.86-.81l-.28-.13-2.86.49.49-2.86-.13-.28C4.29 14.68 4 13.38 4 12c0-4.41 3.59-8 8-8s8 3.59 8 8-3.59 8-8 8z"/>
-                      <circle cx="9" cy="12" r="1.5"/>
-                      <circle cx="15" cy="12" r="1.5"/>
-                    </svg>
+                  <div className="flex items-center justify-center h-10 w-10 rounded-2xl bg-white/20 backdrop-blur-md shadow-inner text-white">
+                    <Bot className="h-6 w-6" />
                   </div>
-                  <div className="absolute bottom-0 right-0 h-3 w-3 bg-green-400 rounded-full border-2 border-white"></div>
+                  <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 bg-emerald-400 rounded-full border-2 border-white"></div>
                 </div>
                 <div>
-                  <div className="font-semibold text-sm">Tourism Assistant</div>
-                  <div className="text-xs text-white/90 flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 bg-green-400 rounded-full animate-pulse"></span>
-                    Online • Sumasagot ngayon
+                  <div className="font-extrabold text-sm flex items-center gap-1.5">
+                    Discover Mansalay AI
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-white/25 uppercase tracking-wider">Assistant</span>
+                  </div>
+                  <div className="text-[11px] text-white/90 flex items-center gap-1.5 mt-0.5">
+                    <span className="inline-block h-2 w-2 bg-emerald-400 rounded-full animate-pulse"></span>
+                    Online • Tourist & Local Guide
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                {/* Language Selector */}
+
+              {/* Header Right Actions */}
+              <div className="flex items-center gap-1.5">
+                {/* Reset Chat */}
+                <button
+                  onClick={handleResetChat}
+                  className="p-1.5 rounded-xl hover:bg-white/20 text-white/90 hover:text-white transition-colors"
+                  title="Reset conversation"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </button>
+
+                {/* Language Switcher */}
                 <div className="relative">
                   <button 
                     onClick={() => setShowLanguageMenu(!showLanguageMenu)} 
-                    className="p-1.5 rounded-lg hover:bg-white/20 transition-colors flex items-center gap-1"
-                    aria-label="Select language"
+                    className="px-2 py-1 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-bold transition-all flex items-center gap-1"
                     title="Change language"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M7 2a1 1 0 011 1v1h3a1 1 0 110 2H9.578a18.87 18.87 0 01-1.724 4.78c.29.354.596.696.914 1.026a1 1 0 11-1.44 1.389c-.188-.196-.373-.396-.554-.6a19.098 19.098 0 01-3.107 3.567 1 1 0 01-1.334-1.49 17.087 17.087 0 003.13-3.733 18.992 18.992 0 01-1.487-2.494 1 1 0 111.79-.89c.234.47.489.928.764 1.372.417-.934.752-1.913.997-2.927H3a1 1 0 110-2h3V3a1 1 0 011-1zm6 6a1 1 0 01.894.553l2.991 5.982a.869.869 0 01.02.037l.99 1.98a1 1 0 11-1.79.895L15.383 16h-4.764l-.724 1.447a1 1 0 11-1.788-.894l.99-1.98.019-.038 2.99-5.982A1 1 0 0113 8zm-1.382 6h2.764L13 11.236 11.618 14z" clipRule="evenodd"/>
-                    </svg>
-                    <span className="text-xs font-medium">{language === 'filipino' ? 'FIL' : 'ENG'}</span>
+                    <span>{language === 'filipino' ? '🇵🇭 FIL' : '🇺🇸 ENG'}</span>
                   </button>
                   
                   {showLanguageMenu && (
-                    <div className="absolute top-full right-0 mt-2 bg-white rounded-lg shadow-xl border overflow-hidden z-10 min-w-[140px]">
+                    <div className="absolute top-full right-0 mt-2 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-20 min-w-[130px] p-1">
                       <button
                         onClick={() => { setLanguage('filipino'); setShowLanguageMenu(false); setMessages([]); }}
-                        className={`w-full px-4 py-2.5 text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 ${language === 'filipino' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
+                        className={`w-full px-3 py-2 text-left text-xs rounded-xl font-bold transition-colors flex items-center justify-between ${language === 'filipino' ? 'bg-pink-50 text-pink-600' : 'text-gray-700 hover:bg-gray-50'}`}
                       >
-                        <span className="text-lg">🇵🇭</span>
-                        <span>Filipino</span>
-                        {language === 'filipino' && <span className="ml-auto text-blue-600">✓</span>}
+                        <span className="flex items-center gap-1.5">🇵🇭 Filipino</span>
+                        {language === 'filipino' && <Check className="h-3.5 w-3.5 text-pink-600" />}
                       </button>
                       <button
                         onClick={() => { setLanguage('english'); setShowLanguageMenu(false); setMessages([]); }}
-                        className={`w-full px-4 py-2.5 text-left text-sm hover:bg-blue-50 transition-colors flex items-center gap-2 ${language === 'english' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
+                        className={`w-full px-3 py-2 text-left text-xs rounded-xl font-bold transition-colors flex items-center justify-between ${language === 'english' ? 'bg-pink-50 text-pink-600' : 'text-gray-700 hover:bg-gray-50'}`}
                       >
-                        <span className="text-lg">🇺🇸</span>
-                        <span>English</span>
-                        {language === 'english' && <span className="ml-auto text-blue-600">✓</span>}
+                        <span className="flex items-center gap-1.5">🇺🇸 English</span>
+                        {language === 'english' && <Check className="h-3.5 w-3.5 text-pink-600" />}
                       </button>
                     </div>
                   )}
                 </div>
                 
+                {/* Close Button */}
                 <button 
                   onClick={() => setOpen(false)} 
-                  className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
+                  className="p-1.5 rounded-xl hover:bg-white/20 text-white transition-colors"
                   aria-label="Close chat"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 011.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
-                  </svg>
+                  <X className="h-5 w-5" />
                 </button>
               </div>
             </div>
 
-            {/* Messages */}
-            <div ref={listRef} className="p-4 flex-1 overflow-y-auto max-h-[400px] bg-gradient-to-b from-gray-50 to-white space-y-4 chat-scroll">
-              {loading ? (
-                <div className="flex items-center justify-center h-full">
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <div className="text-xs text-gray-500">Loading messages...</div>
+            {/* ── Quick Shortcut Strip ── */}
+            <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-1.5 overflow-x-auto text-[11px] font-bold text-gray-600 scrollbar-hide">
+              <span className="text-[10px] text-gray-400 uppercase font-black px-1">Shortcuts:</span>
+              <button onClick={() => navigate('/attractions')} className="px-2.5 py-1 bg-white hover:bg-pink-50 hover:text-pink-600 rounded-lg border border-gray-200 transition-colors whitespace-nowrap">🏖️ Attractions</button>
+              <button onClick={() => navigate('/accommodations')} className="px-2.5 py-1 bg-white hover:bg-pink-50 hover:text-pink-600 rounded-lg border border-gray-200 transition-colors whitespace-nowrap">🏨 Stays</button>
+              <button onClick={() => navigate('/products')} className="px-2.5 py-1 bg-white hover:bg-pink-50 hover:text-pink-600 rounded-lg border border-gray-200 transition-colors whitespace-nowrap">🎁 Products</button>
+              <button onClick={() => navigate('/itinerary')} className="px-2.5 py-1 bg-white hover:bg-pink-50 hover:text-pink-600 rounded-lg border border-gray-200 transition-colors whitespace-nowrap">🗺️ Itinerary</button>
+              <button onClick={() => navigate('/map')} className="px-2.5 py-1 bg-white hover:bg-pink-50 hover:text-pink-600 rounded-lg border border-gray-200 transition-colors whitespace-nowrap">📍 Map</button>
+            </div>
+
+            {/* ── Message Bubble Container ── */}
+            <div ref={listRef} className="p-4 flex-1 overflow-y-auto bg-gradient-to-b from-gray-50/50 to-white space-y-3.5 chat-scroll">
+              {messages.map((msg) => (
+                <div key={msg.id} className={`flex items-end gap-2.5 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fadeIn`}>
+                  {msg.sender === 'bot' && (
+                    <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white flex-shrink-0 shadow-xs">
+                      <Bot className="h-4 w-4" />
+                    </div>
+                  )}
+
+                  <div className={`px-4 py-3 max-w-[82%] text-xs leading-relaxed ${
+                    msg.sender === 'user'
+                      ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white rounded-2xl rounded-br-xs shadow-sm font-medium'
+                      : 'bg-white text-gray-800 rounded-2xl rounded-tl-xs border border-gray-100 shadow-sm'
+                  }`}>
+                    <div dangerouslySetInnerHTML={{ __html: formatMessage(msg.message) }} />
+                    {msg.created_at && (
+                      <div className={`text-[9px] mt-1.5 ${msg.sender === 'user' ? 'text-white/70' : 'text-gray-400'} text-right`}>
+                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    )}
+                  </div>
+
+                  {msg.sender === 'user' && (
+                    <div className="w-8 h-8 rounded-2xl bg-gray-900 text-white flex items-center justify-center text-xs font-black flex-shrink-0 shadow-xs">
+                      {userName?.charAt(0).toUpperCase() || 'U'}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Typing Animation */}
+              {sending && (
+                <div className="flex items-end gap-2.5 justify-start animate-fadeIn">
+                  <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white flex-shrink-0">
+                    <Bot className="h-4 w-4" />
+                  </div>
+                  <div className="bg-white rounded-2xl rounded-tl-xs px-4 py-3 shadow-sm border border-gray-100">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 bg-pink-500 rounded-full animate-bounce"></span>
+                      <span className="h-2 w-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }}></span>
+                      <span className="h-2 w-2 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }}></span>
+                    </div>
                   </div>
                 </div>
-              ) : (
-                <>
-                  {messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                      <div className="text-4xl mb-3">💬</div>
-                      <div className="text-sm font-medium text-gray-700 mb-1">
-                        {language === 'filipino' 
-                          ? `Kumusta, ${userName || 'Kababayan'}!` 
-                          : `Hello, ${userName || 'Explorer'}!`
-                        }
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {language === 'filipino' 
-                          ? 'Magtanong tungkol sa attractions, stays, o iba pang serbisyo sa Mansalay'
-                          : 'Ask about attractions, stays, or other services in Mansalay'
-                        }
-                      </div>
-                    </div>
-                  ) : (
-                    messages.map(msg => (
-                      <div key={msg.id} className={`flex items-end gap-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fadeIn`}>
-                        {msg.sender === 'bot' && (
-                          <div className="flex-shrink-0">
-                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm shadow-md">
-                              🤖
-                            </div>
-                          </div>
-                        )}
+              )}
 
-                        <div className={`${
-                          msg.sender === 'user' 
-                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl rounded-br-md' 
-                            : 'bg-white text-gray-800 rounded-2xl rounded-tl-md border shadow-sm'
-                        } px-4 py-3 max-w-[75%] group`}>
-                          <div 
-                            className="text-sm leading-relaxed"
-                            dangerouslySetInnerHTML={{ __html: formatMessage(msg.message) }}
-                          />
-                          {msg.created_at && (
-                            <div className={`text-[10px] mt-1.5 ${msg.sender === 'user' ? 'text-white/70' : 'text-gray-400'}`}>
-                              {new Date(msg.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          )}
-                        </div>
-
-                        {msg.sender === 'user' && (
-                          <div className="flex-shrink-0">
-                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-gray-600 to-gray-800 flex items-center justify-center text-white text-xs shadow-md">
-                              {userName?.charAt(0).toUpperCase() || 'U'}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  )}
-
-                  {sending && (
-                    <div className="flex items-end gap-2 justify-start animate-fadeIn">
-                      <div className="flex-shrink-0">
-                        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm shadow-md">
-                          🤖
-                        </div>
-                      </div>
-                      <div className="bg-white rounded-2xl rounded-tl-md px-4 py-3 shadow-sm border">
-                        <div className="flex items-center gap-1.5">
-                          <span className="h-2 w-2 bg-blue-400 rounded-full animate-bounce"></span>
-                          <span className="h-2 w-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
-                          <span className="h-2 w-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Quick Replies */}
-                  {showQuickReplies && messages.length > 0 && !sending && (
-                    <div className="pt-2">
-                      <div className="text-xs text-gray-500 mb-2 font-medium">
-                        {language === 'filipino' ? 'Mabilis na tanong:' : 'Quick questions:'}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {quickReplies[room]?.[language]?.slice(0, 3).map((qr, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleQuickReply(qr.text)}
-                            className="text-xs px-3 py-2 bg-white border border-gray-200 rounded-full hover:bg-blue-50 hover:border-blue-300 transition-all flex items-center gap-1.5 shadow-sm"
-                          >
-                            <span>{qr.icon}</span>
-                            <span>{qr.text}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
+              {/* Quick Reply Suggestions */}
+              {!sending && (
+                <div className="pt-2">
+                  <div className="text-[11px] text-gray-400 font-bold mb-2 flex items-center gap-1">
+                    <Sparkles className="h-3 w-3 text-pink-500" />
+                    {language === 'filipino' ? 'Mga Mabilisang Tanong:' : 'Suggested Inquiries:'}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {quickReplies[room]?.[language]?.map((qr, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleSend(undefined, qr.text)}
+                        className="text-xs px-3 py-1.5 bg-white border border-gray-200 hover:border-pink-300 hover:bg-pink-50/50 text-gray-700 hover:text-pink-600 rounded-xl transition-all flex items-center gap-1.5 shadow-2xs font-medium"
+                      >
+                        <span>{qr.icon}</span>
+                        <span>{qr.text}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
 
-            {/* Input */}
-            <form onSubmit={handleSend} className="px-4 py-3 border-t bg-white">
-              {!isAuthenticated ? (
-                <div className="text-xs text-gray-600 text-center py-2">
-                  {language === 'filipino' 
-                    ? 'Kailangan mag-login para mag-chat.'
-                    : 'You need to login to chat.'
-                  }
-                  <button type="button" onClick={() => navigate('/select-role')} className="text-blue-600 underline ml-1 font-medium">
-                    {language === 'filipino' ? 'Login' : 'Login'}
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 relative">
-                    <input 
-                      ref={inputRef}
-                      value={input} 
-                      onChange={e => setInput(e.target.value)} 
-                      placeholder={language === 'filipino' ? 'I-type ang tanong mo...' : 'Type your question...'} 
-                      className="w-full border border-gray-300 rounded-full px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10 transition-all" 
-                      disabled={sending}
-                    />
-                  </div>
-                  <button 
-                    type="submit" 
-                    disabled={sending || !input.trim()} 
-                    className={`bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-2.5 rounded-full shadow-lg transition-all ${
-                      sending || !input.trim() ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-xl hover:scale-105'
-                    }`}
-                    title="Send message"
-                  >
-                    {sending ? (
-                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                    ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              )}
+            {/* ── Input Box (Always Active for All Visitors) ── */}
+            <form onSubmit={handleSend} className="p-3 bg-white border-t border-gray-100">
+              <div className="flex items-center gap-2">
+                <input 
+                  ref={inputRef}
+                  value={input} 
+                  onChange={e => setInput(e.target.value)} 
+                  placeholder={language === 'filipino' ? 'Magtanong tungkol sa Mansalay, beaches, stays...' : 'Ask about Mansalay spots, stays, products...'} 
+                  className="flex-1 bg-gray-50 border border-gray-200 focus:bg-white rounded-2xl px-4 py-2.5 text-xs text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500/30 focus:border-pink-500 transition-all font-medium" 
+                  disabled={sending}
+                />
+                <button 
+                  type="submit" 
+                  disabled={sending || !input.trim()} 
+                  className={`w-10 h-10 rounded-2xl bg-gradient-to-r from-pink-600 to-rose-600 text-white flex items-center justify-center shadow-md transition-all flex-shrink-0 ${
+                    sending || !input.trim() ? 'opacity-40 cursor-not-allowed' : 'hover:scale-105 active:scale-95'
+                  }`}
+                  title="Send message"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="text-[10px] text-gray-400 text-center mt-2 flex items-center justify-center gap-1">
+                <span>Discover Mansalay Smart Tourism Assistant</span>
+                <span>•</span>
+                <span>Live Guide</span>
+              </div>
             </form>
 
-            {/* Powered by */}
-            <div className="px-4 py-2 bg-gray-50 border-t text-center">
-              <div className="text-[10px] text-gray-400">
-                {language === 'filipino' ? 'Pinapatakbo ng' : 'Powered by'} <span className="font-semibold text-blue-600">Groq AI</span> • {language === 'filipino' ? 'Mabilis at Tumpak' : 'Fast & Accurate'}
-              </div>
-            </div>
           </div>
         )}
 
-        {/* Chat Button */}
+        {/* ── Floating Chat Launcher Button ── */}
         <button 
           onClick={() => setOpen(o => !o)} 
-          title="Chat with AI Assistant" 
-          className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 rounded-full shadow-2xl hover:shadow-3xl hover:scale-110 transition-all duration-300 relative group"
+          title="Chat with AI Tourism Assistant" 
+          className="bg-gradient-to-r from-pink-600 via-rose-600 to-indigo-600 text-white p-4 rounded-3xl shadow-2xl hover:shadow-pink-500/20 hover:scale-110 active:scale-95 transition-all duration-300 relative group flex items-center justify-center"
         >
           {!open && (
-            <div className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 rounded-full flex items-center justify-center text-[10px] font-bold animate-pulse">
-              !
+            <div className="absolute -top-1 -right-1 h-5 w-5 bg-emerald-500 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white shadow-xs animate-bounce">
+              💬
             </div>
           )}
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z"/>
-            <path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z"/>
-          </svg>
-          <div className="absolute bottom-full right-0 mb-2 px-3 py-1 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-            {language === 'filipino' ? 'May tanong? Chat tayo! 💬' : 'Have questions? Let\'s chat! 💬'}
+          {open ? <X className="h-6 w-6" /> : <Bot className="h-6 w-6" />}
+          
+          {/* Tooltip */}
+          <div className="absolute bottom-full right-0 mb-3 px-3 py-1.5 bg-gray-900 text-white text-xs font-bold rounded-xl opacity-0 group-hover:opacity-100 transition-all pointer-events-none whitespace-nowrap shadow-lg">
+            {language === 'filipino' ? 'Magtanong sa Tourism Assistant! 🏖️' : 'Ask our Tourism Assistant! 🏖️'}
           </div>
         </button>
       </div>
 
       <style>{`
         .chat-scroll::-webkit-scrollbar {
-          width: 6px;
+          width: 5px;
         }
         .chat-scroll::-webkit-scrollbar-track {
-          background: #f1f1f1;
-          border-radius: 10px;
+          background: #f8fafc;
         }
         .chat-scroll::-webkit-scrollbar-thumb {
-          background: #cbd5e0;
+          background: #e2e8f0;
           border-radius: 10px;
         }
         .chat-scroll::-webkit-scrollbar-thumb:hover {
-          background: #a0aec0;
+          background: #cbd5e1;
         }
         .scrollbar-hide::-webkit-scrollbar {
           display: none;
@@ -654,11 +644,11 @@ export default function ChatWidgetEnhanced() {
         @keyframes slideUp {
           from {
             opacity: 0;
-            transform: translateY(20px);
+            transform: translateY(16px) scale(0.97);
           }
           to {
             opacity: 1;
-            transform: translateY(0);
+            transform: translateY(0) scale(1);
           }
         }
         @keyframes fadeIn {
@@ -670,10 +660,10 @@ export default function ChatWidgetEnhanced() {
           }
         }
         .animate-slideUp {
-          animation: slideUp 0.3s ease-out;
+          animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .animate-fadeIn {
-          animation: fadeIn 0.3s ease-out;
+          animation: fadeIn 0.2s ease-out;
         }
       `}</style>
     </div>

@@ -395,11 +395,38 @@ export async function getPaymentReceipts() {
 
 // Chat API (FAQ-based chat)
 export async function getChatHistory(room: string) {
-  return await getJSON(`/chat/history?room=${encodeURIComponent(room)}`);
+  try {
+    return await getJSON(`/chat/history?room=${encodeURIComponent(room)}`);
+  } catch {
+    try {
+      const res = await fetch(`${API_BASE}/api/public/chat/history?room=${encodeURIComponent(room)}`);
+      return await res.json();
+    } catch {
+      return { messages: [] };
+    }
+  }
 }
 
 export async function sendChatMessage(room: string, message: string, language?: 'filipino' | 'english') {
-  return await postJSON('/chat/send', { room, message, language: language || 'filipino' });
+  const payload = { room, message, language: language || 'filipino' };
+  try {
+    if (getAuthToken()) {
+      return await postJSON('/chat/send', payload);
+    }
+    const res = await fetch(`${API_BASE}/api/public/chat/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return await res.json();
+  } catch {
+    const res = await fetch(`${API_BASE}/api/public/chat/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return await res.json();
+  }
 }
 
 export async function verifyPaymentReceipt(receiptId: number, status: 'verified' | 'rejected', notes?: string) {
