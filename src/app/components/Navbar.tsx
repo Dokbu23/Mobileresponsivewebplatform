@@ -72,13 +72,13 @@ export function Navbar() {
       { to: '/resort/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: `/business/resort/${currentUser?.id ?? ''}?manage=true`, label: 'My Shop Profile', icon: Hotel },
       { to: '/resort/profile', label: 'Manage Rooms', icon: Bed },
-      { to: '/wishlist', label: 'Most Saved & Trends', icon: Heart },
+      { to: '/wishlist', label: 'Wishlist Analytics & Trends', icon: Heart },
     ],
     enterprise: [
       { to: '/enterprise/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: `/business/enterprise/${currentUser?.id ?? ''}?manage=true`, label: 'My Shop Profile', icon: Store },
       { to: '/enterprise/profile', label: 'Manage Products', icon: Package },
-      { to: '/wishlist', label: 'Most Saved & Trends', icon: Heart },
+      { to: '/wishlist', label: 'Wishlist Analytics & Trends', icon: Heart },
     ],
   };
 

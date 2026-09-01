@@ -4,14 +4,14 @@ import {
   Heart, TrendingUp, BarChart2, MapPin, Star,
   Compass, Hotel, Package, Calendar, Trash2, ArrowRight, Eye,
   Award, Layers, CheckCircle2, Bookmark, Sparkles, LayoutDashboard,
-  ShieldCheck
+  ShieldCheck, Store, Bed, Plus, Tag
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { getPublicJSON, API_BASE, decodeHtml, formatImageUrl } from '../../lib/api';
 
 export function Wishlist() {
   const navigate = useNavigate();
-  const { wishlist, removeFromWishlist, isInWishlist, userType, isAdmin } = useApp();
+  const { wishlist, removeFromWishlist, isInWishlist, userType, isAdmin, currentUser } = useApp();
   const [stats, setStats] = useState<any>(null);
   const [activeCategoryTab, setActiveCategoryTab] = useState<'all' | 'attraction' | 'accommodation' | 'product' | 'event'>('all');
   
@@ -24,6 +24,7 @@ export function Wishlist() {
 
   const isAdministrator = isAdmin || userType === 'admin';
   const isBusinessUser = userType === 'resort' || userType === 'enterprise';
+  const canViewAnalytics = isAdministrator || isBusinessUser;
 
   const loadData = async () => {
     try {
@@ -113,7 +114,7 @@ export function Wishlist() {
 
   const getImgUrl = (img?: string) => formatImageUrl(img) || '/assets/mansalay_hero_bg.jpg';
 
-  // ── Compute Ranked Most Saved Items across all categories ──
+  // ── Compute Ranked Most Saved Items across all platform categories ──
   const rankedItems = useMemo(() => {
     const list: Array<{
       id: string | number;
@@ -125,6 +126,7 @@ export function Wishlist() {
       views: number;
       link: string;
       price?: number;
+      user_id?: number | string;
     }> = [];
 
     rawAttractions.forEach((a: any) => {
@@ -155,6 +157,7 @@ export function Wishlist() {
         views: Number(r.views) || Number(r.view_count) || 0,
         link: '/accommodations',
         price: r.pricePerNight || r.price,
+        user_id: r.user_id,
       });
     });
 
@@ -171,6 +174,7 @@ export function Wishlist() {
         views: Number(p.view_count) || 0,
         link: '/products',
         price: p.price,
+        user_id: p.user_id,
       });
     });
 
@@ -191,6 +195,83 @@ export function Wishlist() {
 
     return list.sort((a, b) => b.saves - a.saves);
   }, [rawAttractions, rawResorts, rawProducts, rawEvents, wishlistCounts]);
+
+  // ── Compute specific business user's own items analytics ──
+  const myBusinessItems = useMemo(() => {
+    if (!currentUser || !isBusinessUser) return [];
+
+    const currentUserId = String(currentUser.id || '');
+    const currentName = (currentUser.name || '').toLowerCase().trim();
+    const currentStore = (currentUser.store_name || '').toLowerCase().trim();
+    const currentResort = (currentUser.resort_name || '').toLowerCase().trim();
+
+    if (userType === 'resort') {
+      return rawResorts
+        .filter((r: any) => {
+          const matchId = r.user_id && String(r.user_id) === currentUserId;
+          const matchName = currentResort && (r.name || r.resort_name || '').toLowerCase().includes(currentResort);
+          const matchUser = currentName && (r.name || r.resort_name || '').toLowerCase().includes(currentName);
+          return matchId || matchName || matchUser;
+        })
+        .map((r: any) => {
+          const key = `accommodation_${r.id}`;
+          const saves = wishlistCounts[key] != null ? wishlistCounts[key] : (Number(r.likes) || 8);
+          return {
+            id: r.id,
+            name: decodeHtml(r.name || r.resort_name || 'Room / Stay'),
+            type: 'accommodation' as const,
+            category: r.type || 'Room / Stay',
+            image: r.image || (Array.isArray(r.images) ? r.images[0] : undefined),
+            saves: Math.max(0, saves),
+            views: Number(r.views) || Number(r.view_count) || 0,
+            price: r.pricePerNight || r.price,
+            link: '/accommodations',
+          };
+        })
+        .sort((a, b) => b.saves - a.saves);
+    }
+
+    if (userType === 'enterprise') {
+      return rawProducts
+        .filter((p: any) => {
+          const matchId = p.user_id && String(p.user_id) === currentUserId;
+          const matchSeller = (currentStore && (p.sellerName || '').toLowerCase().includes(currentStore)) ||
+                              (currentName && (p.sellerName || '').toLowerCase().includes(currentName));
+          return matchId || matchSeller;
+        })
+        .map((p: any) => {
+          const key = `product_${p.id}`;
+          const saves = wishlistCounts[key] != null ? wishlistCounts[key] : (Number(p.likes) || 15);
+          return {
+            id: p.id,
+            name: decodeHtml(p.name || 'Product'),
+            type: 'product' as const,
+            category: p.category || 'Product',
+            image: p.image,
+            saves: Math.max(0, saves),
+            views: Number(p.view_count) || 0,
+            price: p.price,
+            link: '/products',
+          };
+        })
+        .sort((a, b) => b.saves - a.saves);
+    }
+
+    return [];
+  }, [currentUser, userType, isBusinessUser, rawResorts, rawProducts, wishlistCounts]);
+
+  const totalMyBusinessSaves = useMemo(() => {
+    return myBusinessItems.reduce((acc, item) => acc + item.saves, 0);
+  }, [myBusinessItems]);
+
+  const totalMyBusinessViews = useMemo(() => {
+    return myBusinessItems.reduce((acc, item) => acc + item.views, 0);
+  }, [myBusinessItems]);
+
+  const topMyBusinessSavedItem = useMemo(() => {
+    if (myBusinessItems.length === 0) return null;
+    return myBusinessItems[0];
+  }, [myBusinessItems]);
 
   const filteredRankedItems = useMemo(() => {
     if (activeCategoryTab === 'all') return rankedItems;
@@ -265,7 +346,15 @@ export function Wishlist() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${isAdministrator ? 'bg-pink-100 text-pink-600' : isBusinessUser ? 'bg-indigo-100 text-indigo-600' : 'bg-pink-100 text-pink-500'}`}>
+            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${
+              isAdministrator
+                ? 'bg-pink-100 text-pink-600'
+                : userType === 'resort'
+                ? 'bg-purple-100 text-purple-600'
+                : userType === 'enterprise'
+                ? 'bg-emerald-100 text-emerald-600'
+                : 'bg-pink-100 text-pink-500'
+            }`}>
               <Heart className="h-6 w-6 fill-current" />
             </div>
             <div>
@@ -274,7 +363,7 @@ export function Wishlist() {
                   {isAdministrator
                     ? 'Most Saved & Platform Analytics'
                     : isBusinessUser
-                    ? 'Most Saved & Community Trends'
+                    ? 'Wishlist Analytics & Market Trends'
                     : 'My Saved & Wishlist'}
                 </h1>
                 {isAdministrator && (
@@ -282,19 +371,30 @@ export function Wishlist() {
                     <ShieldCheck className="h-3 w-3" /> Admin View
                   </span>
                 )}
+                {userType === 'resort' && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-600 text-white uppercase tracking-wider flex items-center gap-1 shadow-xs">
+                    <Hotel className="h-3 w-3" /> Resort Partner
+                  </span>
+                )}
+                {userType === 'enterprise' && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-600 text-white uppercase tracking-wider flex items-center gap-1 shadow-xs">
+                    <Store className="h-3 w-3" /> Enterprise Partner
+                  </span>
+                )}
               </div>
               <p className="text-xs text-gray-500 font-medium mt-0.5">
                 {isAdministrator
                   ? 'Real-time platform analytics on tourist wishlists, top-saved destinations, and community engagement.'
                   : isBusinessUser
-                  ? 'Insights on top-saved destinations, stays, and products in Discover Mansalay'
+                  ? 'Your specific wishlist saves performance alongside platform-wide tourist trends in Discover Mansalay.'
                   : `${wishlist.length} saved places & experiences · visible only to you`}
               </p>
             </div>
           </div>
 
-          {isAdministrator && (
-            <div className="flex items-center gap-2">
+          {/* Quick Action Buttons */}
+          <div className="flex items-center gap-2">
+            {isAdministrator && (
               <Link
                 to="/admin/dashboard"
                 className="px-3.5 py-2 bg-white border border-gray-200 hover:border-pink-300 text-gray-700 hover:text-pink-600 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
@@ -302,55 +402,205 @@ export function Wishlist() {
                 <LayoutDashboard className="h-4 w-4" />
                 Admin Dashboard
               </Link>
-            </div>
-          )}
+            )}
+            {userType === 'resort' && (
+              <Link
+                to="/resort/dashboard"
+                className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                Resort Dashboard
+              </Link>
+            )}
+            {userType === 'enterprise' && (
+              <Link
+                to="/enterprise/dashboard"
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                Enterprise Dashboard
+              </Link>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* ── ADMIN / ANALYTICS VIEW ── */}
-      {isAdministrator ? (
+      {/* ── ADMIN / RESORT / ENTERPRISE ANALYTICS VIEW ── */}
+      {canViewAnalytics ? (
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-          {/* KPI Analytics Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-pink-50 text-pink-500 flex items-center justify-center flex-shrink-0">
-                <Bookmark className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xl font-black text-gray-900">{totalSavesAll.toLocaleString()}</div>
-                <div className="text-[11px] text-gray-500 font-medium truncate">Total Community Saves</div>
-              </div>
-            </div>
 
-            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center flex-shrink-0">
-                <Award className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-sm font-bold text-gray-900 truncate">{topSavedItem?.name || 'Mansalay Beach'}</div>
-                <div className="text-[11px] text-gray-500 font-medium">#1 Top Saved ({topSavedItem?.saves || 0} saves)</div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-500 flex items-center justify-center flex-shrink-0">
-                <Layers className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xl font-black text-gray-900">{grandTotal}</div>
-                <div className="text-[11px] text-gray-500 font-medium">Active Platform Listings</div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-500 flex items-center justify-center flex-shrink-0">
-                <Sparkles className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xl font-black text-emerald-600">
-                  {grandTotal > 0 ? Math.round((totalSavesAll / grandTotal) * 10) / 10 : 0}
+          {/* ── EXCLUSIVE BUSINESS ANALYTICS CARD (For Resort & Enterprise) ── */}
+          {isBusinessUser && (
+            <div className={`rounded-3xl p-6 border shadow-sm transition-all ${
+              userType === 'resort'
+                ? 'bg-gradient-to-br from-purple-900 via-indigo-900 to-purple-950 text-white border-purple-800'
+                : 'bg-gradient-to-br from-emerald-900 via-teal-900 to-emerald-950 text-white border-emerald-800'
+            }`}>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-pink-400">
+                    <Heart className="h-6 w-6 fill-pink-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-lg font-black text-white">
+                        {userType === 'resort' ? 'Your Resort Wishlist Performance' : 'Your Store Wishlist Performance'}
+                      </h2>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-pink-500 text-white uppercase">
+                        Your Listings
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/70 font-medium mt-0.5">
+                      {userType === 'resort'
+                        ? `Live tracking of tourists saving your resort rooms and accommodations to their wishlists.`
+                        : `Live tracking of tourists saving your products and delicacies to their wishlists.`}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-[11px] text-gray-500 font-medium">Avg Saves / Listing</div>
+
+                <Link
+                  to={userType === 'resort' ? '/resort/profile' : '/enterprise/profile'}
+                  className="px-4 py-2 rounded-xl bg-white text-gray-900 hover:bg-pink-50 hover:text-pink-600 text-xs font-bold transition-all self-start md:self-auto flex items-center gap-1.5 shadow-md"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {userType === 'resort' ? 'Manage Rooms' : 'Manage Products'}
+                </Link>
+              </div>
+
+              {/* 4 Business KPI Metrics */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                  <div className="text-2xl font-black text-white flex items-center gap-1.5">
+                    <Heart className="h-5 w-5 text-pink-400 fill-pink-400" />
+                    {totalMyBusinessSaves.toLocaleString()}
+                  </div>
+                  <div className="text-[11px] text-white/70 font-semibold mt-1">
+                    {userType === 'resort' ? 'Total Saves on Your Stays' : 'Total Saves on Your Products'}
+                  </div>
+                </div>
+
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                  <div className="text-2xl font-black text-white flex items-center gap-1.5">
+                    <Eye className="h-5 w-5 text-teal-300" />
+                    {totalMyBusinessViews.toLocaleString()}
+                  </div>
+                  <div className="text-[11px] text-white/70 font-semibold mt-1">
+                    Total Listing Views
+                  </div>
+                </div>
+
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                  <div className="text-sm font-black text-amber-300 truncate">
+                    {topMyBusinessSavedItem?.name || 'No saves yet'}
+                  </div>
+                  <div className="text-[11px] text-white/70 font-semibold mt-1">
+                    Top Saved: {topMyBusinessSavedItem ? `${topMyBusinessSavedItem.saves} saves` : 'N/A'}
+                  </div>
+                </div>
+
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                  <div className="text-2xl font-black text-emerald-300 flex items-center gap-1.5">
+                    <Layers className="h-5 w-5" />
+                    {myBusinessItems.length}
+                  </div>
+                  <div className="text-[11px] text-white/70 font-semibold mt-1">
+                    Active Published Listings
+                  </div>
+                </div>
+              </div>
+
+              {/* List of the business's own listings with save badges */}
+              {myBusinessItems.length > 0 && (
+                <div className="mt-6 pt-5 border-t border-white/10">
+                  <h3 className="text-xs font-bold text-white/90 uppercase tracking-wider mb-3">
+                    Your Most Wishlisted Offerings
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {myBusinessItems.slice(0, 6).map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => navigate(item.link)}
+                        className="flex items-center justify-between p-3 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 transition-all cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img
+                            src={getImgUrl(item.image)}
+                            alt={item.name}
+                            className="w-10 h-10 rounded-xl object-cover border border-white/20 flex-shrink-0"
+                            onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                          />
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold text-white truncate group-hover:text-pink-300 transition-colors">
+                              {item.name}
+                            </h4>
+                            <p className="text-[10px] text-white/60 font-medium">
+                              {item.category} {item.price ? `· ₱${Number(item.price).toLocaleString()}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="px-2.5 py-1 bg-pink-500/80 text-white rounded-lg text-[11px] font-black flex items-center gap-1 flex-shrink-0 ml-2">
+                          <Heart className="h-3 w-3 fill-white" />
+                          <span>{item.saves}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── PLATFORM-WIDE KPI CARDS (Admin + Resort + Enterprise) ── */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-extrabold text-gray-900 uppercase tracking-wider flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-pink-500" />
+                Platform-Wide Tourism Insights
+              </h2>
+              <span className="text-xs text-gray-400 font-medium">Mansalay Municipality</span>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-pink-50 text-pink-500 flex items-center justify-center flex-shrink-0">
+                  <Bookmark className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xl font-black text-gray-900">{totalSavesAll.toLocaleString()}</div>
+                  <div className="text-[11px] text-gray-500 font-medium truncate">Total Community Saves</div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center flex-shrink-0">
+                  <Award className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-gray-900 truncate">{topSavedItem?.name || 'Mansalay Beach'}</div>
+                  <div className="text-[11px] text-gray-500 font-medium">#1 Top Saved ({topSavedItem?.saves || 0} saves)</div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-500 flex items-center justify-center flex-shrink-0">
+                  <Layers className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xl font-black text-gray-900">{grandTotal}</div>
+                  <div className="text-[11px] text-gray-500 font-medium">Active Platform Listings</div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-500 flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xl font-black text-emerald-600">
+                    {grandTotal > 0 ? Math.round((totalSavesAll / grandTotal) * 10) / 10 : 0}
+                  </div>
+                  <div className="text-[11px] text-gray-500 font-medium">Avg Saves / Listing</div>
+                </div>
               </div>
             </div>
           </div>
@@ -534,7 +784,7 @@ export function Wishlist() {
           </div>
         </div>
       ) : (
-        /* ── TOURIST / BUSINESS VIEW ── */
+        /* ── TOURIST PERSONAL WISHLIST VIEW ── */
         <>
           {/* Two Panels: Most Viewed + Trends */}
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mb-8">
@@ -673,34 +923,8 @@ export function Wishlist() {
             </div>
           </div>
 
-          {/* Saved Items Grid or Empty / Business State */}
-          {isBusinessUser ? (
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
-                <h3 className="text-base font-bold text-gray-900 mb-2">Explore Mansalay Offerings</h3>
-                <p className="text-xs text-muted-foreground mb-6 max-w-lg mx-auto">
-                  Monitor active public listings and tourist attractions to align your business offerings with what visitors are looking for.
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full max-w-2xl mx-auto">
-                  {[
-                    { label: 'Attractions', icon: Compass, to: '/attractions', color: 'bg-blue-50 text-blue-600 border-blue-100' },
-                    { label: 'Resorts & Stays', icon: Hotel, to: '/accommodations', color: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
-                    { label: 'Local Products', icon: Package, to: '/products', color: 'bg-amber-50 text-amber-600 border-amber-100' },
-                    { label: 'Events', icon: Calendar, to: '/events', color: 'bg-pink-50 text-pink-600 border-pink-100' },
-                  ].map(({ label, icon: Icon, to, color }) => (
-                    <Link
-                      key={to}
-                      to={to}
-                      className={`flex flex-col items-center gap-2 p-5 rounded-2xl ${color} border hover:scale-105 transition-all font-bold text-xs shadow-xs`}
-                    >
-                      <Icon className="h-6 w-6" />
-                      {label}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : wishlist.length === 0 ? (
+          {/* Tourist Personal Saved Grid or Empty State */}
+          {wishlist.length === 0 ? (
             <div className="max-w-md mx-auto text-center px-4 py-16">
               <div className="w-16 h-16 rounded-full bg-pink-50 text-pink-500 flex items-center justify-center mx-auto mb-4">
                 <Heart className="h-8 w-8 text-pink-400 stroke-1" />
