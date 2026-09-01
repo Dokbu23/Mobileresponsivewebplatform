@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { Store, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, MessageSquare, Facebook, Navigation, MapPin, ExternalLink, Lock, Filter, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
-import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml } from '../../lib/api';
+import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
@@ -198,6 +198,10 @@ export function Products() {
         price: product.price,
       });
     }
+  const handleProductCardClick = (product: ProductItem) => {
+    recordView(product.id, 'product');
+    if (product.user_id) recordView(product.user_id, 'enterprise');
+    setSelectedProduct(product);
   };
 
   const productCategories = useMemo(() => {

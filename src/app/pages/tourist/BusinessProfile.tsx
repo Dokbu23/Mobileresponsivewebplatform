@@ -10,7 +10,7 @@ import {
   Bookmark, Share2, ThumbsUp, Send, Bed, Waves,
   Compass, Palmtree, Megaphone, Calendar, FileText, Clock
 } from 'lucide-react';
-import { getPublicJSON, getAuthToken, API_BASE } from '../../lib/api';
+import { getPublicJSON, getAuthToken, API_BASE, recordView } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
 import { LocationPicker } from '../../components/LocationPicker';
@@ -381,6 +381,7 @@ export function BusinessProfile() {
     (async () => {
       try {
         setLoading(true);
+        recordView(targetUserId, type === 'resort' ? 'resort' : 'enterprise');
         const endpoint = type === 'enterprise'
           ? `/business/enterprise/${targetUserId}`
           : `/business/resort/${targetUserId}`;

@@ -117,43 +117,82 @@ export function AdminDashboard() {
             category: decodeHtml(item.category),
           })));
         }
-        if (Array.isArray(realStats.popular_resorts) && realStats.popular_resorts.length > 0) {
-          setPopularResortsList(realStats.popular_resorts.map((r: any) => ({
-            ...r,
-            name: decodeHtml(r.name),
-          })));
+      let localViewCounts: Record<string, number> = {};
+      try {
+        const vStr = localStorage.getItem('discover-mansalay:view_counts');
+        if (vStr) localViewCounts = JSON.parse(vStr);
+      } catch {}
+
+      if (realStats) {
+        setStats(realStats);
+        if (Array.isArray(realStats.visitor_trend) && realStats.visitor_trend.length > 0) {
+          setVisitorTrendData(realStats.visitor_trend);
         }
-        if (Array.isArray(realStats.popular_enterprises) && realStats.popular_enterprises.length > 0) {
-          setPopularEnterprisesList(realStats.popular_enterprises.map((e: any) => ({
-            ...e,
-            name: decodeHtml(e.name),
-            category: decodeHtml(e.category),
+        if (Array.isArray(realStats.most_wishlisted) && realStats.most_wishlisted.length > 0) {
+          setMostWishlistedList(realStats.most_wishlisted.map((item: any) => ({
+            ...item,
+            name: decodeHtml(item.name),
+            category: decodeHtml(item.category),
           })));
         }
       }
 
-      // If backend popular resorts list is empty, derive from active local resorts
-      if ((!realStats?.popular_resorts || realStats.popular_resorts.length === 0) && activeResorts.length > 0) {
-        const derivedResorts = activeResorts.slice(0, 5).map((r: any, idx: number) => ({
-          id: r.id,
-          name: decodeHtml(r.name || r.resort_name || 'Resort'),
-          views: Number(r.view_count) || (100 - idx * 15),
-          rating: r.rating || '5.0',
-          image: r.image || (Array.isArray(r.images) && r.images[0]) || null,
-        }));
+      // Real Popular Resorts derived strictly from real recorded views
+      if (activeResorts.length > 0) {
+        const derivedResorts = activeResorts.map((r: any) => {
+          const key1 = `view_count_resort_${r.id}`;
+          const key2 = `view_count_accommodation_${r.id}`;
+          const localV = Math.max(Number(localViewCounts[key1]) || 0, Number(localViewCounts[key2]) || 0);
+          const rawV = Number(r.views) || Number(r.view_count) || 0;
+          const realV = Math.max(rawV, localV);
+          return {
+            id: r.id,
+            name: decodeHtml(r.name || r.resort_name || 'Resort'),
+            views: realV,
+            image: r.image || (Array.isArray(r.images) && r.images[0]) || null,
+          };
+        })
+        .sort((a, b) => b.views - a.views)
+        .slice(0, 5);
         setPopularResortsList(derivedResorts);
+      } else if (Array.isArray(realStats?.popular_resorts) && realStats.popular_resorts.length > 0) {
+        setPopularResortsList(realStats.popular_resorts.map((r: any) => ({
+          ...r,
+          name: decodeHtml(r.name),
+          views: Number(r.views) || 0,
+        })));
+      } else {
+        setPopularResortsList([]);
       }
 
-      // If backend popular enterprises is empty, derive from active local products/vendors
-      if ((!realStats?.popular_enterprises || realStats.popular_enterprises.length === 0) && activeProducts.length > 0) {
-        const derivedEnterprises = activeProducts.slice(0, 5).map((p: any, idx: number) => ({
-          id: p.id,
-          name: decodeHtml(p.store_name || p.brand || p.name || 'Enterprise'),
-          category: decodeHtml(p.category || 'Local Shop'),
-          views: Number(p.view_count) || (80 - idx * 10),
-          avatar: p.image || null,
-        }));
+      // Real Popular Enterprises derived strictly from real recorded views
+      if (activeProducts.length > 0) {
+        const derivedEnterprises = activeProducts.map((p: any) => {
+          const key1 = `view_count_enterprise_${p.id}`;
+          const key2 = `view_count_product_${p.id}`;
+          const localV = Math.max(Number(localViewCounts[key1]) || 0, Number(localViewCounts[key2]) || 0);
+          const rawV = Number(p.views) || Number(p.view_count) || 0;
+          const realV = Math.max(rawV, localV);
+          return {
+            id: p.id,
+            name: decodeHtml(p.store_name || p.brand || p.name || 'Enterprise'),
+            category: decodeHtml(p.category || 'Local Shop'),
+            views: realV,
+            avatar: p.image || null,
+          };
+        })
+        .sort((a, b) => b.views - a.views)
+        .slice(0, 5);
         setPopularEnterprisesList(derivedEnterprises);
+      } else if (Array.isArray(realStats?.popular_enterprises) && realStats.popular_enterprises.length > 0) {
+        setPopularEnterprisesList(realStats.popular_enterprises.map((e: any) => ({
+          ...e,
+          name: decodeHtml(e.name),
+          category: decodeHtml(e.category),
+          views: Number(e.views) || 0,
+        })));
+      } else {
+        setPopularEnterprisesList([]);
       }
 
       // ── REAL-TIME WISHLIST SAVES CALCULATION ──
@@ -226,13 +265,28 @@ export function AdminDashboard() {
   useEffect(() => {
     loadDashboardData();
     const handleUpdate = () => loadDashboardData();
+
+    // 4-second automatic background sync timer
+    const autoSyncInterval = setInterval(loadDashboardData, 4000);
+
     window.addEventListener('wishlistUpdated', handleUpdate);
+    window.addEventListener('viewsUpdated', handleUpdate);
     window.addEventListener('contentUpdated', handleUpdate);
     window.addEventListener('storage', handleUpdate);
+    window.addEventListener('focus', handleUpdate);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        loadDashboardData();
+      }
+    });
+
     return () => {
+      clearInterval(autoSyncInterval);
       window.removeEventListener('wishlistUpdated', handleUpdate);
+      window.removeEventListener('viewsUpdated', handleUpdate);
       window.removeEventListener('contentUpdated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('focus', handleUpdate);
     };
   }, []);
 
@@ -316,27 +370,12 @@ export function AdminDashboard() {
               <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
                 Admin Dashboard
               </h1>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live Sync
-              </span>
             </div>
             <p className="text-xs text-gray-500 font-medium mt-0.5">
               Discover Mansalay — platform overview and content management
             </p>
           </div>
           <div className="flex items-center gap-3 self-start sm:self-auto">
-            <button
-              onClick={() => {
-                loadDashboardData();
-                toast.success('Dashboard metrics refreshed!');
-              }}
-              className="px-3.5 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-xl shadow-2xs transition-all flex items-center gap-1.5"
-              title="Refresh live metrics"
-            >
-              <Eye className="h-3.5 w-3.5 text-gray-500" />
-              <span>Refresh</span>
-            </button>
             <Link
               to="/admin/content"
               className="px-5 py-2.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 active:scale-95 text-white font-bold text-xs rounded-xl shadow-md shadow-pink-500/20 flex items-center justify-center gap-2 transition-all"

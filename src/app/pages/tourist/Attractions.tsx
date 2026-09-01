@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { MapPin, Navigation, X, Star, Heart, ChevronLeft, ChevronRight, Share2, Search, Tag, Camera, Phone, Facebook, Instagram, MessageCircle, ArrowRight, Video, Play, Filter, ChevronDown } from 'lucide-react';
-import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken, decodeHtml } from '../../lib/api';
+import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
 import { ATTRACTION_CATEGORIES } from '../../lib/constants';
 import { VirtualTourModal } from '../../components/VirtualTourModal';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
@@ -242,6 +242,7 @@ export function Attractions() {
       navigate('/tourist/login');
       return;
     }
+    recordView(attraction.id, 'attraction');
     setSelectedAttraction(attraction);
     setModalImageIndex(0);
     // Record view in database

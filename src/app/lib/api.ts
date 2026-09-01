@@ -47,6 +47,34 @@ export function decodeHtml(str: string | null | undefined): string {
   return result;
 }
 
+/**
+ * Real-time view counter tracking helper
+ */
+export function recordView(id: string | number, type: 'attraction' | 'accommodation' | 'resort' | 'product' | 'enterprise') {
+  if (!id) return;
+  try {
+    const key = `view_count_${type}_${id}`;
+    const localCountsStr = localStorage.getItem('discover-mansalay:view_counts');
+    const localCounts = localCountsStr ? JSON.parse(localCountsStr) : {};
+    localCounts[key] = (Number(localCounts[key]) || 0) + 1;
+    localStorage.setItem('discover-mansalay:view_counts', JSON.stringify(localCounts));
+
+    // Non-blocking sync to backend
+    fetch(`${API_BASE}/api/public/views/increment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        item_id: id,
+        item_type: type,
+      }),
+    }).catch(() => {});
+
+    // Broadcast instant real-time event
+    window.dispatchEvent(new CustomEvent('viewsUpdated', { detail: { id, type, views: localCounts[key] } }));
+    window.dispatchEvent(new Event('contentUpdated'));
+  } catch {}
+}
+
 // Token management
 export function getAuthToken(): string | null {
   return localStorage.getItem('discover-mansalay:token') || localStorage.getItem('token');

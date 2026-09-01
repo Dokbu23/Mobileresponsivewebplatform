@@ -156,35 +156,45 @@ Route::group(['prefix' => 'public'], function () {
                     ];
                 });
 
-            // 7. Popular Resorts (Real DB query)
+            // 7. Popular Resorts (Real DB query with real view counts)
             $popularResorts = \App\Models\User::where('role', 'resort')
-                ->take(5)
                 ->get()
-                ->map(function($r, $idx) {
+                ->map(function($r) {
                     $rawName = $r->resort_name ?: ($r->name ?: 'Resort');
+                    $cachedViews = (int) \Illuminate\Support\Facades\Cache::get("view_count_resort_{$r->id}", 0);
+                    $cachedAccViews = (int) \Illuminate\Support\Facades\Cache::get("view_count_accommodation_{$r->id}", 0);
+                    $dbViews = (int) ($r->view_count ?: 0);
+                    $views = max($dbViews, $cachedViews, $cachedAccViews);
                     return [
                         'id' => $r->id,
                         'name' => html_entity_decode($rawName, ENT_QUOTES | ENT_HTML5, 'UTF-8'),
-                        'views' => (int) ($r->view_count ?: 0),
-                        'rating' => '5.0',
+                        'views' => $views,
                         'image' => (is_array($r->resort_images) && count($r->resort_images) > 0) ? $r->resort_images[0] : null,
                     ];
-                });
+                })
+                ->sortByDesc('views')
+                ->values()
+                ->take(5);
 
-            // 8. Popular Enterprises (Real DB query)
+            // 8. Popular Enterprises (Real DB query with real view counts)
             $popularEnterprises = \App\Models\User::where('role', 'enterprise')
-                ->take(5)
                 ->get()
-                ->map(function($e, $idx) {
+                ->map(function($e) {
                     $rawName = $e->store_name ?: ($e->name ?: 'Enterprise');
+                    $cachedViews = (int) \Illuminate\Support\Facades\Cache::get("view_count_enterprise_{$e->id}", 0);
+                    $dbViews = (int) ($e->view_count ?: 0);
+                    $views = max($dbViews, $cachedViews);
                     return [
                         'id' => $e->id,
                         'name' => html_entity_decode($rawName, ENT_QUOTES | ENT_HTML5, 'UTF-8'),
                         'category' => html_entity_decode($e->business_type ?: 'Local Shop', ENT_QUOTES | ENT_HTML5, 'UTF-8'),
-                        'views' => (int) ($e->view_count ?: 0),
+                        'views' => $views,
                         'avatar' => $e->logo ?? null,
                     ];
-                });
+                })
+                ->sortByDesc('views')
+                ->values()
+                ->take(5);
 
             // 9. Most Wishlisted Items (Real DB query from attractions/destinations)
             $mostWishlisted = \App\Models\Attraction::orderBy('view_count', 'desc')
@@ -260,6 +270,46 @@ Route::group(['prefix' => 'public'], function () {
                 ]
             ]);
         }
+    });
+
+    // Real-time Views Counter Increment Endpoint
+    Route::post('views/increment', function(\Illuminate\Http\Request $request) {
+        $itemId = $request->input('item_id');
+        $itemType = $request->input('item_type', 'attraction');
+
+        if (!$itemId) {
+            return response()->json(['success' => false, 'message' => 'item_id required'], 400);
+        }
+
+        $cacheKey = "view_count_{$itemType}_{$itemId}";
+        $currentViews = (int) \Illuminate\Support\Facades\Cache::get($cacheKey, 0);
+        $newViews = $currentViews + 1;
+        \Illuminate\Support\Facades\Cache::forever($cacheKey, $newViews);
+
+        try {
+            if ($itemType === 'attraction' && class_exists('\App\Models\Attraction')) {
+                \App\Models\Attraction::where('id', $itemId)->increment('view_count');
+            } elseif ($itemType === 'accommodation' && class_exists('\App\Models\Accommodation')) {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('accommodations', 'view_count')) {
+                    \App\Models\Accommodation::where('id', $itemId)->increment('view_count');
+                }
+            } elseif ($itemType === 'product' && class_exists('\App\Models\Product')) {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'view_count')) {
+                    \App\Models\Product::where('id', $itemId)->increment('view_count');
+                }
+            } elseif (($itemType === 'resort' || $itemType === 'enterprise') && class_exists('\App\Models\User')) {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'view_count')) {
+                    \App\Models\User::where('id', $itemId)->increment('view_count');
+                }
+            }
+        } catch (\Throwable $t) {}
+
+        return response()->json([
+            'success' => true,
+            'item_id' => $itemId,
+            'item_type' => $itemType,
+            'views' => $newViews,
+        ]);
     });
 
     // Real-time Wishlist Counter Increment / Decrement Endpoint

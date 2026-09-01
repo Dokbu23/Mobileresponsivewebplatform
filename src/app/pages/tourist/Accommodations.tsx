@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { Hotel, MapPin, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink } from 'lucide-react';
-import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml } from '../../lib/api';
+import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
 import { ACCOMMODATION_CATEGORIES } from '../../lib/constants';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
@@ -18,6 +18,15 @@ interface AccommodationItem {
   pricePerNight: number;
   location?: string;
   type?: string;
+  rating?: number;
+  contact?: string;
+  facebook?: string;
+  instagram?: string;
+  socials?: any;
+  amenities?: string[];
+  view_count?: number;
+  user_id?: number | string;
+}
   badge?: string;
   rating?: number;
   likes?: number;
@@ -200,6 +209,8 @@ export function Accommodations() {
       navigate('/tourist/login');
       return;
     }
+    recordView(acc.id, 'accommodation');
+    if (acc.user_id) recordView(acc.user_id, 'resort');
     setSelectedAcc(acc);
   };
 
