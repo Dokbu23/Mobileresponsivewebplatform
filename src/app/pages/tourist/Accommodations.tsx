@@ -26,11 +26,8 @@ interface AccommodationItem {
   amenities?: string[];
   view_count?: number;
   user_id?: number | string;
-}
   badge?: string;
-  rating?: number;
   likes?: number;
-  user_id?: string | number;
   is_registered?: boolean;
   resort_amenities?: string[];
   contact_number?: string;
@@ -385,12 +382,14 @@ export function Accommodations() {
                     >
                       <Share2 className="h-3.5 w-3.5" />
                     </button>
-                    <button
-                      onClick={(e) => toggleSaveAcc(acc, e)}
-                      className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
-                    >
-                      <Heart className={`h-3.5 w-3.5 ${isInWishlist(acc.id, 'accommodation') ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
-                    </button>
+                    {userType !== 'admin' && (
+                      <button
+                        onClick={(e) => toggleSaveAcc(acc, e)}
+                        className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
+                      >
+                        <Heart className={`h-3.5 w-3.5 ${isInWishlist(acc.id, 'accommodation') ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
+                      </button>
+                    )}
                   </div>
 
                   {/* Dark Overlay Saves */}

@@ -26,7 +26,7 @@ interface EventType {
 
 export function Events() {
   const navigate = useNavigate();
-  const { currentUser, addToWishlist, removeFromWishlist, isInWishlist } = useApp();
+  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist } = useApp();
   const [selectedEvent, setSelectedEvent] = useState<EventType | null>(null);
   const [items, setItems] = useState<EventType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -275,12 +275,14 @@ export function Events() {
                   </div>
 
                   {/* Top Right Wishlist Heart */}
-                  <button
-                    onClick={(e) => toggleSaveEvent(event, e)}
-                    className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-gray-700 shadow-sm flex items-center justify-center backdrop-blur-md transition-colors"
-                  >
-                    <Heart className={`h-4 w-4 ${isInWishlist(event.id, 'event') ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
-                  </button>
+                  {userType !== 'admin' && (
+                    <button
+                      onClick={(e) => toggleSaveEvent(event, e)}
+                      className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-gray-700 shadow-sm flex items-center justify-center backdrop-blur-md transition-colors"
+                    >
+                      <Heart className={`h-4 w-4 ${isInWishlist(event.id, 'event') ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
+                    </button>
+                  )}
 
                   {/* Dark Bottom Overlay with Title & Date */}
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-gray-950/90 via-gray-950/50 to-transparent p-4">

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { getJSON } from '../lib/api';
+import { getJSON, API_BASE } from '../lib/api';
 
 export interface ProductVariation {
   id: number;
@@ -140,7 +140,24 @@ function readStoredCart(userType: string | null): CartItem[] {
   }
 }
 
-const WISHLIST_STORAGE_KEY = 'discover-mansalay:wishlist';
+function getWishlistStorageKey(user: CurrentUser | null, role: string | null): string | null {
+  if (!user || !user.id || role !== 'tourist') {
+    return null;
+  }
+  return `discover-mansalay:wishlist_user_${user.id}`;
+}
+
+function readStoredWishlist(user: CurrentUser | null, role: string | null): WishlistItem[] {
+  if (typeof window === 'undefined') return [];
+  const key = getWishlistStorageKey(user, role);
+  if (!key) return [];
+  try {
+    const stored = window.localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [userType, setUserType] = useState<'tourist' | 'admin' | 'resort' | 'enterprise' | 'pending' | null>(() => {
@@ -153,26 +170,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ? (storedUserType as 'tourist' | 'admin' | 'resort' | 'enterprise' | 'pending')
       : null;
   });
-  
-  const [cart, setCart] = useState<CartItem[]>(() => readStoredCart(userType));
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [wishlist, setWishlist] = useState<WishlistItem[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const stored = window.localStorage.getItem(WISHLIST_STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-  const [isAdmin, setIsAdmin] = useState(() => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
 
-    return window.localStorage.getItem(IS_ADMIN_STORAGE_KEY) === 'true';
-  });
   const [currentUser, setCurrentUser] = useState<AppContextType['currentUser']>(() => {
     if (typeof window === 'undefined') {
       return null;
@@ -185,12 +183,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return null;
     }
   });
+  
+  const [cart, setCart] = useState<CartItem[]>(() => readStoredCart(userType));
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [wishlist, setWishlist] = useState<WishlistItem[]>(() => readStoredWishlist(currentUser, userType));
+  const [isAdmin, setIsAdmin] = useState(() => {
+    if (typeof window === 'undefined') {
+      return false;
+    }
 
+    return window.localStorage.getItem(IS_ADMIN_STORAGE_KEY) === 'true';
+  });
+
+  // Clean up legacy unscoped wishlist key
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(wishlist));
+      window.localStorage.removeItem('discover-mansalay:wishlist');
     }
-  }, [wishlist]);
+  }, []);
+
+  // Synchronize user-scoped wishlist whenever currentUser or userType changes
+  useEffect(() => {
+    if (userType === 'tourist' && currentUser?.id) {
+      setWishlist(readStoredWishlist(currentUser, userType));
+    } else {
+      setWishlist([]);
+    }
+  }, [currentUser?.id, userType]);
+
+  // Persist user-specific wishlist
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const key = getWishlistStorageKey(currentUser, userType);
+      if (key) {
+        window.localStorage.setItem(key, JSON.stringify(wishlist));
+      }
+    }
+  }, [wishlist, currentUser, userType]);
 
   useEffect(() => {
     if (userType) {
@@ -330,7 +360,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addToWishlist = (item: WishlistItem) => {
-    if (userType === 'resort' || userType === 'enterprise') {
+    if (userType !== 'tourist' || !currentUser?.id) {
       return;
     }
     setWishlist(prev => {
@@ -366,6 +396,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const removeFromWishlist = (id: string | number, type: string) => {
+    if (userType !== 'tourist' || !currentUser?.id) {
+      return;
+    }
     setWishlist(prev => prev.filter(w => !(String(w.id) === String(id) && w.type === type)));
 
     // Real-time Wishlist Counter updates & instant broadcast
@@ -394,6 +427,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const isInWishlist = (id: string | number, type: string) => {
+    if (userType !== 'tourist' || !currentUser?.id) return false;
     return wishlist.some(w => String(w.id) === String(id) && w.type === type);
   };
 

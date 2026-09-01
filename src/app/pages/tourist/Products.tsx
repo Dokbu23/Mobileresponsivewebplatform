@@ -59,15 +59,6 @@ export function Products() {
     navigate(`/business/enterprise/${userId}`);
   };
 
-  const handleProductCardClick = (product: ProductItem) => {
-    if (!currentUser && !getAuthToken()) {
-      toast.info('Please log in or register to view product details');
-      navigate('/login');
-      return;
-    }
-    setSelectedProduct(product);
-  };
-
   const loadProducts = async () => {
     setLoading(true);
     try {
@@ -344,12 +335,14 @@ export function Products() {
                     >
                       <Share2 className="h-3.5 w-3.5" />
                     </button>
-                    <button
-                      onClick={(e) => toggleSaveProduct(product, e)}
-                      className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
-                    >
-                      <Heart className={`h-3.5 w-3.5 ${isInWishlist(product.id, 'product') ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
-                    </button>
+                    {userType !== 'admin' && (
+                      <button
+                        onClick={(e) => toggleSaveProduct(product, e)}
+                        className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
+                      >
+                        <Heart className={`h-3.5 w-3.5 ${isInWishlist(product.id, 'product') ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
+                      </button>
+                    )}
                   </div>
 
                   {/* Dark Overlay Category & Likes */}
@@ -465,7 +458,9 @@ export function Products() {
                   >
                     <Share2 className="h-4 w-4" />
                   </button>
-                  <button onClick={() => toggleSaveProduct(selectedProduct)} className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-pink-50"><Heart className={`h-4 w-4 ${isInWishlist(selectedProduct.id, 'product') ? 'fill-pink-500 text-pink-500' : ''}`} /></button>
+                  {userType !== 'admin' && (
+                    <button onClick={() => toggleSaveProduct(selectedProduct)} className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-pink-50"><Heart className={`h-4 w-4 ${isInWishlist(selectedProduct.id, 'product') ? 'fill-pink-500 text-pink-500' : ''}`} /></button>
+                  )}
                 </div>
               </div>
 

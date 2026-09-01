@@ -128,7 +128,7 @@ class StatsController extends Controller
                     'products'            => $productsCount,
                     'events'              => $eventsCount,
                     'tourists'            => $touristsCount,
-                    'tourist_arrivals'    => $touristArrivals,
+                    'tourist_arrivals'    => $visitorCount,
                     'total_bookings'      => $totalBookings,
                     'users'               => $usersCount,
                     'businesses'          => $businessesCount,
@@ -138,6 +138,7 @@ class StatsController extends Controller
                     'top_attractions'     => $topAttractions,
                     'popular_resorts'     => $popularResorts,
                     'popular_enterprises' => $popularEnterprises,
+                    'most_wishlisted'     => $topAttractions,
                     'monthly_trend'       => $monthlyTrend,
                 ]
             ]);

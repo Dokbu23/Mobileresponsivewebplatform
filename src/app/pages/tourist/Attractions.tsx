@@ -26,7 +26,7 @@ interface AttractionType {
 
 export function Attractions() {
   const navigate = useNavigate();
-  const { currentUser, addToWishlist, removeFromWishlist, isInWishlist } = useApp();
+  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist } = useApp();
   const [selectedAttraction, setSelectedAttraction] = useState<AttractionType | null>(null);
   const [isVirtualTourOpen, setIsVirtualTourOpen] = useState(false);
   const [modalImageIndex, setModalImageIndex] = useState(0);
@@ -371,15 +371,17 @@ export function Attractions() {
                     >
                       <Share2 className="h-3.5 w-3.5" />
                     </button>
-                    <button
-                      onClick={(e) => handleToggleLike(e, attraction)}
-                      className="w-7 h-7 bg-white/90 backdrop-blur-sm hover:bg-white text-gray-700 rounded-full flex items-center justify-center shadow-sm transition-colors"
-                      title="Add to Wishlist"
-                    >
-                      <Heart 
-                        className={`h-3.5 w-3.5 ${isInWishlist(attraction.id, 'attraction') ? 'fill-pink-500 text-pink-500' : 'text-gray-700'}`} 
-                      />
-                    </button>
+                    {userType !== 'admin' && (
+                      <button
+                        onClick={(e) => handleToggleLike(e, attraction)}
+                        className="w-7 h-7 bg-white/90 backdrop-blur-sm hover:bg-white text-gray-700 rounded-full flex items-center justify-center shadow-sm transition-colors"
+                        title="Add to Wishlist"
+                      >
+                        <Heart 
+                          className={`h-3.5 w-3.5 ${isInWishlist(attraction.id, 'attraction') ? 'fill-pink-500 text-pink-500' : 'text-gray-700'}`} 
+                        />
+                      </button>
+                    )}
                   </div>
 
                   {/* Left & Right Arrow Navigation (Visible when multiple images) */}

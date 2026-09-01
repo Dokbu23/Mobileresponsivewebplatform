@@ -66,7 +66,7 @@ export function Navbar() {
       { to: '/admin/users', label: 'Account Management', icon: User },
       { to: '/admin/subscriptions', label: 'Manage Subscriptions', icon: CreditCard },
       { to: '/admin/publish', label: 'Publish Content', icon: Plus },
-      { to: '/wishlist', label: 'Most Saved & Trends', icon: Heart },
+      { to: '/wishlist', label: 'Most Saved & Analytics', icon: Heart },
     ],
     resort: [
       { to: '/resort/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -197,7 +197,7 @@ export function Navbar() {
               <button
                 onClick={() => navigate('/wishlist')}
                 className="p-2 text-gray-600 dark:text-slate-300 hover:text-pink-500 dark:hover:text-pink-400 hover:bg-pink-50 dark:hover:bg-slate-800 rounded-full transition-colors relative"
-                title="Wishlist"
+                title={userType === 'admin' ? 'Most Saved & Analytics' : isBusinessUser ? 'Most Saved & Trends' : 'Wishlist'}
               >
                 <Heart className="h-5 w-5" />
               </button>
