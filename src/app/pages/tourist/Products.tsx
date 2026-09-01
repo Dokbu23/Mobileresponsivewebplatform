@@ -198,6 +198,8 @@ export function Products() {
         price: product.price,
       });
     }
+  };
+
   const handleProductCardClick = (product: ProductItem) => {
     recordView(product.id, 'product');
     if (product.user_id) recordView(product.user_id, 'enterprise');

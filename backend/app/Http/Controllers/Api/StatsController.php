@@ -61,13 +61,6 @@ class StatsController extends Controller
                 $visitorCount = $usersCount;
             }
 
-            // Rating proxy
-            $rating = $totalOrders > 0
-                ? round(($completedOrders / $totalOrders) * 5, 1)
-                : 4.8;
-            $rating = max(3.5, min(5.0, $rating));
-            if ($totalOrders === 0) $rating = 4.8;
-
             // Top attractions sorted by real view_count
             $topAttractions = Attraction::select('id', 'name', 'view_count', 'image', 'location')
                 ->orderByDesc('view_count')
@@ -139,7 +132,6 @@ class StatsController extends Controller
                     'total_bookings'      => $totalBookings,
                     'users'               => $usersCount,
                     'businesses'          => $businessesCount,
-                    'rating'              => $rating,
                     'total_orders'        => $totalOrders,
                     'completed_orders'    => $completedOrders,
                     'total_views'         => (int) $totalViews,
