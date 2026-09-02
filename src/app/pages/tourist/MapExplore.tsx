@@ -61,7 +61,7 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): 
 interface DirectoryLocation {
   id: string;
   name: string;
-  category: 'Beach' | 'Cultural' | 'Heritage' | 'Adventure' | 'Resort' | 'Landmark' | 'Market';
+  category: string;
   icon: string;
   iconBg: string;
   description: string;

@@ -105,18 +105,6 @@ export function AdminDashboard() {
       const activeEvents = mergeSection(evtRes, customEvents);
 
       const realStats = statsRes?.stats;
-      if (realStats) {
-        setStats(realStats);
-        if (Array.isArray(realStats.visitor_trend) && realStats.visitor_trend.length > 0) {
-          setVisitorTrendData(realStats.visitor_trend);
-        }
-        if (Array.isArray(realStats.most_wishlisted) && realStats.most_wishlisted.length > 0) {
-          setMostWishlistedList(realStats.most_wishlisted.map((item: any) => ({
-            ...item,
-            name: decodeHtml(item.name),
-            category: decodeHtml(item.category),
-          })));
-        }
       let localViewCounts: Record<string, number> = {};
       try {
         const vStr = localStorage.getItem('discover-mansalay:view_counts');

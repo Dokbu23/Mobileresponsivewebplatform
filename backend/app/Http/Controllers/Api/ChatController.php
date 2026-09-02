@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Cache;
 class ChatController extends Controller
 {
     protected $allowedRooms = ['tourist', 'resort', 'enterprise', 'admin'];
-    protected string $openaiModel = 'gpt-4o-mini';
+    protected string $groqModel = 'groq/compound-mini';
     
     // Response cache duration (5 minutes)
     protected int $cacheDuration = 300;
@@ -163,69 +163,13 @@ class ChatController extends Controller
             }
         }
 
-        // Build TF-IDF index
-        static $indexCache = [];
-        $entriesKey = md5(json_encode($entries));
-        if (!isset($indexCache[$entriesKey])) {
-            $indexCache[$entriesKey] = $this->buildIndex($entries);
-        }
-        $index = $indexCache[$entriesKey];
+        // Skip TF-IDF pre-filtering — let Groq AI handle all questions with the full FAQ as context
+        $bestAnswer = null; // kept only as last-resort fallback
 
-        $queryTokens = $this->tokenize($text);
-        if (empty($queryTokens)) {
-            return $language === 'filipino'
-                ? "Pasensya na, hindi ko maintindihan ang tanong. Maaari mo ba itong ipaliwanag nang mas malinaw?"
-                : "Sorry, I don't understand the question. Can you explain it more clearly?";
-        }
 
-        // Query TF
-        $queryTf = [];
-        foreach ($queryTokens as $t) {
-            $queryTf[$t] = ($queryTf[$t] ?? 0) + 1;
-        }
-
-        // Query TF-IDF weights
-        $queryWeights = [];
-        foreach ($queryTf as $t => $c) {
-            $idf = $index['idf'][$t] ?? (log((count($entries) + 1) / 1) + 1);
-            $queryWeights[$t] = $c * $idf;
-        }
-
-        $queryNorm = sqrt(array_sum(array_map(function ($v) { return $v * $v; }, $queryWeights)));
-
-        $bestScore = 0;
-        $bestAnswer = null;
-
-        foreach ($index['entries'] as $entry) {
-            $dot = 0.0;
-            foreach ($queryWeights as $t => $qW) {
-                $eW = $entry['weights'][$t] ?? 0;
-                $dot += $qW * $eW;
-            }
-
-            $cos = ($queryNorm > 0 && $entry['norm'] > 0) ? ($dot / ($queryNorm * $entry['norm'])) : 0;
-
-            $percent = 0;
-            similar_text($text, $entry['question'], $percent);
-
-            $score = ($cos * 0.85) + ($percent / 100 * 0.15);
-
-            if ($score > $bestScore) {
-                $bestScore = $score;
-                $bestAnswer = $entry['answer'];
-            }
-        }
-
-        // Threshold
-        if ($bestScore > 0.18) {
-            // Cache the response
-            Cache::put($cacheKey, $bestAnswer, $this->cacheDuration);
-            return $bestAnswer;
-        }
-
-        // Use Groq with conversation context
+        // Use Groq AI FIRST — gives most accurate, contextual answers
         $groqKey = env('GROQ_API_KEY') ?: config('services.groq.key');
-        $groqModel = env('GROQ_MODEL') ?: config('services.groq.model') ?: 'llama-3.1-8b-instant';
+        $groqModel = env('GROQ_MODEL') ?: config('services.groq.model') ?: 'groq/compound-mini';
         $groqUrl = env('GROQ_API_URL') ?: config('services.groq.url') ?: 'https://api.groq.com';
 
         if (!empty($groqKey)) {
@@ -233,12 +177,11 @@ class ChatController extends Controller
                 $conversationContext = $this->getConversationContext($room, $userId);
                 $ai = $this->callGroq($text, $room, $entries, $groqKey, $groqModel, $groqUrl, $conversationContext, $language);
                 if (!empty($ai)) {
-                    // Cache the response
                     Cache::put($cacheKey, $ai, $this->cacheDuration);
                     return $ai;
                 }
             } catch (\Throwable $ex) {
-                Log::warning('Groq fallback failed: ' . $ex->getMessage());
+                Log::warning('Groq call failed: ' . $ex->getMessage());
             }
         }
 
@@ -250,8 +193,8 @@ class ChatController extends Controller
         }
 
         return $language === 'filipino'
-            ? "Salamat sa iyong pagtatanong! Ako ang iyong **Mansalay Tourism Assistant**. Maaari mo akong tanungin tungkol sa mga magagandang beach (tulad ng Buktot), resorts (MB Hiraya, Mahalta Glamping), katutubong produkto ng AWATI, at direksyon sa biyahe."
-            : "Thank you for asking! I'm your **Mansalay Tourism Assistant**. You can ask me about top beaches (like Buktot), resorts (MB Hiraya, Mahalta Glamping), authentic AWATI handicrafts, and travel directions.";
+            ? "Pasensya na, ako ay isang **Mansalay Tourism Assistant** na nakalaan lamang para sa mga tanong tungkol sa Mansalay, Oriental Mindoro—tulad ng aming mga pasyalan, resorts, lokal na produkto, pista, at interactive map. May maitutulong ba ako tungkol sa iyong pagbisita sa Mansalay?"
+            : "I apologize, but I am the **Mansalay Tourism Assistant** dedicated specifically to inquiries about Mansalay, Oriental Mindoro—such as our attractions, resorts, local products, events, and interactive map. How may I help you with your Mansalay travel plans?";
     }
 
     protected function generateDatabaseBackedAnswer(string $text, string $language = 'filipino'): ?string
@@ -348,7 +291,7 @@ class ChatController extends Controller
         return null;
     }
 
-    protected function callGroq(string $text, string $room, array $entries, string $apiKey, string $modelId = 'llama-3.1-8b-instant', string $apiUrl = 'https://api.groq.com', array $conversationContext = [], string $language = 'filipino'): ?string
+    protected function callGroq(string $text, string $room, array $entries, string $apiKey, string $modelId = 'groq/compound-mini', string $apiUrl = 'https://api.groq.com', array $conversationContext = [], string $language = 'filipino'): ?string
     {
         // Build knowledge base context
         $kbText = $this->buildKnowledgeBaseContext($entries);
@@ -375,55 +318,66 @@ class ChatController extends Controller
         
         $endpoint = rtrim($apiUrl, '/') . '/openai/v1/chat/completions';
         
-        $payload = [
-            'model' => $modelId,
-            'messages' => $messages,
-            'temperature' => 0.3,
-            'max_tokens' => 500,
-            'top_p' => 0.9
-        ];
+        $modelsToTry = array_unique([$modelId, 'groq/compound-mini', 'openai/gpt-oss-20b', 'qwen/qwen3.6-27b']);
         
-        try {
-            $startTime = microtime(true);
+        foreach ($modelsToTry as $currentModel) {
+            $payload = [
+                'model' => $currentModel,
+                'messages' => $messages,
+                'temperature' => 0.2,
+                'max_tokens' => 550,
+                'top_p' => 0.9
+            ];
             
-            $response = Http::withHeaders([
-                'Authorization' => "Bearer {$apiKey}",
-                'Content-Type' => 'application/json',
-            ])->timeout(30)->post($endpoint, $payload);
-            
-            $responseTime = (microtime(true) - $startTime) * 1000; // ms
-            $this->trackResponseTime($room, $responseTime);
-            
-            if (!$response->successful()) {
-                Log::warning('Groq API failed', [
-                    'status' => $response->status(),
-                    'body' => $response->body()
-                ]);
-                return null;
+            try {
+                $startTime = microtime(true);
+                
+                $response = Http::withHeaders([
+                    'Authorization' => "Bearer {$apiKey}",
+                    'Content-Type' => 'application/json',
+                ])->timeout(25)->post($endpoint, $payload);
+                
+                $responseTime = (microtime(true) - $startTime) * 1000;
+                $this->trackResponseTime($room, $responseTime);
+                
+                if ($response->successful()) {
+                    $json = $response->json();
+                    if (!empty($json['choices'][0]['message']['content'])) {
+                        $content = trim($json['choices'][0]['message']['content']);
+                        
+                        // Strip reasoning/think tags if present
+                        if (stripos($content, '</think>') !== false) {
+                            $parts = explode('</think>', $content);
+                            $clean = trim(end($parts));
+                        } elseif (stripos($content, '<think>') !== false) {
+                            // Incomplete think tag - discard the think block
+                            $clean = '';
+                        } else {
+                            $clean = $content;
+                        }
+                        
+                        if (!empty($clean)) {
+                            return $clean;
+                        }
+                    }
+                }
+                
+                Log::warning("Groq attempt with {$currentModel} failed (status {$response->status()}), trying next model...");
+                usleep(250000); // 250ms before trying next model
+                
+            } catch (\Throwable $ex) {
+                Log::error("Groq error with {$currentModel}: " . $ex->getMessage());
             }
-            
-            $json = $response->json();
-            
-            if (isset($json['choices'][0]['message']['content'])) {
-                return trim($json['choices'][0]['message']['content']);
-            }
-            
-            Log::warning('Unexpected Groq response format', ['response' => $json]);
-            return null;
-            
-        } catch (\Throwable $ex) {
-            Log::error('Groq API error', [
-                'error' => $ex->getMessage()
-            ]);
-            return null;
         }
+        
+        return null;
     }
 
     protected function buildKnowledgeBaseContext(array $entries): string
     {
-        $context = "# Knowledge Base\n\n## Frequently Asked Questions\n\n";
+        $context = "# Knowledge Base FAQs:\n";
         
-        foreach (array_slice($entries, 0, 20) as $e) {
+        foreach (array_slice($entries, 0, 15) as $e) {
             $q = $e['question'] ?? '';
             $a = $e['answer'] ?? '';
             if ($q && $a) {
@@ -441,22 +395,21 @@ class ChatController extends Controller
         try {
             // Attractions
             if (class_exists(\App\Models\Attraction::class)) {
-                $attractions = \App\Models\Attraction::select('name', 'description', 'address', 'category')
+                $attractions = \App\Models\Attraction::select('name', 'location', 'category', 'description')
                     ->whereNotNull('name')
-                    ->take(30)
+                    ->take(10)
                     ->get();
                 
                 if ($attractions->count() > 0) {
-                    $context .= "## Tourist Attractions\n\n";
+                    $context .= "## Mansalay Tourist Attractions & Destinations\n\n";
                     foreach ($attractions as $item) {
                         $name = $item->name ?? '';
                         $desc = trim(strip_tags($item->description ?? ''));
-                        $addr = $item->address ?? '';
+                        $loc = $item->location ?? '';
                         $cat = $item->category ?? '';
-                        $context .= "**{$name}**\n";
-                        if ($cat) $context .= "Category: {$cat}\n";
-                        if ($desc) $context .= "Description: {$desc}\n";
-                        if ($addr) $context .= "Location: {$addr}\n";
+                        $context .= "• **{$name}**" . ($cat ? " ({$cat})" : "") . "\n";
+                        if ($loc) $context .= "  Location: {$loc}\n";
+                        if ($desc) $context .= "  Details: " . mb_substr($desc, 0, 120) . "...\n";
                         $context .= "\n";
                     }
                 }
@@ -466,26 +419,25 @@ class ChatController extends Controller
         }
         
         try {
-            // Accommodations
+            // Accommodations / Stays
             if (class_exists(\App\Models\Accommodation::class)) {
-                $accommodations = \App\Models\Accommodation::select('name', 'description', 'address', 'price_per_night', 'amenities')
+                $accommodations = \App\Models\Accommodation::select('name', 'location', 'category', 'type', 'description', 'price_per_night', 'contact_number')
                     ->whereNotNull('name')
-                    ->take(30)
+                    ->take(10)
                     ->get();
                 
                 if ($accommodations->count() > 0) {
-                    $context .= "## Accommodations\n\n";
+                    $context .= "## Mansalay Accommodations & Stays\n\n";
                     foreach ($accommodations as $item) {
                         $name = $item->name ?? '';
-                        $desc = trim(strip_tags($item->description ?? ''));
-                        $addr = $item->address ?? '';
+                        $loc = $item->location ?? '';
                         $price = $item->price_per_night ?? '';
-                        $amenities = $item->amenities ?? '';
-                        $context .= "**{$name}**\n";
-                        if ($desc) $context .= "Description: {$desc}\n";
-                        if ($addr) $context .= "Location: {$addr}\n";
-                        if ($price) $context .= "Price: ₱{$price} per night\n";
-                        if ($amenities) $context .= "Amenities: {$amenities}\n";
+                        $contact = $item->contact_number ?? '';
+                        $type = $item->type ?? $item->category ?? '';
+                        $context .= "• **{$name}**" . ($type ? " ({$type})" : "") . "\n";
+                        if ($loc) $context .= "  Location: {$loc}\n";
+                        if ($price) $context .= "  Rate: ₱" . number_format((float)$price, 2) . "/night\n";
+                        if ($contact) $context .= "  Contact: {$contact}\n";
                         $context .= "\n";
                     }
                 }
@@ -497,24 +449,20 @@ class ChatController extends Controller
         try {
             // Products
             if (class_exists(\App\Models\Product::class)) {
-                $products = \App\Models\Product::select('name', 'description', 'price', 'category')
+                $products = \App\Models\Product::select('name', 'category', 'description', 'price')
                     ->whereNotNull('name')
-                    ->take(30)
+                    ->take(10)
                     ->get();
                 
                 if ($products->count() > 0) {
-                    $context .= "## Local Products\n\n";
+                    $context .= "## Mansalay Products & Souvenirs\n\n";
                     foreach ($products as $item) {
                         $name = $item->name ?? '';
-                        $desc = trim(strip_tags($item->description ?? ''));
                         $price = $item->price ?? '';
                         $cat = $item->category ?? '';
-                        $context .= "**{$name}**\n";
-                        if ($cat) $context .= "Category: {$cat}\n";
-                        if ($desc) $context .= "Description: {$desc}\n";
-                        if ($price) $context .= "Price: ₱{$price}\n";
-                        $context .= "\n";
+                        $context .= "• **{$name}**" . ($cat ? " [{$cat}]" : "") . " — ₱" . number_format((float)$price, 2) . "\n";
                     }
+                    $context .= "\n";
                 }
             }
         } catch (\Throwable $ex) {
@@ -524,56 +472,34 @@ class ChatController extends Controller
         try {
             // Events
             if (class_exists(\App\Models\Event::class)) {
-                $events = \App\Models\Event::select('title', 'description', 'start_date', 'end_date', 'location')
-                    ->whereNotNull('title')
-                    ->where('start_date', '>=', now())
-                    ->take(20)
+                $events = \App\Models\Event::select('name', 'location', 'category', 'date', 'description')
+                    ->whereNotNull('name')
+                    ->take(10)
                     ->get();
                 
                 if ($events->count() > 0) {
-                    $context .= "## Upcoming Events\n\n";
+                    $context .= "## Mansalay Events & Festivals\n\n";
                     foreach ($events as $item) {
-                        $title = $item->title ?? '';
-                        $desc = trim(strip_tags($item->description ?? ''));
-                        $start = $item->start_date ?? '';
-                        $end = $item->end_date ?? '';
+                        $name = $item->name ?? '';
+                        $date = $item->date ? (is_string($item->date) ? $item->date : $item->date->format('Y-m-d')) : '';
                         $loc = $item->location ?? '';
-                        $context .= "**{$title}**\n";
-                        if ($start) $context .= "Date: {$start}";
-                        if ($end && $end != $start) $context .= " to {$end}";
-                        $context .= "\n";
-                        if ($loc) $context .= "Location: {$loc}\n";
-                        if ($desc) $context .= "Description: {$desc}\n";
-                        $context .= "\n";
+                        $context .= "• **{$name}**" . ($date ? " (Date: {$date})" : "") . ($loc ? " at {$loc}" : "") . "\n";
                     }
+                    $context .= "\n";
                 }
             }
         } catch (\Throwable $ex) {
             Log::debug('Events enrichment skipped: ' . $ex->getMessage());
         }
-        
-        try {
-            // Recent Bookings (for resort/enterprise rooms)
-            if (class_exists(\App\Models\Booking::class)) {
-                $bookings = \App\Models\Booking::select('id', 'status', 'check_in', 'check_out', 'total_price')
-                    ->whereIn('status', ['pending', 'confirmed'])
-                    ->orderBy('created_at', 'desc')
-                    ->take(10)
-                    ->get();
-                
-                if ($bookings->count() > 0) {
-                    $context .= "## Recent Bookings\n\n";
-                    $context .= "Total pending/confirmed bookings: {$bookings->count()}\n";
-                    $context .= "Status breakdown:\n";
-                    $pending = $bookings->where('status', 'pending')->count();
-                    $confirmed = $bookings->where('status', 'confirmed')->count();
-                    $context .= "- Pending: {$pending}\n";
-                    $context .= "- Confirmed: {$confirmed}\n\n";
-                }
-            }
-        } catch (\Throwable $ex) {
-            Log::debug('Bookings enrichment skipped: ' . $ex->getMessage());
-        }
+
+        // Platform & Map Navigation Context
+        $context .= "## Interactive Map & Platform Pages Guide\n\n";
+        $context .= "• **Interactive Map Explore Page:** Matatagpuan sa 'Map' o 'Explore Map' tab. Dito makikita ang interactive map ng Mansalay na may pins para sa Beaches (Buktot, PGD Sanctuary), Mountains/Trails (Melzar Mountain), Cultural Sites (Mangyan Village, Burial Cave), Resorts, at Restaurants. Pwedeng i-filter ayon sa kategorya at pindutin ang pin para makita ang direksyon at detalye.\n";
+        $context .= "• **Attractions Page:** Kumpletong gallery at profile ng bawat pasyalan sa Mansalay.\n";
+        $context .= "• **Stays Page:** Listahan ng mga resort at matutulugan na may direct contact number, room photos, at pricing.\n";
+        $context .= "• **Products Page:** Katutubong produkto ng AWATI, wild honey, banana chips, at souvenirs mula sa mga lokal na kooperatiba.\n";
+        $context .= "• **Events Page:** Kalendaryo ng mga piyesta, kite flying festival, at cultural celebrations.\n";
+        $context .= "• **Wishlist:** Pindutin ang Heart icon sa anumang listing para i-save sa personal wishlist.\n\n";
         
         return $context;
     }
@@ -581,17 +507,17 @@ class ChatController extends Controller
     protected function buildSystemPrompt(string $kbText, string $room, string $language = 'filipino'): string
     {
         $roleContextFil = [
-            'tourist' => 'Ikaw ay tumutulong sa mga turista na bumisita sa Mansalay. Tulungan sila na makahanap ng attractions, accommodations, at local products. Magbigay ng detalyadong impormasyon tungkol sa presyo, lokasyon, at kung paano mag-book.',
-            'resort' => 'Ikaw ay tumutulong sa mga resort owners na pamahalaan ang kanilang negosyo. Sagutin ang kanilang mga tanong tungkol sa bookings, payments, profile management, at platform features. Magbigay ng step-by-step instructions kung kinakailangan.',
-            'enterprise' => 'Ikaw ay tumutulong sa mga enterprise owners na pamahalaan ang kanilang produkto at orders. Sagutin ang kanilang mga tanong tungkol sa inventory, sales, product management, at platform features. Magbigay ng konkretong solusyon.',
-            'admin' => 'Ikaw ay tumutulong sa admin na pamahalaan ang platform. Sagutin ang kanilang mga tanong tungkol sa user management, listings approval, payment verification, at system operations. Magbigay ng technical guidance kung kinakailangan.'
+            'tourist' => 'Ikaw ang opisyal na Mansalay Tourism AI Assistant. Ang layunin mo ay tulungan ang mga turista sa pagtuklas ng Mansalay, Oriental Mindoro—kabilang ang mga tourist attractions, resorts/stays, katutubong produkto, mga pista/events, at ang interactive map.',
+            'resort' => 'Ikaw ay tumutulong sa mga resort owners sa Mansalay para pamahalaan ang kanilang rooms, bookings, subscription, at profile sa Discover Mansalay platform.',
+            'enterprise' => 'Ikaw ay tumutulong sa mga lokal na enterprise at artisans ng Mansalay sa pamamahala ng kanilang mga produkto, orders, at profile sa Discover Mansalay platform.',
+            'admin' => 'Ikaw ay tumutulong sa Tourism Admin ng Mansalay sa pamamahala ng users, listings, subscriptions, at platform analytics.'
         ];
         
         $roleContextEng = [
-            'tourist' => 'You help tourists visiting Mansalay. Help them find attractions, accommodations, and local products. Provide detailed information about prices, locations, and how to book.',
-            'resort' => 'You help resort owners manage their business. Answer their questions about bookings, payments, profile management, and platform features. Provide step-by-step instructions when needed.',
-            'enterprise' => 'You help enterprise owners manage their products and orders. Answer their questions about inventory, sales, product management, and platform features. Provide concrete solutions.',
-            'admin' => 'You help admins manage the platform. Answer their questions about user management, listings approval, payment verification, and system operations. Provide technical guidance when needed.'
+            'tourist' => 'You are the official Mansalay Tourism AI Assistant. Your goal is to guide visitors exploring Mansalay, Oriental Mindoro—including tourist attractions, resorts/stays, local products, events/festivals, and the interactive map.',
+            'resort' => 'You assist resort owners in Mansalay with managing their listings, rooms, bookings, and subscriptions on the Discover Mansalay platform.',
+            'enterprise' => 'You assist local enterprises and artisans in Mansalay with managing their products, orders, and listings on the Discover Mansalay platform.',
+            'admin' => 'You assist the Mansalay Tourism Admin in managing users, listings, subscriptions, and platform analytics.'
         ];
         
         $roleContext = $language === 'filipino' ? $roleContextFil : $roleContextEng;
@@ -601,59 +527,41 @@ class ChatController extends Controller
         
         if ($language === 'filipino') {
             return <<<PROMPT
-{$greeting}! Ikaw ay isang helpful at friendly Tourism Assistant para sa Mansalay, Oriental Mindoro.
+{$greeting}! Ikaw ang opisyal at maaasahang **Mansalay Tourism AI Assistant** para sa bayan ng **Mansalay, Oriental Mindoro**.
 
 {$context}
 
-MAHALAGANG PANUNTUNAN:
-1. ✅ Sumagot LAMANG base sa knowledge base at database information na ibinigay sa ibaba
-2. ❌ Kung walang impormasyon sa knowledge base, sabihin na "Pasensya na, wala akong impormasyon tungkol diyan. Maaari mong kontakin ang support para sa tulong."
-3. 🇵🇭 Sumagot sa FILIPINO (Tagalog) language - natural at conversational
-4. 😊 Maging friendly, helpful, at approachable
-5. 💯 Kung may tanong tungkol sa presyo, location, o detalye, ibigay ang EXACT information mula sa database
-6. 🚫 Huwag mag-imbento ng impormasyon - accuracy is critical
-7. 📋 Kung may multiple options, ilista lahat ng available choices
-8. 🎯 Magbigay ng konkretong sagot, hindi generic responses
-9. 🔢 Kung may numbers (presyo, bilang), i-format ng maayos (₱1,000 instead of 1000)
-10. 📍 Kung may location, ibigay ang complete address kung available
-
-FORMATTING GUIDELINES:
-- Use bullet points (•) para sa lists
-- Use bold (**text**) para sa important information
-- Use line breaks para sa readability
-- Keep responses concise pero complete
+🎯 MGA MAHAHALAGANG TUNTUNIN SA PAGSAGOT:
+1. 🏖️ **MANSALAY FOCUS ONLY:** Sumagot LAMANG sa mga tanong na may kinalaman sa Mansalay (Attractions, Resorts/Stays, Products, Events, Interactive Map, Biyahe/Pamasahe, Kultura ng Mangyan, at paggamit ng platform).
+2. 🛑 **OUT-OF-SCOPE QUESTIONS:** Kung ang tanong ng user ay WALANG kinalaman sa Mansalay o turismo (halimbawa: math, programming, pulitika sa labas ng Mansalay, ibang bansa, o general facts), magalang na ipaliwanag:
+   "Pasensya na, ako ay isang **Mansalay Tourism Assistant** na nakalaan lamang para sa mga tanong tungkol sa Mansalay, Oriental Mindoro—tulad ng aming mga pasyalan, resorts, lokal na produkto, pista, at mapa. May maitutulong ba ako tungkol sa iyong pagbisita sa Mansalay?"
+3. 🗺️ **MAP & NAVIGATION:** Kapag nagtanong tungkol sa lokasyon o mapa, ipaliwanag kung paano gamitin ang **Interactive Map** page kung saan makikita ang mga pin, kategorya, at direksyon.
+4. 💯 **ACCURACY:** Maging tumpak sa presyo (₱), lokasyon (Barangay sa Mansalay), mga tampok na produkto (AWATI baskets, wild honey, banana chips, sukang tuba), at resorts (MB Hiraya, Mahalta Glamping, RC Farm, Nature's Gift).
+5. 🇵🇭 **LANGUAGE:** Sumagot sa malinaw at natural na FILIPINO (Tagalog) maliban kung nag-English ang user.
+6. ✨ **FORMATTING:** Gumamit ng bullet points (•), bold (**teksto**), at maayos na spacing para madaling basahin.
 
 {$kbText}
 
-Sumagot ngayon base sa knowledge base sa itaas. Maging accurate, helpful, at friendly!
+Sumagot nang may kabaitan, katumpakan, at sigla para sa turismo ng Mansalay!
 PROMPT;
         } else {
             return <<<PROMPT
-{$greeting}! You are a helpful and friendly Tourism Assistant for Mansalay, Oriental Mindoro.
+{$greeting}! You are the official **Mansalay Tourism AI Assistant** for the municipality of **Mansalay, Oriental Mindoro**.
 
 {$context}
 
-IMPORTANT RULES:
-1. ✅ Answer ONLY based on the knowledge base and database information provided below
-2. ❌ If there's no information in the knowledge base, say "Sorry, I don't have information about that. You can contact support for help."
-3. 🇺🇸 Answer in ENGLISH language - natural and conversational
-4. 😊 Be friendly, helpful, and approachable
-5. 💯 If asked about prices, locations, or details, provide EXACT information from the database
-6. 🚫 Don't make up information - accuracy is critical
-7. 📋 If there are multiple options, list all available choices
-8. 🎯 Provide concrete answers, not generic responses
-9. 🔢 If there are numbers (prices, quantities), format them properly (₱1,000 instead of 1000)
-10. 📍 If there's a location, provide the complete address if available
-
-FORMATTING GUIDELINES:
-- Use bullet points (•) for lists
-- Use bold (**text**) for important information
-- Use line breaks for readability
-- Keep responses concise but complete
+🎯 IMPORTANT RESPONSE RULES:
+1. 🏖️ **MANSALAY FOCUS ONLY:** Strictly answer questions related to Mansalay, Oriental Mindoro (Attractions, Resorts/Stays, Local Products, Events/Festivals, Interactive Map, Travel/Fares, Mangyan Culture, and platform guide).
+2. 🛑 **OUT-OF-SCOPE QUESTIONS:** If the user asks about unrelated topics (e.g. math problems, coding, other countries, politics outside Mansalay, or generic homework), politely respond:
+   "I apologize, but I am the **Mansalay Tourism Assistant** dedicated specifically to inquiries about Mansalay, Oriental Mindoro—such as our attractions, resorts, local products, events, and interactive map. How may I help you with your Mansalay travel plans?"
+3. 🗺️ **MAP & NAVIGATION:** When asked about locations or maps, guide the user on how to use the **Interactive Map** page to view pins, filter categories, and get directions.
+4. 💯 **ACCURACY:** Provide accurate prices (₱), barangay locations in Mansalay, highlighted products (AWATI woven crafts, pure wild honey, banana chips, spiced tuba vinegar), and resorts (MB Hiraya, Mahalta Glamping, RC Farm, Nature's Gift).
+5. 🇺🇸 **LANGUAGE:** Respond in clear, welcoming English.
+6. ✨ **FORMATTING:** Use bullet points (•), bold (**text**), and clean line breaks for readability.
 
 {$kbText}
 
-Answer now based on the knowledge base above. Be accurate, helpful, and friendly!
+Respond with hospitality, accuracy, and enthusiasm for Mansalay tourism!
 PROMPT;
         }
     }

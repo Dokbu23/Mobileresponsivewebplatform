@@ -204,24 +204,10 @@ function generateTourismAiReply(text: string, currentLang: 'filipino' | 'english
         `Is there a specific resort or attraction you need assistance with?`;
   }
 
-  // General Conversational Fallback
+  // General Conversational Fallback — Strictly Mansalay Tourism
   return lang === 'filipino'
-    ? `Salamat sa iyong pagtatanong tungkol sa **"${text}"**!\n\n` +
-      `Ako ang iyong **Discover Mansalay Tourism Assistant**. Narito ang mga pwede kong maitulong:\n` +
-      `• **🏖️ Mga Tourist Spots** (Buktot Beach, PGD Sanctuary, Caves, Melzar Mountain)\n` +
-      `• **🏨 Matutulugan & Resorts** (MB Hiraya, Mahalta Glamping, RC Farm)\n` +
-      `• **🎁 AWATI Pasalubong & Delicacies** (Woven Baskets, Wild Honey, Banana Chips)\n` +
-      `• **🚌 Direksyon & Sakayan** (Mula Maynila, Batangas Port, Calapan, o Roxas)\n` +
-      `• **🗺️ Trip Itinerary Planning** (2-3 day custom travel plans)\n\n` +
-      `Ano pa ang nais mong malaman tungkol sa Mansalay?`
-    : `Thank you for asking about **"${text}"**!\n\n` +
-      `I'm your **Discover Mansalay Tourism Assistant**. Here is what I can help you with:\n` +
-      `• **🏖️ Tourist Attractions** (Buktot Beach, PGD Sanctuary, Caves, Melzar Mountain)\n` +
-      `• **🏨 Resorts & Accommodations** (MB Hiraya, Mahalta Glamping, RC Farm)\n` +
-      `• **🎁 AWATI Pasalubong & Delicacies** (Handwoven Crafts, Wild Honey, Native Treats)\n` +
-      `• **🚌 Directions & Commute** (From Manila, Batangas Port, Calapan, or Roxas)\n` +
-      `• **🗺️ Travel Itinerary Planning** (2-3 day trip schedules)\n\n` +
-      `How else may I assist your visit to Mansalay?`;
+    ? `Pasensya na, ako ay isang **Mansalay Tourism Assistant** na nakalaan lamang para sa mga tanong tungkol sa **Mansalay, Oriental Mindoro**—tulad ng aming mga pasyalan (Buktot Beach, Caves), resorts (MB Hiraya, Mahalta Glamping), lokal na produkto ng AWATI, mga pista, at interactive map.\n\nMay maitutulong ba ako tungkol sa iyong pagbisita sa Mansalay?`
+    : `I apologize, but I am the **Mansalay Tourism Assistant** dedicated specifically to inquiries about **Mansalay, Oriental Mindoro**—such as our attractions (Buktot Beach, Caves), resorts (MB Hiraya, Mahalta Glamping), local AWATI products, festivals, and the interactive map.\n\nHow may I help you with your Mansalay travel plans?`;
 }
 
 export default function ChatWidgetEnhanced() {
@@ -352,6 +338,10 @@ export default function ChatWidgetEnhanced() {
     }
   }, [messages, sending, loading, open]);
 
+  function handleResetChat() {
+    setMessages([]);
+  }
+
   async function handleSend(e?: React.FormEvent, quickReplyText?: string) {
     e?.preventDefault();
     const text = (quickReplyText || input).trim();
@@ -397,10 +387,6 @@ export default function ChatWidgetEnhanced() {
         setSending(false);
       }, 400);
     }
-  }
-
-  function handleResetChat() {
-    setMessages([]);
   }
 
   function formatMessage(text: string) {
