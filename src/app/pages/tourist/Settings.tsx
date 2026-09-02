@@ -44,19 +44,21 @@ export function Settings() {
           <span className="text-sm text-primary font-medium">Manage →</span>
         </Link>
 
-        <Link
-          to="/itinerary"
-          className="flex items-center justify-between gap-4 bg-white border-2 border-primary/20 rounded-xl p-5 hover:border-primary transition-all shadow-sm"
-        >
-          <div className="flex items-center gap-3">
-            <Calendar className="h-6 w-6 text-primary" />
-            <div>
-              <p className="font-semibold text-gray-800">Saved Trip Plans</p>
-              <p className="text-sm text-muted-foreground">View and manage your saved tourism itineraries.</p>
+        {userType !== 'admin' && (
+          <Link
+            to="/itinerary"
+            className="flex items-center justify-between gap-4 bg-white border-2 border-primary/20 rounded-xl p-5 hover:border-primary transition-all shadow-sm"
+          >
+            <div className="flex items-center gap-3">
+              <Calendar className="h-6 w-6 text-primary" />
+              <div>
+                <p className="font-semibold text-gray-800">Saved Trip Plans</p>
+                <p className="text-sm text-muted-foreground">View and manage your saved tourism itineraries.</p>
+              </div>
             </div>
-          </div>
-          <span className="text-sm text-primary font-medium">View →</span>
-        </Link>
+            <span className="text-sm text-primary font-medium">View →</span>
+          </Link>
+        )}
 
         <Link
           to="/profile"

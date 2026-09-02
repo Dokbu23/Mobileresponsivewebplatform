@@ -40,7 +40,7 @@ interface AccommodationItem {
 
 export function Accommodations() {
   const navigate = useNavigate();
-  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist } = useApp();
+  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist, getWishlistCount } = useApp();
   const isLoggedIn = Boolean(userType && currentUser);
 
   const [items, setItems] = useState<AccommodationItem[]>([]);
@@ -385,18 +385,37 @@ export function Accommodations() {
                     {userType !== 'admin' && (
                       <button
                         onClick={(e) => toggleSaveAcc(acc, e)}
-                        className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
+                        className="w-7 h-7 bg-white/80 hover:bg-white rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 shadow-xs cursor-pointer"
+                        title={isInWishlist(acc.id, 'accommodation') ? 'Remove from wishlist' : 'Save to wishlist'}
                       >
-                        <Heart className={`h-3.5 w-3.5 ${isInWishlist(acc.id, 'accommodation') ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
+                        <Heart
+                          className={`h-3.5 w-3.5 transition-all ${
+                            isInWishlist(acc.id, 'accommodation')
+                              ? 'fill-pink-500 text-pink-500'
+                              : 'text-pink-500 fill-transparent stroke-2'
+                          }`}
+                        />
                       </button>
                     )}
                   </div>
 
                   {/* Dark Overlay Saves */}
-                  <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-white text-[11px] font-bold">
-                    <Heart className="h-3 w-3 text-pink-400 fill-pink-400" />
-                    <span>{acc.likes || 89} saves</span>
-                  </div>
+                  <button
+                    onClick={(e) => toggleSaveAcc(acc, e)}
+                    className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 z-10"
+                    title={isInWishlist(acc.id, 'accommodation') ? 'Saved in wishlist' : 'Click to save to wishlist'}
+                  >
+                    <Heart
+                      className={`h-3 w-3 transition-all ${
+                        isInWishlist(acc.id, 'accommodation')
+                          ? 'fill-pink-500 text-pink-500'
+                          : 'text-pink-400 fill-transparent stroke-2'
+                      }`}
+                    />
+                    <span className={isInWishlist(acc.id, 'accommodation') ? 'text-pink-400 font-extrabold' : 'text-white'}>
+                      {getWishlistCount(acc.id, 'accommodation', acc.likes)} saves
+                    </span>
+                  </button>
                 </div>
 
                 {/* Content */}
@@ -462,10 +481,22 @@ export function Accommodations() {
               </button>
 
               {/* Saves Pill on Bottom Left */}
-              <div className="absolute bottom-3 left-4 flex items-center gap-1 px-3 py-1 bg-black/60 backdrop-blur-md rounded-full text-white text-xs font-bold">
-                <Heart className="h-3.5 w-3.5 text-pink-400 fill-pink-400" />
-                <span>{selectedAcc.likes || 89} saves</span>
-              </div>
+              <button
+                onClick={() => toggleSaveAcc(selectedAcc)}
+                className="absolute bottom-3 left-4 flex items-center gap-1.5 px-3 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-xs font-bold transition-all cursor-pointer z-10"
+                title={isInWishlist(selectedAcc.id, 'accommodation') ? 'Saved in wishlist' : 'Click to save to wishlist'}
+              >
+                <Heart
+                  className={`h-3.5 w-3.5 transition-all ${
+                    isInWishlist(selectedAcc.id, 'accommodation')
+                      ? 'fill-pink-500 text-pink-500'
+                      : 'text-pink-400 fill-transparent stroke-2'
+                  }`}
+                />
+                <span className={isInWishlist(selectedAcc.id, 'accommodation') ? 'text-pink-400 font-extrabold' : 'text-white'}>
+                  {getWishlistCount(selectedAcc.id, 'accommodation', selectedAcc.likes)} saves
+                </span>
+              </button>
             </div>
 
             {/* Modal Body */}
@@ -506,7 +537,23 @@ export function Accommodations() {
                   >
                     <Share2 className="h-4 w-4" />
                   </button>
-                  <button onClick={() => toggleSaveAcc(selectedAcc)} className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-pink-50"><Heart className={`h-4 w-4 ${savedAccIds.includes(selectedAcc.id) ? 'fill-pink-500 text-pink-500' : ''}`} /></button>
+                  <button
+                    onClick={() => toggleSaveAcc(selectedAcc)}
+                    className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer ${
+                      isInWishlist(selectedAcc.id, 'accommodation')
+                        ? 'bg-pink-50 border-pink-300'
+                        : 'border-gray-200 hover:bg-pink-50'
+                    }`}
+                    title={isInWishlist(selectedAcc.id, 'accommodation') ? 'Remove from wishlist' : 'Save to wishlist'}
+                  >
+                    <Heart
+                      className={`h-4 w-4 transition-all ${
+                        isInWishlist(selectedAcc.id, 'accommodation')
+                          ? 'fill-pink-500 text-pink-500'
+                          : 'text-pink-500 fill-transparent stroke-2'
+                      }`}
+                    />
+                  </button>
                 </div>
               </div>
 

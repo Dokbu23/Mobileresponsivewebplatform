@@ -1907,12 +1907,32 @@ export function BusinessProfile() {
 
 // Clean Product Card
 function ProductCard({ product }: any) {
+  const { isInWishlist, addToWishlist, removeFromWishlist, getWishlistCount, userType } = useApp();
   const imageUrl = product.image
     ? (product.image.startsWith('http') ? product.image : `${API_BASE}${product.image}`)
     : '/assets/default-product.jpg';
 
+  const isSaved = isInWishlist(product.id, 'product');
+  const count = getWishlistCount(product.id, 'product', product.likes || 0);
+
+  const toggleSave = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isSaved) {
+      removeFromWishlist(product.id, 'product');
+    } else {
+      addToWishlist({
+        id: product.id,
+        type: 'product',
+        title: product.name,
+        image: product.image,
+        category: product.category,
+        price: product.price,
+      });
+    }
+  };
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-pink-300 transition-all duration-300 group cursor-pointer">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-pink-300 transition-all duration-300 group cursor-pointer flex flex-col justify-between">
       {/* Image */}
       <div className="relative aspect-square bg-gray-100 overflow-hidden">
         <img
@@ -1921,6 +1941,19 @@ function ProductCard({ product }: any) {
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => { e.currentTarget.src = '/assets/default-product.jpg'; }}
         />
+        {userType !== 'admin' && (
+          <button
+            onClick={toggleSave}
+            className="absolute top-2 right-2 w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
+            title="Save to wishlist"
+          >
+            <Heart className={`h-3.5 w-3.5 ${isSaved ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
+          </button>
+        )}
+        <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-md text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
+          <Heart className="h-3 w-3 fill-pink-500 text-pink-500" />
+          <span>{count}</span>
+        </div>
       </div>
 
       {/* Product Info */}
@@ -1943,11 +1976,29 @@ function ProductCard({ product }: any) {
 
 // Clean Accommodation Card
 function AccommodationCard({ accommodation }: any) {
+  const { isInWishlist, addToWishlist, removeFromWishlist, getWishlistCount, userType } = useApp();
   const imageUrl = accommodation.image
     ? (accommodation.image.startsWith('http') ? accommodation.image : `${API_BASE}${accommodation.image}`)
     : '/assets/default-accommodation.jpg';
 
   const price = Number(accommodation.price_per_night || accommodation.price || 0);
+  const isSaved = isInWishlist(accommodation.id, 'accommodation');
+  const count = getWishlistCount(accommodation.id, 'accommodation', accommodation.likes || 0);
+
+  const toggleSave = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isSaved) {
+      removeFromWishlist(accommodation.id, 'accommodation');
+    } else {
+      addToWishlist({
+        id: accommodation.id,
+        type: 'accommodation',
+        title: accommodation.name,
+        image: accommodation.image,
+        price: price,
+      });
+    }
+  };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-pink-300 transition-all duration-300 group cursor-pointer flex flex-col justify-between">
@@ -1963,6 +2014,19 @@ function AccommodationCard({ accommodation }: any) {
             {accommodation.type}
           </span>
         )}
+        {userType !== 'admin' && (
+          <button
+            onClick={toggleSave}
+            className="absolute top-2 right-2 w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
+            title="Save to wishlist"
+          >
+            <Heart className={`h-3.5 w-3.5 ${isSaved ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
+          </button>
+        )}
+        <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-md text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
+          <Heart className="h-3 w-3 fill-pink-500 text-pink-500" />
+          <span>{count}</span>
+        </div>
       </div>
       <div className="p-3 flex-1 flex flex-col justify-between">
         <div>

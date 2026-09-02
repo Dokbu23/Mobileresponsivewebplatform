@@ -131,12 +131,12 @@ export function Wishlist() {
 
     rawAttractions.forEach((a: any) => {
       const key = `attraction_${a.id}`;
-      const saves = wishlistCounts[key] != null ? wishlistCounts[key] : (Number(a.view_count) > 0 ? Math.round(Number(a.view_count) * 0.35) : (Number(a.likes) || 12));
+      const saves = wishlistCounts[key] != null ? wishlistCounts[key] : (Number(a.likes) || (Number(a.view_count) > 0 ? Math.round(Number(a.view_count) * 0.35) : 0));
       list.push({
         id: a.id,
         type: 'attraction',
-        name: decodeHtml(a.name || 'Attraction'),
-        category: a.category || 'Attraction',
+        name: decodeHtml(a.name || a.title || 'Attraction'),
+        category: decodeHtml(a.category || 'Attraction'),
         image: a.image || (Array.isArray(a.images) ? a.images[0] : undefined),
         saves: Math.max(0, saves),
         views: Number(a.view_count) || 0,
@@ -146,12 +146,12 @@ export function Wishlist() {
 
     rawResorts.forEach((r: any) => {
       const key = `accommodation_${r.id}`;
-      const saves = wishlistCounts[key] != null ? wishlistCounts[key] : (Number(r.likes) || 8);
+      const saves = wishlistCounts[key] != null ? wishlistCounts[key] : (Number(r.likes) || 0);
       list.push({
         id: r.id,
         type: 'accommodation',
         name: decodeHtml(r.name || r.resort_name || 'Resort'),
-        category: r.type || 'Resort & Stay',
+        category: decodeHtml(r.type || r.category || 'Resort & Stay'),
         image: r.image || (Array.isArray(r.images) ? r.images[0] : undefined),
         saves: Math.max(0, saves),
         views: Number(r.views) || Number(r.view_count) || 0,
@@ -163,12 +163,12 @@ export function Wishlist() {
 
     rawProducts.forEach((p: any) => {
       const key = `product_${p.id}`;
-      const saves = wishlistCounts[key] != null ? wishlistCounts[key] : (Number(p.likes) || 15);
+      const saves = wishlistCounts[key] != null ? wishlistCounts[key] : (Number(p.likes) || 0);
       list.push({
         id: p.id,
         type: 'product',
         name: decodeHtml(p.name || 'Local Product'),
-        category: p.category || 'Product',
+        category: decodeHtml(p.category || 'Product'),
         image: p.image,
         saves: Math.max(0, saves),
         views: Number(p.view_count) || 0,
@@ -180,12 +180,12 @@ export function Wishlist() {
 
     rawEvents.forEach((e: any) => {
       const key = `event_${e.id}`;
-      const saves = wishlistCounts[key] != null ? wishlistCounts[key] : (Number(e.likes) || 5);
+      const saves = wishlistCounts[key] != null ? wishlistCounts[key] : (Number(e.likes) || 0);
       list.push({
         id: e.id,
         type: 'event',
         name: decodeHtml(e.name || 'Event'),
-        category: e.category || 'Festival / Event',
+        category: decodeHtml(e.category || 'Festival / Event'),
         image: e.image,
         saves: Math.max(0, saves),
         views: Number(e.view_count) || 0,

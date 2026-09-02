@@ -62,7 +62,7 @@ interface ResortPost {
 
 export function ResortDashboard() {
   const navigate = useNavigate();
-  const { currentUser } = useApp();
+  const { currentUser, getWishlistCount, wishlistCounts } = useApp();
   const [resortProfile, setResortProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
@@ -482,8 +482,10 @@ export function ResortDashboard() {
   }, [posts]);
 
   const totalSaves = useMemo(() => {
-    return posts.reduce((sum, p) => sum + (p.saves || 0), 0);
-  }, [posts]);
+    const postSaves = posts.reduce((sum, p) => sum + (p.saves || 0), 0);
+    const resortSaves = currentUser?.id ? getWishlistCount(currentUser.id, 'accommodation', 0) : 0;
+    return postSaves + resortSaves;
+  }, [posts, currentUser?.id, wishlistCounts, getWishlistCount]);
 
   const totalPostsCount = useMemo(() => {
     return posts.length;

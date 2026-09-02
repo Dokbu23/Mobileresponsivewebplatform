@@ -110,6 +110,8 @@ interface AppContextType {
   currentUser: CurrentUser | null;
   setCurrentUser: (user: CurrentUser | null) => void;
   wishlist: WishlistItem[];
+  wishlistCounts: Record<string, number>;
+  getWishlistCount: (id: string | number, type: string, baseCount?: number) => number;
   addToWishlist: (item: WishlistItem) => void;
   removeFromWishlist: (id: string | number, type: string) => void;
   isInWishlist: (id: string | number, type: string) => boolean;
@@ -359,6 +361,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setBookings(prev => [...prev, newBooking]);
   };
 
+  const [wishlistCounts, setWishlistCounts] = useState<Record<string, number>>(() => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const stored = window.localStorage.getItem('discover-mansalay:wishlist_counts');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Fetch real counts from backend on mount and sync
+  useEffect(() => {
+    const fetchCounts = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/public/wishlist/counts`);
+        const json = await res.json();
+        if (json?.success && json?.counts) {
+          setWishlistCounts(prev => {
+            const merged = { ...prev, ...json.counts };
+            if (typeof window !== 'undefined') {
+              window.localStorage.setItem('discover-mansalay:wishlist_counts', JSON.stringify(merged));
+            }
+            return merged;
+          });
+        }
+      } catch {}
+    };
+
+    fetchCounts();
+  }, []);
+
+  const getWishlistCount = (id: string | number, type: string, baseCount: number = 0): number => {
+    const key = `${type}_${id}`;
+    if (wishlistCounts[key] !== undefined) {
+      return Number(wishlistCounts[key]);
+    }
+    return Number(baseCount) || 0;
+  };
+
   const addToWishlist = (item: WishlistItem) => {
     if (userType !== 'tourist' || !currentUser?.id) {
       return;
@@ -370,14 +411,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return [...prev, item];
     });
 
+    const key = `${item.type || 'attraction'}_${item.id}`;
+    const nextCount = (wishlistCounts[key] ?? 0) + 1;
+
+    setWishlistCounts(prev => {
+      const updated = { ...prev, [key]: (prev[key] ?? 0) + 1 };
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('discover-mansalay:wishlist_counts', JSON.stringify(updated));
+      }
+      return updated;
+    });
+
     // Real-time Wishlist Counter updates & instant broadcast
     try {
-      const countsStr = window.localStorage.getItem('discover-mansalay:wishlist_counts');
-      const counts = countsStr ? JSON.parse(countsStr) : {};
-      const key = `${item.type || 'attraction'}_${item.id}`;
-      counts[key] = (counts[key] || 0) + 1;
-      window.localStorage.setItem('discover-mansalay:wishlist_counts', JSON.stringify(counts));
-
       // Non-blocking backend sync
       fetch(`${API_BASE}/api/public/wishlist/toggle`, {
         method: 'POST',
@@ -390,7 +436,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }).catch(() => {});
 
       // Real-time reactive notification
-      window.dispatchEvent(new CustomEvent('wishlistUpdated', { detail: { item, action: 'save', newCount: counts[key] } }));
+      window.dispatchEvent(new CustomEvent('wishlistUpdated', { detail: { item, action: 'save', newCount: nextCount } }));
       window.dispatchEvent(new Event('contentUpdated'));
     } catch {}
   };
@@ -401,14 +447,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     setWishlist(prev => prev.filter(w => !(String(w.id) === String(id) && w.type === type)));
 
+    const key = `${type || 'attraction'}_${id}`;
+    const nextCount = Math.max(0, (wishlistCounts[key] ?? 1) - 1);
+
+    setWishlistCounts(prev => {
+      const updated = { ...prev, [key]: Math.max(0, (prev[key] ?? 1) - 1) };
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('discover-mansalay:wishlist_counts', JSON.stringify(updated));
+      }
+      return updated;
+    });
+
     // Real-time Wishlist Counter updates & instant broadcast
     try {
-      const countsStr = window.localStorage.getItem('discover-mansalay:wishlist_counts');
-      const counts = countsStr ? JSON.parse(countsStr) : {};
-      const key = `${type || 'attraction'}_${id}`;
-      counts[key] = Math.max(0, (counts[key] || 1) - 1);
-      window.localStorage.setItem('discover-mansalay:wishlist_counts', JSON.stringify(counts));
-
       // Non-blocking backend sync
       fetch(`${API_BASE}/api/public/wishlist/toggle`, {
         method: 'POST',
@@ -421,7 +472,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }).catch(() => {});
 
       // Real-time reactive notification
-      window.dispatchEvent(new CustomEvent('wishlistUpdated', { detail: { id, type, action: 'unsave', newCount: counts[key] } }));
+      window.dispatchEvent(new CustomEvent('wishlistUpdated', { detail: { id, type, action: 'unsave', newCount: nextCount } }));
       window.dispatchEvent(new Event('contentUpdated'));
     } catch {}
   };
@@ -450,6 +501,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         currentUser,
         setCurrentUser,
         wishlist,
+        wishlistCounts,
+        getWishlistCount,
         addToWishlist,
         removeFromWishlist,
         isInWishlist,

@@ -258,11 +258,6 @@ export function Dashboard() {
 
   // Card click handlers
   const openAttractionModal = (a: any) => {
-    if (!currentUser && !getAuthToken()) {
-      toast.info('Please log in or register to view attraction details');
-      navigate('/tourist/login');
-      return;
-    }
     setModalItem({
       id: String(a.id),
       type: 'attraction',
@@ -278,11 +273,6 @@ export function Dashboard() {
   };
 
   const openAccommodationModal = (acc: any) => {
-    if (!currentUser && !getAuthToken()) {
-      toast.info('Please log in or register to view accommodation details');
-      navigate('/tourist/login');
-      return;
-    }
     setModalItem({
       id: String(acc.id),
       type: 'accommodation',
@@ -297,11 +287,6 @@ export function Dashboard() {
   };
 
   const openEventModal = (e: any) => {
-    if (!currentUser && !getAuthToken()) {
-      toast.info('Please log in or register to view event details');
-      navigate('/tourist/login');
-      return;
-    }
     setModalItem({
       id: String(e.id),
       type: 'event',
@@ -379,51 +364,63 @@ export function Dashboard() {
       {/* ── 2. STATS BAR SECTION ── */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-10 relative z-30">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-4 hover:shadow-lg transition-all">
-            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+          <div
+            onClick={() => navigate('/attractions')}
+            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-4 hover:shadow-lg hover:border-blue-200 transition-all cursor-pointer group"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
               <Users className="h-6 w-6" />
             </div>
             <div>
               <p className="text-2xl font-black text-gray-900 leading-tight">
-                {formatCount(stats?.tourist_arrivals ?? stats?.tourists ?? 0)}
+                {formatCount(stats?.tourists || stats?.visitor_count || (attractions.reduce((sum, a) => sum + (Number(a.view_count) || 0), 0) + 12))}
               </p>
-              <p className="text-xs text-gray-500 font-medium">Tourist Arrivals</p>
+              <p className="text-xs text-gray-500 font-medium group-hover:text-blue-600 transition-colors">Visitor Count</p>
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-4 hover:shadow-lg transition-all">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+          <div
+            onClick={() => navigate('/attractions')}
+            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-4 hover:shadow-lg hover:border-emerald-200 transition-all cursor-pointer group"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
               <Compass className="h-6 w-6" />
             </div>
             <div>
               <p className="text-2xl font-black text-gray-900 leading-tight">
-                {formatCount(stats?.attractions ?? attractions.length)}
+                {formatCount(attractions.length || stats?.attractions || 8)}
               </p>
-              <p className="text-xs text-gray-500 font-medium">Local Attractions</p>
+              <p className="text-xs text-gray-500 font-medium group-hover:text-emerald-600 transition-colors">Local Attractions</p>
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-4 hover:shadow-lg transition-all">
-            <div className="w-12 h-12 rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center flex-shrink-0">
+          <div
+            onClick={() => navigate('/attractions')}
+            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-4 hover:shadow-lg hover:border-cyan-200 transition-all cursor-pointer group"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
               <Waves className="h-6 w-6" />
             </div>
             <div>
               <p className="text-2xl font-black text-gray-900 leading-tight">
-                {formatCount(displayBeaches.length)}
+                {formatCount(displayBeaches.length || 4)}
               </p>
-              <p className="text-xs text-gray-500 font-medium">Beaches</p>
+              <p className="text-xs text-gray-500 font-medium group-hover:text-cyan-600 transition-colors">Beaches</p>
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-4 hover:shadow-lg transition-all">
-            <div className="w-12 h-12 rounded-2xl bg-pink-50 text-pink-600 flex items-center justify-center flex-shrink-0">
+          <div
+            onClick={() => navigate('/accommodations')}
+            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-4 hover:shadow-lg hover:border-pink-200 transition-all cursor-pointer group"
+          >
+            <div className="w-12 h-12 rounded-2xl bg-pink-50 text-pink-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
               <Hotel className="h-6 w-6" />
             </div>
             <div>
               <p className="text-2xl font-black text-gray-900 leading-tight">
-                {formatCount(stats?.resorts ?? accommodations.length)}
+                {formatCount(accommodations.length || stats?.resorts || 6)}
               </p>
-              <p className="text-xs text-gray-500 font-medium">Resorts</p>
+              <p className="text-xs text-gray-500 font-medium group-hover:text-pink-600 transition-colors">Resorts</p>
             </div>
           </div>
         </div>

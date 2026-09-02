@@ -26,7 +26,7 @@ interface EventType {
 
 export function Events() {
   const navigate = useNavigate();
-  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist } = useApp();
+  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist, getWishlistCount } = useApp();
   const [selectedEvent, setSelectedEvent] = useState<EventType | null>(null);
   const [items, setItems] = useState<EventType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -289,9 +289,15 @@ export function Events() {
                     <h3 className="text-sm font-bold text-white leading-tight line-clamp-1">
                       {event.name}
                     </h3>
-                    <div className="flex items-center gap-1.5 text-[11px] text-gray-300 mt-1 font-medium">
-                      <Calendar className="h-3.5 w-3.5 text-pink-400 flex-shrink-0" />
-                      <span>{event.date ? new Date(event.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Upcoming'}</span>
+                    <div className="flex items-center justify-between text-[11px] text-gray-300 mt-1 font-medium">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-pink-400 flex-shrink-0" />
+                        <span>{event.date ? new Date(event.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Upcoming'}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-white">
+                        <Heart className="h-3 w-3 text-pink-400 fill-pink-400" />
+                        <span>{getWishlistCount(event.id, 'event', event.likes)}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -454,7 +460,7 @@ export function Events() {
                   }`}
                 >
                   <Heart className={`h-4 w-4 ${savedEventIds.includes(selectedEvent.id) ? 'fill-white' : ''}`} />
-                  <span>{savedEventIds.includes(selectedEvent.id) ? 'Saved' : 'Save Event'}</span>
+                  <span>{savedEventIds.includes(selectedEvent.id) ? 'Saved' : 'Save Event'} ({getWishlistCount(selectedEvent.id, 'event', selectedEvent.likes)})</span>
                 </button>
 
                 <button

@@ -54,7 +54,7 @@ interface EnterprisePost {
 }
 
 export function EnterpriseDashboard() {
-  const { currentUser } = useApp();
+  const { currentUser, getWishlistCount, wishlistCounts } = useApp();
   const [products, setProducts] = useState<any[]>([]);
   const [storeProfile, setStoreProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -398,36 +398,37 @@ export function EnterpriseDashboard() {
     }
   };
 
-  // Dynamic wishlist trends based on real products
+  // Dynamic wishlist trends based on real products and live wishlist saves
   const wishlistTrends = useMemo(() => {
     if (products.length > 0) {
-      const baseScores = [87, 64, 52, 41, 29, 22, 18];
-      const maxScore = baseScores[0];
-      return products.slice(0, 5).map((p, idx) => {
-        const count = baseScores[idx] || Math.max(10, 20 - idx * 2);
+      const scored = products.map((p) => {
+        const count = getWishlistCount(p.id, 'product', p.likes || 0);
         return {
           id: p.id,
           name: p.name,
           count: count,
-          percentage: Math.round((count / maxScore) * 100)
         };
-      });
+      }).sort((a, b) => b.count - a.count);
+
+      const maxScore = Math.max(1, scored[0]?.count || 1);
+      return scored.slice(0, 5).map((item) => ({
+        ...item,
+        percentage: item.count > 0 ? Math.min(100, Math.round((item.count / maxScore) * 100)) : 0,
+      }));
     }
     return [
-      { id: 1, name: 'Handwoven Baskets', count: 87, percentage: 100 },
-      { id: 2, name: 'Organic Honey', count: 64, percentage: 74 },
-      { id: 3, name: 'Souvenir Set', count: 52, percentage: 60 },
-      { id: 4, name: 'Traditional Clothing', count: 41, percentage: 47 },
-      { id: 5, name: 'Mangyan Accessories', count: 29, percentage: 33 }
+      { id: 1, name: 'Handwoven Baskets', count: 0, percentage: 0 },
+      { id: 2, name: 'Organic Honey', count: 0, percentage: 0 },
+      { id: 3, name: 'Dried Mangoes', count: 0, percentage: 0 },
     ];
-  }, [products]);
+  }, [products, wishlistCounts, getWishlistCount]);
 
   // Compute total real wishlist saves
   const totalWishlistSaves = useMemo(() => {
     const postSaves = posts.reduce((a, b) => a + Number(b.saves || 0), 0);
-    const trendSaves = wishlistTrends.reduce((acc, curr) => acc + curr.count, 0);
-    return trendSaves + postSaves;
-  }, [wishlistTrends, posts]);
+    const productSaves = products.reduce((acc, p) => acc + getWishlistCount(p.id, 'product', p.likes || 0), 0);
+    return productSaves + postSaves;
+  }, [products, posts, wishlistCounts, getWishlistCount]);
 
   if (loading) {
     return (

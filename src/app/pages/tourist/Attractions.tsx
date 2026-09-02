@@ -26,7 +26,7 @@ interface AttractionType {
 
 export function Attractions() {
   const navigate = useNavigate();
-  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist } = useApp();
+  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist, getWishlistCount } = useApp();
   const [selectedAttraction, setSelectedAttraction] = useState<AttractionType | null>(null);
   const [isVirtualTourOpen, setIsVirtualTourOpen] = useState(false);
   const [modalImageIndex, setModalImageIndex] = useState(0);
@@ -374,11 +374,15 @@ export function Attractions() {
                     {userType !== 'admin' && (
                       <button
                         onClick={(e) => handleToggleLike(e, attraction)}
-                        className="w-7 h-7 bg-white/90 backdrop-blur-sm hover:bg-white text-gray-700 rounded-full flex items-center justify-center shadow-sm transition-colors"
-                        title="Add to Wishlist"
+                        className="w-7 h-7 bg-white/90 backdrop-blur-sm hover:bg-white rounded-full flex items-center justify-center shadow-sm transition-all hover:scale-110 cursor-pointer"
+                        title={isInWishlist(attraction.id, 'attraction') ? 'Remove from wishlist' : 'Save to wishlist'}
                       >
                         <Heart 
-                          className={`h-3.5 w-3.5 ${isInWishlist(attraction.id, 'attraction') ? 'fill-pink-500 text-pink-500' : 'text-gray-700'}`} 
+                          className={`h-3.5 w-3.5 transition-all ${
+                            isInWishlist(attraction.id, 'attraction')
+                              ? 'fill-pink-500 text-pink-500'
+                              : 'text-pink-500 fill-transparent stroke-2'
+                          }`} 
                         />
                       </button>
                     )}
@@ -422,10 +426,22 @@ export function Attractions() {
                       <Tag className="h-3 w-3 text-pink-400" />
                       <span>{attraction.category}</span>
                     </div>
-                    <div className="flex items-center gap-1 text-white text-[11px] font-medium">
-                      <Heart className="h-3 w-3 text-pink-400 fill-pink-400/50" />
-                      <span>{attraction.likes}</span>
-                    </div>
+                    <button
+                      onClick={(e) => handleToggleLike(e, attraction)}
+                      className="flex items-center gap-1 bg-black/50 hover:bg-black/80 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[11px] font-medium transition-all cursor-pointer hover:scale-105 active:scale-95"
+                      title={isInWishlist(attraction.id, 'attraction') ? 'Saved in wishlist' : 'Click to save to wishlist'}
+                    >
+                      <Heart
+                        className={`h-3 w-3 transition-all ${
+                          isInWishlist(attraction.id, 'attraction')
+                            ? 'fill-pink-500 text-pink-500'
+                            : 'text-pink-400 fill-transparent stroke-2'
+                        }`}
+                      />
+                      <span className={isInWishlist(attraction.id, 'attraction') ? 'text-pink-400 font-bold' : 'text-white'}>
+                        {getWishlistCount(attraction.id, 'attraction', attraction.likes)}
+                      </span>
+                    </button>
                   </div>
                 </div>
 
@@ -530,10 +546,22 @@ export function Attractions() {
               )}
 
               {/* Bottom-Left Saves Overlay */}
-              <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md text-white px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 z-10">
-                <Heart className="h-3.5 w-3.5 text-pink-400 fill-pink-400" />
-                <span className="font-bold">{selectedAttraction.likes} saves</span>
-              </div>
+              <button
+                onClick={() => toggleSaveAttraction(selectedAttraction)}
+                className="absolute bottom-4 left-4 bg-black/60 hover:bg-black/80 backdrop-blur-md text-white px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 z-10 transition-all cursor-pointer hover:scale-105 active:scale-95"
+                title={isInWishlist(selectedAttraction.id, 'attraction') ? 'Saved in wishlist' : 'Click to save to wishlist'}
+              >
+                <Heart
+                  className={`h-3.5 w-3.5 transition-all ${
+                    isInWishlist(selectedAttraction.id, 'attraction')
+                      ? 'fill-pink-500 text-pink-500'
+                      : 'text-pink-400 fill-transparent stroke-2'
+                  }`}
+                />
+                <span className={`font-bold ${isInWishlist(selectedAttraction.id, 'attraction') ? 'text-pink-400' : 'text-white'}`}>
+                  {getWishlistCount(selectedAttraction.id, 'attraction', selectedAttraction.likes)} saves
+                </span>
+              </button>
 
               {/* Bottom-Center Dots Indicator if multiple images */}
               {selectedAttraction.images && selectedAttraction.images.length > 1 && (

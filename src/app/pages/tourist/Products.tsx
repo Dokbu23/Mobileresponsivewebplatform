@@ -30,7 +30,7 @@ interface ProductItem {
 
 export function Products() {
   const navigate = useNavigate();
-  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist } = useApp();
+  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist, getWishlistCount } = useApp();
   const isLoggedIn = Boolean(userType && currentUser);
 
   const [items, setItems] = useState<ProductItem[]>([]);
@@ -319,7 +319,7 @@ export function Products() {
                   )}
 
                   {/* Top Right Wishlist & Share */}
-                  <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -330,7 +330,7 @@ export function Products() {
                           category: product.category || 'Product',
                         });
                       }}
-                      className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors hover:scale-110"
+                      className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors hover:scale-110 shadow-xs cursor-pointer"
                       title="Share product"
                     >
                       <Share2 className="h-3.5 w-3.5" />
@@ -338,22 +338,41 @@ export function Products() {
                     {userType !== 'admin' && (
                       <button
                         onClick={(e) => toggleSaveProduct(product, e)}
-                        className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
+                        className="w-7 h-7 bg-white/80 hover:bg-white rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 shadow-xs cursor-pointer"
+                        title={isInWishlist(product.id, 'product') ? 'Remove from wishlist' : 'Save to wishlist'}
                       >
-                        <Heart className={`h-3.5 w-3.5 ${isInWishlist(product.id, 'product') ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
+                        <Heart
+                          className={`h-3.5 w-3.5 transition-all ${
+                            isInWishlist(product.id, 'product')
+                              ? 'fill-pink-500 text-pink-500'
+                              : 'text-pink-500 fill-transparent stroke-2'
+                          }`}
+                        />
                       </button>
                     )}
                   </div>
 
                   {/* Dark Overlay Category & Likes */}
-                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-[11px] font-bold">
+                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-[11px] font-bold z-10">
                     <span className="px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-[10px]">
                       {product.category || 'Product'}
                     </span>
-                    <div className="flex items-center gap-1 text-white/90">
-                      <Heart className="h-3 w-3 fill-pink-500 text-pink-500" />
-                      <span>{product.likes || 189}</span>
-                    </div>
+                    <button
+                      onClick={(e) => toggleSaveProduct(product, e)}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95"
+                      title={isInWishlist(product.id, 'product') ? 'Saved in wishlist' : 'Click to save to wishlist'}
+                    >
+                      <Heart
+                        className={`h-3.5 w-3.5 transition-all ${
+                          isInWishlist(product.id, 'product')
+                            ? 'fill-pink-500 text-pink-500'
+                            : 'text-pink-400 fill-transparent stroke-2'
+                        }`}
+                      />
+                      <span className={isInWishlist(product.id, 'product') ? 'text-pink-400 font-extrabold' : 'text-white'}>
+                        {getWishlistCount(product.id, 'product', product.likes)}
+                      </span>
+                    </button>
                   </div>
                 </div>
 
@@ -459,7 +478,23 @@ export function Products() {
                     <Share2 className="h-4 w-4" />
                   </button>
                   {userType !== 'admin' && (
-                    <button onClick={() => toggleSaveProduct(selectedProduct)} className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-pink-50"><Heart className={`h-4 w-4 ${isInWishlist(selectedProduct.id, 'product') ? 'fill-pink-500 text-pink-500' : ''}`} /></button>
+                    <button
+                      onClick={() => toggleSaveProduct(selectedProduct)}
+                      className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer ${
+                        isInWishlist(selectedProduct.id, 'product')
+                          ? 'bg-pink-50 border-pink-300'
+                          : 'border-gray-200 hover:bg-pink-50'
+                      }`}
+                      title={isInWishlist(selectedProduct.id, 'product') ? 'Remove from wishlist' : 'Save to wishlist'}
+                    >
+                      <Heart
+                        className={`h-4 w-4 transition-all ${
+                          isInWishlist(selectedProduct.id, 'product')
+                            ? 'fill-pink-500 text-pink-500'
+                            : 'text-pink-500 fill-transparent stroke-2'
+                        }`}
+                      />
+                    </button>
                   )}
                 </div>
               </div>
@@ -467,7 +502,7 @@ export function Products() {
               {/* Sub-info bar */}
               <div className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 p-3 rounded-2xl border border-gray-100 text-xs">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-gray-500 font-bold">({selectedProduct.likes || 267} saves)</span>
+                  <span className="text-gray-500 font-bold">({getWishlistCount(selectedProduct.id, 'product', selectedProduct.likes)} saves)</span>
                   <span>•</span>
                   <button
                     onClick={(e) => handleStoreClick(selectedProduct.sellerName, selectedProduct.user_id, e)}

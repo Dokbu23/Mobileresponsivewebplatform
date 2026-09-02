@@ -25,6 +25,7 @@ class Accommodation extends Model
         'website',
         'video',
         'price_per_night',
+        'likes',
         'image',
         'images',
         'availability',
