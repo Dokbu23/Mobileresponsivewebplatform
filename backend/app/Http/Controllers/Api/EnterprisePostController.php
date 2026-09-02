@@ -58,6 +58,8 @@ class EnterprisePostController extends Controller
             'stock'          => 'nullable|string|max:255',
             'tags'           => 'nullable',
             'image'          => 'nullable',
+            'video'          => 'nullable',
+            'video_url'      => 'nullable|string',
         ]);
 
         if ($request->hasFile('image')) {
@@ -66,6 +68,17 @@ class EnterprisePostController extends Controller
             $data['image'] = '/storage/' . $path;
         } elseif ($request->filled('image_url')) {
             $data['image'] = $request->input('image_url');
+        }
+
+        // Handle video file upload or video link
+        if ($request->hasFile('video')) {
+            $folder = ($user && $user->role === 'resort') ? 'resort/videos' : 'enterprise/videos';
+            $path = $request->file('video')->store($folder, 'public');
+            $data['video'] = '/storage/' . $path;
+        } elseif ($request->filled('video_url')) {
+            $data['video'] = $request->input('video_url');
+        } elseif (is_string($request->input('video')) && !empty($request->input('video'))) {
+            $data['video'] = $request->input('video');
         }
 
         if (isset($data['tags']) && is_string($data['tags'])) {
@@ -79,6 +92,35 @@ class EnterprisePostController extends Controller
         $data['saves'] = 0;
 
         $post = EnterprisePost::create($data);
+
+        // If post type is product or has a product name, also create/sync a Product in products table
+        if (($data['type'] === 'product' || !empty($data['product_name'])) && $user) {
+            try {
+                $numericPrice = floatval(preg_replace('/[^0-9.]/', '', (string)($data['price'] ?? '0')));
+                if ($numericPrice <= 0) {
+                    $numericPrice = 100;
+                }
+                $numericStock = intval(preg_replace('/[^0-9]/', '', (string)($data['stock'] ?? '10')));
+                if ($numericStock <= 0) {
+                    $numericStock = 10;
+                }
+
+                \App\Models\Product::create([
+                    'name'          => $data['product_name'] ?: ($data['content'] ? \Illuminate\Support\Str::limit($data['content'], 40) : 'Handicraft Item'),
+                    'description'   => $data['content'] ?: ($data['product_name'] ?? ''),
+                    'price'         => $numericPrice,
+                    'stock'         => $numericStock,
+                    'category'      => $data['category'] ?: 'Souvenir',
+                    'image'         => $data['image'] ?? null,
+                    'images'        => !empty($data['image']) ? [$data['image']] : [],
+                    'user_id'       => $user->id,
+                    'is_registered' => true,
+                    'likes'         => 0,
+                ]);
+            } catch (\Throwable $e) {
+                \Log::warning('Failed to sync Product record from EnterprisePost: ' . $e->getMessage());
+            }
+        }
 
         return response()->json($post, 201);
     }
@@ -107,6 +149,8 @@ class EnterprisePostController extends Controller
             'stock'          => 'nullable|string|max:255',
             'tags'           => 'nullable',
             'image'          => 'nullable',
+            'video'          => 'nullable',
+            'video_url'      => 'nullable|string',
         ]);
 
         if ($request->hasFile('image')) {
@@ -115,6 +159,17 @@ class EnterprisePostController extends Controller
             $data['image'] = '/storage/' . $path;
         } elseif ($request->filled('image_url')) {
             $data['image'] = $request->input('image_url');
+        }
+
+        // Handle video file upload or video link
+        if ($request->hasFile('video')) {
+            $folder = ($user && $user->role === 'resort') ? 'resort/videos' : 'enterprise/videos';
+            $path = $request->file('video')->store($folder, 'public');
+            $data['video'] = '/storage/' . $path;
+        } elseif ($request->filled('video_url')) {
+            $data['video'] = $request->input('video_url');
+        } elseif (is_string($request->input('video')) && !empty($request->input('video'))) {
+            $data['video'] = $request->input('video');
         }
 
         if (isset($data['tags']) && is_string($data['tags'])) {

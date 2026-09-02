@@ -24,7 +24,6 @@ import {
   Palmtree,
   Megaphone,
   Tag,
-  DollarSign,
   Phone,
   Mail,
   Facebook,
@@ -32,7 +31,10 @@ import {
   CheckCircle2,
   X,
   Edit,
-  Lock
+  Lock,
+  Video,
+  Film,
+  Play
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { getJSON, getPublicJSON, postJSON, putJSON, deleteJSON, getStorageUrl, API_BASE, getAuthToken } from '../../lib/api';
@@ -41,12 +43,51 @@ import { SubscriptionPaymentModal } from '../../components/SubscriptionPaymentMo
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 
+// 🛡️ Video Upload Validation & Utilities (Matching Admin Content)
+const ALLOWED_VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogv', '.mov'];
+const ALLOWED_VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
+const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024; // 500MB Limit
+
+function validateSecureVideoFile(file: File): { valid: boolean; error?: string } {
+  const fileName = file.name.toLowerCase();
+  const hasValidExt = ALLOWED_VIDEO_EXTENSIONS.some((ext) => fileName.endsWith(ext));
+  if (!hasValidExt) {
+    return {
+      valid: false,
+      error: `Invalid video extension. Allowed formats: ${ALLOWED_VIDEO_EXTENSIONS.join(', ')}`,
+    };
+  }
+  if (file.type && !ALLOWED_VIDEO_MIME_TYPES.includes(file.type)) {
+    return {
+      valid: false,
+      error: `Unsupported video MIME type (${file.type}). Only MP4, WebM, OGG, or MOV videos are allowed.`,
+    };
+  }
+  if (file.size > MAX_VIDEO_SIZE_BYTES) {
+    return {
+      valid: false,
+      error: `Video file size exceeds 500MB limit (${(file.size / (1024 * 1024)).toFixed(1)} MB).`,
+    };
+  }
+  return { valid: true };
+}
+
+function getYouTubeEmbedUrl(url: string): string | null {
+  if (!url) return null;
+  const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+  if (ytMatch && ytMatch[1]) {
+    return `https://www.youtube.com/embed/${ytMatch[1]}`;
+  }
+  return null;
+}
+
 interface ResortPost {
   id: string | number;
   type: string;
   title?: string;
   content: string;
   image?: string;
+  video?: string;
   product_name?: string;
   price?: string;
   category?: string;
@@ -77,10 +118,16 @@ export function ResortDashboard() {
   const [posts, setPosts] = useState<ResortPost[]>([]);
 
   // Create Post Form State
-  const [postType, setPostType] = useState<string>('promotion');
+  const [postType, setPostType] = useState<string>('virtual_tour');
   const [postContent, setPostContent] = useState('');
   const [postImageFile, setPostImageFile] = useState<File | null>(null);
   const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
+
+  // Video Tour upload & link state
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
+  const [videoUrlInput, setVideoUrlInput] = useState('');
+  const videoFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Post form fields
   const [location, setLocation] = useState('');
@@ -97,6 +144,31 @@ export function ResortDashboard() {
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validation = validateSecureVideoFile(file);
+    if (!validation.valid) {
+      toast.error(validation.error || 'Invalid video file');
+      if (videoFileInputRef.current) videoFileInputRef.current.value = '';
+      return;
+    }
+
+    setVideoFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setVideoPreview(objectUrl);
+    setVideoUrlInput('');
+    toast.success(`Video "${file.name}" is ready!`);
+  };
+
+  const handleRemoveVideo = () => {
+    setVideoFile(null);
+    setVideoPreview(null);
+    setVideoUrlInput('');
+    if (videoFileInputRef.current) videoFileInputRef.current.value = '';
+  };
+
   // Social links form state
   const [socialForm, setSocialForm] = useState({
     facebook_link: '',
@@ -109,6 +181,7 @@ export function ResortDashboard() {
 
   // Post Type Options
   const postTypes = [
+    { key: 'virtual_tour', label: 'Virtual Tour / Video', icon: Video, color: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
     { key: 'promotion', label: 'Promotion', icon: Tag, color: 'bg-pink-50 text-pink-600 border-pink-200' },
     { key: 'rooms', label: 'Rooms', icon: Bed, color: 'bg-purple-50 text-purple-600 border-purple-200' },
     { key: 'amenities', label: 'Amenities', icon: Waves, color: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
@@ -293,8 +366,8 @@ export function ResortDashboard() {
       return;
     }
 
-    if (!postContent.trim()) {
-      toast.error('Please write a caption for your post');
+    if (!postContent.trim() && !videoFile && !videoUrlInput.trim() && !postImageFile) {
+      toast.error('Please write a caption or upload a video / image for your post');
       return;
     }
 
@@ -310,7 +383,7 @@ export function ResortDashboard() {
       const formData = new FormData();
 
       formData.append('type', postType);
-      formData.append('content', postContent.trim());
+      formData.append('content', postContent.trim() || (videoFile || videoUrlInput ? 'Experience our resort with this virtual video tour!' : 'Resort updates and highlights!'));
       formData.append('location', location.trim());
 
       const resortName = resortProfile?.resort_name || currentUser?.resort_name || currentUser?.name || 'Resort';
@@ -324,12 +397,22 @@ export function ResortDashboard() {
       if (promoNote.trim()) {
         allTags.push(promoNote.trim());
       }
+      if (postType === 'virtual_tour' && !allTags.includes('VirtualTour')) {
+        allTags.push('VirtualTour');
+      }
       if (allTags.length > 0) {
         formData.append('tags', JSON.stringify(allTags));
       }
 
       if (postImageFile) {
         formData.append('image', postImageFile);
+      }
+
+      // Video Tour upload or link
+      if (videoFile) {
+        formData.append('video', videoFile);
+      } else if (videoUrlInput.trim()) {
+        formData.append('video_url', videoUrlInput.trim());
       }
 
       const res = await fetch(`${API_BASE}/api/enterprise-posts`, {
@@ -356,6 +439,7 @@ export function ResortDashboard() {
       setTags([]);
       setTagInput('');
       handleRemoveImage();
+      handleRemoveVideo();
       setShowMoreDetails(false);
 
       // Refresh post feed and real-time stats
@@ -724,6 +808,126 @@ export function ResortDashboard() {
             )}
           </div>
 
+          {/* VIRTUAL TOUR / VIDEO UPLOAD SECTION */}
+          {postType === 'virtual_tour' && (
+            <div className="bg-gradient-to-br from-indigo-50/50 via-white to-purple-50/30 p-4.5 sm:p-5 rounded-2xl border border-indigo-100/80 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-indigo-500/10 text-indigo-600 rounded-lg">
+                    <Video className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-900">Virtual Tour Video Upload</h3>
+                    <p className="text-[11px] text-gray-500 font-medium">Upload a resort video file or paste a video link (YouTube, Facebook, MP4)</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Resort Video Tour
+                </span>
+              </div>
+
+              {/* Video Link Input */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                  Video Link (YouTube, Facebook, or Direct Video URL)
+                </label>
+                <div className="relative">
+                  <ExternalLink className="w-3.5 h-3.5 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="url"
+                    value={videoUrlInput}
+                    onChange={(e) => {
+                      setVideoUrlInput(e.target.value);
+                      if (e.target.value.trim()) {
+                        setVideoFile(null);
+                        setVideoPreview(null);
+                        if (videoFileInputRef.current) videoFileInputRef.current.value = '';
+                      }
+                    }}
+                    placeholder="https://www.youtube.com/watch?v=... or https://example.com/resort-tour.mp4"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* OR Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 border-t border-gray-200"></div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">OR Upload Video File</span>
+                <div className="flex-1 border-t border-gray-200"></div>
+              </div>
+
+              {/* Secure Video File Dropzone */}
+              <div>
+                <input
+                  ref={videoFileInputRef}
+                  type="file"
+                  accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                  onChange={handleVideoFileChange}
+                  className="hidden"
+                />
+
+                <div
+                  onClick={() => videoFileInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-200 hover:border-indigo-400 rounded-xl p-5 text-center bg-white/70 hover:bg-indigo-50/30 transition-all cursor-pointer group"
+                >
+                  <Film className="h-7 w-7 text-gray-400 group-hover:text-indigo-500 mx-auto mb-1.5 transition-colors" />
+                  <p className="text-xs font-bold text-gray-700">Click to choose resort video file</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5 font-medium">MP4, WebM, MOV (Up to 500MB)</p>
+                  {videoFile && (
+                    <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-[11px] font-bold">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>{videoFile.name} ({(videoFile.size / (1024 * 1024)).toFixed(1)} MB)</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Live Video Preview Player */}
+              {(videoPreview || videoUrlInput) && (
+                <div className="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Play className="h-3.5 w-3.5 text-indigo-400 fill-indigo-400" />
+                      <span>Resort Video Tour Preview</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleRemoveVideo}
+                      className="px-2 py-0.5 bg-rose-500/20 text-rose-300 hover:bg-rose-500 hover:text-white text-[11px] font-bold rounded-md transition-all cursor-pointer"
+                    >
+                      Remove Video
+                    </button>
+                  </div>
+
+                  {videoPreview ? (
+                    <video
+                      controls
+                      playsInline
+                      className="w-full max-h-56 object-cover rounded-lg bg-black"
+                      src={videoPreview}
+                    />
+                  ) : getYouTubeEmbedUrl(videoUrlInput) ? (
+                    <iframe
+                      src={getYouTubeEmbedUrl(videoUrlInput)!}
+                      title="YouTube video player"
+                      className="w-full aspect-video max-h-56 rounded-lg"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <video
+                      controls
+                      playsInline
+                      className="w-full max-h-56 object-cover rounded-lg bg-black"
+                      src={videoUrlInput}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Caption Textarea */}
           <div>
             <textarea
@@ -765,8 +969,8 @@ export function ResortDashboard() {
             </div>
 
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                <DollarSign className="h-4 w-4" />
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none font-bold text-xs text-gray-400 select-none">
+                ₱
               </div>
               <input
                 type="text"
@@ -942,6 +1146,8 @@ export function ResortDashboard() {
             posts.map(post => {
               const badge = getBadgeStyle(post.type);
               const imageUrl = post.image ? getStorageUrl(post.image) : null;
+              const videoUrl = post.video ? (post.video.startsWith('http') ? post.video : getStorageUrl(post.video)) : null;
+              const ytEmbed = videoUrl ? getYouTubeEmbedUrl(videoUrl) : null;
               const postTags = Array.isArray(post.tags) ? post.tags : [];
 
               return (
@@ -949,8 +1155,33 @@ export function ResortDashboard() {
                   key={post.id}
                   className="bg-white border border-gray-200/80 rounded-2xl overflow-hidden shadow-sm hover:shadow transition-all"
                 >
-                  {/* Post Image with Category Badge */}
-                  {imageUrl && (
+                  {/* Post Video or Image with Category Badge */}
+                  {videoUrl ? (
+                    <div className="relative aspect-video max-h-80 w-full bg-black overflow-hidden">
+                      {ytEmbed ? (
+                        <iframe
+                          src={ytEmbed}
+                          title="Virtual Tour"
+                          className="w-full h-full object-cover"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      ) : (
+                        <video
+                          src={videoUrl}
+                          controls
+                          playsInline
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                      <div className="absolute top-3 left-3 pointer-events-none">
+                        <span className="px-3 py-1 bg-indigo-600/90 backdrop-blur-xs text-white text-[11px] font-bold rounded-full shadow-sm flex items-center gap-1.5">
+                          <Video className="w-3.5 h-3.5" />
+                          Virtual Video Tour
+                        </span>
+                      </div>
+                    </div>
+                  ) : imageUrl ? (
                     <div className="relative h-64 sm:h-72 w-full bg-gray-100 overflow-hidden">
                       <img
                         src={imageUrl}
@@ -963,11 +1194,11 @@ export function ResortDashboard() {
                         </span>
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* Post Body */}
                   <div className="p-5 space-y-3">
-                    {!imageUrl && (
+                    {!imageUrl && !videoUrl && (
                       <div className="inline-block">
                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${badge.bg}`}>
                           {badge.label}
@@ -991,8 +1222,8 @@ export function ResortDashboard() {
 
                       {post.price && (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-medium border border-emerald-100">
-                          <DollarSign className="h-3 w-3 text-emerald-600" />
-                          {post.price}
+                          <span className="font-extrabold text-emerald-600 text-xs">₱</span>
+                          {post.price.replace(/^₱\s*/, '')}
                         </span>
                       )}
 

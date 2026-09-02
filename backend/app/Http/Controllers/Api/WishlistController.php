@@ -71,8 +71,9 @@ class WishlistController extends Controller
             if ($model) {
                 $model->increment('likes');
             }
+            $finalCount = $model ? (int)$model->likes : max(1, WishlistItem::where('item_id', $itemId)->where('item_type', $itemType)->count());
         } else {
-            // Unsave
+            // Unsave / remove from wishlist
             if ($user) {
                 WishlistItem::where('user_id', $user->id)
                     ->where('item_id', $itemId)
@@ -83,14 +84,7 @@ class WishlistController extends Controller
             if ($model && $model->likes > 0) {
                 $model->decrement('likes');
             }
-        }
-
-        $currentLikes = $model ? (int)$model->likes : 0;
-        $dbSavesCount = WishlistItem::where('item_id', $itemId)->where('item_type', $itemType)->count();
-        $cachedSaves = (int)\Illuminate\Support\Facades\Cache::get("wishlist_saves_{$itemType}_{$itemId}", 0);
-        $finalCount = max($currentLikes, $dbSavesCount, $cachedSaves);
-        if ($action === 'save' && $finalCount === 0) {
-            $finalCount = 1;
+            $finalCount = $model ? (int)$model->likes : WishlistItem::where('item_id', $itemId)->where('item_type', $itemType)->count();
         }
 
         \Illuminate\Support\Facades\Cache::forever("wishlist_saves_{$itemType}_{$itemId}", $finalCount);

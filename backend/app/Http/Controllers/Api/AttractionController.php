@@ -92,9 +92,15 @@ class AttractionController extends Controller
             'category' => 'nullable|string|max:255',
             'image' => 'nullable', // file upload or image URL string
             'video' => 'nullable', // file or string URL
+            'video_url' => 'nullable|string',
             'description' => 'nullable|string',
             'full_description' => 'nullable|string',
         ]);
+
+        // Handle string video link / URL if provided
+        if ($request->filled('video_url')) {
+            $data['video'] = $request->input('video_url');
+        }
 
         // Handle image upload
         if ($request->hasFile('image')) {
@@ -180,9 +186,15 @@ class AttractionController extends Controller
             'category' => 'sometimes|nullable|string|max:255',
             'image' => 'sometimes|nullable|file|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max
             'video' => 'sometimes|nullable', // file or string URL
+            'video_url' => 'sometimes|nullable|string',
             'description' => 'sometimes|nullable|string',
             'full_description' => 'sometimes|nullable|string',
         ]);
+
+        // Handle string video link / URL if provided
+        if ($request->filled('video_url')) {
+            $data['video'] = $request->input('video_url');
+        }
 
         // Handle image upload
         if ($request->hasFile('image')) {

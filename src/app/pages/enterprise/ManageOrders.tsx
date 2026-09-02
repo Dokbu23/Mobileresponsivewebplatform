@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Package, Clock, CheckCircle, Truck, Phone, MapPin, User, Calendar, CreditCard, Building2, DollarSign } from 'lucide-react';
+import { Package, Clock, CheckCircle, Truck, Phone, MapPin, User, Calendar, CreditCard, Building2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
 import { getJSON, patchJSON } from '../../lib/api';

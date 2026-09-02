@@ -78,15 +78,15 @@ export function Itinerary() {
   const navigate = useNavigate();
   const { currentUser, userType } = useApp();
 
-  useEffect(() => {
-    if (!currentUser && !getAuthToken()) {
-      toast.error('Please log in as a tourist to access the Itinerary planner');
-      navigate('/login');
-    } else if (userType === 'resort' || userType === 'enterprise' || currentUser?.role === 'resort' || currentUser?.role === 'enterprise') {
-      toast.error('Itinerary creation is available for tourists and admins only.');
-      navigate(userType === 'resort' ? '/resort/dashboard' : '/enterprise/dashboard');
-    }
-  }, [currentUser, userType, navigate]);
+  const isBusinessOrAdmin =
+    userType === 'admin' ||
+    userType === 'resort' ||
+    userType === 'enterprise' ||
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'resort' ||
+    currentUser?.role === 'enterprise';
+
+  const canAccessBuilders = !isBusinessOrAdmin;
 
   const [myCustomTrips, setMyCustomTrips] = useState<ItineraryCard[]>([]);
 
@@ -478,7 +478,9 @@ export function Itinerary() {
               </h1>
             </div>
             <p className="text-gray-500 text-sm pl-4">
-              Explore official recommended itineraries curated by the Tourism Office, or generate your custom schedule.
+              {canAccessBuilders
+                ? 'Explore official recommended itineraries curated by the Tourism Office, or generate your custom schedule.'
+                : 'Explore official recommended itineraries and travel routes curated by the Mansalay Tourism Office.'}
             </p>
           </div>
         </div>
@@ -578,7 +580,7 @@ export function Itinerary() {
                         <span>View Schedule</span>
                         <ChevronRight className="h-3.5 w-3.5" />
                       </button>
-                      {userType !== 'admin' && (
+                      {canAccessBuilders && (
                         <button
                           onClick={(e) => handleSaveOfficialToMyTrips(trip, e)}
                           className="p-2.5 bg-pink-50 hover:bg-pink-100 text-pink-600 rounded-full border border-pink-200 transition-colors flex-shrink-0"
@@ -596,7 +598,7 @@ export function Itinerary() {
         </section>
 
         {/* ── MY TRIPS & SAVED ITINERARIES (Tourists Only) ── */}
-        {userType !== 'admin' && (
+        {canAccessBuilders && (
           <section className="mb-16">
             <div className="flex items-center gap-2 text-pink-500 text-xs font-bold uppercase tracking-wider mb-1">
               <BookmarkCheck className="h-4 w-4" />
@@ -676,61 +678,63 @@ export function Itinerary() {
           </section>
         )}
 
-        {/* ── 3. DYNAMIC TRIP GENERATOR & BUILDER CALLOUT ── */}
-        <section className="bg-gradient-to-r from-pink-50/70 via-rose-50/50 to-pink-50/70 border border-pink-100 rounded-3xl p-6 sm:p-10 text-center">
-          <div className="flex items-center justify-center gap-1.5 text-pink-500 text-xs font-bold uppercase tracking-wider mb-1">
-            <Sparkles className="h-4 w-4" />
-            <span>Interactive Builders</span>
-          </div>
-          <h2 className="text-2xl font-extrabold text-gray-900 mb-2">Build & Customize Your Mansalay Trip</h2>
-          <p className="text-xs text-gray-500 max-w-md mx-auto mb-8">
-            Let our AI auto-generate an itinerary based on your preferences or hand-pick every location manually.
-          </p>
+        {/* ── 3. DYNAMIC TRIP GENERATOR & BUILDER CALLOUT (Tourists Only) ── */}
+        {canAccessBuilders && (
+          <section className="bg-gradient-to-r from-pink-50/70 via-rose-50/50 to-pink-50/70 border border-pink-100 rounded-3xl p-6 sm:p-10 text-center">
+            <div className="flex items-center justify-center gap-1.5 text-pink-500 text-xs font-bold uppercase tracking-wider mb-1">
+              <Sparkles className="h-4 w-4" />
+              <span>Interactive Builders</span>
+            </div>
+            <h2 className="text-2xl font-extrabold text-gray-900 mb-2">Build & Customize Your Mansalay Trip</h2>
+            <p className="text-xs text-gray-500 max-w-md mx-auto mb-8">
+              Let our AI auto-generate an itinerary based on your preferences or hand-pick every location manually.
+            </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-            {/* Smart Generator Option */}
-            <div
-              onClick={() => setShowAiModal(true)}
-              className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-pink-300 transition-all cursor-pointer text-left group flex flex-col justify-between"
-            >
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-pink-100 text-pink-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <Wand2 className="h-6 w-6" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+              {/* Smart Generator Option */}
+              <div
+                onClick={() => setShowAiModal(true)}
+                className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-pink-300 transition-all cursor-pointer text-left group flex flex-col justify-between"
+              >
+                <div>
+                  <div className="w-12 h-12 rounded-2xl bg-pink-100 text-pink-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                    <Wand2 className="h-6 w-6" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Smart AI Generator</h3>
+                  <p className="text-xs text-gray-500 leading-relaxed mb-6">
+                    Select your travel style, duration, and pace to auto-build a day-by-day customized Mansalay itinerary.
+                  </p>
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">Smart AI Generator</h3>
-                <p className="text-xs text-gray-500 leading-relaxed mb-6">
-                  Select your travel style, duration, and pace to auto-build a day-by-day customized Mansalay itinerary.
-                </p>
+
+                <div className="flex items-center justify-between text-xs font-bold text-pink-500 pt-4 border-t border-gray-100">
+                  <span className="flex items-center gap-1">✨ AI-powered</span>
+                  <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                </div>
               </div>
 
-              <div className="flex items-center justify-between text-xs font-bold text-pink-500 pt-4 border-t border-gray-100">
-                <span className="flex items-center gap-1">✨ AI-powered</span>
-                <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+              {/* Manual Builder Option */}
+              <div
+                onClick={() => setShowBuilderModal(true)}
+                className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-pink-300 transition-all cursor-pointer text-left group flex flex-col justify-between"
+              >
+                <div>
+                  <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                    <Edit3 className="h-6 w-6" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">Custom Manual Builder</h3>
+                  <p className="text-xs text-gray-500 leading-relaxed mb-6">
+                    Hand-pick your favorite attractions and accommodations from Mansalay to create your custom trip schedule.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between text-xs font-bold text-pink-500 pt-4 border-t border-gray-100">
+                  <span className="flex items-center gap-1">📋 Custom Builder</span>
+                  <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                </div>
               </div>
             </div>
-
-            {/* Manual Builder Option */}
-            <div
-              onClick={() => setShowBuilderModal(true)}
-              className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-pink-300 transition-all cursor-pointer text-left group flex flex-col justify-between"
-            >
-              <div>
-                <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <Edit3 className="h-6 w-6" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2">Custom Manual Builder</h3>
-                <p className="text-xs text-gray-500 leading-relaxed mb-6">
-                  Hand-pick your favorite attractions and accommodations from Mansalay to create your custom trip schedule.
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between text-xs font-bold text-pink-500 pt-4 border-t border-gray-100">
-                <span className="flex items-center gap-1">📋 Custom Builder</span>
-                <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
 
       </div>
 
@@ -772,7 +776,7 @@ export function Itinerary() {
                   >
                     <Printer className="h-3.5 w-3.5" /> Print / PDF
                   </button>
-                  {userType !== 'admin' && (
+                  {canAccessBuilders && (
                     <button
                       onClick={(e) => handleSaveOfficialToMyTrips(selectedItinerary, e)}
                       className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold rounded-full shadow-sm transition-colors flex items-center gap-1.5"

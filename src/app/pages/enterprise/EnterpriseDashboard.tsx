@@ -2,26 +2,30 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { 
   Store, 
   Package, 
-  DollarSign, 
   TrendingUp, 
-  Eye,
-  Heart,
-  FileText,
-  BarChart2,
-  Plus,
-  Image as ImageIcon,
-  MapPin,
-  Clock,
-  Send,
-  Trash2,
-  ChevronDown,
-  ExternalLink,
-  Share2,
-  Video,
-  X,
-  Bookmark,
-  Lock,
-  Sparkles
+  Eye, 
+  Heart, 
+  FileText, 
+  BarChart2, 
+  Plus, 
+  Image as ImageIcon, 
+  MapPin, 
+  Clock, 
+  Send, 
+  Trash2, 
+  ChevronDown, 
+  ExternalLink, 
+  Share2, 
+  Video, 
+  X, 
+  Bookmark, 
+  Lock, 
+  Sparkles, 
+  CheckCircle2,
+  Film,
+  Play,
+  ShieldCheck,
+  Upload
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { getJSON, getPublicJSON, postJSON, deleteJSON, getStorageUrl } from '../../lib/api';
@@ -30,12 +34,91 @@ import { SubscriptionPaymentModal } from '../../components/SubscriptionPaymentMo
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 
+const OPEN_TIME_OPTIONS = [
+  '6:00 AM',
+  '6:30 AM',
+  '7:00 AM',
+  '7:30 AM',
+  '8:00 AM',
+  '8:30 AM',
+  '9:00 AM',
+  '9:30 AM',
+  '10:00 AM',
+  '10:30 AM',
+  '11:00 AM',
+  '11:30 AM',
+  '12:00 PM',
+  '1:00 PM',
+  '2:00 PM',
+  'Open 24 Hours',
+];
+
+const CLOSE_TIME_OPTIONS = [
+  '12:00 PM',
+  '1:00 PM',
+  '2:00 PM',
+  '3:00 PM',
+  '4:00 PM',
+  '4:30 PM',
+  '5:00 PM',
+  '5:30 PM',
+  '6:00 PM',
+  '6:30 PM',
+  '7:00 PM',
+  '7:30 PM',
+  '8:00 PM',
+  '8:30 PM',
+  '9:00 PM',
+  '9:30 PM',
+  '10:00 PM',
+];
+
+// 🛡️ Video Upload Validation & Utilities (Matching Admin Content)
+const ALLOWED_VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogv', '.mov'];
+const ALLOWED_VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
+const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024; // 500MB Limit
+
+function validateSecureVideoFile(file: File): { valid: boolean; error?: string } {
+  const fileName = file.name.toLowerCase();
+  const hasValidExt = ALLOWED_VIDEO_EXTENSIONS.some((ext) => fileName.endsWith(ext));
+  if (!hasValidExt) {
+    return {
+      valid: false,
+      error: `Invalid video extension. Allowed formats: ${ALLOWED_VIDEO_EXTENSIONS.join(', ')}`,
+    };
+  }
+  if (file.type && !ALLOWED_VIDEO_MIME_TYPES.includes(file.type)) {
+    return {
+      valid: false,
+      error: `Unsupported video MIME type (${file.type}). Only MP4, WebM, OGG, or MOV videos are allowed.`,
+    };
+  }
+  if (file.size > MAX_VIDEO_SIZE_BYTES) {
+    return {
+      valid: false,
+      error: `Video file size exceeds 500MB limit (${(file.size / (1024 * 1024)).toFixed(1)} MB).`,
+    };
+  }
+  return { valid: true };
+}
+
+function getYouTubeEmbedUrl(url: string): string | null {
+  if (!url) return null;
+  const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+  if (ytMatch && ytMatch[1]) {
+    return `https://www.youtube.com/embed/${ytMatch[1]}`;
+  }
+  return null;
+}
+
 interface EnterprisePost {
   id: string | number;
-  type: 'product' | 'promotion' | 'update';
+  type: 'product' | 'update' | string;
   title?: string;
   content: string;
   image?: string;
+  video?: string;
+  video_url?: string;
   product_name?: string;
   productName?: string;
   price?: string;
@@ -69,10 +152,16 @@ export function EnterpriseDashboard() {
   const [posts, setPosts] = useState<EnterprisePost[]>([]);
 
   // Create Post Form State
-  const [postType, setPostType] = useState<'product' | 'promotion' | 'update'>('product');
+  const [postType, setPostType] = useState<'product' | 'update'>('product');
   const [postContent, setPostContent] = useState('');
   const [postImageFile, setPostImageFile] = useState<File | null>(null);
   const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
+
+  // Video Tour upload & link state
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
+  const [videoUrlInput, setVideoUrlInput] = useState('');
+  const videoFileInputRef = useRef<HTMLInputElement | null>(null);
   
   // Product details
   const [productName, setProductName] = useState('');
@@ -81,11 +170,13 @@ export function EnterpriseDashboard() {
   const [sellerName, setSellerName] = useState('');
   const [location, setLocation] = useState('');
   const [businessHours, setBusinessHours] = useState('');
+  const [openTime, setOpenTime] = useState('');
+  const [closeTime, setCloseTime] = useState('');
+  const [openDropdownActive, setOpenDropdownActive] = useState(false);
+  const [closeDropdownActive, setCloseDropdownActive] = useState(false);
+  const openDropdownRef = useRef<HTMLDivElement | null>(null);
+  const closeDropdownRef = useRef<HTMLDivElement | null>(null);
   const [stock, setStock] = useState('');
-
-  // Promotion details
-  const [promoDetails, setPromoDetails] = useState('');
-  const [promoLocation, setPromoLocation] = useState('');
 
   // Tags state
   const [tags, setTags] = useState<string[]>([]);
@@ -94,6 +185,45 @@ export function EnterpriseDashboard() {
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validation = validateSecureVideoFile(file);
+    if (!validation.valid) {
+      toast.error(validation.error || 'Invalid video file');
+      if (videoFileInputRef.current) videoFileInputRef.current.value = '';
+      return;
+    }
+
+    setVideoFile(file);
+    const objectUrl = URL.createObjectURL(file);
+    setVideoPreview(objectUrl);
+    setVideoUrlInput('');
+    toast.success(`Video "${file.name}" is ready!`);
+  };
+
+  const handleRemoveVideo = () => {
+    setVideoFile(null);
+    setVideoPreview(null);
+    setVideoUrlInput('');
+    if (videoFileInputRef.current) videoFileInputRef.current.value = '';
+  };
+
+  // Click outside listener to close dropdowns
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (openDropdownRef.current && !openDropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdownActive(false);
+      }
+      if (closeDropdownRef.current && !closeDropdownRef.current.contains(event.target as Node)) {
+        setCloseDropdownActive(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Check for subscription verification and show congratulations
   useEffect(() => {
@@ -154,12 +284,23 @@ export function EnterpriseDashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const productsResponse = await getPublicJSON('/products');
-        const rawProducts = Array.isArray(productsResponse) ? productsResponse : [];
-        const filteredProducts = currentUser?.id
-          ? rawProducts.filter((product: any) => Number(product.user_id ?? product.userId) === currentUser.id)
-          : rawProducts;
-        setProducts(filteredProducts);
+        let fetchedProducts: any[] = [];
+        try {
+          const res = await getJSON('/products');
+          if (Array.isArray(res)) {
+            fetchedProducts = res;
+          }
+        } catch {}
+
+        if (fetchedProducts.length === 0) {
+          const publicRes = await getPublicJSON('/products');
+          if (Array.isArray(publicRes)) {
+            fetchedProducts = currentUser?.id
+              ? publicRes.filter((product: any) => Number(product.user_id ?? product.userId) === Number(currentUser.id))
+              : publicRes;
+          }
+        }
+        setProducts(fetchedProducts);
       } catch {
         setProducts([]);
       }
@@ -226,8 +367,8 @@ export function EnterpriseDashboard() {
       return;
     }
 
-    if (!postContent.trim() && !productName.trim() && !promoDetails.trim()) {
-      toast.error('Please write some content or details for the post.');
+    if (!postContent.trim() && !productName.trim() && !videoFile && !videoUrlInput.trim()) {
+      toast.error('Please write some content or upload a video / image for the post.');
       return;
     }
 
@@ -243,10 +384,8 @@ export function EnterpriseDashboard() {
       formData.append('type', postType);
       
       const defaultContent = 
-        postType === 'promotion'
-          ? (promoDetails ? `${promoDetails} - Available at ${promoLocation || 'Mansalay'}!` : 'Special Promo at Mansalay!')
-          : postType === 'update'
-          ? 'Virtual tour and store updates from Mansalay!'
+        postType === 'update'
+          ? (videoFile || videoUrlInput ? 'Virtual Video Tour & Updates from Mansalay!' : 'Store updates and announcements from Mansalay!')
           : `Featuring ${productName || 'our products'} at Mansalay!`;
 
       formData.append('content', postContent.trim() || defaultContent);
@@ -261,21 +400,22 @@ export function EnterpriseDashboard() {
         if (location.trim()) formData.append('location', location.trim());
         if (businessHours.trim()) formData.append('business_hours', businessHours.trim());
         if (stock.trim()) formData.append('stock', stock.trim());
-      } else if (postType === 'promotion') {
-        if (promoDetails.trim()) formData.append('price', promoDetails.trim());
-        if (promoLocation.trim()) formData.append('location', promoLocation.trim());
-        formData.append('seller_name', storeProfile?.store_name || currentUser?.name || 'Mansalay Enterprise');
       } else if (postType === 'update') {
         formData.append('location', storeProfile?.barangay ? `${storeProfile.address ? storeProfile.address + ', ' : ''}${storeProfile.barangay}` : 'Mansalay, Oriental Mindoro');
         formData.append('seller_name', storeProfile?.store_name || currentUser?.name || 'Mansalay Enterprise');
+
+        // Video file or link for Virtual Tour / Update
+        if (videoFile) {
+          formData.append('video', videoFile);
+        } else if (videoUrlInput.trim()) {
+          formData.append('video_url', videoUrlInput.trim());
+        }
       }
 
       const computedTags = tags.length > 0
         ? tags
-        : postType === 'promotion'
-        ? ['Sale', 'Promo', 'Souvenir']
         : postType === 'update'
-        ? ['Update', 'VirtualTour']
+        ? (videoFile || videoUrlInput ? ['VirtualTour', 'Video', 'Mansalay'] : ['Update', 'Mansalay'])
         : [category || 'Handicraft', 'Product', 'Mansalay'].filter(Boolean);
 
       formData.append('tags', JSON.stringify(computedTags));
@@ -297,17 +437,31 @@ export function EnterpriseDashboard() {
         await fetchPosts();
       }
 
+      // Refetch products to immediately update 'My Products' tab and stats
+      try {
+        const prodData = await getJSON('/products');
+        const rawProds = Array.isArray(prodData) ? prodData : [];
+        const myProds = currentUser?.id
+          ? rawProds.filter((p: any) => Number(p.user_id ?? p.userId) === currentUser.id)
+          : rawProds;
+        setProducts(myProds);
+      } catch {
+        // ignore
+      }
+
       // Reset form
       setPostContent('');
       setProductName('');
       setPrice('');
       setStock('');
-      setPromoDetails('');
-      setPromoLocation('');
+      setBusinessHours('');
+      setOpenTime('');
+      setCloseTime('');
       setTags([]);
       setTagInput('');
       setPostImageFile(null);
       setPostImagePreview(null);
+      handleRemoveVideo();
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -400,35 +554,54 @@ export function EnterpriseDashboard() {
 
   // Dynamic wishlist trends based on real products and live wishlist saves
   const wishlistTrends = useMemo(() => {
-    if (products.length > 0) {
-      const scored = products.map((p) => {
-        const count = getWishlistCount(p.id, 'product', p.likes || 0);
-        return {
-          id: p.id,
-          name: p.name,
-          count: count,
-        };
-      }).sort((a, b) => b.count - a.count);
+    if (products.length === 0) return [];
 
-      const maxScore = Math.max(1, scored[0]?.count || 1);
-      return scored.slice(0, 5).map((item) => ({
-        ...item,
-        percentage: item.count > 0 ? Math.min(100, Math.round((item.count / maxScore) * 100)) : 0,
-      }));
-    }
-    return [
-      { id: 1, name: 'Handwoven Baskets', count: 0, percentage: 0 },
-      { id: 2, name: 'Organic Honey', count: 0, percentage: 0 },
-      { id: 3, name: 'Dried Mangoes', count: 0, percentage: 0 },
-    ];
+    const scored = products.map((p) => {
+      const count = getWishlistCount(p.id, 'product', p.likes || 0);
+      return {
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        count: count,
+      };
+    }).sort((a, b) => b.count - a.count);
+
+    const maxScore = Math.max(1, scored[0]?.count || 1);
+    return scored.slice(0, 5).map((item) => ({
+      ...item,
+      percentage: item.count > 0 ? Math.min(100, Math.round((item.count / maxScore) * 100)) : 0,
+    }));
   }, [products, wishlistCounts, getWishlistCount]);
 
-  // Compute total real wishlist saves
+  // Compute total real wishlist saves for this enterprise's catalog & posts
   const totalWishlistSaves = useMemo(() => {
     const postSaves = posts.reduce((a, b) => a + Number(b.saves || 0), 0);
     const productSaves = products.reduce((acc, p) => acc + getWishlistCount(p.id, 'product', p.likes || 0), 0);
     return productSaves + postSaves;
   }, [products, posts, wishlistCounts, getWishlistCount]);
+
+  // Real store and product views from database + real-time visitor tracking
+  const totalViews = useMemo(() => {
+    const localCountsStr = typeof window !== 'undefined' ? localStorage.getItem('discover-mansalay:view_counts') : null;
+    const localCounts = localCountsStr ? JSON.parse(localCountsStr) : {};
+
+    let total = 0;
+    // 1. Store profile views
+    if (currentUser?.id) {
+      const storeViewDB = Number(storeProfile?.view_count || currentUser?.view_count || 0);
+      const storeViewLocal = Number(localCounts[`view_count_enterprise_${currentUser.id}`] || 0);
+      total += Math.max(storeViewDB, storeViewLocal);
+    }
+
+    // 2. Products views
+    products.forEach((p) => {
+      const prodViewDB = Number(p.view_count || p.views || 0);
+      const prodViewLocal = Number(localCounts[`view_count_product_${p.id}`] || 0);
+      total += Math.max(prodViewDB, prodViewLocal);
+    });
+
+    return total;
+  }, [currentUser?.id, storeProfile?.view_count, currentUser?.view_count, products]);
 
   if (loading) {
     return (
@@ -518,12 +691,12 @@ export function EnterpriseDashboard() {
             <Eye className="w-5 h-5" />
           </div>
           <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
-            {(5820 + (products.length * 150) + (posts.length * 85)).toLocaleString()}
+            {totalViews.toLocaleString()}
           </div>
-          <div className="text-xs text-gray-500 mt-0.5">Views</div>
+          <div className="text-xs text-gray-500 mt-0.5">Shop & Product Views</div>
           <div className="text-xs font-medium text-emerald-600 flex items-center gap-1 mt-2">
             <TrendingUp className="w-3.5 h-3.5" />
-            +18%
+            {totalViews > 0 ? `+${totalViews}` : '+0'}
           </div>
         </div>
 
@@ -533,12 +706,12 @@ export function EnterpriseDashboard() {
             <Heart className="w-5 h-5" />
           </div>
           <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
-            {totalWishlistSaves}
+            {totalWishlistSaves.toLocaleString()}
           </div>
           <div className="text-xs text-gray-500 mt-0.5">Wishlist Saves</div>
           <div className="text-xs font-medium text-emerald-600 flex items-center gap-1 mt-2">
             <TrendingUp className="w-3.5 h-3.5" />
-            +25%
+            {totalWishlistSaves > 0 ? `+${totalWishlistSaves}` : '+0'}
           </div>
         </div>
 
@@ -550,7 +723,7 @@ export function EnterpriseDashboard() {
           <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
             {products.length}
           </div>
-          <div className="text-xs text-gray-500 mt-0.5">Products</div>
+          <div className="text-xs text-gray-500 mt-0.5">Total Products</div>
           <div className="text-xs font-medium text-emerald-600 flex items-center gap-1 mt-2">
             <TrendingUp className="w-3.5 h-3.5" />
             +{products.length}
@@ -565,7 +738,7 @@ export function EnterpriseDashboard() {
           <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
             {posts.length}
           </div>
-          <div className="text-xs text-gray-500 mt-0.5">Posts</div>
+          <div className="text-xs text-gray-500 mt-0.5">Published Posts</div>
           <div className="text-xs font-medium text-emerald-600 flex items-center gap-1 mt-2">
             <TrendingUp className="w-3.5 h-3.5" />
             +{posts.length}
@@ -575,35 +748,62 @@ export function EnterpriseDashboard() {
 
       {/* Wishlist Trends — Most Saved Products */}
       <div className="bg-white rounded-2xl p-6 border border-gray-100/80 shadow-[0_2px_10px_-3px_rgba(0,0,0,0.05)]">
-        <div className="flex items-center gap-2 mb-5">
-          <BarChart2 className="w-5 h-5 text-pink-500" />
-          <h2 className="text-base font-bold text-gray-900">
-            Wishlist Trends — Most Saved Products
-          </h2>
+        <div className="flex items-center justify-between gap-2 mb-5">
+          <div className="flex items-center gap-2">
+            <BarChart2 className="w-5 h-5 text-pink-500" />
+            <h2 className="text-base font-bold text-gray-900">
+              Wishlist Trends — Most Saved Products
+            </h2>
+          </div>
+          <span className="text-xs text-gray-400 font-medium">Ranked by total tourist saves</span>
         </div>
 
-        <div className="space-y-4">
-          {wishlistTrends.map((item, index) => (
-            <div key={item.id || index} className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-medium">
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400 font-semibold w-4">#{index + 1}</span>
-                  <span className="text-gray-800 font-semibold">{item.name}</span>
+        {wishlistTrends.length === 0 ? (
+          <div className="py-8 text-center bg-gray-50/60 rounded-xl border border-dashed border-gray-200">
+            <Package className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+            <p className="text-xs font-bold text-gray-700">No products added yet</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">Add products to your store to view real-time wishlist ranking and tourist interest.</p>
+            <Link
+              to="/enterprise/profile"
+              className="inline-flex items-center gap-1 mt-3 px-3.5 py-1.5 bg-pink-500 text-white hover:bg-pink-600 rounded-lg text-xs font-bold transition-all shadow-xs"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Your First Product</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {wishlistTrends.map((item, index) => (
+              <div key={item.id || index} className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-medium">
+                  <div className="flex items-center gap-2">
+                    <span className={`font-extrabold w-5 text-center text-xs ${
+                      index === 0 ? 'text-amber-500' : index === 1 ? 'text-slate-400' : index === 2 ? 'text-amber-700' : 'text-gray-400'
+                    }`}>
+                      #{index + 1}
+                    </span>
+                    <span className="text-gray-900 font-bold">{item.name}</span>
+                    {item.category && (
+                      <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full font-medium hidden sm:inline-block">
+                        {item.category}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 text-pink-500 font-extrabold text-xs">
+                    <Heart className="w-3.5 h-3.5 fill-pink-500" />
+                    <span>{item.count} {item.count === 1 ? 'save' : 'saves'}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 text-pink-500 font-semibold">
-                  <Heart className="w-3.5 h-3.5 fill-pink-500" />
-                  <span>{item.count}</span>
+                <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-pink-500 to-rose-500 rounded-full transition-all duration-500" 
+                    style={{ width: `${Math.max(item.percentage, item.count > 0 ? 8 : 0)}%` }}
+                  />
                 </div>
               </div>
-              <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-[#ec4899] rounded-full transition-all duration-500" 
-                  style={{ width: `${item.percentage}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Create Post Section (Saves Real Data to DB) */}
@@ -650,7 +850,7 @@ export function EnterpriseDashboard() {
           <button
             type="button"
             onClick={() => setPostType('product')}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all ${
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
               postType === 'product'
                 ? 'bg-[#ec4899] text-white shadow-sm'
                 : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
@@ -662,21 +862,8 @@ export function EnterpriseDashboard() {
 
           <button
             type="button"
-            onClick={() => setPostType('promotion')}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all ${
-              postType === 'promotion'
-                ? 'bg-[#ec4899] text-white shadow-sm'
-                : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
-            }`}
-          >
-            <TrendingUp className="w-3.5 h-3.5" />
-            Promotion
-          </button>
-
-          <button
-            type="button"
             onClick={() => setPostType('update')}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all ${
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer ${
               postType === 'update'
                 ? 'bg-[#ec4899] text-white shadow-sm'
                 : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
@@ -760,7 +947,9 @@ export function EnterpriseDashboard() {
                 </div>
 
                 <div className="relative">
-                  <DollarSign className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <div className="w-4 h-4 text-gray-500 font-extrabold text-sm absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center select-none pointer-events-none">
+                    ₱
+                  </div>
                   <input
                     type="text"
                     value={price}
@@ -799,7 +988,7 @@ export function EnterpriseDashboard() {
                   />
                 </div>
 
-                {/* Row 3: Location & Business Hours */}
+                {/* Row 3: Location & Stock */}
                 <div className="relative">
                   <MapPin className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
@@ -815,61 +1004,274 @@ export function EnterpriseDashboard() {
                 </div>
 
                 <div className="relative">
-                  <Clock className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Package className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
-                    value={businessHours}
-                    onChange={(e) => setBusinessHours(e.target.value)}
-                    placeholder="Business hours (e.g. Mon–Sat 7:00 AM – 5:00 PM)"
+                    value={stock}
+                    onChange={(e) => setStock(e.target.value)}
+                    placeholder="Stock / availability (e.g. In stock, 20 remaining)"
                     className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-[#ec4899] transition-all"
                   />
                 </div>
               </div>
 
-              {/* Row 4: Stock / availability */}
-              <div className="relative">
-                <Package className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={stock}
-                  onChange={(e) => setStock(e.target.value)}
-                  placeholder="Stock / availability (e.g. In stock, 20 remaining)"
-                  className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-[#ec4899] transition-all"
-                />
+              {/* Operating / Business Hours Section with Dropdowns */}
+              <div className="space-y-1.5 pt-1">
+                <label className="block text-[11px] font-bold text-gray-600 flex items-center gap-1">
+                  <Clock className="h-3.5 w-3.5 text-pink-500" />
+                  <span>Business / Operating Hours</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Opening Time Custom Dropdown */}
+                  <div ref={openDropdownRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenDropdownActive((prev) => !prev);
+                        setCloseDropdownActive(false);
+                      }}
+                      className={`w-full pl-3.5 pr-3 py-2.5 bg-white border rounded-lg text-xs font-semibold text-gray-800 text-left flex items-center justify-between shadow-2xs transition-all cursor-pointer ${
+                        openDropdownActive ? 'border-pink-500 ring-2 ring-pink-500/20' : 'border-gray-200 hover:border-pink-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <Clock className="h-3.5 w-3.5 text-pink-500 flex-shrink-0" />
+                        <span className={openTime ? 'text-gray-900 font-bold' : 'text-gray-400'}>
+                          {openTime || 'Opening Time (e.g. 8:00 AM)'}
+                        </span>
+                      </div>
+                      <ChevronDown
+                        className={`h-3.5 w-3.5 text-gray-400 transition-transform duration-200 flex-shrink-0 ${
+                          openDropdownActive ? 'rotate-180 text-pink-500' : ''
+                        }`}
+                      />
+                    </button>
+
+                    {/* Downward Popover Menu with Scroll */}
+                    {openDropdownActive && (
+                      <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white border border-gray-100 rounded-xl shadow-xl p-1 max-h-56 overflow-y-auto divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                        <div className="p-1.5 text-[10px] uppercase font-extrabold text-gray-400 tracking-wider sticky top-0 bg-white/95 backdrop-blur-xs z-10 border-b border-gray-100">
+                          Select Opening Time
+                        </div>
+                        <div className="py-1 space-y-0.5">
+                          {OPEN_TIME_OPTIONS.map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => {
+                                setOpenTime(t);
+                                if (t === 'Open 24 Hours') {
+                                  setBusinessHours('Open 24 Hours');
+                                } else {
+                                  setBusinessHours(`${t} – ${closeTime || '5:00 PM'}`);
+                                }
+                                setOpenDropdownActive(false);
+                              }}
+                              className={`w-full px-3 py-1.5 text-left text-xs font-semibold rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                                openTime === t
+                                  ? 'bg-pink-50 text-pink-600 font-extrabold'
+                                  : 'text-gray-700 hover:bg-gray-50 hover:text-pink-600'
+                              }`}
+                            >
+                              <span>{t}</span>
+                              {openTime === t && <CheckCircle2 className="h-3.5 w-3.5 text-pink-500" />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Closing Time Custom Dropdown */}
+                  <div ref={closeDropdownRef} className="relative">
+                    <button
+                      type="button"
+                      disabled={openTime === 'Open 24 Hours'}
+                      onClick={() => {
+                        setCloseDropdownActive((prev) => !prev);
+                        setOpenDropdownActive(false);
+                      }}
+                      className={`w-full pl-3.5 pr-3 py-2.5 bg-white border rounded-lg text-xs font-semibold text-gray-800 text-left flex items-center justify-between shadow-2xs transition-all cursor-pointer disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed ${
+                        closeDropdownActive ? 'border-rose-500 ring-2 ring-rose-500/20' : 'border-gray-200 hover:border-rose-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <Clock className="h-3.5 w-3.5 text-rose-500 flex-shrink-0" />
+                        <span className={closeTime ? 'text-gray-900 font-bold' : 'text-gray-400'}>
+                          {openTime === 'Open 24 Hours' ? 'N/A (24 Hours)' : closeTime || 'Closing Time (e.g. 5:00 PM)'}
+                        </span>
+                      </div>
+                      <ChevronDown
+                        className={`h-3.5 w-3.5 text-gray-400 transition-transform duration-200 flex-shrink-0 ${
+                          closeDropdownActive ? 'rotate-180 text-rose-500' : ''
+                        }`}
+                      />
+                    </button>
+
+                    {/* Downward Popover Menu with Scroll */}
+                    {closeDropdownActive && openTime !== 'Open 24 Hours' && (
+                      <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white border border-gray-100 rounded-xl shadow-xl p-1 max-h-56 overflow-y-auto divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                        <div className="p-1.5 text-[10px] uppercase font-extrabold text-gray-400 tracking-wider sticky top-0 bg-white/95 backdrop-blur-xs z-10 border-b border-gray-100">
+                          Select Closing Time
+                        </div>
+                        <div className="py-1 space-y-0.5">
+                          {CLOSE_TIME_OPTIONS.map((t) => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => {
+                                setCloseTime(t);
+                                if (openTime && openTime !== 'Open 24 Hours') {
+                                  setBusinessHours(`${openTime} – ${t}`);
+                                }
+                                setCloseDropdownActive(false);
+                              }}
+                              className={`w-full px-3 py-1.5 text-left text-xs font-semibold rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                                closeTime === t
+                                  ? 'bg-rose-50 text-rose-600 font-extrabold'
+                                  : 'text-gray-700 hover:bg-gray-50 hover:text-rose-600'
+                              }`}
+                            >
+                              <span>{t}</span>
+                              {closeTime === t && <CheckCircle2 className="h-3.5 w-3.5 text-rose-500" />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Schedule preview badge */}
+                {businessHours && (
+                  <p className="text-[11px] text-pink-600 font-bold mt-1.5 flex items-center gap-1.5">
+                    <span>⏰ Selected Hours:</span>
+                    <span className="bg-pink-50 px-2.5 py-0.5 rounded-md border border-pink-200 text-pink-700 font-semibold shadow-2xs">
+                      {businessHours}
+                    </span>
+                  </p>
+                )}
               </div>
             </div>
           )}
 
-          {/* PROMOTION DETAILS (Only for Promotion) */}
-          {postType === 'promotion' && (
-            <div className="bg-gray-50/70 p-4.5 rounded-xl border border-gray-100 space-y-3.5">
-              <div className="text-[11px] font-bold tracking-wider text-gray-500 uppercase">
-                Promotion Details
+          {/* VIRTUAL TOUR / VIDEO UPLOAD SECTION (For Virtual Tour / Update) */}
+          {postType === 'update' && (
+            <div className="bg-gradient-to-br from-pink-50/50 via-white to-purple-50/30 p-4.5 sm:p-5 rounded-2xl border border-pink-100/80 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-pink-500/10 text-pink-600 rounded-lg">
+                    <Video className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-900">Virtual Tour Video Upload</h3>
+                    <p className="text-[11px] text-gray-500 font-medium">Upload a video file or paste a video link (YouTube, Facebook, MP4)</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Optional Video Tour
+                </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Video Link Input */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                  Video Link (YouTube, Facebook, or Direct Video URL)
+                </label>
                 <div className="relative">
-                  <DollarSign className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <ExternalLink className="w-3.5 h-3.5 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
-                    type="text"
-                    value={promoDetails}
-                    onChange={(e) => setPromoDetails(e.target.value)}
-                    placeholder="Promo / discount details"
-                    className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-[#ec4899] transition-all"
-                  />
-                </div>
-
-                <div className="relative">
-                  <MapPin className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={promoLocation}
-                    onChange={(e) => setPromoLocation(e.target.value)}
-                    placeholder="Where it applies (barangay)"
-                    className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-[#ec4899] transition-all"
+                    type="url"
+                    value={videoUrlInput}
+                    onChange={(e) => {
+                      setVideoUrlInput(e.target.value);
+                      if (e.target.value.trim()) {
+                        setVideoFile(null);
+                        setVideoPreview(null);
+                        if (videoFileInputRef.current) videoFileInputRef.current.value = '';
+                      }
+                    }}
+                    placeholder="https://www.youtube.com/watch?v=... or https://example.com/tour.mp4"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 transition-all font-medium"
                   />
                 </div>
               </div>
+
+              {/* OR Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 border-t border-gray-200"></div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">OR Upload Video File</span>
+                <div className="flex-1 border-t border-gray-200"></div>
+              </div>
+
+              {/* Secure Video File Dropzone */}
+              <div>
+                <input
+                  ref={videoFileInputRef}
+                  type="file"
+                  accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                  onChange={handleVideoFileChange}
+                  className="hidden"
+                />
+
+                <div
+                  onClick={() => videoFileInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-200 hover:border-pink-400 rounded-xl p-5 text-center bg-white/70 hover:bg-pink-50/30 transition-all cursor-pointer group"
+                >
+                  <Film className="h-7 w-7 text-gray-400 group-hover:text-pink-500 mx-auto mb-1.5 transition-colors" />
+                  <p className="text-xs font-bold text-gray-700">Click to choose video file</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5 font-medium">MP4, WebM, MOV (Up to 500MB)</p>
+                  {videoFile && (
+                    <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-[11px] font-bold">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>{videoFile.name} ({(videoFile.size / (1024 * 1024)).toFixed(1)} MB)</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Live Video Preview Player */}
+              {(videoPreview || videoUrlInput) && (
+                <div className="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <Play className="h-3.5 w-3.5 text-pink-400 fill-pink-400" />
+                      <span>Video Tour Preview</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleRemoveVideo}
+                      className="px-2 py-0.5 bg-rose-500/20 text-rose-300 hover:bg-rose-500 hover:text-white text-[11px] font-bold rounded-md transition-all cursor-pointer"
+                    >
+                      Remove Video
+                    </button>
+                  </div>
+
+                  {videoPreview ? (
+                    <video
+                      controls
+                      playsInline
+                      className="w-full max-h-56 object-cover rounded-lg bg-black"
+                      src={videoPreview}
+                    />
+                  ) : getYouTubeEmbedUrl(videoUrlInput) ? (
+                    <iframe
+                      src={getYouTubeEmbedUrl(videoUrlInput)!}
+                      title="YouTube video player"
+                      className="w-full aspect-video max-h-56 rounded-lg"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <video
+                      controls
+                      playsInline
+                      className="w-full max-h-56 object-cover rounded-lg bg-black"
+                      src={videoUrlInput}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -996,6 +1398,8 @@ export function EnterpriseDashboard() {
             ) : (
               posts.map((post) => {
                 const imgUrl = post.image ? (post.image.startsWith('http') ? post.image : getStorageUrl(post.image)) : null;
+                const videoUrl = post.video ? (post.video.startsWith('http') ? post.video : getStorageUrl(post.video)) : null;
+                const ytEmbed = videoUrl ? getYouTubeEmbedUrl(videoUrl) : null;
                 const prodTitle = post.product_name || post.productName;
                 const priceText = post.price;
                 const categoryText = post.category;
@@ -1010,8 +1414,33 @@ export function EnterpriseDashboard() {
                     key={post.id}
                     className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_1px_6px_rgba(0,0,0,0.03)] space-y-4 hover:border-pink-200 transition-all group"
                   >
-                    {/* Post Image with Badge */}
-                    {imgUrl && (
+                    {/* Post Video or Image Media */}
+                    {videoUrl ? (
+                      <div className="relative rounded-xl overflow-hidden bg-black aspect-video max-h-80">
+                        {ytEmbed ? (
+                          <iframe
+                            src={ytEmbed}
+                            title="Virtual Tour"
+                            className="w-full h-full object-cover"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                          />
+                        ) : (
+                          <video
+                            src={videoUrl}
+                            controls
+                            playsInline
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                        <div className="absolute top-3 left-3 pointer-events-none">
+                          <span className="px-3 py-1 bg-pink-600/90 backdrop-blur-xs text-white text-[11px] font-bold rounded-full shadow-sm flex items-center gap-1.5">
+                            <Video className="w-3.5 h-3.5" />
+                            Virtual Video Tour
+                          </span>
+                        </div>
+                      </div>
+                    ) : imgUrl ? (
                       <div className="relative rounded-xl overflow-hidden bg-gray-100 aspect-video sm:aspect-[21/9] max-h-72">
                         <img
                           src={imgUrl}
@@ -1022,13 +1451,11 @@ export function EnterpriseDashboard() {
                           <span className="px-3 py-1 bg-[#ec4899] text-white text-[11px] font-bold rounded-full shadow-sm">
                             {post.type === 'product'
                               ? 'Product Listing'
-                              : post.type === 'promotion'
-                              ? 'Promotion'
                               : 'Business Update'}
                           </span>
                         </div>
                       </div>
-                    )}
+                    ) : null}
 
                     {/* Post Content */}
                     <p className="text-sm text-gray-800 leading-relaxed font-normal">
@@ -1044,8 +1471,8 @@ export function EnterpriseDashboard() {
                       )}
                       {priceText && (
                         <span className="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200/60 font-semibold text-xs rounded-full inline-flex items-center gap-1">
-                          <DollarSign className="w-3 h-3 text-emerald-600" />
-                          {priceText}
+                          <span className="font-extrabold text-emerald-600 text-xs">₱</span>
+                          {priceText.replace(/^₱\s*/, '')}
                         </span>
                       )}
                       {categoryText && (

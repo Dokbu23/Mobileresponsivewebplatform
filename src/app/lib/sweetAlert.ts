@@ -233,3 +233,59 @@ export const showPaymentMethodSuccess = (action: 'added' | 'deleted', methodName
     }
   });
 };
+
+// Wishlist alerts (Added or Unhearted/Removed)
+export const showWishlistAlert = (action: 'added' | 'removed', itemName?: string) => {
+  if (action === 'added') {
+    return Swal.fire({
+      icon: 'success',
+      title: 'Added to Wishlist!',
+      text: itemName ? `"${itemName}" was added to your saved wishlist.` : 'Item has been added to your wishlist.',
+      showConfirmButton: false,
+      timer: 1800,
+      timerProgressBar: true,
+      toast: true,
+      position: 'top-end',
+      customClass: {
+        popup: 'swal-product-popup'
+      }
+    });
+  } else {
+    return Swal.fire({
+      icon: 'info',
+      title: 'Removed from Wishlist',
+      text: itemName ? `"${itemName}" was removed from your wishlist.` : 'Item has been removed from your wishlist.',
+      showConfirmButton: false,
+      timer: 1800,
+      timerProgressBar: true,
+      toast: true,
+      position: 'top-end',
+      customClass: {
+        popup: 'swal-logout-popup'
+      }
+    });
+  }
+};
+
+// Unsave / Unheart confirmation dialog
+export const showUnsaveConfirmDialog = async (itemName?: string): Promise<boolean> => {
+  const result = await Swal.fire({
+    icon: 'question',
+    title: 'Unsave from Wishlist?',
+    text: itemName
+      ? `Are you sure you want to unsave "${itemName}" from your wishlist?`
+      : 'Are you sure you want to unsave this item from your wishlist?',
+    showCancelButton: true,
+    confirmButtonColor: '#ec4899',
+    cancelButtonColor: '#9ca3af',
+    confirmButtonText: 'Yes, Unsave',
+    cancelButtonText: 'Cancel',
+    reverseButtons: true,
+    customClass: {
+      popup: 'swal-logout-popup',
+      confirmButton: 'rounded-xl font-bold px-4 py-2',
+      cancelButton: 'rounded-xl font-bold px-4 py-2'
+    }
+  });
+  return result.isConfirmed;
+};

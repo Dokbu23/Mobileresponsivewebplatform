@@ -26,14 +26,17 @@ class ProductController extends Controller
             if ($user && $user->role === 'enterprise') {
                 $query->where('user_id', $user->id);
             } elseif (!$user || $user->role !== 'admin') {
-                // Public non-admin view: show products from admin OR approved & paid enterprise accounts
+                // Public non-admin view: show products from admin OR active/approved enterprise accounts
                 $query->where(function($q) {
                     $q->whereNull('user_id')
                       ->orWhereHas('owner', function($userQuery) {
                           $userQuery->where('role', 'admin')
                                     ->orWhere(function($bq) {
-                                        $bq->where('listing_status', 'approved')
-                                           ->whereIn('subscription_status', ['paid', 'active']);
+                                        $bq->where('role', 'enterprise')
+                                           ->where(function($subQ) {
+                                               $subQ->whereIn('listing_status', ['approved', 'active', 'pending'])
+                                                    ->orWhereIn('subscription_status', ['paid', 'active']);
+                                           });
                                     });
                       });
                 });
@@ -78,17 +81,57 @@ class ProductController extends Controller
 
         $user = $request->user();
 
-        // handle uploaded image file
+        $storedImages = [];
+
+        // Handle multiple uploaded image files (images[])
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $file) {
+                if ($file) {
+                    $path = $file->store('products', 'public');
+                    $storedImages[] = '/storage/' . $path;
+                }
+            }
+        }
+
+        // Handle single uploaded image file
         if ($request->hasFile('image')) {
             try {
                 $file = $request->file('image');
                 $path = $file->store('products', 'public');
-                $data['image'] = '/storage/' . $path;
+                $singlePath = '/storage/' . $path;
+                if (!in_array($singlePath, $storedImages)) {
+                    array_unshift($storedImages, $singlePath);
+                }
+                $data['image'] = $singlePath;
             } catch (\Exception $e) {
                 return response()->json(['error' => 'Failed to store file: ' . $e->getMessage()], 400);
             }
-        } elseif (is_string($request->input('image'))) {
+        } elseif (is_string($request->input('image')) && !empty($request->input('image'))) {
             $data['image'] = $request->input('image');
+            if (!in_array($data['image'], $storedImages)) {
+                array_unshift($storedImages, $data['image']);
+            }
+        }
+
+        // Merge any existing or string images provided in request
+        if ($request->has('existing_images')) {
+            $existing = $request->input('existing_images');
+            if (is_string($existing)) {
+                $decoded = json_decode($existing, true);
+                if (is_array($decoded)) {
+                    $storedImages = array_merge($decoded, $storedImages);
+                }
+            } elseif (is_array($existing)) {
+                $storedImages = array_merge($existing, $storedImages);
+            }
+        }
+
+        if (!empty($storedImages)) {
+            $storedImages = array_values(array_unique($storedImages));
+            $data['images'] = $storedImages;
+            if (empty($data['image'])) {
+                $data['image'] = $storedImages[0];
+            }
         }
 
         // Enterprise owner creates a registered listing; admin creates a static listing
@@ -99,6 +142,30 @@ class ProductController extends Controller
 
         // Handle optional variations payload
         $this->syncVariations($request, $product, false);
+
+        // Auto-create an Enterprise Post so it appears in the Posts feed
+        if ($user && ($user->role === 'enterprise' || $user->role === 'resort')) {
+            try {
+                \App\Models\EnterprisePost::create([
+                    'user_id'        => $user->id,
+                    'type'           => 'product',
+                    'title'          => $product->name,
+                    'product_name'   => $product->name,
+                    'content'        => $product->description ?: "Check out our product: {$product->name}! Now available in our store.",
+                    'price'          => '₱' . number_format($product->price, 2),
+                    'category'       => $product->category ?: 'Souvenir',
+                    'seller_name'    => $user->store_name ?: ($user->resort_name ?: $user->name),
+                    'location'       => $user->address ? "{$user->address}, {$user->barangay}" : ($user->barangay ?: 'Mansalay, Oriental Mindoro'),
+                    'stock'          => $product->stock ? "{$product->stock} remaining" : 'In stock',
+                    'image'          => $product->image,
+                    'tags'           => [$product->category ?: 'Product', 'Souvenir', 'Mansalay'],
+                    'likes'          => 0,
+                    'saves'          => 0,
+                ]);
+            } catch (\Throwable $e) {
+                \Log::warning('Failed to auto-create EnterprisePost for product: ' . $e->getMessage());
+            }
+        }
 
         return response()->json($product->load('variations'), 201);
     }
@@ -135,17 +202,57 @@ class ProductController extends Controller
             'category' => 'sometimes|nullable|string|max:255',
         ]);
 
-        // handle uploaded image file
+        $storedImages = [];
+
+        // Handle multiple uploaded image files (images[])
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $file) {
+                if ($file) {
+                    $path = $file->store('products', 'public');
+                    $storedImages[] = '/storage/' . $path;
+                }
+            }
+        }
+
+        // Handle single uploaded image file
         if ($request->hasFile('image')) {
             try {
                 $file = $request->file('image');
                 $path = $file->store('products', 'public');
-                $data['image'] = '/storage/' . $path;
+                $singlePath = '/storage/' . $path;
+                if (!in_array($singlePath, $storedImages)) {
+                    array_unshift($storedImages, $singlePath);
+                }
+                $data['image'] = $singlePath;
             } catch (\Exception $e) {
                 return response()->json(['error' => 'Failed to store file: ' . $e->getMessage()], 400);
             }
-        } elseif (is_string($request->input('image'))) {
+        } elseif (is_string($request->input('image')) && !empty($request->input('image'))) {
             $data['image'] = $request->input('image');
+            if (!in_array($data['image'], $storedImages)) {
+                array_unshift($storedImages, $data['image']);
+            }
+        }
+
+        // Merge any existing or string images provided in request
+        if ($request->has('existing_images')) {
+            $existing = $request->input('existing_images');
+            if (is_string($existing)) {
+                $decoded = json_decode($existing, true);
+                if (is_array($decoded)) {
+                    $storedImages = array_merge($decoded, $storedImages);
+                }
+            } elseif (is_array($existing)) {
+                $storedImages = array_merge($existing, $storedImages);
+            }
+        }
+
+        if (!empty($storedImages)) {
+            $storedImages = array_values(array_unique($storedImages));
+            $data['images'] = $storedImages;
+            if (empty($data['image'])) {
+                $data['image'] = $storedImages[0];
+            }
         }
 
         $product = \App\Models\Product::findOrFail($id);
@@ -154,7 +261,7 @@ class ProductController extends Controller
         // Handle optional variations payload (delete & re-create)
         $this->syncVariations($request, $product, true);
 
-            \Log::info('Product updated', ['id' => $id]);
+        \Log::info('Product updated', ['id' => $id]);
 
         return response()->json($product->load('variations'));
     }

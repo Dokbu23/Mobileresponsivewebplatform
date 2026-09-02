@@ -30,7 +30,8 @@ import {
   Square,
   RotateCcw,
   ChevronDown,
-  Mail
+  Mail,
+  ExternalLink
 } from 'lucide-react';
 import { getPublicJSON, postJSON, deleteJSON, API_BASE } from '../../lib/api';
 import {
@@ -111,6 +112,47 @@ function sanitizeVideoUrl(url: string): { valid: boolean; error?: string; cleanU
   return { valid: true, cleanUrl: trimmed };
 }
 
+const OPEN_TIME_OPTIONS = [
+  '6:00 AM',
+  '6:30 AM',
+  '7:00 AM',
+  '7:30 AM',
+  '8:00 AM',
+  '8:30 AM',
+  '9:00 AM',
+  '9:30 AM',
+  '10:00 AM',
+  '10:30 AM',
+  '11:00 AM',
+  '11:30 AM',
+  '12:00 PM',
+  '1:00 PM',
+  '2:00 PM',
+  'Open 24 Hours',
+];
+
+const CLOSE_TIME_OPTIONS = [
+  '12:00 PM',
+  '1:00 PM',
+  '2:00 PM',
+  '3:00 PM',
+  '4:00 PM',
+  '4:30 PM',
+  '5:00 PM',
+  '5:30 PM',
+  '6:00 PM',
+  '6:30 PM',
+  '7:00 PM',
+  '7:30 PM',
+  '8:00 PM',
+  '8:30 PM',
+  '9:00 PM',
+  '9:30 PM',
+  '10:00 PM',
+  '11:00 PM',
+  '12:00 AM',
+];
+
 export function AdminContent() {
   const [mainMode, setMainMode] = useState<MainMode>('publish');
   const [activeTab, setActiveTab] = useState<ContentTab>('resort');
@@ -132,7 +174,26 @@ export function AdminContent() {
   const [description, setDescription] = useState('');
   const [fullDescription, setFullDescription] = useState('');
   const [location, setLocation] = useState('');
-  const [operatingHours, setOperatingHours] = useState('');
+  const [openTime, setOpenTime] = useState('8:00 AM');
+  const [closeTime, setCloseTime] = useState('5:00 PM');
+  const [operatingHours, setOperatingHours] = useState('8:00 AM – 5:00 PM');
+  const [openDropdownActive, setOpenDropdownActive] = useState(false);
+  const [closeDropdownActive, setCloseDropdownActive] = useState(false);
+  const openDropdownRef = useRef<HTMLDivElement>(null);
+  const closeDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openDropdownRef.current && !openDropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdownActive(false);
+      }
+      if (closeDropdownRef.current && !closeDropdownRef.current.contains(event.target as Node)) {
+        setCloseDropdownActive(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   const [price, setPrice] = useState('');
   const [stock, setStock] = useState('10');
   const [eventDate, setEventDate] = useState('');
@@ -142,6 +203,8 @@ export function AdminContent() {
   const [coverImageFiles, setCoverImageFiles] = useState<File[]>([]);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoFileInputRef = useRef<HTMLInputElement>(null);
 
   // Resort social/contact fields
   const [facebook, setFacebook] = useState('');
@@ -303,9 +366,6 @@ export function AdminContent() {
     toast.success(`Permanently deleted ${targetIds.length} post(s)!`);
   };
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const videoFileInputRef = useRef<HTMLInputElement | null>(null);
-
   useEffect(() => {
     loadManagePosts();
     window.addEventListener('contentUpdated', loadManagePosts);
@@ -394,7 +454,9 @@ export function AdminContent() {
     setDescription('');
     setFullDescription('');
     setLocation('');
-    setOperatingHours('');
+    setOpenTime('8:00 AM');
+    setCloseTime('5:00 PM');
+    setOperatingHours('8:00 AM – 5:00 PM');
     setPrice('');
     setStock('10');
     setEventDate('');
@@ -406,11 +468,14 @@ export function AdminContent() {
     setImagePreviews([]);
     setSelectedVideoFile(null);
     setVideoPreviewUrl(null);
+    setVideoUrlInput('');
     setFacebook('');
     setInstagram('');
     setContactNumber('');
     setEmail('');
     setWebsite('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (videoFileInputRef.current) videoFileInputRef.current.value = '';
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -596,15 +661,38 @@ export function AdminContent() {
     setShopName(item.shop_name || item.store_name || item.sellerName || '');
     setCategory(item.category || '');
     setDescription(item.description || '');
-    setFullDescription(item.full_description || item.description || '');
     setLocation(item.location || '');
-    setOperatingHours(item.operating_hours || '');
+    const rawHours = item.operating_hours || '';
+    setOperatingHours(rawHours);
+    if (rawHours === 'Open 24 Hours' || rawHours.toLowerCase().includes('24')) {
+      setOpenTime('Open 24 Hours');
+    } else if (rawHours.includes('–') || rawHours.includes('-')) {
+      const delimiter = rawHours.includes('–') ? '–' : '-';
+      const parts = rawHours.split(delimiter);
+      if (parts[0]) setOpenTime(parts[0].trim());
+      if (parts[1]) setCloseTime(parts[1].trim());
+    } else if (rawHours) {
+      setOpenTime(rawHours);
+    } else {
+      setOpenTime('8:00 AM');
+      setCloseTime('5:00 PM');
+      setOperatingHours('8:00 AM – 5:00 PM');
+    }
     setPrice(item.price || item.price_per_night || '');
     setStock(String(item.stock || 10));
     setEventDate(item.date || '');
     setEventTime(item.time || '');
     setCoverImageUrl(item.image || '');
     setImagePreview(item.image ? (item.image.startsWith('http') ? item.image : `${API_BASE}${item.image}`) : null);
+    if (item.video) {
+      const v = String(item.video);
+      setVideoUrlInput(v);
+      setVideoPreviewUrl(v.startsWith('http') ? v : `${API_BASE}${v}`);
+    } else {
+      setVideoUrlInput('');
+      setVideoPreviewUrl(null);
+      setSelectedVideoFile(null);
+    }
     setFacebook(item.facebook || '');
     setInstagram(item.instagram || '');
     setContactNumber(item.contact_number || item.phone || '');
@@ -655,6 +743,7 @@ export function AdminContent() {
     await new Promise((res) => setTimeout(res, 120));
 
     const numPrice = Number(price || 150);
+    const resolvedVideo = videoPreviewUrl || videoUrlInput.trim() || undefined;
     const newItemPayload: any = {
       id: editingId || Date.now(),
       name: activeTab === 'itinerary' && !name.includes('Itinerary') ? `${name} (Itinerary)` : name,
@@ -676,7 +765,7 @@ export function AdminContent() {
       time: eventTime || '9:00 AM – 5:00 PM',
       image: finalImageUrl || '',
       images: finalImagesList.length > 0 ? finalImagesList : (finalImageUrl ? [finalImageUrl] : []),
-      video: videoPreviewUrl || undefined,
+      video: resolvedVideo,
       facebook,
       instagram,
       contact_number: contactNumber,
@@ -714,7 +803,7 @@ export function AdminContent() {
       }
 
       let apiResult: any = null;
-      if (coverImageFiles.length > 0 || coverImageFile || selectedVideoFile) {
+      if (coverImageFiles.length > 0 || coverImageFile || selectedVideoFile || videoUrlInput.trim()) {
         const formData = new FormData();
         formData.append('name', newItemPayload.name);
         formData.append('category', newItemPayload.category);
@@ -730,7 +819,12 @@ export function AdminContent() {
           formData.append('image', coverImageFile);
         }
 
-        if (selectedVideoFile) formData.append('video', selectedVideoFile);
+        if (selectedVideoFile) {
+          formData.append('video', selectedVideoFile);
+        } else if (videoUrlInput.trim()) {
+          formData.append('video', videoUrlInput.trim());
+          formData.append('video_url', videoUrlInput.trim());
+        }
         if (location) formData.append('location', location);
         if (operatingHours) formData.append('operating_hours', operatingHours);
         if (fullDescription) formData.append('full_description', fullDescription);
@@ -1499,17 +1593,131 @@ export function AdminContent() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-gray-800 mb-1.5">Operating Hours</label>
-                      <div className="relative">
-                        <Clock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input
-                          type="text"
-                          value={operatingHours}
-                          onChange={(e) => setOperatingHours(e.target.value)}
-                          placeholder="e.g. 8:00 AM – 6:00 PM"
-                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium focus:border-pink-500 outline-none"
-                        />
+                      <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                        Operating Hours <span className="text-gray-400 font-normal">(AM to PM)</span>
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {/* Opening Time Custom Dropdown (Opens strictly downward & Scrollable) */}
+                        <div ref={openDropdownRef} className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenDropdownActive(prev => !prev);
+                              setCloseDropdownActive(false);
+                            }}
+                            className={`w-full pl-3.5 pr-3 py-2.5 bg-white border rounded-xl text-xs font-semibold text-gray-800 text-left flex items-center justify-between shadow-2xs transition-all ${
+                              openDropdownActive ? 'border-pink-500 ring-2 ring-pink-500/20' : 'border-gray-200 hover:border-pink-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <Clock className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                              <span className={openTime ? 'text-gray-900 font-bold' : 'text-gray-400'}>
+                                {openTime || 'Opening Time (e.g. 8:00 AM)'}
+                              </span>
+                            </div>
+                            <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${openDropdownActive ? 'rotate-180 text-pink-500' : ''}`} />
+                          </button>
+
+                          {/* Downward Popover Menu with Scroll */}
+                          {openDropdownActive && (
+                            <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white border border-gray-100 rounded-2xl shadow-xl p-1 max-h-56 overflow-y-auto divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                              <div className="p-1.5 text-[10px] uppercase font-extrabold text-gray-400 tracking-wider sticky top-0 bg-white/95 backdrop-blur-xs z-10 border-b border-gray-100">
+                                Select Opening Time
+                              </div>
+                              <div className="py-1 space-y-0.5">
+                                {OPEN_TIME_OPTIONS.map((t) => (
+                                  <button
+                                    key={t}
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenTime(t);
+                                      if (t === 'Open 24 Hours') {
+                                        setOperatingHours('Open 24 Hours');
+                                      } else {
+                                        setOperatingHours(`${t} – ${closeTime || '5:00 PM'}`);
+                                      }
+                                      setOpenDropdownActive(false);
+                                    }}
+                                    className={`w-full px-3 py-2 text-left text-xs font-semibold rounded-xl flex items-center justify-between transition-colors ${
+                                      openTime === t
+                                        ? 'bg-pink-50 text-pink-600 font-extrabold'
+                                        : 'text-gray-700 hover:bg-gray-50 hover:text-pink-600'
+                                    }`}
+                                  >
+                                    <span>{t}</span>
+                                    {openTime === t && <CheckCircle2 className="h-3.5 w-3.5 text-pink-500" />}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Closing Time Custom Dropdown (Opens strictly downward & Scrollable) */}
+                        <div ref={closeDropdownRef} className="relative">
+                          <button
+                            type="button"
+                            disabled={openTime === 'Open 24 Hours'}
+                            onClick={() => {
+                              setCloseDropdownActive(prev => !prev);
+                              setOpenDropdownActive(false);
+                            }}
+                            className={`w-full pl-3.5 pr-3 py-2.5 bg-white border rounded-xl text-xs font-semibold text-gray-800 text-left flex items-center justify-between shadow-2xs transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed ${
+                              closeDropdownActive ? 'border-rose-500 ring-2 ring-rose-500/20' : 'border-gray-200 hover:border-rose-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <Clock className="h-4 w-4 text-rose-500 flex-shrink-0" />
+                              <span className={closeTime ? 'text-gray-900 font-bold' : 'text-gray-400'}>
+                                {openTime === 'Open 24 Hours' ? 'N/A (24 Hours)' : (closeTime || 'Closing Time (e.g. 5:00 PM)')}
+                              </span>
+                            </div>
+                            <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${closeDropdownActive ? 'rotate-180 text-rose-500' : ''}`} />
+                          </button>
+
+                          {/* Downward Popover Menu with Scroll */}
+                          {closeDropdownActive && openTime !== 'Open 24 Hours' && (
+                            <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white border border-gray-100 rounded-2xl shadow-xl p-1 max-h-56 overflow-y-auto divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                              <div className="p-1.5 text-[10px] uppercase font-extrabold text-gray-400 tracking-wider sticky top-0 bg-white/95 backdrop-blur-xs z-10 border-b border-gray-100">
+                                Select Closing Time
+                              </div>
+                              <div className="py-1 space-y-0.5">
+                                {CLOSE_TIME_OPTIONS.map((t) => (
+                                  <button
+                                    key={t}
+                                    type="button"
+                                    onClick={() => {
+                                      setCloseTime(t);
+                                      if (openTime && openTime !== 'Open 24 Hours') {
+                                        setOperatingHours(`${openTime} – ${t}`);
+                                      }
+                                      setCloseDropdownActive(false);
+                                    }}
+                                    className={`w-full px-3 py-2 text-left text-xs font-semibold rounded-xl flex items-center justify-between transition-colors ${
+                                      closeTime === t
+                                        ? 'bg-rose-50 text-rose-600 font-extrabold'
+                                        : 'text-gray-700 hover:bg-gray-50 hover:text-rose-600'
+                                    }`}
+                                  >
+                                    <span>{t}</span>
+                                    {closeTime === t && <CheckCircle2 className="h-3.5 w-3.5 text-rose-500" />}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Schedule preview badge */}
+                      {operatingHours && (
+                        <p className="text-[11px] text-pink-600 font-bold mt-2 flex items-center gap-1.5">
+                          <span>⏰ Selected Hours:</span>
+                          <span className="bg-pink-50 px-2.5 py-0.5 rounded-md border border-pink-200 text-pink-700 font-semibold shadow-2xs">
+                            {operatingHours}
+                          </span>
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -1590,6 +1798,129 @@ export function AdminContent() {
                         </>
                       )}
                     </div>
+                  </div>
+
+                  {/* Video Tour Section (Optional for Attraction, Resort, Event, etc.) */}
+                  <div className="bg-gradient-to-br from-indigo-50/60 via-white to-pink-50/40 p-5 rounded-2xl border border-indigo-100 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-indigo-500/10 text-indigo-600 rounded-lg">
+                          <Video className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-bold text-gray-900">Virtual Video Tour <span className="text-gray-400 font-normal">(Optional)</span></h4>
+                          <p className="text-[11px] text-gray-500 font-medium">Add a video link (YouTube / MP4) or upload a video tour file</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Virtual Tour
+                      </span>
+                    </div>
+
+                    {/* Video Link Input */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                        Video Tour Link (YouTube, Facebook, or Direct Video URL)
+                      </label>
+                      <div className="relative">
+                        <ExternalLink className="w-3.5 h-3.5 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="url"
+                          value={videoUrlInput}
+                          onChange={(e) => {
+                            setVideoUrlInput(e.target.value);
+                            if (e.target.value.trim()) {
+                              setSelectedVideoFile(null);
+                              setVideoPreviewUrl(null);
+                              if (videoFileInputRef.current) videoFileInputRef.current.value = '';
+                            }
+                          }}
+                          placeholder="https://www.youtube.com/watch?v=... or https://example.com/attraction-tour.mp4"
+                          className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    {/* OR Divider */}
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 border-t border-gray-200"></div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">OR Upload Video File</span>
+                      <div className="flex-1 border-t border-gray-200"></div>
+                    </div>
+
+                    {/* Secure Video File Dropzone */}
+                    <div>
+                      <input
+                        ref={videoFileInputRef}
+                        type="file"
+                        accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                        onChange={handleVideoFileChange}
+                        className="hidden"
+                      />
+
+                      <div
+                        onClick={() => videoFileInputRef.current?.click()}
+                        className="border-2 border-dashed border-gray-200 hover:border-indigo-400 rounded-xl p-5 text-center bg-white/70 hover:bg-indigo-50/30 transition-all cursor-pointer group"
+                      >
+                        <Film className="h-7 w-7 text-gray-400 group-hover:text-indigo-500 mx-auto mb-1.5 transition-colors" />
+                        <p className="text-xs font-bold text-gray-700">Click to choose video tour file</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5 font-medium">MP4, WebM, MOV (Up to 500MB)</p>
+                        {selectedVideoFile && (
+                          <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-[11px] font-bold">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                            <span>{selectedVideoFile.name} ({(selectedVideoFile.size / (1024 * 1024)).toFixed(1)} MB)</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Live Video Preview Player */}
+                    {(videoPreviewUrl || videoUrlInput) && (
+                      <div className="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                            <Play className="h-3.5 w-3.5 text-indigo-400 fill-indigo-400" />
+                            <span>Virtual Tour Video Preview</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedVideoFile(null);
+                              setVideoPreviewUrl(null);
+                              setVideoUrlInput('');
+                              if (videoFileInputRef.current) videoFileInputRef.current.value = '';
+                            }}
+                            className="px-2 py-0.5 bg-rose-500/20 text-rose-300 hover:bg-rose-500 hover:text-white text-[11px] font-bold rounded-md transition-all cursor-pointer"
+                          >
+                            Remove Video
+                          </button>
+                        </div>
+
+                        {videoPreviewUrl ? (
+                          <video
+                            controls
+                            playsInline
+                            className="w-full max-h-56 object-cover rounded-lg bg-black"
+                            src={videoPreviewUrl}
+                          />
+                        ) : (videoUrlInput.includes('youtu.be/') || videoUrlInput.includes('youtube.com')) ? (
+                          <iframe
+                            src={videoUrlInput.includes('watch?v=') ? `https://www.youtube.com/embed/${videoUrlInput.split('v=')[1]?.split('&')[0]}` : videoUrlInput.includes('youtu.be/') ? `https://www.youtube.com/embed/${videoUrlInput.split('youtu.be/')[1]?.split('?')[0]}` : videoUrlInput}
+                            title="YouTube video player"
+                            className="w-full aspect-video max-h-56 rounded-lg"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                          />
+                        ) : (
+                          <video
+                            controls
+                            playsInline
+                            className="w-full max-h-56 object-cover rounded-lg bg-black"
+                            src={videoUrlInput}
+                          />
+                        )}
+                      </div>
+                    )}
                   </div>
                 </>
               )}

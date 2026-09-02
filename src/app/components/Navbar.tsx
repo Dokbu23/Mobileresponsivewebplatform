@@ -50,8 +50,8 @@ export function Navbar() {
     { path: '/events', label: 'Events' },
     { path: '/products', label: 'Products' },
     { path: '/accommodations', label: 'Stays' },
+    { path: '/itinerary', label: 'Itinerary' },
     { path: '/map', label: 'Map' },
-    ...(!isBusinessUser ? [{ path: '/itinerary', label: 'Itinerary' }] : []),
   ];
 
   const roleMenuItems: Record<RoleType, RoleMenuItem[]> = {

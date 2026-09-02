@@ -8,6 +8,7 @@ import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
+import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
 
 interface AttractionType {
   id: string;
@@ -189,15 +190,29 @@ export function Attractions() {
     });
   }, [items, activeCategory, searchQuery]);
 
-  const handleToggleLike = (e: React.MouseEvent, attraction: AttractionType) => {
+  const handleToggleLike = async (e: React.MouseEvent, attraction: AttractionType) => {
     e.stopPropagation();
+    if (
+      userType === 'admin' ||
+      userType === 'resort' ||
+      userType === 'enterprise' ||
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'resort' ||
+      currentUser?.role === 'enterprise'
+    ) {
+      toast.info('Wishlist saving is available for tourist accounts only.');
+      return;
+    }
     if (!currentUser && !getAuthToken()) {
-      toast.info('Please log in or register to save to wishlist');
+      toast.info('Please log in or register as a tourist to save to wishlist');
       navigate('/tourist/login');
       return;
     }
     if (isInWishlist(attraction.id, 'attraction')) {
-      removeFromWishlist(attraction.id, 'attraction');
+      const confirmed = await showUnsaveConfirmDialog(attraction.name);
+      if (confirmed) {
+        removeFromWishlist(attraction.id, 'attraction', attraction.name);
+      }
     } else {
       addToWishlist({
         id: attraction.id,
@@ -205,7 +220,8 @@ export function Attractions() {
         title: attraction.name,
         image: attraction.image,
         category: attraction.category,
-      });
+        likes: attraction.likes,
+      } as any);
     }
   };
 
@@ -347,10 +363,27 @@ export function Attractions() {
                   {/* Dark gradient overlay for rating & wishlists readability */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent pointer-events-none" />
                   
-                  {/* Special Badge (top left) */}
-                  {specialBadge && (
-                    <div className="absolute top-3 left-3 bg-pink-500 text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-full shadow-sm z-10">
-                      {specialBadge}
+                  {/* Special Badge & Video Tour Badge (top left) */}
+                  <div className="absolute top-3 left-3 flex flex-col gap-1 z-10">
+                    {specialBadge && (
+                      <div className="bg-pink-500 text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-full shadow-sm">
+                        {specialBadge}
+                      </div>
+                    )}
+                    {attraction.video && (
+                      <div className="bg-indigo-600/90 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm flex items-center gap-1">
+                        <Video className="h-3 w-3" />
+                        <span>Video Tour</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Quick Play Center Button for Video Tour */}
+                  {attraction.video && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/30 transition-all pointer-events-none">
+                      <div className="w-10 h-10 rounded-full bg-pink-500/90 text-white flex items-center justify-center shadow-lg group-hover:scale-110 transition-all backdrop-blur-xs">
+                        <Play className="h-4 w-4 fill-white text-white translate-x-0.5" />
+                      </div>
                     </div>
                   )}
 
@@ -371,7 +404,7 @@ export function Attractions() {
                     >
                       <Share2 className="h-3.5 w-3.5" />
                     </button>
-                    {userType !== 'admin' && (
+                    {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
                       <button
                         onClick={(e) => handleToggleLike(e, attraction)}
                         className="w-7 h-7 bg-white/90 backdrop-blur-sm hover:bg-white rounded-full flex items-center justify-center shadow-sm transition-all hover:scale-110 cursor-pointer"
@@ -426,43 +459,49 @@ export function Attractions() {
                       <Tag className="h-3 w-3 text-pink-400" />
                       <span>{attraction.category}</span>
                     </div>
-                    <button
-                      onClick={(e) => handleToggleLike(e, attraction)}
-                      className="flex items-center gap-1 bg-black/50 hover:bg-black/80 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[11px] font-medium transition-all cursor-pointer hover:scale-105 active:scale-95"
-                      title={isInWishlist(attraction.id, 'attraction') ? 'Saved in wishlist' : 'Click to save to wishlist'}
-                    >
-                      <Heart
-                        className={`h-3 w-3 transition-all ${
-                          isInWishlist(attraction.id, 'attraction')
-                            ? 'fill-pink-500 text-pink-500'
-                            : 'text-pink-400 fill-transparent stroke-2'
-                        }`}
-                      />
-                      <span className={isInWishlist(attraction.id, 'attraction') ? 'text-pink-400 font-bold' : 'text-white'}>
-                        {getWishlistCount(attraction.id, 'attraction', attraction.likes)}
-                      </span>
-                    </button>
+                    {userType === 'admin' || userType === 'resort' || userType === 'enterprise' ? (
+                      <div
+                        className="flex items-center gap-1 bg-black/50 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[11px] font-medium"
+                        title="Total Tourist Wishlist Saves"
+                      >
+                        <Heart className="h-3 w-3 text-pink-400 fill-pink-400" />
+                        <span className="text-white">
+                          {getWishlistCount(attraction.id, 'attraction', attraction.likes)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div
+                        className="flex items-center gap-1 bg-black/50 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[11px] font-medium"
+                        title="Wishlist Saves"
+                      >
+                        <Heart className="h-3 w-3 text-pink-400 fill-pink-400" />
+                        <span className="text-white">
+                          {getWishlistCount(attraction.id, 'attraction', attraction.likes)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Card Text Content */}
+                {/* Card Content */}
                 <div className="p-4 flex-1 flex flex-col justify-between">
                   <div>
-                    <span className="text-[11px] font-medium text-gray-500 block mb-1">
-                      {attraction.category}
-                    </span>
-                    <h3 className="font-bold text-gray-900 text-sm mb-1.5 line-clamp-1 group-hover:text-pink-500 transition-colors">
+                    <h3 className="font-bold text-gray-900 text-sm group-hover:text-pink-600 transition-colors line-clamp-1 mb-1">
                       {attraction.name}
                     </h3>
                     <p className="text-gray-500 text-xs line-clamp-2 leading-relaxed mb-3">
-                      {attraction.description || 'A landmark cultural institution preserving the rich history and indigenous heritage...'}
+                      {attraction.description}
                     </p>
                   </div>
-                  
-                  {/* Location footer matching screenshot */}
-                  <div className="flex items-center text-pink-500 text-[11px] font-medium pt-2 border-t border-gray-50">
-                    <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
-                    <span className="truncate">{attraction.location || 'Mansalay, Oriental Mindoro'}</span>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs text-gray-500">
+                    <div className="flex items-center gap-1 truncate max-w-[170px]">
+                      <MapPin className="h-3 w-3 text-pink-500 flex-shrink-0" />
+                      <span className="truncate">{attraction.location || 'Mansalay, Oriental Mindoro'}</span>
+                    </div>
+                    <span className="text-pink-500 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                      Explore <ArrowRight className="h-3 w-3" />
+                    </span>
                   </div>
                 </div>
               </div>
@@ -470,45 +509,37 @@ export function Attractions() {
           })}
         </div>
 
-        {/* Empty State */}
         {filteredAttractions.length === 0 && (
-          <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
-            <Search className="h-10 w-10 mx-auto mb-3 text-gray-300" />
-            <p className="font-semibold text-gray-800 text-base">No attractions found</p>
-            <p className="text-xs text-gray-500 mt-1">
-              {searchQuery ? `No results found for "${searchQuery}"` : 'No attractions available in this category'}
+          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center my-6">
+            <Search className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+            <h3 className="font-bold text-gray-800 text-base mb-1">No attractions found</h3>
+            <p className="text-xs text-gray-500 max-w-sm mx-auto">
+              We couldn't find any attractions matching "{searchQuery}". Try searching for something else or clearing your filters.
             </p>
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="mt-4 px-4 py-2 bg-pink-500 text-white rounded-full text-xs font-medium hover:bg-pink-600 transition-colors shadow-sm"
-              >
-                Clear Search
-              </button>
-            )}
           </div>
         )}
       </div>
 
-      {/* Detail Modal matching user screenshot */}
+      {/* 🌟 ATTRACTION DETAIL MODAL 🌟 */}
       {selectedAttraction && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
           onClick={() => setSelectedAttraction(null)}
         >
           <div
-            className="bg-white rounded-3xl overflow-hidden max-w-xl w-full max-h-[92vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-200"
-            onClick={e => e.stopPropagation()}
+            className="bg-white rounded-3xl overflow-hidden max-w-xl w-full max-h-[90vh] flex flex-col shadow-2xl relative animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
           >
-            {/* Top Modal Image Banner with Badges & Arrows */}
-            <div className="relative aspect-[16/10] bg-gray-900 flex-shrink-0">
-              <AutoSwipeCarousel
-                images={selectedAttraction.images && selectedAttraction.images.length > 0 ? selectedAttraction.images : (selectedAttraction.image ? [selectedAttraction.image] : [])}
+            {/* Modal Image Carousel Container */}
+            <div className="relative aspect-[16/10] bg-gray-100 overflow-hidden">
+              <img
+                src={
+                  selectedAttraction.images && selectedAttraction.images.length > 0
+                    ? selectedAttraction.images[modalImageIndex] || selectedAttraction.images[0]
+                    : selectedAttraction.image || '/assets/default-attraction.jpg'
+                }
                 alt={selectedAttraction.name}
-                className="w-full h-full"
-                intervalMs={3000}
-                showDots={true}
-                showArrows={true}
+                className="w-full h-full object-cover"
               />
 
               {/* Top-Left Badge e.g. Must Visit */}
@@ -545,24 +576,6 @@ export function Attractions() {
                 </>
               )}
 
-              {/* Bottom-Left Saves Overlay */}
-              <button
-                onClick={() => toggleSaveAttraction(selectedAttraction)}
-                className="absolute bottom-4 left-4 bg-black/60 hover:bg-black/80 backdrop-blur-md text-white px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 z-10 transition-all cursor-pointer hover:scale-105 active:scale-95"
-                title={isInWishlist(selectedAttraction.id, 'attraction') ? 'Saved in wishlist' : 'Click to save to wishlist'}
-              >
-                <Heart
-                  className={`h-3.5 w-3.5 transition-all ${
-                    isInWishlist(selectedAttraction.id, 'attraction')
-                      ? 'fill-pink-500 text-pink-500'
-                      : 'text-pink-400 fill-transparent stroke-2'
-                  }`}
-                />
-                <span className={`font-bold ${isInWishlist(selectedAttraction.id, 'attraction') ? 'text-pink-400' : 'text-white'}`}>
-                  {getWishlistCount(selectedAttraction.id, 'attraction', selectedAttraction.likes)} saves
-                </span>
-              </button>
-
               {/* Bottom-Center Dots Indicator if multiple images */}
               {selectedAttraction.images && selectedAttraction.images.length > 1 && (
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10 bg-black/30 px-2.5 py-1 rounded-full backdrop-blur-xs">
@@ -584,7 +597,7 @@ export function Attractions() {
               {/* Full Description */}
               <p className="text-gray-600 text-sm leading-relaxed font-normal">
                 {selectedAttraction.fullDescription || selectedAttraction.description || 
-                  'The Oriental Mindoro Heritage and Cultural Center is a landmark institution dedicated to preserving and celebrating the rich history and indigenous heritage of Oriental Mindoro. Visitors can explore exhibits on Mangyan culture, colonial history, and the natural wonders of the region through interactive displays and curated artifacts.'}
+                  'The Oriental Mindoro Heritage and Cultural Center is a landmark institution dedicated to preserving and celebrating the rich history and indigenous heritage of Oriental Mindoro.'}
               </p>
 
               {/* Tags Section */}
@@ -600,18 +613,47 @@ export function Attractions() {
                 ))}
               </div>
 
-              {/* Virtual Tour & Video Box */}
-              <div className="bg-pink-50/50 border border-pink-100 rounded-2xl p-5 text-center my-2">
-                <div className="flex items-center justify-center gap-2 font-bold text-gray-900 text-sm mb-3">
-                  <Video className="h-4 w-4 text-pink-500" />
-                  <span>{selectedAttraction.video ? 'Attraction Video Available' : 'Virtual Tour Available'}</span>
+              {/* Virtual Tour & Video Player Box */}
+              <div className="bg-gradient-to-br from-indigo-50/70 via-white to-pink-50/40 border border-indigo-100 rounded-2xl p-4 sm:p-5 my-2 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-extrabold text-gray-900 text-sm">
+                    <Video className="h-4 w-4 text-indigo-600" />
+                    <span>{selectedAttraction.video ? '🎥 Virtual Video Tour Available' : 'Virtual Tour Available'}</span>
+                  </div>
+                  {selectedAttraction.video && (
+                    <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                      Video Ready
+                    </span>
+                  )}
                 </div>
+
+                {selectedAttraction.video ? (
+                  <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black shadow-inner border border-gray-800">
+                    {selectedAttraction.video.includes('youtube.com') || selectedAttraction.video.includes('youtu.be') ? (
+                      <iframe
+                        src={selectedAttraction.video.includes('watch?v=') ? `https://www.youtube.com/embed/${selectedAttraction.video.split('v=')[1]?.split('&')[0]}` : selectedAttraction.video.includes('youtu.be/') ? `https://www.youtube.com/embed/${selectedAttraction.video.split('youtu.be/')[1]?.split('?')[0]}` : selectedAttraction.video}
+                        title={`Virtual Tour - ${selectedAttraction.name}`}
+                        className="w-full h-full border-0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                        allowFullScreen
+                      />
+                    ) : (
+                      <video
+                        src={selectedAttraction.video.startsWith('http') ? selectedAttraction.video : `${API_BASE}${selectedAttraction.video}`}
+                        controls
+                        playsInline
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+                ) : null}
+
                 <button
                   onClick={() => setIsVirtualTourOpen(true)}
-                  className="w-full py-3 bg-pink-500 hover:bg-pink-600 active:bg-pink-700 text-white font-bold rounded-xl text-sm shadow-md shadow-pink-500/20 transition-all flex items-center justify-center gap-2 group cursor-pointer"
+                  className="w-full py-2.5 bg-pink-500 hover:bg-pink-600 active:bg-pink-700 text-white font-bold rounded-xl text-xs shadow-md shadow-pink-500/20 transition-all flex items-center justify-center gap-2 group cursor-pointer"
                 >
-                  <Play className="h-4 w-4 fill-white" />
-                  <span>Virtual Tour</span>
+                  <Play className="h-3.5 w-3.5 fill-white" />
+                  <span>Open Fullscreen Virtual Tour</span>
                 </button>
               </div>
 

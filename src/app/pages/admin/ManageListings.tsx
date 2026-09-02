@@ -61,6 +61,7 @@ interface AttractionFormData {
   category: string;
   image: File | null;
   video: File | null;
+  video_url: string;
 }
 
 const emptyAttractionForm: AttractionFormData = {
@@ -71,6 +72,7 @@ const emptyAttractionForm: AttractionFormData = {
   category: '',
   image: null,
   video: null,
+  video_url: '',
 };
 
 const emptyProductForm: ProductFormData = {
@@ -175,6 +177,7 @@ export function ManageListings() {
       category: attraction.category ?? '',
       image: null,
       video: null,
+      video_url: attraction.video && attraction.video.startsWith('http') ? attraction.video : '',
     });
     setShowAttractionModal(true);
   };
@@ -195,6 +198,9 @@ export function ManageListings() {
       }
       if (attractionForm.video) {
         formData.append('video', attractionForm.video);
+      } else if (attractionForm.video_url.trim()) {
+        formData.append('video_url', attractionForm.video_url.trim());
+        formData.append('video', attractionForm.video_url.trim());
       }
 
       if (editingAttraction) {
@@ -1085,7 +1091,19 @@ export function ManageListings() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  Video / Virtual Tour Video {editingAttraction && <span className="text-muted-foreground text-xs">(leave blank to keep existing)</span>}
+                  Video Tour Link <span className="text-muted-foreground text-xs">(YouTube / MP4 URL - Optional)</span>
+                </label>
+                <input
+                  type="url"
+                  value={attractionForm.video_url}
+                  onChange={(e) => setAttractionForm(f => ({ ...f, video_url: e.target.value }))}
+                  placeholder="https://www.youtube.com/watch?v=... or https://example.com/video.mp4"
+                  className="w-full px-4 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  OR Upload Video File <span className="text-muted-foreground text-xs">(MP4, WebM up to 500MB - Optional)</span>
                 </label>
                 <input
                   type="file"

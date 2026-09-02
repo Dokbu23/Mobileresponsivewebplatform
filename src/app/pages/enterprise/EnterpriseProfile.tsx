@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Store, Plus, Edit, Trash2, Package, DollarSign, TrendingUp, BarChart3, ChevronDown, CreditCard, Eye, CheckCircle, XCircle, Calendar, Upload, Image as ImageIcon, X, MapPin, Phone, Mail, Facebook, Instagram, ExternalLink, ShieldCheck, Sparkles } from 'lucide-react';
+import { Store, Plus, Edit, Trash2, Package, TrendingUp, BarChart3, ChevronDown, CreditCard, Eye, CheckCircle, XCircle, Calendar, Upload, Image as ImageIcon, X, MapPin, Phone, Mail, Facebook, Instagram, ExternalLink, ShieldCheck, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router';
 import { useApp } from '../../context/AppContext';
@@ -80,8 +80,9 @@ export function EnterpriseProfile() {
     stock: 0,
     category: '',
   });
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [existingImages, setExistingImages] = useState<string[]>([]);
 
   // Product variations (Shopee-style) — optional. Each row has name/value/price/stock.
   const [variations, setVariations] = useState<ProductVariationForm[]>([]);
@@ -312,6 +313,9 @@ export function EnterpriseProfile() {
           image: product.image
             ? (product.image.startsWith('http') ? product.image : `${API_BASE}${product.image}`)
             : '',
+          images: Array.isArray(product.images)
+            ? product.images.map((img: string) => (img.startsWith('http') ? img : `${API_BASE}${img}`))
+            : (product.image ? [product.image.startsWith('http') ? product.image : `${API_BASE}${product.image}`] : []),
           variations: Array.isArray(product.variations)
             ? product.variations.map((v: any) => ({
                 id: v.id,
@@ -371,7 +375,7 @@ export function EnterpriseProfile() {
       iconColor: 'text-blue-600',
     },
     {
-      icon: DollarSign,
+      icon: CreditCard,
       label: 'Revenue (Live)',
       value: `₱${orders.reduce((sum, order) => sum + order.total, 0).toLocaleString()}`,
       color: 'bg-green-50',
@@ -412,94 +416,69 @@ export function EnterpriseProfile() {
       }));
 
     try {
-      // If an image file was selected, send FormData (supports file upload)
-      if (imageFile) {
-        const form = new FormData();
-        form.append('name', newProduct.name);
-        form.append('description', newProduct.description ?? '');
-        form.append('price', String(newProduct.price));
-        form.append('stock', String(newProduct.stock));
-        form.append('category', newProduct.category ?? '');
-        form.append('image', imageFile);
+      const form = new FormData();
+      form.append('name', newProduct.name);
+      form.append('description', newProduct.description ?? '');
+      form.append('price', String(newProduct.price));
+      form.append('stock', String(newProduct.stock));
+      form.append('category', newProduct.category ?? '');
 
-        // Always send the variations payload so the backend can sync (empty
-        // array means "remove all variations on update").
-        form.append('variations', JSON.stringify(cleanVariations));
+      // Append all multiple image files
+      imageFiles.forEach((file) => {
+        form.append('images[]', file);
+      });
 
-        // Add user_id to track product ownership
-        if (currentUser?.id) {
-          form.append('user_id', String(currentUser.id));
-        }
-        
-          // Use POST with _method override for PUT (Laravel supports PUT for updates)
-          if (editingProductId) {
-            form.append('_method', 'PUT');
-          }
-
-        const url = editingProductId ? `${API_BASE}/api/products/${editingProductId}` : `${API_BASE}/api/products`;
-          const method = 'POST';  // Always POST when sending FormData (Laravel uses _method override)
-
-        try {
-          const token = getAuthToken();
-          const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-          const res = await fetch(url, { method, headers, body: form });
-          const contentType = res.headers.get('content-type');
-          let errorMsg = `HTTP ${res.status}`;
-
-          if (!res.ok) {
-            // Try to parse JSON error response
-            if (contentType?.includes('application/json')) {
-              try {
-                const data = await res.json();
-                errorMsg = data.message || data.error || JSON.stringify(data);
-              } catch {
-                errorMsg = await res.text().catch(() => errorMsg);
-              }
-            } else {
-              errorMsg = await res.text().catch(() => errorMsg);
-            }
-            throw new Error(errorMsg);
-          }
-
-          await showProductSuccess(editingProductId ? 'updated' : 'added', newProduct.name);
-          
-          // Refresh product list to show updated image
-          await fetchData();
-        } catch (err) {
-          console.error('Upload error:', err);
-          throw err;
-        }
-      } else {
-        if (editingProductId) {
-          await putJSON(`/products/${editingProductId}`, {
-            name: newProduct.name,
-            description: newProduct.description,
-            price: newProduct.price,
-            stock: newProduct.stock,
-            category: newProduct.category,
-            variations: cleanVariations,
-          });
-          await showProductSuccess('updated', newProduct.name);
-          await fetchData();
-        } else {
-          await postJSON('/products', {
-            name: newProduct.name,
-            description: newProduct.description,
-            price: newProduct.price,
-            stock: newProduct.stock,
-            category: newProduct.category,
-            image: '',
-            user_id: currentUser?.id, // Track product ownership
-            variations: cleanVariations,
-          });
-          await showProductSuccess('added', newProduct.name);
-          await fetchData();
-        }
+      // Append existing retained images
+      if (existingImages.length > 0) {
+        form.append('existing_images', JSON.stringify(existingImages));
+        form.append('image', existingImages[0]);
       }
 
+      // Always send the variations payload so the backend can sync (empty
+      // array means "remove all variations on update").
+      form.append('variations', JSON.stringify(cleanVariations));
+
+      // Add user_id to track product ownership
+      if (currentUser?.id) {
+        form.append('user_id', String(currentUser.id));
+      }
+
+      // Use POST with _method override for PUT (Laravel supports PUT for updates)
+      if (editingProductId) {
+        form.append('_method', 'PUT');
+      }
+
+      const url = editingProductId ? `${API_BASE}/api/products/${editingProductId}` : `${API_BASE}/api/products`;
+      const token = getAuthToken();
+      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch(url, { method: 'POST', headers, body: form });
+      const contentType = res.headers.get('content-type');
+      let errorMsg = `HTTP ${res.status}`;
+
+      if (!res.ok) {
+        // Try to parse JSON error response
+        if (contentType?.includes('application/json')) {
+          try {
+            const data = await res.json();
+            errorMsg = data.message || data.error || JSON.stringify(data);
+          } catch {
+            errorMsg = await res.text().catch(() => errorMsg);
+          }
+        } else {
+          errorMsg = await res.text().catch(() => errorMsg);
+        }
+        throw new Error(errorMsg);
+      }
+
+      await showProductSuccess(editingProductId ? 'updated' : 'added', newProduct.name);
+      
+      // Refresh product list to show updated images
+      await fetchData();
+
       setNewProduct({ name: '', description: '', price: 0, stock: 0, category: '' });
-      setImageFile(null);
-      setImagePreview(null);
+      setImageFiles([]);
+      setImagePreviews([]);
+      setExistingImages([]);
       setVariations([]);
       setEditingProductId(null);
       setShowAddProduct(false);
@@ -509,7 +488,27 @@ export function EnterpriseProfile() {
     }
   };
 
-  const handleEditProduct = (product: Product) => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      setImageFiles((prev) => [...prev, ...files]);
+      const newUrls = files.map((file) => URL.createObjectURL(file));
+      setImagePreviews((prev) => [...prev, ...newUrls]);
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    const existingCount = existingImages.length;
+    if (index < existingCount) {
+      setExistingImages((prev) => prev.filter((_, i) => i !== index));
+    } else {
+      const fileIdx = index - existingCount;
+      setImageFiles((prev) => prev.filter((_, i) => i !== fileIdx));
+    }
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEditProduct = (product: any) => {
     setEditingProductId(product.id);
     setNewProduct({
       name: product.name,
@@ -518,12 +517,16 @@ export function EnterpriseProfile() {
       stock: product.stock,
       category: product.category,
     });
-    setImagePreview(product.image || null);
-    setImageFile(null);
+    const imgs: string[] = Array.isArray(product.images) && product.images.length > 0
+      ? product.images
+      : (product.image ? [product.image] : []);
+    setExistingImages(imgs);
+    setImagePreviews(imgs);
+    setImageFiles([]);
     // Populate variation rows so the owner can tweak them
     setVariations(
       Array.isArray(product.variations)
-        ? product.variations.map(v => ({
+        ? product.variations.map((v: any) => ({
             id: v.id,
             name: v.name,
             value: v.value,
@@ -1017,47 +1020,65 @@ export function EnterpriseProfile() {
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium mb-2">Product Image</label>
+                <label className="block text-sm font-medium mb-1">
+                  Product Images (Multiple allowed)
+                </label>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Upload multiple photos of your product to showcase different angles, details, and packaging.
+                </p>
+
                 <div className="space-y-3">
-                  <div className="flex items-center gap-4">
-                    <label className="flex-1 cursor-pointer">
-                      <div className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg hover:border-primary transition-colors bg-white flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">
-                          {imageFile ? imageFile.name : 'Choose image file...'}
-                        </span>
-                        <span className="px-3 py-1 bg-primary/10 text-primary text-xs rounded">
-                          Browse
+                  <label className="cursor-pointer block">
+                    <div className="w-full px-4 py-3.5 border-2 border-dashed border-primary/30 hover:border-primary rounded-xl transition-colors bg-white flex items-center justify-between group">
+                      <div className="flex items-center gap-2.5 text-sm text-gray-600">
+                        <Upload className="h-4 w-4 text-primary group-hover:scale-110 transition-transform" />
+                        <span>
+                          {imagePreviews.length > 0
+                            ? `${imagePreviews.length} image${imagePreviews.length > 1 ? 's' : ''} selected (Click to add more)`
+                            : 'Choose product photos (You can select multiple)...'}
                         </span>
                       </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={e => {
-                          const f = e.target.files?.[0] ?? null;
-                          setImageFile(f);
-                          setImagePreview(f ? URL.createObjectURL(f) : null);
-                        }}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                  {imagePreview && (
-                    <div className="relative w-full max-w-xs">
-                      <img 
-                        src={imagePreview} 
-                        alt="Product preview" 
-                        className="w-full h-48 object-cover rounded-lg border-2 border-primary/20"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setImageFile(null);
-                          setImagePreview(null);
-                        }}
-                        className="absolute top-2 right-2 p-2 bg-destructive text-white rounded-full hover:bg-destructive/90 transition-colors"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <span className="px-3 py-1 bg-primary text-white text-xs font-bold rounded-lg shadow-xs">
+                        Browse Files
+                      </span>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleImageChange}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {/* Multiple Image Previews Grid */}
+                  {imagePreviews.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pt-2">
+                      {imagePreviews.map((preview, idx) => (
+                        <div
+                          key={idx}
+                          className="relative group rounded-xl overflow-hidden border-2 border-primary/20 aspect-square bg-gray-100 shadow-2xs"
+                        >
+                          <img
+                            src={preview}
+                            alt={`Preview ${idx + 1}`}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                          {idx === 0 && (
+                            <span className="absolute top-1.5 left-1.5 px-2 py-0.5 bg-primary text-white text-[10px] font-bold rounded-md shadow-xs">
+                              Cover Photo
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImage(idx)}
+                            className="absolute top-1.5 right-1.5 p-1.5 bg-destructive text-white rounded-full hover:bg-destructive/90 transition-colors shadow-sm cursor-pointer opacity-90 hover:opacity-100 hover:scale-110"
+                            title="Remove image"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

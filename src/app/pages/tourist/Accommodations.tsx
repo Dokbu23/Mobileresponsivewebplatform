@@ -7,6 +7,7 @@ import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
 import { toast } from 'sonner';
+import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
 
 interface AccommodationItem {
   id: string;
@@ -211,7 +212,7 @@ export function Accommodations() {
     setSelectedAcc(acc);
   };
 
-  const toggleSaveAcc = (acc: AccommodationItem, e?: React.MouseEvent) => {
+  const toggleSaveAcc = async (acc: AccommodationItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!currentUser && !getAuthToken()) {
       toast.info('Please log in or register to save to wishlist');
@@ -219,7 +220,10 @@ export function Accommodations() {
       return;
     }
     if (isInWishlist(acc.id, 'accommodation')) {
-      removeFromWishlist(acc.id, 'accommodation');
+      const confirmed = await showUnsaveConfirmDialog(acc.name);
+      if (confirmed) {
+        removeFromWishlist(acc.id, 'accommodation', acc.name);
+      }
     } else {
       addToWishlist({
         id: acc.id,
@@ -228,7 +232,8 @@ export function Accommodations() {
         image: acc.image,
         category: acc.type,
         price: acc.pricePerNight,
-      });
+        likes: acc.likes,
+      } as any);
     }
   };
 
@@ -341,115 +346,145 @@ export function Accommodations() {
           Showing <span className="text-gray-900 font-bold">{filteredAccommodations.length}</span> stays & rooms
         </p>
 
-        {/* ── CARDS GRID (4 COLUMNS) ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {filteredAccommodations.map(acc => {
-            const isSaved = savedAccIds.includes(acc.id);
-            return (
-              <div
-                key={acc.id}
-                onClick={() => handleAccCardClick(acc)}
-                className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-xs hover:shadow-xl transition-all cursor-pointer group flex flex-col justify-between"
-              >
-                {/* Image Container */}
-                <div className="relative h-60 bg-gray-900 overflow-hidden">
-                  <AutoSwipeCarousel
-                    images={acc.images && acc.images.length > 0 ? acc.images : [acc.image]}
-                    alt={acc.name}
-                    className="w-full h-full"
-                    intervalMs={3500}
-                  />
+        {/* ── MAIN LISTINGS GRID (4 COLUMNS) ── */}
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+              <div key={n} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm animate-pulse">
+                <div className="aspect-4/3 bg-gray-200" />
+                <div className="p-4 space-y-3">
+                  <div className="h-4 bg-gray-200 rounded-md w-3/4" />
+                  <div className="h-3 bg-gray-200 rounded-md w-1/2" />
+                  <div className="h-4 bg-gray-200 rounded-md w-1/4 mt-4" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filteredAccommodations.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-3xl border border-gray-100 shadow-sm max-w-xl mx-auto my-8">
+            <Hotel className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+            <h3 className="text-base font-bold text-gray-800">No Stays Found</h3>
+            <p className="text-xs text-gray-500 mt-1">Try selecting a different category or refining your search term.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredAccommodations.map((acc, index) => {
+              const imgList = (acc.images && acc.images.length > 0) ? acc.images : [acc.image];
+              const activeDisplayImage = imgList[0] || acc.image;
 
-                  {acc.badge && (
-                    <span className="absolute top-3 left-3 px-3 py-1 bg-pink-500 text-white text-[10px] font-bold rounded-full shadow-xs">
-                      {acc.badge}
-                    </span>
-                  )}
+              return (
+                <div
+                  key={acc.id}
+                  onClick={() => handleAccCardClick(acc)}
+                  className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col group cursor-pointer hover:border-pink-200 justify-between"
+                >
+                  {/* Image Container */}
+                  <div className="relative aspect-4/3 overflow-hidden bg-gray-100">
+                    <img
+                      src={formatImageUrl(activeDisplayImage) || '/assets/mansalay_hero_bg.jpg'}
+                      alt={acc.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                    />
 
-                  <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShareData({
-                          title: acc.name,
-                          description: acc.description,
-                          image: acc.image,
-                          category: acc.type || 'Resort',
-                        });
-                      }}
-                      className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors hover:scale-110"
-                      title="Share this stay"
-                    >
-                      <Share2 className="h-3.5 w-3.5" />
-                    </button>
-                    {userType !== 'admin' && (
+                    {/* Top-Right Action Controls (Share + Heart Wishlist) */}
+                    <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShareData({
+                            title: acc.name,
+                            description: acc.description,
+                            image: acc.image,
+                            category: acc.type || 'Resort',
+                          });
+                        }}
+                        className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors hover:scale-110"
+                        title="Share this stay"
+                      >
+                        <Share2 className="h-3.5 w-3.5" />
+                      </button>
+                      {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
+                        <button
+                          onClick={(e) => toggleSaveAcc(acc, e)}
+                          className="w-7 h-7 bg-white/80 hover:bg-white rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 shadow-xs cursor-pointer"
+                          title={isInWishlist(acc.id, 'accommodation') ? 'Remove from wishlist' : 'Save to wishlist'}
+                        >
+                          <Heart
+                            className={`h-3.5 w-3.5 transition-all ${
+                              isInWishlist(acc.id, 'accommodation')
+                                ? 'fill-pink-500 text-pink-500'
+                                : 'text-pink-500 fill-transparent stroke-2'
+                            }`}
+                          />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Dark Overlay Saves */}
+                    {userType === 'admin' || userType === 'resort' || userType === 'enterprise' ? (
+                      <div
+                        className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-white text-[11px] font-bold z-10"
+                        title="Total Tourist Wishlist Saves"
+                      >
+                        <Heart className="h-3 w-3 fill-pink-400 text-pink-400" />
+                        <span className="text-white font-extrabold">
+                          {getWishlistCount(acc.id, 'accommodation', acc.likes)} saves
+                        </span>
+                      </div>
+                    ) : (
                       <button
                         onClick={(e) => toggleSaveAcc(acc, e)}
-                        className="w-7 h-7 bg-white/80 hover:bg-white rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 shadow-xs cursor-pointer"
-                        title={isInWishlist(acc.id, 'accommodation') ? 'Remove from wishlist' : 'Save to wishlist'}
+                        className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 z-10"
+                        title={isInWishlist(acc.id, 'accommodation') ? 'Saved in wishlist' : 'Click to save to wishlist'}
                       >
                         <Heart
-                          className={`h-3.5 w-3.5 transition-all ${
+                          className={`h-3 w-3 transition-all ${
                             isInWishlist(acc.id, 'accommodation')
                               ? 'fill-pink-500 text-pink-500'
-                              : 'text-pink-500 fill-transparent stroke-2'
+                              : 'text-pink-400 fill-transparent stroke-2'
                           }`}
                         />
+                        <span className={isInWishlist(acc.id, 'accommodation') ? 'text-pink-400 font-extrabold' : 'text-white'}>
+                          {getWishlistCount(acc.id, 'accommodation', acc.likes)} saves
+                        </span>
                       </button>
                     )}
                   </div>
 
-                  {/* Dark Overlay Saves */}
-                  <button
-                    onClick={(e) => toggleSaveAcc(acc, e)}
-                    className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 z-10"
-                    title={isInWishlist(acc.id, 'accommodation') ? 'Saved in wishlist' : 'Click to save to wishlist'}
-                  >
-                    <Heart
-                      className={`h-3 w-3 transition-all ${
-                        isInWishlist(acc.id, 'accommodation')
-                          ? 'fill-pink-500 text-pink-500'
-                          : 'text-pink-400 fill-transparent stroke-2'
-                      }`}
-                    />
-                    <span className={isInWishlist(acc.id, 'accommodation') ? 'text-pink-400 font-extrabold' : 'text-white'}>
-                      {getWishlistCount(acc.id, 'accommodation', acc.likes)} saves
-                    </span>
-                  </button>
-                </div>
+                  {/* Content */}
+                  <div className="p-4 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between gap-1">
+                        <p className="text-[10px] uppercase font-bold text-gray-400">{acc.type || 'Resort'}</p>
+                        {acc.capacity ? (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                            <Users className="h-3 w-3" /> Max {acc.capacity}
+                          </span>
+                        ) : null}
+                      </div>
 
-                {/* Content */}
-                <div className="p-4 flex-1 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between gap-1">
-                      <p className="text-[10px] uppercase font-bold text-gray-400">{acc.type || 'Resort'}</p>
-                      {acc.capacity ? (
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                          <Users className="h-3 w-3" /> Max {acc.capacity}
-                        </span>
-                      ) : null}
+                      <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-0.5">{acc.name}</h3>
+
+                      <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 min-h-[32px]">{acc.description}</p>
                     </div>
 
-                    <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-0.5">{acc.name}</h3>
-
-                    <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 min-h-[32px]">{acc.description}</p>
-                  </div>
-
-                  {/* Clickable Resort Host Link */}
-                  <div
-                    onClick={(e) => handleResortClick(acc.resort_name || acc.name, acc.user_id, e)}
-                    className="flex items-center gap-1.5 text-[11px] text-emerald-700 hover:text-emerald-800 font-semibold mt-4 pt-3 border-t border-gray-100 group/resort cursor-pointer transition-colors"
-                    title={`Click to view resort profile of ${acc.resort_name || 'this resort'}`}
-                  >
-                    <Hotel className="h-3.5 w-3.5 text-emerald-600 group-hover/resort:scale-110 transition-transform flex-shrink-0" />
-                    <span className="truncate group-hover/resort:underline">{acc.resort_name || 'Mansalay Beach Resort'}</span>
-                    <ExternalLink className="h-2.5 w-2.5 opacity-60 ml-auto flex-shrink-0 group-hover/resort:opacity-100 text-emerald-600" />
+                    {/* Clickable Resort Host Link */}
+                    <div
+                      onClick={(e) => handleResortClick(acc.resort_name || acc.name, acc.user_id, e)}
+                      className="flex items-center gap-1.5 text-[11px] text-emerald-700 hover:text-emerald-800 font-semibold mt-4 pt-3 border-t border-gray-100 group/resort cursor-pointer transition-colors"
+                      title={`Click to view resort profile of ${acc.resort_name || 'this resort'}`}
+                    >
+                      <Hotel className="h-3.5 w-3.5 text-emerald-600 group-hover/resort:scale-110 transition-transform flex-shrink-0" />
+                      <span className="truncate group-hover/resort:underline">{acc.resort_name || 'Mansalay Beach Resort'}</span>
+                      <ExternalLink className="h-2.5 w-2.5 opacity-60 ml-auto flex-shrink-0 group-hover/resort:opacity-100 text-emerald-600" />
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── ACCOMMODATION / ROOM DETAIL MODAL ── */}

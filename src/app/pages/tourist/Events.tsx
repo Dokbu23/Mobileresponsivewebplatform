@@ -6,6 +6,7 @@ import { ShareModal } from '../../components/ShareModal';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
+import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
 
 interface EventType {
   id: string;
@@ -20,6 +21,7 @@ interface EventType {
   category?: string;
   capacity?: string;
   rating?: number;
+  likes?: number;
   badges?: string[];
   tags?: string[];
 }
@@ -118,15 +120,29 @@ export function Events() {
     setSelectedEvent(event);
   };
 
-  const toggleSaveEvent = (event: EventType, e?: React.MouseEvent) => {
+  const toggleSaveEvent = async (event: EventType, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (
+      userType === 'admin' ||
+      userType === 'resort' ||
+      userType === 'enterprise' ||
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'resort' ||
+      currentUser?.role === 'enterprise'
+    ) {
+      toast.info('Wishlist saving is available for tourist accounts only.');
+      return;
+    }
     if (!currentUser && !getAuthToken()) {
-      toast.info('Please log in or register to save to wishlist');
+      toast.info('Please log in or register as a tourist to save to wishlist');
       navigate('/tourist/login');
       return;
     }
     if (isInWishlist(event.id, 'event')) {
-      removeFromWishlist(event.id, 'event');
+      const confirmed = await showUnsaveConfirmDialog(event.name);
+      if (confirmed) {
+        removeFromWishlist(event.id, 'event', event.name);
+      }
     } else {
       addToWishlist({
         id: event.id,
@@ -134,7 +150,8 @@ export function Events() {
         title: event.name,
         image: event.image,
         category: event.category,
-      });
+        likes: event.likes,
+      } as any);
     }
   };
 
@@ -451,17 +468,24 @@ export function Events() {
 
               {/* Bottom Action Buttons */}
               <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
-                <button
-                  onClick={() => toggleSaveEvent(selectedEvent)}
-                  className={`flex-1 py-2.5 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-2 border ${
-                    savedEventIds.includes(selectedEvent.id)
-                      ? 'bg-pink-500 text-white border-pink-500 shadow-md shadow-pink-500/20'
-                      : 'border-pink-300 text-pink-600 hover:bg-pink-50'
-                  }`}
-                >
-                  <Heart className={`h-4 w-4 ${savedEventIds.includes(selectedEvent.id) ? 'fill-white' : ''}`} />
-                  <span>{savedEventIds.includes(selectedEvent.id) ? 'Saved' : 'Save Event'} ({getWishlistCount(selectedEvent.id, 'event', selectedEvent.likes)})</span>
-                </button>
+                {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' ? (
+                  <button
+                    onClick={() => toggleSaveEvent(selectedEvent)}
+                    className={`flex-1 py-2.5 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-2 border ${
+                      isInWishlist(selectedEvent.id, 'event')
+                        ? 'bg-pink-500 text-white border-pink-500 shadow-md shadow-pink-500/20'
+                        : 'border-pink-300 text-pink-600 hover:bg-pink-50'
+                    }`}
+                  >
+                    <Heart className={`h-4 w-4 ${isInWishlist(selectedEvent.id, 'event') ? 'fill-white' : ''}`} />
+                    <span>{isInWishlist(selectedEvent.id, 'event') ? 'Saved' : 'Save Event'} ({getWishlistCount(selectedEvent.id, 'event', selectedEvent.likes)})</span>
+                  </button>
+                ) : (
+                  <div className="flex-1 py-2.5 rounded-full text-xs font-bold flex items-center justify-center gap-2 bg-pink-50 text-pink-600 border border-pink-100">
+                    <Heart className="h-4 w-4 fill-pink-500 text-pink-500" />
+                    <span>{getWishlistCount(selectedEvent.id, 'event', selectedEvent.likes)} saves</span>
+                  </div>
+                )}
 
                 <button
                   onClick={() => {

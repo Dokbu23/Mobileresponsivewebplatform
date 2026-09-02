@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { Store, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, MessageSquare, Facebook, Navigation, MapPin, ExternalLink, Lock, Filter, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
+import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
 import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
@@ -170,15 +171,29 @@ export function Products() {
     }
   }, [savedProductIds, isLoggedIn, currentUser?.id]);
 
-  const toggleSaveProduct = (product: ProductItem, e?: React.MouseEvent) => {
+  const toggleSaveProduct = async (product: ProductItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (
+      userType === 'admin' ||
+      userType === 'resort' ||
+      userType === 'enterprise' ||
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'resort' ||
+      currentUser?.role === 'enterprise'
+    ) {
+      toast.info('Wishlist saving is available for tourist accounts only.');
+      return;
+    }
     if (!currentUser && !getAuthToken()) {
-      toast.info('Please log in or register to save to wishlist');
+      toast.info('Please log in or register as a tourist to save to wishlist');
       navigate('/tourist/login');
       return;
     }
     if (isInWishlist(product.id, 'product')) {
-      removeFromWishlist(product.id, 'product');
+      const confirmed = await showUnsaveConfirmDialog(product.name);
+      if (confirmed) {
+        removeFromWishlist(product.id, 'product', product.name);
+      }
     } else {
       addToWishlist({
         id: product.id,
@@ -187,7 +202,8 @@ export function Products() {
         image: product.image,
         category: product.category,
         price: product.price,
-      });
+        likes: product.likes,
+      } as any);
     }
   };
 
@@ -335,7 +351,7 @@ export function Products() {
                     >
                       <Share2 className="h-3.5 w-3.5" />
                     </button>
-                    {userType !== 'admin' && (
+                    {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
                       <button
                         onClick={(e) => toggleSaveProduct(product, e)}
                         className="w-7 h-7 bg-white/80 hover:bg-white rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 shadow-xs cursor-pointer"
@@ -357,22 +373,34 @@ export function Products() {
                     <span className="px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-[10px]">
                       {product.category || 'Product'}
                     </span>
-                    <button
-                      onClick={(e) => toggleSaveProduct(product, e)}
-                      className="flex items-center gap-1 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95"
-                      title={isInWishlist(product.id, 'product') ? 'Saved in wishlist' : 'Click to save to wishlist'}
-                    >
-                      <Heart
-                        className={`h-3.5 w-3.5 transition-all ${
-                          isInWishlist(product.id, 'product')
-                            ? 'fill-pink-500 text-pink-500'
-                            : 'text-pink-400 fill-transparent stroke-2'
-                        }`}
-                      />
-                      <span className={isInWishlist(product.id, 'product') ? 'text-pink-400 font-extrabold' : 'text-white'}>
-                        {getWishlistCount(product.id, 'product', product.likes)}
-                      </span>
-                    </button>
+                    {userType === 'admin' || userType === 'resort' || userType === 'enterprise' ? (
+                      <div
+                        className="flex items-center gap-1 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-white text-[11px] font-bold"
+                        title="Total Tourist Wishlist Saves"
+                      >
+                        <Heart className="h-3.5 w-3.5 fill-pink-400 text-pink-400" />
+                        <span className="text-white font-extrabold">
+                          {getWishlistCount(product.id, 'product', product.likes)}
+                        </span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => toggleSaveProduct(product, e)}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95"
+                        title={isInWishlist(product.id, 'product') ? 'Saved in wishlist' : 'Click to save to wishlist'}
+                      >
+                        <Heart
+                          className={`h-3.5 w-3.5 transition-all ${
+                            isInWishlist(product.id, 'product')
+                              ? 'fill-pink-500 text-pink-500'
+                              : 'text-pink-400 fill-transparent stroke-2'
+                          }`}
+                        />
+                        <span className={isInWishlist(product.id, 'product') ? 'text-pink-400 font-extrabold' : 'text-white'}>
+                          {getWishlistCount(product.id, 'product', product.likes)}
+                        </span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -477,7 +505,7 @@ export function Products() {
                   >
                     <Share2 className="h-4 w-4" />
                   </button>
-                  {userType !== 'admin' && (
+                  {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
                     <button
                       onClick={() => toggleSaveProduct(selectedProduct)}
                       className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer ${

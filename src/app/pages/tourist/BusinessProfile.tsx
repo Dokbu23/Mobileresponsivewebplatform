@@ -8,11 +8,12 @@ import {
   Pencil, Upload, X, Image as ImageIcon, Loader2,
   Ticket, Tag, Copy, Check, Plus, MessageSquare,
   Bookmark, Share2, ThumbsUp, Send, Bed, Waves,
-  Compass, Palmtree, Megaphone, Calendar, FileText, Clock
+  Compass, Palmtree, Megaphone, Calendar, FileText, Clock, Video
 } from 'lucide-react';
 import { getPublicJSON, getAuthToken, API_BASE, recordView } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
+import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
 import { LocationPicker } from '../../components/LocationPicker';
 
 import { MANSALAY_BARANGAYS } from '../../lib/constants';
@@ -49,6 +50,8 @@ interface BusinessOwner {
   resort_facilities?: string;
   resort_policies?: string;
   resort_is_setup?: boolean;
+  video_tour?: string;
+  video?: string;
 }
 
 interface PromoCodeItem {
@@ -67,6 +70,15 @@ interface BusinessProfileData {
   products?: any[];
   promo_codes?: PromoCodeItem[];
   is_registered: boolean;
+}
+
+function getYouTubeEmbedUrl(url: string): string | null {
+  if (!url) return null;
+  const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+  if (ytMatch && ytMatch[1]) {
+    return `https://www.youtube.com/embed/${ytMatch[1]}`;
+  }
+  return null;
 }
 
 const mockStoresList: Record<string, {
@@ -338,6 +350,8 @@ export function BusinessProfile() {
   const [activeProfileTab, setActiveProfileTab] = useState<'listings' | 'posts'>('listings');
   const [selectedPostCategory, setSelectedPostCategory] = useState<string>('all');
   const [viewingPost, setViewingPost] = useState<any | null>(null);
+  const [coverMode, setCoverMode] = useState<'video' | 'photo'>('video');
+  const [isCoverMuted, setIsCoverMuted] = useState(true);
 
   const handleCopyPromo = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -492,6 +506,11 @@ export function BusinessProfile() {
   const shopLogo = isResort
     ? (owner.resort_logo || (owner.resort_images && owner.resort_images[0]) || owner.store_logo)
     : owner.store_logo;
+
+  // Check if this shop / resort has an uploaded video tour (from posts or owner profile)
+  const videoTourPost = Array.isArray(posts) ? posts.find((p: any) => p.video) : null;
+  const videoTourUrl = videoTourPost?.video || owner.video_tour || owner.video;
+  const ytCoverEmbed = videoTourUrl ? getYouTubeEmbedUrl(videoTourUrl) : null;
 
   // Active Now vs time ago logic
   const getActiveStatus = () => {
@@ -741,25 +760,86 @@ export function BusinessProfile() {
           {isResort ? 'Back to Stays & Resorts' : 'Back to Products'}
         </button>
 
-        {/* 🌟 SHOP / RESORT HEADER BANNER - Enhanced */}
+        {/* 🌟 SHOP / RESORT HEADER BANNER - Enhanced with Virtual Video Tour */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
-          {/* Banner */}
-          <div className="relative h-36 md:h-52 overflow-hidden bg-gradient-to-br from-pink-500 via-rose-500 to-teal-500">
-            {shopBanner ? (
+          {/* Banner Area */}
+          <div className="relative h-44 sm:h-64 md:h-72 lg:h-80 overflow-hidden bg-black">
+            {videoTourUrl && coverMode === 'video' ? (
+              <div className="relative w-full h-full bg-black flex items-center justify-center">
+                {ytCoverEmbed ? (
+                  <iframe
+                    src={`${ytCoverEmbed}?autoplay=1&mute=1&loop=1&playsinline=1`}
+                    title="Virtual Video Tour"
+                    className="w-full h-full object-cover pointer-events-auto"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <video
+                    src={getImageUrl(videoTourUrl)}
+                    autoPlay
+                    muted={isCoverMuted}
+                    loop
+                    playsInline
+                    controls
+                    className="w-full h-full object-cover"
+                  />
+                )}
+
+                {/* Virtual Tour Overlay Badges */}
+                <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none z-10">
+                  <span className="px-3 py-1 bg-pink-600/90 text-white text-[11px] font-extrabold rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 border border-pink-400/30">
+                    <Video className="w-3.5 h-3.5" />
+                    Virtual Video Tour Active
+                  </span>
+                </div>
+              </div>
+            ) : shopBanner ? (
               <img
                 src={getImageUrl(shopBanner)}
                 alt={`${shopName} banner`}
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full opacity-90" />
+              <div className="w-full h-full bg-gradient-to-br from-pink-500 via-rose-500 to-teal-500 opacity-90" />
             )}
-            <div className="absolute inset-0 bg-black/25" />
+
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20 pointer-events-none" />
+
+            {/* Switch between Video Tour and Photo Cover if both exist */}
+            {videoTourUrl && shopBanner && (
+              <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/60 backdrop-blur-md p-1 rounded-full border border-white/20 z-10">
+                <button
+                  type="button"
+                  onClick={() => setCoverMode('video')}
+                  className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                    coverMode === 'video'
+                      ? 'bg-pink-500 text-white shadow-xs'
+                      : 'text-white/80 hover:text-white'
+                  }`}
+                >
+                  <Video className="w-3 h-3" />
+                  <span>Video Tour</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCoverMode('photo')}
+                  className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                    coverMode === 'photo'
+                      ? 'bg-white text-gray-900 shadow-xs'
+                      : 'text-white/80 hover:text-white'
+                  }`}
+                >
+                  <ImageIcon className="w-3 h-3" />
+                  <span>Photo</span>
+                </button>
+              </div>
+            )}
 
             {isOwner && (
               <button
                 onClick={handleOpenEditModal}
-                className="absolute top-3 right-3 px-3.5 py-1.5 bg-black/60 hover:bg-black/80 active:scale-95 text-white rounded-full text-xs font-bold backdrop-blur-md flex items-center gap-1.5 shadow-md transition-all z-10"
+                className="absolute top-3 right-3 px-3.5 py-1.5 bg-black/60 hover:bg-black/80 active:scale-95 text-white rounded-full text-xs font-bold backdrop-blur-md flex items-center gap-1.5 shadow-md transition-all z-10 cursor-pointer"
               >
                 <Pencil className="h-3.5 w-3.5" />
                 <span>Edit Cover</span>
@@ -926,7 +1006,14 @@ export function BusinessProfile() {
               }`}
             >
               {isResort ? <Hotel className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
-              <span>{isResort ? 'Rooms & Stays' : 'All Products'} ({items.length})</span>
+              <span>{isResort ? 'Rooms & Stays' : 'All Products'}</span>
+              {items.length > 0 && (
+                <span className={`px-2 py-0.5 text-[10px] rounded-full font-extrabold ${
+                  activeProfileTab === 'listings' ? 'bg-white text-pink-600' : 'bg-pink-100 text-pink-700'
+                }`}>
+                  {items.length}
+                </span>
+              )}
             </button>
 
             <button
@@ -938,7 +1025,7 @@ export function BusinessProfile() {
               }`}
             >
               <FileText className="h-4 w-4" />
-              <span>Posts & Updates ({posts.length})</span>
+              <span>Posts & Updates</span>
               {posts.length > 0 && (
                 <span className={`px-2 py-0.5 text-[10px] rounded-full font-extrabold ${
                   activeProfileTab === 'posts' ? 'bg-white text-pink-600' : 'bg-pink-100 text-pink-700'
@@ -1353,8 +1440,27 @@ export function BusinessProfile() {
                               </div>
                             )}
 
-                            {/* Post Image */}
-                            {post.image && (
+                            {/* Post Video or Image */}
+                            {post.video ? (
+                              <div className="rounded-xl overflow-hidden bg-black border border-gray-100 aspect-video max-h-72 relative">
+                                {getYouTubeEmbedUrl(post.video) ? (
+                                  <iframe
+                                    src={getYouTubeEmbedUrl(post.video)!}
+                                    title="Virtual Tour Video"
+                                    className="w-full h-full object-cover"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                  />
+                                ) : (
+                                  <video
+                                    src={getImageUrl(post.video)}
+                                    controls
+                                    playsInline
+                                    className="w-full h-full object-cover"
+                                  />
+                                )}
+                              </div>
+                            ) : post.image ? (
                               <div className="rounded-xl overflow-hidden bg-gray-100 border border-gray-100 max-h-72">
                                 <img
                                   src={getImageUrl(post.image)}
@@ -1363,7 +1469,7 @@ export function BusinessProfile() {
                                   onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
                                 />
                               </div>
-                            )}
+                            ) : null}
 
                             {/* Tags */}
                             {Array.isArray(post.tags) && post.tags.length > 0 && (
@@ -1592,7 +1698,26 @@ export function BusinessProfile() {
                 </div>
               )}
 
-              {viewingPost.image && (
+              {viewingPost.video ? (
+                <div className="rounded-2xl overflow-hidden bg-black border border-gray-100 aspect-video max-h-[380px] relative">
+                  {getYouTubeEmbedUrl(viewingPost.video) ? (
+                    <iframe
+                      src={getYouTubeEmbedUrl(viewingPost.video)!}
+                      title="Virtual Tour Video"
+                      className="w-full h-full object-cover"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <video
+                      src={getImageUrl(viewingPost.video)}
+                      controls
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </div>
+              ) : viewingPost.image ? (
                 <div className="rounded-2xl overflow-hidden bg-gray-100 border border-gray-100">
                   <img
                     src={getImageUrl(viewingPost.image)}
@@ -1601,7 +1726,7 @@ export function BusinessProfile() {
                     onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
                   />
                 </div>
-              )}
+              ) : null}
 
               {Array.isArray(viewingPost.tags) && viewingPost.tags.length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap pt-2">
@@ -1915,10 +2040,13 @@ function ProductCard({ product }: any) {
   const isSaved = isInWishlist(product.id, 'product');
   const count = getWishlistCount(product.id, 'product', product.likes || 0);
 
-  const toggleSave = (e: React.MouseEvent) => {
+  const toggleSave = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isSaved) {
-      removeFromWishlist(product.id, 'product');
+      const confirmed = await showUnsaveConfirmDialog(product.name);
+      if (confirmed) {
+        removeFromWishlist(product.id, 'product', product.name);
+      }
     } else {
       addToWishlist({
         id: product.id,
@@ -1927,7 +2055,8 @@ function ProductCard({ product }: any) {
         image: product.image,
         category: product.category,
         price: product.price,
-      });
+        likes: product.likes,
+      } as any);
     }
   };
 
@@ -1941,7 +2070,12 @@ function ProductCard({ product }: any) {
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => { e.currentTarget.src = '/assets/default-product.jpg'; }}
         />
-        {userType !== 'admin' && (
+        {Array.isArray(product.images) && product.images.length > 1 && (
+          <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-md text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
+            <span>📷 {product.images.length}</span>
+          </div>
+        )}
+        {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
           <button
             onClick={toggleSave}
             className="absolute top-2 right-2 w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
@@ -1985,10 +2119,13 @@ function AccommodationCard({ accommodation }: any) {
   const isSaved = isInWishlist(accommodation.id, 'accommodation');
   const count = getWishlistCount(accommodation.id, 'accommodation', accommodation.likes || 0);
 
-  const toggleSave = (e: React.MouseEvent) => {
+  const toggleSave = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isSaved) {
-      removeFromWishlist(accommodation.id, 'accommodation');
+      const confirmed = await showUnsaveConfirmDialog(accommodation.name);
+      if (confirmed) {
+        removeFromWishlist(accommodation.id, 'accommodation', accommodation.name);
+      }
     } else {
       addToWishlist({
         id: accommodation.id,
@@ -1996,7 +2133,8 @@ function AccommodationCard({ accommodation }: any) {
         title: accommodation.name,
         image: accommodation.image,
         price: price,
-      });
+        likes: accommodation.likes,
+      } as any);
     }
   };
 
@@ -2014,7 +2152,7 @@ function AccommodationCard({ accommodation }: any) {
             {accommodation.type}
           </span>
         )}
-        {userType !== 'admin' && (
+        {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
           <button
             onClick={toggleSave}
             className="absolute top-2 right-2 w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors"

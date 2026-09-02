@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { getJSON, API_BASE } from '../lib/api';
+import { showWishlistAlert } from '../lib/sweetAlert';
 
 export interface ProductVariation {
   id: number;
@@ -17,7 +18,9 @@ export interface Product {
   price: number;
   stock: number;
   image: string;
+  images?: string[];
   category: string;
+  user_id?: number;
   variations?: ProductVariation[];
 }
 
@@ -91,6 +94,7 @@ export interface CurrentUser {
   facebook_link?: string;
   instagram_link?: string;
   description?: string;
+  view_count?: number;
 }
 
 interface AppContextType {
@@ -113,7 +117,7 @@ interface AppContextType {
   wishlistCounts: Record<string, number>;
   getWishlistCount: (id: string | number, type: string, baseCount?: number) => number;
   addToWishlist: (item: WishlistItem) => void;
-  removeFromWishlist: (id: string | number, type: string) => void;
+  removeFromWishlist: (id: string | number, type: string, title?: string) => void;
   isInWishlist: (id: string | number, type: string) => boolean;
 }
 
@@ -142,17 +146,16 @@ function readStoredCart(userType: string | null): CartItem[] {
   }
 }
 
-function getWishlistStorageKey(user: CurrentUser | null, role: string | null): string | null {
-  if (!user || !user.id || role !== 'tourist') {
-    return null;
+function getWishlistStorageKey(user: CurrentUser | null, role: string | null): string {
+  if (user && user.id) {
+    return `discover-mansalay:wishlist_user_${user.id}`;
   }
-  return `discover-mansalay:wishlist_user_${user.id}`;
+  return `discover-mansalay:wishlist_guest`;
 }
 
 function readStoredWishlist(user: CurrentUser | null, role: string | null): WishlistItem[] {
   if (typeof window === 'undefined') return [];
   const key = getWishlistStorageKey(user, role);
-  if (!key) return [];
   try {
     const stored = window.localStorage.getItem(key);
     return stored ? JSON.parse(stored) : [];
@@ -207,11 +210,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Synchronize user-scoped wishlist whenever currentUser or userType changes
   useEffect(() => {
-    if (userType === 'tourist' && currentUser?.id) {
-      setWishlist(readStoredWishlist(currentUser, userType));
-    } else {
-      setWishlist([]);
-    }
+    setWishlist(readStoredWishlist(currentUser, userType));
   }, [currentUser?.id, userType]);
 
   // Persist user-specific wishlist
@@ -401,21 +400,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addToWishlist = (item: WishlistItem) => {
-    if (userType !== 'tourist' || !currentUser?.id) {
+    // Only tourist accounts are allowed to save wishlist items
+    if (
+      userType === 'admin' ||
+      userType === 'resort' ||
+      userType === 'enterprise' ||
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'resort' ||
+      currentUser?.role === 'enterprise'
+    ) {
       return;
     }
+
     setWishlist(prev => {
-      if (prev.some(w => String(w.id) === String(item.id) && w.type === item.type)) {
+      if (prev.some(w => String(w.id) === String(item.id) && (w.type || 'attraction') === (item.type || 'attraction'))) {
         return prev;
       }
       return [...prev, item];
     });
 
     const key = `${item.type || 'attraction'}_${item.id}`;
-    const nextCount = (wishlistCounts[key] ?? 0) + 1;
+    const baseVal = Number((item as any).likes) || 0;
+    const currentCount = wishlistCounts[key] !== undefined ? Number(wishlistCounts[key]) : baseVal;
+    const nextCount = currentCount + 1;
 
     setWishlistCounts(prev => {
-      const updated = { ...prev, [key]: (prev[key] ?? 0) + 1 };
+      const updated = { ...prev, [key]: nextCount };
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('discover-mansalay:wishlist_counts', JSON.stringify(updated));
       }
@@ -433,25 +443,53 @@ export function AppProvider({ children }: { children: ReactNode }) {
           item_type: item.type || 'attraction',
           action: 'save',
         }),
-      }).catch(() => {});
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.likes !== undefined) {
+            setWishlistCounts((prev) => {
+              const updated = { ...prev, [key]: Number(data.likes) };
+              if (typeof window !== 'undefined') {
+                window.localStorage.setItem('discover-mansalay:wishlist_counts', JSON.stringify(updated));
+              }
+              return updated;
+            });
+          }
+        })
+        .catch(() => {});
 
       // Real-time reactive notification
+      showWishlistAlert('added', item.title);
       window.dispatchEvent(new CustomEvent('wishlistUpdated', { detail: { item, action: 'save', newCount: nextCount } }));
       window.dispatchEvent(new Event('contentUpdated'));
+      window.dispatchEvent(new Event('storage'));
     } catch {}
   };
 
-  const removeFromWishlist = (id: string | number, type: string) => {
-    if (userType !== 'tourist' || !currentUser?.id) {
+  const removeFromWishlist = (id: string | number, type: string, title?: string) => {
+    // Only tourist accounts are allowed to unsave wishlist items
+    if (
+      userType === 'admin' ||
+      userType === 'resort' ||
+      userType === 'enterprise' ||
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'resort' ||
+      currentUser?.role === 'enterprise'
+    ) {
       return;
     }
-    setWishlist(prev => prev.filter(w => !(String(w.id) === String(id) && w.type === type)));
+
+    const existingItem = wishlist.find(w => String(w.id) === String(id) && (w.type || 'attraction') === (type || 'attraction'));
+    const itemTitle = title || existingItem?.title;
+
+    setWishlist(prev => prev.filter(w => !(String(w.id) === String(id) && (w.type || 'attraction') === (type || 'attraction'))));
 
     const key = `${type || 'attraction'}_${id}`;
-    const nextCount = Math.max(0, (wishlistCounts[key] ?? 1) - 1);
+    const currentCount = wishlistCounts[key] !== undefined ? Number(wishlistCounts[key]) : 1;
+    const nextCount = Math.max(0, currentCount - 1);
 
     setWishlistCounts(prev => {
-      const updated = { ...prev, [key]: Math.max(0, (prev[key] ?? 1) - 1) };
+      const updated = { ...prev, [key]: nextCount };
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('discover-mansalay:wishlist_counts', JSON.stringify(updated));
       }
@@ -469,17 +507,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
           item_type: type || 'attraction',
           action: 'unsave',
         }),
-      }).catch(() => {});
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.likes !== undefined) {
+            setWishlistCounts((prev) => {
+              const updated = { ...prev, [key]: Number(data.likes) };
+              if (typeof window !== 'undefined') {
+                window.localStorage.setItem('discover-mansalay:wishlist_counts', JSON.stringify(updated));
+              }
+              return updated;
+            });
+          }
+        })
+        .catch(() => {});
+
+      // 🔔 Show SweetAlert notice when unhearted / removed
+      showWishlistAlert('removed', itemTitle);
 
       // Real-time reactive notification
       window.dispatchEvent(new CustomEvent('wishlistUpdated', { detail: { id, type, action: 'unsave', newCount: nextCount } }));
       window.dispatchEvent(new Event('contentUpdated'));
+      window.dispatchEvent(new Event('storage'));
     } catch {}
   };
 
   const isInWishlist = (id: string | number, type: string) => {
-    if (userType !== 'tourist' || !currentUser?.id) return false;
-    return wishlist.some(w => String(w.id) === String(id) && w.type === type);
+    return wishlist.some(w => String(w.id) === String(id) && (w.type || 'attraction') === (type || 'attraction'));
   };
 
   return (

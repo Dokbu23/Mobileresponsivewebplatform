@@ -17,6 +17,7 @@ class EnterprisePost extends Model
         'title',
         'content',
         'image',
+        'video',
         'product_name',
         'price',
         'category',
