@@ -100,7 +100,23 @@ class EnterprisePostController extends Controller
             ->first();
 
         if ($existing) {
-            $existing->update($prodData);
+            $updateData = [
+                'name'        => $prodName,
+                'description' => $post->content ?: $prodName,
+                'price'       => $numericPrice,
+                'stock'       => $numericStock,
+            ];
+            if (!empty($post->category) && empty($existing->category)) {
+                $updateData['category'] = $post->category;
+            }
+            // Only update image from post if product has NO image yet
+            if (empty($existing->image) && !empty($post->image)) {
+                $updateData['image'] = $post->image;
+                if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'images')) {
+                    $updateData['images'] = [$post->image];
+                }
+            }
+            $existing->update($updateData);
             return $existing;
         } else {
             return \App\Models\Product::create($prodData);

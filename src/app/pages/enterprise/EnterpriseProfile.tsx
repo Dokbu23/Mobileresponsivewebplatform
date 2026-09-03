@@ -3,7 +3,7 @@ import { Store, Plus, Edit, Trash2, Package, TrendingUp, BarChart3, ChevronDown,
 import { toast } from 'sonner';
 import { Link } from 'react-router';
 import { useApp } from '../../context/AppContext';
-import { getAuthToken, getJSON, getPublicJSON, postJSON, putJSON, patchJSON, deleteJSON, API_BASE } from '../../lib/api';
+import { getAuthToken, getJSON, getPublicJSON, postJSON, putJSON, patchJSON, deleteJSON, API_BASE, getStorageUrl } from '../../lib/api';
 import { showPaymentMethodSuccess, showProductSuccess, showStatusUpdateSuccess } from '../../lib/sweetAlert';
 
 import { MANSALAY_BARANGAYS } from '../../lib/constants';
@@ -296,36 +296,49 @@ export function EnterpriseProfile() {
 
   const fetchData = async () => {
     try {
-      const productsResponse = await getPublicJSON('/products');
-      const rawProducts = Array.isArray(productsResponse) ? productsResponse : [];
+      let rawProducts: any[] = [];
+      try {
+        const authProds = await getJSON('/products');
+        if (Array.isArray(authProds) && authProds.length > 0) {
+          rawProducts = authProds;
+        }
+      } catch {}
+
+      if (rawProducts.length === 0) {
+        const productsResponse = await getPublicJSON('/products');
+        rawProducts = Array.isArray(productsResponse) ? productsResponse : [];
+      }
+
       const filteredProducts = currentUser?.id
         ? rawProducts.filter((product: any) => Number(product.user_id ?? product.userId) === currentUser.id)
         : rawProducts;
 
       setProducts(
-        filteredProducts.map((product: any) => ({
-          id: String(product.id),
-          name: product.name || '',
-          description: product.description || '',
-          price: Number(product.price) || 0,
-          stock: Number(product.stock) || 0,
-          category: product.category || '',
-          image: product.image
-            ? (product.image.startsWith('http') ? product.image : `${API_BASE}${product.image}`)
-            : '',
-          images: Array.isArray(product.images)
-            ? product.images.map((img: string) => (img.startsWith('http') ? img : `${API_BASE}${img}`))
-            : (product.image ? [product.image.startsWith('http') ? product.image : `${API_BASE}${product.image}`] : []),
-          variations: Array.isArray(product.variations)
-            ? product.variations.map((v: any) => ({
-                id: v.id,
-                name: v.name || '',
-                value: v.value || '',
-                price: v.price != null ? Number(v.price) : null,
-                stock: Number(v.stock) || 0,
-              }))
-            : [],
-        }))
+        filteredProducts.map((product: any) => {
+          const rawImg = product.image ? (product.image.startsWith('http') ? product.image : getStorageUrl(product.image)) : '';
+          const rawImgs = Array.isArray(product.images)
+            ? product.images.map((img: string) => (img.startsWith('http') ? img : getStorageUrl(img)))
+            : (rawImg ? [rawImg] : []);
+          return {
+            id: String(product.id),
+            name: product.name || '',
+            description: product.description || '',
+            price: Number(product.price) || 0,
+            stock: Number(product.stock) || 0,
+            category: product.category || '',
+            image: rawImg,
+            images: rawImgs,
+            variations: Array.isArray(product.variations)
+              ? product.variations.map((v: any) => ({
+                  id: v.id,
+                  name: v.name || '',
+                  value: v.value || '',
+                  price: v.price != null ? Number(v.price) : null,
+                  stock: Number(v.stock) || 0,
+                }))
+              : [],
+          };
+        })
       );
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -409,15 +422,21 @@ export function EnterpriseProfile() {
       form.append('stock', String(newProduct.stock));
       form.append('category', newProduct.category ?? '');
 
-      // Append all multiple image files
-      imageFiles.forEach((file) => {
-        form.append('images[]', file);
-      });
+      // Append new image files (primary file as 'image', all as 'images[]')
+      if (imageFiles.length > 0) {
+        form.append('image', imageFiles[0]);
+        imageFiles.forEach((file) => {
+          form.append('images[]', file);
+        });
+      }
 
       // Append existing retained images
       if (existingImages.length > 0) {
-        form.append('existing_images', JSON.stringify(existingImages));
-        form.append('image', existingImages[0]);
+        const cleanExisting = existingImages.map((img) => (typeof img === 'string' ? img.replace(API_BASE, '') : img));
+        form.append('existing_images', JSON.stringify(cleanExisting));
+        if (imageFiles.length === 0) {
+          form.append('image', cleanExisting[0]);
+        }
       }
 
       // Always send the variations payload so the backend can sync (empty

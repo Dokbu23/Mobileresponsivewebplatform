@@ -209,52 +209,78 @@ class ProductController extends Controller
         ]);
 
         $storedImages = [];
+        $hasNewFileUpload = false;
 
-        // Handle multiple uploaded image files (images[])
-        if ($request->hasFile('images')) {
-            foreach ($request->file('images') as $file) {
-                if ($file) {
-                    $path = $file->store('products', 'public');
-                    $storedImages[] = '/storage/' . $path;
-                }
-            }
-        }
-
-        // Handle single uploaded image file
+        // 1. Handle primary uploaded image file (image)
         if ($request->hasFile('image')) {
             try {
                 $file = $request->file('image');
                 $path = $file->store('products', 'public');
                 $singlePath = '/storage/' . $path;
-                if (!in_array($singlePath, $storedImages)) {
-                    array_unshift($storedImages, $singlePath);
-                }
+                $storedImages[] = $singlePath;
                 $data['image'] = $singlePath;
+                $hasNewFileUpload = true;
             } catch (\Exception $e) {
                 return response()->json(['error' => 'Failed to store file: ' . $e->getMessage()], 400);
             }
-        } elseif (is_string($request->input('image')) && !empty($request->input('image'))) {
-            $data['image'] = $request->input('image');
-            if (!in_array($data['image'], $storedImages)) {
-                array_unshift($storedImages, $data['image']);
+        }
+
+        // 2. Handle multiple uploaded image files (images[])
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $file) {
+                if ($file) {
+                    $path = $file->store('products', 'public');
+                    $newPath = '/storage/' . $path;
+                    $storedImages[] = $newPath;
+                    $hasNewFileUpload = true;
+                }
+            }
+            if (empty($data['image']) && !empty($storedImages)) {
+                $data['image'] = $storedImages[0];
             }
         }
 
-        // Merge any existing or string images provided in request
+        // 3. Handle existing retained images
         if ($request->has('existing_images')) {
             $existing = $request->input('existing_images');
+            $existingArr = [];
             if (is_string($existing)) {
                 $decoded = json_decode($existing, true);
                 if (is_array($decoded)) {
-                    $storedImages = array_merge($decoded, $storedImages);
+                    $existingArr = $decoded;
                 }
             } elseif (is_array($existing)) {
-                $storedImages = array_merge($existing, $storedImages);
+                $existingArr = $existing;
+            }
+
+            // Clean URLs (strip absolute domain if present)
+            $cleanedExisting = array_map(function($img) {
+                if (is_string($img)) {
+                    return preg_replace('#^https?://[^/]+#', '', $img);
+                }
+                return $img;
+            }, $existingArr);
+
+            if ($hasNewFileUpload) {
+                // New uploads take precedence at the front
+                $storedImages = array_merge($storedImages, $cleanedExisting);
+            } else {
+                // No new upload, existing retained images are primary
+                $storedImages = array_merge($cleanedExisting, $storedImages);
+            }
+        }
+
+        // 4. Fallback string image if no file was uploaded
+        if (!$hasNewFileUpload && $request->filled('image') && is_string($request->input('image'))) {
+            $cleanImg = preg_replace('#^https?://[^/]+#', '', $request->input('image'));
+            $data['image'] = $cleanImg;
+            if (!in_array($cleanImg, $storedImages)) {
+                array_unshift($storedImages, $cleanImg);
             }
         }
 
         if (!empty($storedImages)) {
-            $storedImages = array_values(array_unique($storedImages));
+            $storedImages = array_values(array_unique(array_filter($storedImages)));
             $data['images'] = $storedImages;
             if (empty($data['image'])) {
                 $data['image'] = $storedImages[0];
@@ -267,7 +293,37 @@ class ProductController extends Controller
         // Handle optional variations payload (delete & re-create)
         $this->syncVariations($request, $product, true);
 
-        \Log::info('Product updated', ['id' => $id]);
+        // Also sync updated image & details to matching EnterprisePost so feeds stay in sync
+        try {
+            $postUpdateData = [];
+            if (!empty($product->image)) {
+                $postUpdateData['image'] = $product->image;
+            }
+            if ($product->price) {
+                $postUpdateData['price'] = '₱' . number_format($product->price, 2);
+            }
+            if ($product->stock !== null) {
+                $postUpdateData['stock'] = $product->stock ? "{$product->stock} in stock" : 'Out of stock';
+            }
+            if (!empty($product->category)) {
+                $postUpdateData['category'] = $product->category;
+            }
+
+            if (!empty($postUpdateData)) {
+                \App\Models\EnterprisePost::where(function($q) use ($product) {
+                    if ($product->user_id) {
+                        $q->where('user_id', $product->user_id);
+                    }
+                })->where(function($q) use ($product) {
+                    $q->where('product_name', $product->name)
+                      ->orWhere('title', $product->name);
+                })->update($postUpdateData);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Failed to sync post on product update: ' . $e->getMessage());
+        }
+
+        \Log::info('Product updated', ['id' => $id, 'image' => $product->image]);
 
         return response()->json($product->load('variations'));
     }
