@@ -17,6 +17,10 @@ for i in $(seq 1 $MAX_TRIES); do
     sleep $WAIT_SEC
 done
 
+# Run database migrations
+echo 'Running database migrations...'
+php artisan migrate --force || true
+
 # Storage symlink and caching
 echo 'Creating storage link...'
 php artisan storage:link || true

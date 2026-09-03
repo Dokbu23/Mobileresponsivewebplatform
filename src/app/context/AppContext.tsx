@@ -375,6 +375,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const fetchCounts = async () => {
       try {
         const res = await fetch(`${API_BASE}/api/public/wishlist/counts`);
+        if (!res.ok) return;
         const json = await res.json();
         if (json?.success && json?.counts) {
           setWishlistCounts(prev => {
