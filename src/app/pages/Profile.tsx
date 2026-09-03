@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { User, Mail, Phone, MapPin, Store, Hotel, Shield, Camera, Save, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Store, Hotel, Shield, Camera, Save, Lock, Eye, EyeOff, Loader2, Edit3 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getJSON, patchJSON, postJSON, API_BASE, getAuthToken, formatImageUrl } from '../lib/api';
 import { toast } from 'sonner';
 import { showSuccessAlert } from '../lib/sweetAlert';
+import Swal from 'sweetalert2';
 import { Link } from 'react-router';
 
 export function Profile() {
@@ -228,6 +229,132 @@ export function Profile() {
     }
   };
 
+  // Change Email with SweetAlert & 6-digit Verification Code
+  const handleChangeEmail = async () => {
+    const currentEmail = profile?.email || currentUser?.email || '';
+
+    // Step 1: Prompt for New Email Address with SweetAlert
+    const { value: newEmailResult } = await Swal.fire({
+      title: 'Change Gmail / Email',
+      html: `
+        <div class="text-left text-xs text-gray-600 mb-3 p-2.5 bg-gray-50 rounded-lg border border-gray-100">
+          Kasalukuyang Email: <strong class="text-gray-900">${currentEmail}</strong>
+        </div>
+        <p class="text-xs text-gray-600 mb-2 text-left leading-relaxed">
+          Ilagay ang iyong bagong Gmail / Email address. Padadalhan ka ng <strong>6-digit verification code</strong> bago ito opisyal na mapalitan:
+        </p>
+      `,
+      input: 'email',
+      inputPlaceholder: 'bagong.email@gmail.com',
+      showCancelButton: true,
+      confirmButtonText: 'Send Verification Code 📩',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#ec4899',
+      cancelButtonColor: '#9ca3af',
+      showLoaderOnConfirm: true,
+      allowOutsideClick: () => !Swal.isLoading(),
+      inputValidator: (val) => {
+        if (!val || !val.trim()) {
+          return 'Pakilagay ang iyong bagong email address!';
+        }
+        const cleaned = val.trim().toLowerCase();
+        if (cleaned === currentEmail.toLowerCase()) {
+          return 'Kailangan magkaiba ang bagong email sa kasalukuyang email!';
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned)) {
+          return 'Pakilagay ang wastong email address format!';
+        }
+        return null;
+      },
+      preConfirm: async (val) => {
+        try {
+          const res = await postJSON('/profile/change-email/send-code', {
+            new_email: val.trim().toLowerCase(),
+          });
+          return { newEmail: val.trim().toLowerCase(), message: res?.message };
+        } catch (err: any) {
+          Swal.showValidationMessage(err?.message || 'Hindi maipadala ang verification code. Pakisubukan muli.');
+          return false;
+        }
+      },
+    });
+
+    if (!newEmailResult) return;
+
+    const targetNewEmail = typeof newEmailResult === 'object' ? newEmailResult.newEmail : newEmailResult;
+
+    // Step 2: Prompt for 6-digit Verification Code with SweetAlert
+    const { value: verificationResult } = await Swal.fire({
+      title: 'Enter Verification Code',
+      html: `
+        <div class="text-center text-xs text-gray-600 mb-3">
+          Naipadala na ang 6-digit verification code sa:<br/>
+          <strong class="text-pink-600 text-sm tracking-wide font-bold">${targetNewEmail}</strong>
+        </div>
+        <p class="text-[11px] text-gray-400 mb-1">
+          Pakitingnan ang iyong inbox o Spam/Junk folder.
+        </p>
+      `,
+      input: 'text',
+      inputPlaceholder: '000000',
+      inputAttributes: {
+        maxlength: '6',
+        inputmode: 'numeric',
+        style: 'text-align: center; font-family: monospace; font-size: 1.75rem; letter-spacing: 0.3em; font-weight: 800; padding: 0.5rem;',
+      },
+      showCancelButton: true,
+      confirmButtonText: 'Verify & Change Email ✅',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#ec4899',
+      cancelButtonColor: '#9ca3af',
+      showLoaderOnConfirm: true,
+      allowOutsideClick: () => !Swal.isLoading(),
+      inputValidator: (val) => {
+        if (!val || val.trim().length !== 6) {
+          return 'Pakilagay ang eksaktong 6-digit verification code!';
+        }
+        return null;
+      },
+      preConfirm: async (code) => {
+        try {
+          const res = await postJSON('/profile/change-email/verify', {
+            new_email: targetNewEmail,
+            code: code.trim(),
+          });
+          return res;
+        } catch (err: any) {
+          Swal.showValidationMessage(err?.message || 'Maling verification code o nag-expire na.');
+          return false;
+        }
+      },
+    });
+
+    if (!verificationResult) return;
+
+    // Step 3: Success SweetAlert Modal & Synchronize State
+    await Swal.fire({
+      icon: 'success',
+      title: 'Email Changed Successfully! 🎉',
+      html: `
+        <p class="text-sm text-gray-700">
+          Matagumpay nang napalitan ang iyong email sa:<br/>
+          <strong class="text-emerald-600 font-bold text-base">${targetNewEmail}</strong>
+        </p>
+      `,
+      confirmButtonColor: '#ec4899',
+      confirmButtonText: 'Ayos!',
+    });
+
+    // Update state & localStorage
+    setProfile((prev: any) => ({ ...(prev || {}), email: targetNewEmail }));
+    if (currentUser) {
+      const updatedUser = { ...currentUser, email: targetNewEmail };
+      setCurrentUser(updatedUser);
+      localStorage.setItem('discover-mansalay:currentUser', JSON.stringify(updatedUser));
+      localStorage.setItem('discover-mansalay:user', JSON.stringify(updatedUser));
+    }
+  };
+
   const getRoleIcon = () => {
     switch (userType) {
       case 'enterprise': return <Store className="h-6 w-6 text-pink-600" />;
@@ -381,17 +508,37 @@ export function Profile() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1 text-gray-700 flex items-center gap-1.5">
-                  <Mail className="h-4 w-4 text-pink-500" /> Gmail / Email Address
-                </label>
-                <input
-                  type="email"
-                  value={profile?.email || currentUser?.email || ''}
-                  readOnly
-                  disabled
-                  className="w-full px-4 py-2.5 border-2 border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed outline-none text-sm"
-                  title="Your registered email address"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                    <Mail className="h-4 w-4 text-pink-500" /> Gmail / Email Address
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleChangeEmail}
+                    className="text-xs font-semibold text-pink-600 hover:text-pink-700 hover:underline transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                    Change Email
+                  </button>
+                </div>
+                <div className="relative flex items-center">
+                  <input
+                    type="email"
+                    value={profile?.email || currentUser?.email || ''}
+                    readOnly
+                    disabled
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 bg-gray-50 text-gray-700 font-medium rounded-lg cursor-not-allowed outline-none text-sm pr-24"
+                    title="Click Change Email to update your registered email address"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleChangeEmail}
+                    className="absolute right-1.5 px-2.5 py-1.5 bg-pink-50 hover:bg-pink-100 text-pink-600 rounded-md text-xs font-semibold transition-colors flex items-center gap-1 border border-pink-200 cursor-pointer shadow-2xs"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                    Change
+                  </button>
+                </div>
               </div>
             </div>
 

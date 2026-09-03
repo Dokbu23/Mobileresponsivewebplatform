@@ -183,6 +183,40 @@ function PostImageGallery({ images, badge, title }: { images: string[]; badge: {
   );
 }
 
+// Operating / Check-in Hours Preset Groups for Scrollable Dropdown
+const RESORT_TIME_OPTIONS = [
+  { category: '🌟 24/7 & Anytime', items: [
+    'Open 24/7 (24 Hours Open)',
+    '24/7 Check-in Available',
+  ]},
+  { category: '🏨 Overnight & Check-in / Out', items: [
+    'Check-in: 2:00 PM — Check-out: 12:00 PM (Next Day)',
+    'Check-in: 1:00 PM — Check-out: 11:00 AM (Next Day)',
+    'Check-in: 3:00 PM — Check-out: 1:00 PM (Next Day)',
+    'Overnight: 6:00 PM — 6:00 AM (Next Day)',
+    'Night Swimming: 6:00 PM — 12:00 AM',
+    'Night Swimming: 6:00 PM — 11:00 PM',
+  ]},
+  { category: '☀️ Day Tour Schedules', items: [
+    'Day Tour: 6:00 AM — 6:00 PM',
+    'Day Tour: 7:00 AM — 5:00 PM',
+    'Day Tour: 8:00 AM — 5:00 PM',
+    'Day Tour: 8:00 AM — 6:00 PM',
+    'Day Tour: 8:00 AM — 8:00 PM',
+  ]},
+  { category: '🕒 Daily Operating Schedules', items: [
+    'Open Daily: 6:00 AM — 8:00 PM',
+    'Open Daily: 6:00 AM — 10:00 PM',
+    'Open Daily: 7:00 AM — 7:00 PM',
+    'Open Daily: 7:00 AM — 9:00 PM',
+    'Open Daily: 8:00 AM — 8:00 PM',
+    'Open Daily: 8:00 AM — 9:00 PM',
+    'Open Daily: 8:00 AM — 10:00 PM',
+    'Monday - Sunday: 8:00 AM — 6:00 PM',
+    'Weekends Only: 8:00 AM — 6:00 PM',
+  ]},
+];
+
 export function ResortDashboard() {
   const navigate = useNavigate();
   const { currentUser, getWishlistCount, wishlistCounts } = useApp();
@@ -192,6 +226,20 @@ export function ResortDashboard() {
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [previousStatus, setPreviousStatus] = useState<string | null>(null);
   const [hasCheckedProfile, setHasCheckedProfile] = useState(false);
+
+  // Time dropdown open state
+  const [timeDropdownOpen, setTimeDropdownOpen] = useState(false);
+  const timeDropdownRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (timeDropdownRef.current && !timeDropdownRef.current.contains(event.target as Node)) {
+        setTimeDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Active tab state: 'posts' | 'social'
   const [activeTab, setActiveTab] = useState<'posts' | 'social'>('posts');
@@ -1152,17 +1200,99 @@ export function ResortDashboard() {
             {showMoreDetails && (
               <div className="mt-3 p-4 bg-gray-50/80 rounded-xl border border-gray-100 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                      Operating / Check-in Hours
+                  <div className="relative" ref={timeDropdownRef}>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-pink-500" />
+                        Operating / Check-in Hours
+                      </span>
+                      {businessHours && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBusinessHours('');
+                          }}
+                          className="text-[10px] text-gray-400 hover:text-rose-500 transition-colors"
+                          title="Clear selected time"
+                        >
+                          Clear
+                        </button>
+                      )}
                     </label>
-                    <input
-                      type="text"
-                      value={businessHours}
-                      onChange={e => setBusinessHours(e.target.value)}
-                      placeholder="e.g. Open daily 6:00 AM - 8:00 PM"
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-pink-500"
-                    />
+
+                    {/* Dropdown Button */}
+                    <button
+                      type="button"
+                      onClick={() => setTimeDropdownOpen(!timeDropdownOpen)}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-pink-500 flex items-center justify-between text-left transition-all hover:border-pink-300 cursor-pointer shadow-2xs"
+                    >
+                      <span className={businessHours ? 'text-gray-900 font-medium truncate' : 'text-gray-400'}>
+                        {businessHours || 'Select operating / check-in hours...'}
+                      </span>
+                      <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0 ml-1.5 ${timeDropdownOpen ? 'rotate-180 text-pink-500' : ''}`} />
+                    </button>
+
+                    {/* Scrollable Dropdown List */}
+                    {timeDropdownOpen && (
+                      <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden text-xs animate-in fade-in zoom-in-95 duration-100">
+                        {/* Scrollable Container with standard & extended resort hours */}
+                        <div className="max-h-60 overflow-y-auto p-1.5 space-y-2 scrollbar-thin">
+                          {RESORT_TIME_OPTIONS.map((group, gIdx) => (
+                            <div key={gIdx} className="space-y-0.5">
+                              <div className="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50/90 rounded-md">
+                                {group.category}
+                              </div>
+                              {group.items.map((opt, oIdx) => {
+                                const isSelected = businessHours === opt;
+                                return (
+                                  <button
+                                    key={oIdx}
+                                    type="button"
+                                    onClick={() => {
+                                      setBusinessHours(opt);
+                                      setTimeDropdownOpen(false);
+                                    }}
+                                    className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-pink-50 text-pink-700 font-semibold'
+                                        : 'hover:bg-gray-100 text-gray-700'
+                                    }`}
+                                  >
+                                    <span>{opt}</span>
+                                    {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600 flex-shrink-0 ml-2" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Custom Input Option */}
+                        <div className="p-2.5 border-t border-gray-100 bg-gray-50/80">
+                          <label className="block text-[10px] font-bold text-gray-500 mb-1">
+                            Or Type Custom Schedule:
+                          </label>
+                          <div className="flex gap-1.5">
+                            <input
+                              type="text"
+                              value={businessHours}
+                              onChange={e => setBusinessHours(e.target.value)}
+                              placeholder="e.g. 9:00 AM - 5:00 PM"
+                              className="flex-1 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-pink-500"
+                              onClick={e => e.stopPropagation()}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setTimeDropdownOpen(false)}
+                              className="px-3 py-1 bg-pink-500 hover:bg-pink-600 text-white rounded-lg text-[11px] font-semibold transition-colors cursor-pointer"
+                            >
+                              Apply
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-gray-600 mb-1">

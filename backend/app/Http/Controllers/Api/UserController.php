@@ -5,6 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
+use App\Models\EmailVerificationCode;
+use App\Mail\VerificationCodeMail;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Http;
+use Carbon\Carbon;
 
 class UserController extends Controller
 {
@@ -184,5 +189,155 @@ class UserController extends Controller
             'message' => 'Profile updated successfully.',
             'user'    => $user->fresh(),
         ]);
+    }
+
+    /**
+     * Send OTP verification code to the user's requested new email.
+     */
+    public function sendChangeEmailCode(Request $request)
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'new_email' => ['required', 'email', 'max:255', 'unique:users,email'],
+        ], [
+            'new_email.required' => 'Please enter your new email address.',
+            'new_email.email'    => 'Please enter a valid email address.',
+            'new_email.unique'   => 'This email address is already taken by another user.',
+        ]);
+
+        $newEmail = strtolower(trim($validated['new_email']));
+
+        if (strtolower($user->email) === $newEmail) {
+            return response()->json([
+                'message' => 'The new email is already your current email address.',
+            ], 422);
+        }
+
+        // Rate limit: 1 request per 60 seconds
+        $recentCode = EmailVerificationCode::where('email', $newEmail)
+            ->where('created_at', '>', Carbon::now()->subSeconds(60))
+            ->first();
+
+        if ($recentCode) {
+            $retryAfter = 60 - Carbon::now()->diffInSeconds($recentCode->created_at);
+            return response()->json([
+                'message' => 'Please wait ' . $retryAfter . ' seconds before requesting another code.',
+            ], 429);
+        }
+
+        // Generate 6-digit OTP code
+        $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        EmailVerificationCode::create([
+            'email'      => $newEmail,
+            'code'       => $code,
+            'expires_at' => Carbon::now()->addMinutes(10),
+            'is_used'    => false,
+        ]);
+
+        \Log::info('Change Email OTP Code Generated', [
+            'user_id'   => $user->id,
+            'new_email' => $newEmail,
+            'code'      => $code,
+        ]);
+
+        // Deliver email via Brevo HTTPS API or Laravel Mail
+        try {
+            $this->deliverChangeEmailOtp($newEmail, $user->name, $code);
+        } catch (\Throwable $e) {
+            \Log::warning('Change email OTP delivery warning: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'message'    => 'Verification code sent to ' . $newEmail,
+            'expires_in' => 600,
+        ]);
+    }
+
+    /**
+     * Verify OTP code and update user's email address.
+     */
+    public function verifyAndChangeEmail(Request $request)
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'new_email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'code'      => ['required', 'string', 'size:6'],
+        ], [
+            'new_email.unique' => 'This email is already taken by another account.',
+            'code.size'        => 'Verification code must be exactly 6 digits.',
+        ]);
+
+        $newEmail = strtolower(trim($validated['new_email']));
+        $code = trim($validated['code']);
+
+        $verificationCode = EmailVerificationCode::where('email', $newEmail)
+            ->where('code', $code)
+            ->where('is_used', false)
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if (!$verificationCode) {
+            return response()->json([
+                'message' => 'Invalid verification code. Please check and try again.',
+            ], 400);
+        }
+
+        if ($verificationCode->isExpired()) {
+            return response()->json([
+                'message' => 'Verification code has expired. Please request a new code.',
+            ], 400);
+        }
+
+        // Mark code as used
+        $verificationCode->markAsUsed();
+
+        // Update user email
+        $user->email = $newEmail;
+        $user->email_verified_at = Carbon::now();
+        $user->save();
+
+        return response()->json([
+            'message' => 'Email address changed successfully!',
+            'user'    => $user->fresh(),
+        ]);
+    }
+
+    private function deliverChangeEmailOtp(string $toEmail, ?string $userName, string $code): void
+    {
+        $brevoApiKey = env('BREVO_API_KEY');
+        $fromEmail   = env('MAIL_FROM_ADDRESS', 'discoverymansalay@gmail.com');
+        $fromName    = env('MAIL_FROM_NAME', 'DiscoverMansalay');
+        $subject     = 'Change Email Verification Code - DiscoverMansalay';
+
+        $htmlContent = view('emails.verification-code', [
+            'code'     => $code,
+            'userName' => $userName ?? 'User',
+        ])->render();
+
+        if (!empty($brevoApiKey)) {
+            try {
+                $response = Http::withHeaders([
+                    'api-key'      => $brevoApiKey,
+                    'Content-Type' => 'application/json',
+                    'Accept'       => 'application/json',
+                ])->timeout(10)->post('https://api.brevo.com/v3/smtp/email', [
+                    'sender' => ['name' => $fromName, 'email' => $fromEmail],
+                    'to'     => [['email' => $toEmail, 'name' => $userName ?? 'User']],
+                    'subject' => $subject,
+                    'htmlContent' => $htmlContent,
+                ]);
+
+                if ($response->successful()) {
+                    return;
+                }
+            } catch (\Throwable $e) {
+                // fallback to Mail below
+            }
+        }
+
+        Mail::to($toEmail)->send(new VerificationCodeMail($code, $userName ?? 'User'));
     }
 }

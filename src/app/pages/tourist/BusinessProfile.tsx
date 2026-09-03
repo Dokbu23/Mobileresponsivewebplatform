@@ -8,7 +8,8 @@ import {
   Pencil, Upload, X, Image as ImageIcon, Loader2,
   Ticket, Tag, Copy, Check, Plus, MessageSquare,
   Bookmark, Share2, ThumbsUp, Send, Bed, Waves,
-  Compass, Palmtree, Megaphone, Calendar, FileText, Clock, Video
+  Compass, Palmtree, Megaphone, Calendar, FileText, Clock, Video,
+  ChevronDown, ChevronUp
 } from 'lucide-react';
 import { getPublicJSON, getAuthToken, API_BASE, recordView } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
@@ -352,6 +353,7 @@ export function BusinessProfile() {
   const [viewingPost, setViewingPost] = useState<any | null>(null);
   const [coverMode, setCoverMode] = useState<'video' | 'photo'>('video');
   const [isCoverMuted, setIsCoverMuted] = useState(true);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
   const handleCopyPromo = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -911,20 +913,66 @@ export function BusinessProfile() {
                       {[owner.barangay, 'Mansalay, Oriental Mindoro'].filter(Boolean).join(', ')}
                     </span>
                   </p>
-                  {shopDescription && (
-                    <div className="text-xs md:text-sm text-gray-600 mt-2 max-w-2xl leading-relaxed text-justify space-y-2" style={{ textAlign: 'justify' }}>
-                      {shopDescription
-                        .replace(/<br\s*[\/]?>/gi, '\n')
-                        .split(/\r?\n+/)
-                        .map((p: string) => p.trim())
-                        .filter((p: string) => p.length > 0)
-                        .map((para: string, idx: number) => (
-                          <p key={idx} className="text-justify leading-relaxed" style={{ textAlign: 'justify' }}>
-                            {para}
-                          </p>
-                        ))}
-                    </div>
-                  )}
+                  {shopDescription && (() => {
+                    const cleanText = shopDescription
+                      .replace(/&amp;/g, '&')
+                      .replace(/&#039;|&apos;/g, "'")
+                      .replace(/&quot;/g, '"')
+                      .replace(/&lt;/g, '<')
+                      .replace(/&gt;/g, '>')
+                      .replace(/<br\s*[\/]?>/gi, '\n');
+
+                    const paragraphs = cleanText
+                      .split(/\r?\n+/)
+                      .map((p: string) => p.trim())
+                      .filter((p: string) => p.length > 0);
+
+                    const isLong = cleanText.length > 180 || paragraphs.length > 2;
+
+                    return (
+                      <div className="mt-2 max-w-2xl">
+                        {!isLong ? (
+                          <div className="text-xs md:text-sm text-gray-600 leading-relaxed space-y-2">
+                            {paragraphs.map((para: string, idx: number) => (
+                              <p key={idx} className="text-justify leading-relaxed" style={{ textAlign: 'justify' }}>
+                                {para}
+                              </p>
+                            ))}
+                          </div>
+                        ) : isDescriptionExpanded ? (
+                          <div className="text-xs md:text-sm text-gray-600 leading-relaxed space-y-2 animate-in fade-in duration-150">
+                            {paragraphs.map((para: string, idx: number) => (
+                              <p key={idx} className="text-justify leading-relaxed" style={{ textAlign: 'justify' }}>
+                                {para}
+                              </p>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => setIsDescriptionExpanded(false)}
+                              className="text-xs font-bold text-pink-600 hover:text-pink-700 hover:underline inline-flex items-center gap-1 cursor-pointer pt-1 transition-colors"
+                            >
+                              <span>See less</span>
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="text-xs md:text-sm text-gray-600 leading-relaxed text-justify line-clamp-3" style={{ textAlign: 'justify' }}>
+                              {paragraphs.join(' ')}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setIsDescriptionExpanded(true)}
+                              className="mt-1 text-xs font-bold text-pink-600 hover:text-pink-700 hover:underline inline-flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                              <span>See more</span>
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
