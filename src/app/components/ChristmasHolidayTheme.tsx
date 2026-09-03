@@ -14,53 +14,50 @@ export function isBerMonths(): boolean {
   return (month >= 8 && month <= 11) || (month === 0 && day <= 6);
 }
 
-// 4 Distinct Detailed Snowflake SVG Designs
+// 4 Gentle, Non-Dizzying Snowflake Designs (Soft rounded crystals & fluffy snow)
 function SnowflakeIcon({ type, size, color }: { type: number; size: number; color: string }) {
   switch (type % 4) {
     case 0:
-      // Detailed branching 6-point crystal snowflake
+      // Elegant 6-point crystal with soft rounded endpoints
       return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round">
-          <line x1="12" y1="1" x2="12" y2="23" />
-          <line x1="1" y1="12" x2="23" y2="12" />
-          <line x1="4.22" y1="4.22" x2="19.78" y2="19.78" />
-          <line x1="4.22" y1="19.78" x2="19.78" y2="4.22" />
-          <polyline points="9 4 12 7 15 4" />
-          <polyline points="9 20 12 17 15 20" />
-          <polyline points="4 9 7 12 4 15" />
-          <polyline points="20 9 17 12 20 15" />
-          <circle cx="12" cy="12" r="1.5" fill={color} />
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round">
+          <line x1="12" y1="2" x2="12" y2="22" />
+          <line x1="2" y1="12" x2="22" y2="12" />
+          <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+          <line x1="4.93" y1="19.07" x2="19.07" y2="4.93" />
+          <circle cx="12" cy="12" r="1.8" fill={color} />
         </svg>
       );
     case 1:
-      // Ornate dendritic snowflake
+      // Fluffy rounded snowball puff
       return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.7" strokeLinecap="round">
-          <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14" />
-          <path d="M12 5l-2-2m4 0l-2 2M12 19l-2 2m4 0l-2-2M5 12l-2-2m0 4l2-2M19 12l2-2m0 4l-2-2" />
-          <path d="M7 7l-2 0m2 2l0-2M17 17l2 0m-2-2l0 2" />
-          <circle cx="12" cy="12" r="1.8" fill="#ffffff" stroke={color} />
+        <svg width={size} height={size} viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="7" fill={color} fillOpacity="0.85" />
+          <circle cx="12" cy="12" r="9.5" fill={color} fillOpacity="0.25" />
         </svg>
       );
     case 2:
-      // Crystal star sparkle
-      return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
-          <path d="M12 1l2.8 7.2L22 11l-6.2 3.8L17 22l-5-4.2-5 4.2 1.2-7.2L2 11l7.2-2.8z" opacity="0.95" />
-          <circle cx="12" cy="12" r="2.5" fill="#ffffff" />
-        </svg>
-      );
-    case 3:
-    default:
-      // Star ice blossom
+      // Classic symmetrical winter snowflake
       return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round">
           <line x1="12" y1="2" x2="12" y2="22" />
           <line x1="2" y1="12" x2="22" y2="12" />
           <line x1="5" y1="5" x2="19" y2="19" />
           <line x1="5" y1="19" x2="19" y2="5" />
-          <polygon points="12,7 13.5,10.5 17,12 13.5,13.5 12,17 10.5,13.5 7,12 10.5,10.5" fill={color} opacity="0.65" />
+          <circle cx="12" cy="5" r="1.2" fill={color} />
+          <circle cx="12" cy="19" r="1.2" fill={color} />
+          <circle cx="5" cy="12" r="1.2" fill={color} />
+          <circle cx="19" cy="12" r="1.2" fill={color} />
           <circle cx="12" cy="12" r="2" fill="#ffffff" />
+        </svg>
+      );
+    case 3:
+    default:
+      // Soft glowing snow pearl
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="5.5" fill="#ffffff" stroke={color} strokeWidth="1.5" />
+          <circle cx="12" cy="12" r="2.8" fill={color} />
         </svg>
       );
   }
@@ -76,16 +73,15 @@ interface SnowflakeItem {
   type: number;
   color: string;
   swayDuration: number;
-  rotationDirection: number;
 }
 
 const SNOWFLAKE_COLORS = [
-  '#0284c7', // vibrant cyan-blue
-  '#0369a1', // deep ocean crystal
   '#38bdf8', // crisp sky ice
-  '#6366f1', // festive holiday indigo
+  '#60a5fa', // soft winter blue
+  '#818cf8', // calming indigo
   '#ec4899', // Mansalay holiday pink
-  '#2563eb', // sapphire frost
+  '#0284c7', // gentle cyan
+  '#e0f2fe', // soft frosty white
 ];
 
 export function ChristmasHolidayTheme() {
@@ -108,19 +104,18 @@ export function ChristmasHolidayTheme() {
     };
   }, []);
 
-  // Generate 38 distinct designed crystal snowflakes
+  // Generate 22 gentle, non-dizzying snowflakes
   const snowflakes: SnowflakeItem[] = useMemo(() => {
-    return Array.from({ length: 38 }, (_, i) => ({
+    return Array.from({ length: 22 }, (_, i) => ({
       id: i,
-      left: Math.random() * 98,
-      size: Math.floor(Math.random() * 14) + 16,
-      duration: Math.random() * 9 + 8,
+      left: Math.random() * 96 + 2,
+      size: Math.floor(Math.random() * 8) + 14, // 14px to 22px
+      duration: Math.random() * 8 + 14, // 14s to 22s (very slow and calming)
       delay: Math.random() * 10,
-      opacity: Math.random() * 0.4 + 0.6,
+      opacity: Math.random() * 0.35 + 0.45,
       type: i % 4,
       color: SNOWFLAKE_COLORS[i % SNOWFLAKE_COLORS.length],
-      swayDuration: Math.random() * 3 + 3,
-      rotationDirection: i % 2 === 0 ? 1 : -1,
+      swayDuration: Math.random() * 3 + 5, // 5s to 8s slow gentle sway
     }));
   }, []);
 
@@ -194,9 +189,9 @@ export function ChristmasHolidayTheme() {
               left: `${flake.left}%`,
               top: '-35px',
               opacity: flake.opacity,
-              animation: `snowFall ${flake.duration}s linear infinite, snowSway ${flake.swayDuration}s ease-in-out infinite alternate, snowSpin ${flake.duration * 0.8}s linear infinite ${flake.rotationDirection < 0 ? 'reverse' : 'normal'}`,
-              animationDelay: `${flake.delay}s, ${flake.delay * 0.3}s, ${flake.delay * 0.5}s`,
-              filter: 'drop-shadow(0 2px 5px rgba(2, 132, 199, 0.45)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3))',
+              animation: `snowFall ${flake.duration}s linear infinite, snowSway ${flake.swayDuration}s ease-in-out infinite`,
+              animationDelay: `${flake.delay}s, ${flake.delay * 0.3}s`,
+              filter: 'drop-shadow(0 2px 4px rgba(2, 132, 199, 0.3))',
             }}
           >
             <SnowflakeIcon type={flake.type} size={flake.size} color={flake.color} />
@@ -208,7 +203,7 @@ export function ChristmasHolidayTheme() {
       <style>{`
         @keyframes snowFall {
           0% {
-            transform: translateY(-35px);
+            transform: translateY(-40px);
           }
           100% {
             transform: translateY(105vh);
@@ -216,18 +211,13 @@ export function ChristmasHolidayTheme() {
         }
         @keyframes snowSway {
           0% {
-            margin-left: -20px;
+            transform: translateX(-15px) rotate(-6deg);
+          }
+          50% {
+            transform: translateX(15px) rotate(6deg);
           }
           100% {
-            margin-left: 20px;
-          }
-        }
-        @keyframes snowSpin {
-          0% {
-            rotate: 0deg;
-          }
-          100% {
-            rotate: 360deg;
+            transform: translateX(-15px) rotate(-6deg);
           }
         }
 
