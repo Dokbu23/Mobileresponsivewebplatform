@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { getJSON, API_BASE } from '../lib/api';
+import { getJSON, API_BASE, getAuthToken } from '../lib/api';
 import { showWishlistAlert } from '../lib/sweetAlert';
 
 export interface ProductVariation {
@@ -250,6 +250,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
       window.localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
     }
   }, [currentUser]);
+
+  // Hydrate fresh user profile & avatar from backend on reload
+  useEffect(() => {
+    const token = getAuthToken();
+    if (token) {
+      getJSON('/me')
+        .then((data) => {
+          const user = data.user ?? data;
+          if (user && user.id) {
+            setCurrentUser((prev) => ({
+              ...(prev || {}),
+              ...user,
+              avatar: user.avatar ?? prev?.avatar ?? null,
+            }));
+            if (user.role) {
+              setUserType(user.role);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     // Only save cart for tourists

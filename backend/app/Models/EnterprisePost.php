@@ -17,6 +17,7 @@ class EnterprisePost extends Model
         'title',
         'content',
         'image',
+        'images',
         'video',
         'product_name',
         'price',
@@ -32,6 +33,7 @@ class EnterprisePost extends Model
 
     protected $casts = [
         'tags' => 'array',
+        'images' => 'array',
         'likes' => 'integer',
         'saves' => 'integer',
     ];

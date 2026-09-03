@@ -504,6 +504,7 @@ Route::group(['middleware' => ['jwt.auth']], function () {
     Route::post('promo-codes/apply', [PromoCodeController::class, 'apply']);
     Route::post('promo-codes/redeem', [PromoCodeController::class, 'redeem']);
     Route::post('landmarks', [LandmarkController::class, 'store']);
+    Route::post('profile/avatar', [UserController::class, 'uploadAvatar']);
     Route::patch('profile', [UserController::class, 'updateProfile']);
     Route::post('profile', [UserController::class, 'updateProfile']); // FormData support
     Route::post('profile/change-password', [UserController::class, 'changePassword']);

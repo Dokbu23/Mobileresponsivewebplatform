@@ -399,8 +399,7 @@ export function Dashboard() {
       <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 -mt-6 sm:-mt-10 relative z-30">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
           <div
-            onClick={() => navigate('/attractions')}
-            className="bg-white p-3 sm:p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-2.5 sm:gap-4 hover:shadow-lg hover:border-blue-200 transition-all cursor-pointer group"
+            className="bg-white p-3 sm:p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-2.5 sm:gap-4 hover:shadow-lg hover:border-blue-200 transition-all cursor-default select-none group"
           >
             <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
               <Users className="h-4 w-4 sm:h-6 sm:w-6" />
@@ -414,8 +413,7 @@ export function Dashboard() {
           </div>
 
           <div
-            onClick={() => navigate('/attractions')}
-            className="bg-white p-3 sm:p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-2.5 sm:gap-4 hover:shadow-lg hover:border-emerald-200 transition-all cursor-pointer group"
+            className="bg-white p-3 sm:p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-2.5 sm:gap-4 hover:shadow-lg hover:border-emerald-200 transition-all cursor-default select-none group"
           >
             <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
               <Compass className="h-4 w-4 sm:h-6 sm:w-6" />
@@ -429,8 +427,7 @@ export function Dashboard() {
           </div>
 
           <div
-            onClick={() => navigate('/attractions')}
-            className="bg-white p-3 sm:p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-2.5 sm:gap-4 hover:shadow-lg hover:border-cyan-200 transition-all cursor-pointer group"
+            className="bg-white p-3 sm:p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-2.5 sm:gap-4 hover:shadow-lg hover:border-cyan-200 transition-all cursor-default select-none group"
           >
             <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
               <Waves className="h-4 w-4 sm:h-6 sm:w-6" />
@@ -444,8 +441,7 @@ export function Dashboard() {
           </div>
 
           <div
-            onClick={() => navigate('/accommodations')}
-            className="bg-white p-3 sm:p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-2.5 sm:gap-4 hover:shadow-lg hover:border-pink-200 transition-all cursor-pointer group"
+            className="bg-white p-3 sm:p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-2.5 sm:gap-4 hover:shadow-lg hover:border-pink-200 transition-all cursor-default select-none group"
           >
             <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-pink-50 text-pink-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
               <Hotel className="h-4 w-4 sm:h-6 sm:w-6" />

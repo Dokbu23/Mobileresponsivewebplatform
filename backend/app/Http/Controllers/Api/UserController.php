@@ -105,6 +105,42 @@ class UserController extends Controller
     }
 
     /**
+     * Upload and update user avatar immediately.
+     */
+    public function uploadAvatar(Request $request)
+    {
+        $user = $request->user();
+
+        $request->validate([
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:8192',
+        ]);
+
+        if ($request->hasFile('avatar')) {
+            $path = $request->file('avatar')->store('avatars', 'public');
+            $avatarUrl = '/storage/' . $path;
+
+            // Delete old avatar if it was stored locally in avatars/
+            if ($user->avatar && str_starts_with($user->avatar, '/storage/avatars/')) {
+                $oldFile = str_replace('/storage/', '', $user->avatar);
+                try {
+                    \Illuminate\Support\Facades\Storage::disk('public')->delete($oldFile);
+                } catch (\Throwable $t) {}
+            }
+
+            $user->update(['avatar' => $avatarUrl]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile picture updated successfully.',
+                'avatar'  => $avatarUrl,
+                'user'    => $user->fresh(),
+            ]);
+        }
+
+        return response()->json(['success' => false, 'message' => 'No image file uploaded.'], 400);
+    }
+
+    /**
      * Update the authenticated user's profile.
      */
     public function updateProfile(Request $request)
@@ -112,14 +148,16 @@ class UserController extends Controller
         $user = $request->user();
 
         $data = $request->validate([
-            'name'        => 'required|string|max:255',
-            'resort_name' => 'nullable|string|max:255',
-            'store_name'  => 'nullable|string|max:255',
-            'phone'       => 'nullable|string|max:20',
-            'address'     => 'nullable|string|max:500',
-            'barangay'    => 'nullable|string|max:100',
-            'description' => 'nullable|string|max:1000',
-            'avatar'      => 'nullable',
+            'name'           => 'nullable|string|max:255',
+            'resort_name'    => 'nullable|string|max:255',
+            'store_name'     => 'nullable|string|max:255',
+            'phone'          => 'nullable|string|max:20',
+            'address'        => 'nullable|string|max:500',
+            'barangay'       => 'nullable|string|max:100',
+            'description'    => 'nullable|string|max:1000',
+            'facebook_link'  => 'nullable|string|max:255',
+            'instagram_link' => 'nullable|string|max:255',
+            'avatar'         => 'nullable',
         ]);
 
         if ($request->hasFile('avatar')) {
@@ -130,14 +168,16 @@ class UserController extends Controller
         }
 
         $user->update(array_filter([
-            'name'        => $data['name'],
-            'resort_name' => $data['resort_name'] ?? null,
-            'store_name'  => $data['store_name'] ?? null,
-            'phone'       => $data['phone'] ?? null,
-            'address'     => $data['address'] ?? null,
-            'barangay'    => $data['barangay'] ?? null,
-            'description' => $data['description'] ?? null,
-            'avatar'      => $data['avatar'] ?? null,
+            'name'           => !empty($data['name']) ? $data['name'] : $user->name,
+            'resort_name'    => $data['resort_name'] ?? null,
+            'store_name'     => $data['store_name'] ?? null,
+            'phone'          => $data['phone'] ?? null,
+            'address'        => $data['address'] ?? null,
+            'barangay'       => $data['barangay'] ?? null,
+            'description'    => $data['description'] ?? null,
+            'facebook_link'  => $data['facebook_link'] ?? null,
+            'instagram_link' => $data['instagram_link'] ?? null,
+            'avatar'         => $data['avatar'] ?? null,
         ], fn($v) => $v !== null));
 
         return response()->json([

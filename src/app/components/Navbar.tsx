@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
 
 import { showLogoutConfirm, showLogoutSuccess } from '../lib/sweetAlert';
-import { API_BASE, postJSON, removeAuthToken } from '../lib/api';
+import { API_BASE, postJSON, removeAuthToken, formatImageUrl } from '../lib/api';
 
 import { NotificationBell } from './NotificationBell';
 import { isBerMonths } from './ChristmasHolidayTheme';
@@ -291,7 +291,7 @@ export function Navbar() {
                 >
                   {currentUser?.avatar ? (
                     <img
-                      src={currentUser.avatar.startsWith('http') ? currentUser.avatar : `${API_BASE}${currentUser.avatar}`}
+                      src={formatImageUrl(currentUser.avatar)}
                       alt="avatar"
                       className="w-6 h-6 rounded-full object-cover border border-pink-200"
                     />
@@ -315,7 +315,7 @@ export function Navbar() {
                       <div className="p-3 flex items-center gap-3">
                         {currentUser?.avatar ? (
                           <img
-                            src={currentUser.avatar.startsWith('http') ? currentUser.avatar : `${API_BASE}${currentUser.avatar}`}
+                            src={formatImageUrl(currentUser.avatar)}
                             alt="avatar"
                             className="w-10 h-10 rounded-full object-cover border-2 border-pink-100 dark:border-slate-700"
                           />
@@ -423,6 +423,25 @@ export function Navbar() {
             {userType ? (
               <>
                 <div className="pt-2 border-t border-gray-100 dark:border-slate-800 space-y-0.5">
+                  <div className="px-4 py-2 flex items-center gap-3 mb-1 bg-pink-50/40 dark:bg-slate-800/40 rounded-xl">
+                    {currentUser?.avatar ? (
+                      <img
+                        src={formatImageUrl(currentUser.avatar)}
+                        alt="avatar"
+                        className="w-8 h-8 rounded-full object-cover border border-pink-200"
+                      />
+                    ) : (
+                      <div className={`w-8 h-8 rounded-full ${roleInfo.bg} text-white font-bold flex items-center justify-center text-xs shadow-xs`}>
+                        {roleInfo.initial}
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs font-bold text-gray-900 dark:text-slate-100 leading-tight">
+                        {currentUser?.name || roleInfo.label}
+                      </p>
+                      <p className="text-[10px] text-gray-400 capitalize">{userType}</p>
+                    </div>
+                  </div>
                   {activeRoleItems.map(item => {
                     const IconComp = item.icon;
                     return (

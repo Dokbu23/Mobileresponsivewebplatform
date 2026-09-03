@@ -15,6 +15,8 @@ import {
   Trash2, 
   ChevronDown, 
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink, 
   Share2, 
   Sparkles,
@@ -87,6 +89,7 @@ interface ResortPost {
   title?: string;
   content: string;
   image?: string;
+  images?: string[];
   video?: string;
   product_name?: string;
   price?: string;
@@ -99,6 +102,85 @@ interface ResortPost {
   likes: number;
   saves: number;
   created_at?: string;
+}
+
+// Interactive Gallery for Multi-Image Posts in Feed
+function PostImageGallery({ images, badge, title }: { images: string[]; badge: { label: string; bg: string }; title: string }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  if (!images || images.length === 0) return null;
+
+  const currentImage = images[currentIndex] || images[0];
+
+  return (
+    <div className="relative h-64 sm:h-80 w-full bg-gray-900 overflow-hidden group">
+      <img
+        src={currentImage}
+        alt={title}
+        className="w-full h-full object-cover transition-all duration-300"
+      />
+      {/* Category Badge */}
+      <div className="absolute top-3 left-3 z-10">
+        <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-md ${badge.bg}`}>
+          {badge.label}
+        </span>
+      </div>
+
+      {/* Multiple Images Counter Badge */}
+      {images.length > 1 && (
+        <div className="absolute top-3 right-3 z-10">
+          <span className="px-2.5 py-1 bg-black/60 backdrop-blur-xs text-white text-[11px] font-bold rounded-full shadow-sm flex items-center gap-1">
+            <ImageIcon className="w-3 h-3" />
+            {currentIndex + 1} / {images.length}
+          </span>
+        </div>
+      )}
+
+      {/* Navigation Arrows if > 1 image */}
+      {images.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setCurrentIndex(prev => (prev === 0 ? images.length - 1 : prev - 1));
+            }}
+            className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity z-10 cursor-pointer"
+            aria-label="Previous image"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setCurrentIndex(prev => (prev === images.length - 1 ? 0 : prev + 1));
+            }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity z-10 cursor-pointer"
+            aria-label="Next image"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+
+          {/* Dots Indicator */}
+          <div className="absolute bottom-3 inset-x-0 flex justify-center gap-1.5 z-10">
+            {images.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentIndex(i);
+                }}
+                className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                  currentIndex === i ? 'w-5 bg-white' : 'w-1.5 bg-white/50'
+                }`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 export function ResortDashboard() {
@@ -120,8 +202,8 @@ export function ResortDashboard() {
   // Create Post Form State
   const [postType, setPostType] = useState<string>('virtual_tour');
   const [postContent, setPostContent] = useState('');
-  const [postImageFile, setPostImageFile] = useState<File | null>(null);
-  const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
+  const [postImageFiles, setPostImageFiles] = useState<File[]>([]);
+  const [postImagePreviews, setPostImagePreviews] = useState<string[]>([]);
 
   // Video Tour upload & link state
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -182,12 +264,10 @@ export function ResortDashboard() {
   // Post Type Options
   const postTypes = [
     { key: 'virtual_tour', label: 'Virtual Tour / Video', icon: Video, color: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
-    { key: 'promotion', label: 'Promotion', icon: Tag, color: 'bg-pink-50 text-pink-600 border-pink-200' },
     { key: 'rooms', label: 'Rooms', icon: Bed, color: 'bg-purple-50 text-purple-600 border-purple-200' },
     { key: 'amenities', label: 'Amenities', icon: Waves, color: 'bg-cyan-50 text-cyan-600 border-cyan-200' },
     { key: 'activities', label: 'Activities', icon: Compass, color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
     { key: 'beach_views', label: 'Beach Views', icon: Palmtree, color: 'bg-rose-50 text-rose-600 border-rose-200' },
-    { key: 'announcement', label: 'Announcement', icon: Megaphone, color: 'bg-amber-50 text-amber-600 border-amber-200' },
   ];
 
   // Check for subscription verification
@@ -309,24 +389,40 @@ export function ResortDashboard() {
     }
   };
 
-  // Image Selection Handler
+  // Multi-Image Selection Handler
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error('Image size must be less than 10MB');
-        return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const validFiles: File[] = [];
+    const validPreviews: string[] = [];
+
+    for (const file of files) {
+      if (file.size > 15 * 1024 * 1024) {
+        toast.error(`"${file.name}" exceeds 15MB limit`);
+        continue;
       }
-      setPostImageFile(file);
-      setPostImagePreview(URL.createObjectURL(file));
+      validFiles.push(file);
+      validPreviews.push(URL.createObjectURL(file));
+    }
+
+    setPostImageFiles(prev => [...prev, ...validFiles]);
+    setPostImagePreviews(prev => [...prev, ...validPreviews]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
-  const handleRemoveImage = () => {
-    setPostImageFile(null);
-    setPostImagePreview(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+  const handleRemoveImage = (indexToRemove?: number) => {
+    if (typeof indexToRemove === 'number') {
+      setPostImageFiles(prev => prev.filter((_, i) => i !== indexToRemove));
+      setPostImagePreviews(prev => prev.filter((_, i) => i !== indexToRemove));
+    } else {
+      setPostImageFiles([]);
+      setPostImagePreviews([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -366,7 +462,7 @@ export function ResortDashboard() {
       return;
     }
 
-    if (!postContent.trim() && !videoFile && !videoUrlInput.trim() && !postImageFile) {
+    if (!postContent.trim() && !videoFile && !videoUrlInput.trim() && postImageFiles.length === 0) {
       toast.error('Please write a caption or upload a video / image for your post');
       return;
     }
@@ -404,8 +500,11 @@ export function ResortDashboard() {
         formData.append('tags', JSON.stringify(allTags));
       }
 
-      if (postImageFile) {
-        formData.append('image', postImageFile);
+      if (postImageFiles.length > 0) {
+        postImageFiles.forEach((file) => {
+          formData.append('images[]', file);
+        });
+        formData.append('image', postImageFiles[0]);
       }
 
       // Video Tour upload or link
@@ -769,41 +868,89 @@ export function ResortDashboard() {
             })}
           </div>
 
-          {/* Photo Upload Area */}
+          {/* Photo Upload Area (Multiple Images Supported) */}
           <div>
             <input
               ref={fileInputRef}
               type="file"
               accept="image/*"
+              multiple
               className="hidden"
               onChange={handleImageChange}
             />
 
-            {postImagePreview ? (
-              <div className="relative rounded-2xl overflow-hidden border border-gray-200 max-h-72 group">
-                <img
-                  src={postImagePreview}
-                  alt="Post preview"
-                  className="w-full h-64 object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={handleRemoveImage}
-                  className="absolute top-3 right-3 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full backdrop-blur-sm transition-all"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+            {postImagePreviews.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4 text-pink-500" />
+                    <span>Selected Photos ({postImagePreviews.length})</span>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-2.5 py-1 text-xs font-semibold text-pink-600 hover:text-pink-700 bg-pink-50 hover:bg-pink-100 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add Photos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage()}
+                      className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+
+                {/* Multi-Image Thumbnails Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                  {postImagePreviews.map((previewUrl, idx) => (
+                    <div key={idx} className="relative group rounded-xl overflow-hidden border border-gray-200 aspect-square bg-gray-900 shadow-xs">
+                      <img
+                        src={previewUrl}
+                        alt={`Selected preview ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      {idx === 0 && (
+                        <span className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 bg-black/70 backdrop-blur-xs text-white text-[9px] font-bold rounded">
+                          Cover
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImage(idx)}
+                        className="absolute top-1.5 right-1.5 bg-black/60 hover:bg-black/90 text-white p-1 rounded-full backdrop-blur-xs transition-all opacity-90 group-hover:opacity-100 cursor-pointer"
+                        title="Remove photo"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Add more tile */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-pink-200 hover:border-pink-400 bg-pink-50/40 hover:bg-pink-50/80 rounded-xl flex flex-col items-center justify-center p-3 text-pink-600 aspect-square transition-all cursor-pointer group"
+                  >
+                    <Plus className="w-5 h-5 mb-1 group-hover:scale-110 transition-transform" />
+                    <span className="text-[11px] font-bold">Add More</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-gray-200 hover:border-pink-300 rounded-2xl p-8 text-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-pink-50/20"
+                className="border-2 border-dashed border-gray-200 hover:border-pink-300 rounded-2xl p-8 text-center cursor-pointer transition-colors bg-gray-50/50 hover:bg-pink-50/20 group"
               >
-                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm mb-2 text-gray-400">
+                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm mb-2 text-gray-400 group-hover:text-pink-500 transition-colors">
                   <ImageIcon className="h-6 w-6" />
                 </div>
-                <p className="text-xs font-semibold text-gray-700">Click to upload photo</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">JPG, PNG up to 10MB</p>
+                <p className="text-xs font-semibold text-gray-700">Click to upload photos (Multi-select enabled)</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Select one or multiple JPG, PNG images (up to 15MB each)</p>
               </div>
             )}
           </div>
@@ -1139,13 +1286,21 @@ export function ResortDashboard() {
               </div>
               <h3 className="font-semibold text-gray-800">No posts yet</h3>
               <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
-                Create your first post above to showcase your resort rooms, promotions, amenities, and beach views!
+                Create your first post above to showcase your resort rooms, amenities, and beach views!
               </p>
             </div>
           ) : (
             posts.map(post => {
               const badge = getBadgeStyle(post.type);
-              const imageUrl = post.image ? getStorageUrl(post.image) : null;
+              const postImages: string[] = (() => {
+                if (Array.isArray(post.images) && post.images.length > 0) {
+                  return post.images.map(img => getStorageUrl(img));
+                }
+                if (post.image) {
+                  return [getStorageUrl(post.image)];
+                }
+                return [];
+              })();
               const videoUrl = post.video ? (post.video.startsWith('http') ? post.video : getStorageUrl(post.video)) : null;
               const ytEmbed = videoUrl ? getYouTubeEmbedUrl(videoUrl) : null;
               const postTags = Array.isArray(post.tags) ? post.tags : [];
@@ -1181,24 +1336,17 @@ export function ResortDashboard() {
                         </span>
                       </div>
                     </div>
-                  ) : imageUrl ? (
-                    <div className="relative h-64 sm:h-72 w-full bg-gray-100 overflow-hidden">
-                      <img
-                        src={imageUrl}
-                        alt={post.content.slice(0, 30)}
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute top-3 left-3">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-md ${badge.bg}`}>
-                          {badge.label}
-                        </span>
-                      </div>
-                    </div>
+                  ) : postImages.length > 0 ? (
+                    <PostImageGallery
+                      images={postImages}
+                      badge={badge}
+                      title={post.content.slice(0, 30)}
+                    />
                   ) : null}
 
                   {/* Post Body */}
                   <div className="p-5 space-y-3">
-                    {!imageUrl && !videoUrl && (
+                    {postImages.length === 0 && !videoUrl && (
                       <div className="inline-block">
                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${badge.bg}`}>
                           {badge.label}

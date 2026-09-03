@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { User, Mail, Phone, MapPin, Store, Hotel, Shield, Camera, Save, Lock, Eye, EyeOff } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Store, Hotel, Shield, Camera, Save, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { getJSON, patchJSON, postJSON, API_BASE, getAuthToken } from '../lib/api';
+import { getJSON, patchJSON, postJSON, API_BASE, getAuthToken, formatImageUrl } from '../lib/api';
 import { toast } from 'sonner';
 import { showSuccessAlert } from '../lib/sweetAlert';
 import { Link } from 'react-router';
@@ -10,6 +10,7 @@ export function Profile() {
   const { currentUser, userType, setCurrentUser } = useApp();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [profile, setProfile] = useState<any>(null);
   const [form, setForm] = useState({
     name: '',
@@ -41,6 +42,9 @@ export function Profile() {
       const data = await getJSON('/me');
       const user = data.user ?? data;
       setProfile(user);
+      if (user && user.id) {
+        setCurrentUser(user);
+      }
       setForm({
         name: user.name ?? '',
         resort_name: user.resort_name ?? '',
@@ -61,11 +65,65 @@ export function Profile() {
     }
   };
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setAvatarFile(file);
-      setAvatarPreview(URL.createObjectURL(file));
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select a valid image file (PNG, JPG, WEBP).');
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error('Image size must be less than 8MB.');
+      return;
+    }
+
+    // Instant local preview
+    const previewUrl = URL.createObjectURL(file);
+    setAvatarPreview(previewUrl);
+    setUploadingAvatar(true);
+    const toastId = toast.loading('Uploading profile picture...');
+
+    try {
+      const token = getAuthToken();
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const res = await fetch(`${API_BASE}/api/profile/avatar`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to upload profile picture');
+      }
+
+      const newAvatar = data.avatar || data.user?.avatar;
+      const updatedUser = data.user || { ...currentUser, avatar: newAvatar };
+
+      // Update local profile & global AppContext
+      setProfile((prev: any) => ({ ...prev, avatar: newAvatar }));
+      setCurrentUser(updatedUser);
+      setAvatarPreview(null);
+      setAvatarFile(null);
+
+      // Force refresh stored user in localStorage so page reload always has it
+      localStorage.setItem('discover-mansalay:currentUser', JSON.stringify(updatedUser));
+      localStorage.setItem('discover-mansalay:user', JSON.stringify(updatedUser));
+
+      toast.success('Profile picture updated successfully! 📸', { id: toastId });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to upload image. Please try again.', { id: toastId });
+      setAvatarPreview(null);
+    } finally {
+      setUploadingAvatar(false);
+      e.target.value = '';
     }
   };
 
@@ -74,6 +132,13 @@ export function Profile() {
     if (!form.name.trim()) {
       toast.error('Name is required');
       return;
+    }
+    if (userType === 'tourist' && form.phone && form.phone.trim()) {
+      const cleanPhone = form.phone.trim();
+      if (!/^09\d{9}$/.test(cleanPhone)) {
+        toast.error('Ang Phone Number ay dapat 11 digits at nagsisimula sa 09 (Halimbawa: 09123456789)');
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -183,10 +248,9 @@ export function Profile() {
 
   const getAvatarUrl = () => {
     if (avatarPreview) return avatarPreview;
-    if (profile?.avatar) {
-      return profile.avatar.startsWith('http')
-        ? profile.avatar
-        : `${API_BASE}${profile.avatar}`;
+    const raw = profile?.avatar || currentUser?.avatar;
+    if (raw) {
+      return formatImageUrl(raw);
     }
     return null;
   };
@@ -232,19 +296,33 @@ export function Profile() {
                 <img
                   src={getAvatarUrl()!}
                   alt="Profile"
-                  className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md"
+                  className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md bg-gray-50"
                 />
               ) : (
                 <div className="w-20 h-20 rounded-full bg-primary/10 border-4 border-white shadow-md flex items-center justify-center">
                   {getRoleIcon()}
                 </div>
               )}
-              <label className="absolute bottom-0 right-0 bg-primary text-white rounded-full p-1.5 cursor-pointer hover:bg-primary/90 transition-colors shadow">
+
+              {/* Uploading Spinner Overlay */}
+              {uploadingAvatar && (
+                <div className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center text-white z-10 border-4 border-white">
+                  <Loader2 className="w-6 h-6 animate-spin text-white" />
+                </div>
+              )}
+
+              <label 
+                className={`absolute bottom-0 right-0 bg-primary text-white rounded-full p-1.5 cursor-pointer hover:bg-primary/90 transition-colors shadow z-20 ${
+                  uploadingAvatar ? 'pointer-events-none opacity-50' : ''
+                }`}
+                title="Change profile picture"
+              >
                 <Camera className="h-3.5 w-3.5" />
                 <input
                   type="file"
                   accept="image/*"
                   onChange={handleAvatarChange}
+                  disabled={uploadingAvatar}
                   className="hidden"
                 />
               </label>
@@ -284,127 +362,206 @@ export function Profile() {
       <form onSubmit={handleSave} className="bg-white border-2 border-primary/20 rounded-lg p-6 space-y-4">
         <h3 className="font-semibold text-gray-800 mb-4">Edit Information</h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Full Name (Owner) <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. Juan Dela Cruz"
-              className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-              required
-            />
-          </div>
+        {userType === 'tourist' ? (
+          /* ── TOURIST FORM: ONLY NAME, GMAIL, PH 11-DIGIT PHONE, AND ADDRESS ── */
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-700 flex items-center gap-1.5">
+                  <User className="h-4 w-4 text-pink-500" /> Full Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Juan Dela Cruz"
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm transition-all"
+                  required
+                />
+              </div>
 
-          {userType === 'resort' && (
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-700 flex items-center gap-1.5">
+                  <Mail className="h-4 w-4 text-pink-500" /> Gmail / Email Address
+                </label>
+                <input
+                  type="email"
+                  value={profile?.email || currentUser?.email || ''}
+                  readOnly
+                  disabled
+                  className="w-full px-4 py-2.5 border-2 border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed outline-none text-sm"
+                  title="Your registered email address"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">Verified account email</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-700 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Phone className="h-4 w-4 text-pink-500" /> Phone Number (PH 11 Digits)
+                  </span>
+                  <span className="text-xs font-mono text-gray-400">
+                    {form.phone?.length || 0}/11
+                  </span>
+                </label>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={11}
+                  value={form.phone}
+                  onChange={(e) => {
+                    const cleaned = e.target.value.replace(/\D/g, '').slice(0, 11);
+                    setForm(f => ({ ...f, phone: cleaned }));
+                  }}
+                  placeholder="09123456789"
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm font-mono tracking-wider transition-all"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  PH Mobile Number (Halimbawa: 09123456789)
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1 text-gray-700 flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4 text-pink-500" /> Complete Address
+                </label>
+                <input
+                  type="text"
+                  value={form.address}
+                  onChange={(e) => setForm(f => ({ ...f, address: e.target.value }))}
+                  placeholder="Street, Barangay, City/Municipality"
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm transition-all"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">Home or delivery address</p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ── BUSINESS FORM: RESORT & ENTERPRISE ACCOUNTS ── */
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Full Name (Owner) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Juan Dela Cruz"
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                  required
+                />
+              </div>
+
+              {userType === 'resort' && (
+                <div>
+                  <label className="block text-sm font-medium mb-1 flex items-center gap-1">
+                    <Hotel className="h-4 w-4 text-primary" /> Resort / Accommodation Name
+                  </label>
+                  <input
+                    type="text"
+                    value={form.resort_name}
+                    onChange={(e) => setForm(f => ({ ...f, resort_name: e.target.value }))}
+                    placeholder="e.g. Paradise Cove Beach Resort"
+                    className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                  />
+                </div>
+              )}
+
+              {userType === 'enterprise' && (
+                <div>
+                  <label className="block text-sm font-medium mb-1 flex items-center gap-1">
+                    <Store className="h-4 w-4 text-primary" /> Store / Business Name
+                  </label>
+                  <input
+                    type="text"
+                    value={form.store_name}
+                    onChange={(e) => setForm(f => ({ ...f, store_name: e.target.value }))}
+                    placeholder="e.g. Mansalay Handicrafts & Weaving"
+                    className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1 flex items-center gap-1">
+                  <Phone className="h-4 w-4" /> Phone Number (Call Direct)
+                </label>
+                <input
+                  type="text"
+                  value={form.phone}
+                  onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
+                  placeholder="09123456789"
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1 flex items-center gap-1">
+                  <MapPin className="h-4 w-4" /> Barangay
+                </label>
+                <input
+                  type="text"
+                  value={form.barangay}
+                  onChange={(e) => setForm(f => ({ ...f, barangay: e.target.value }))}
+                  placeholder="e.g. Poblacion"
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1 flex items-center gap-1">
+                  <span className="font-bold text-blue-600">FB</span> Facebook Page URL / Link
+                </label>
+                <input
+                  type="text"
+                  value={form.facebook_link}
+                  onChange={(e) => setForm(f => ({ ...f, facebook_link: e.target.value }))}
+                  placeholder="e.g. facebook.com/yourbusiness"
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1 flex items-center gap-1">
+                  <span className="font-bold text-pink-600">IG</span> Instagram Profile URL / Link
+                </label>
+                <input
+                  type="text"
+                  value={form.instagram_link}
+                  onChange={(e) => setForm(f => ({ ...f, instagram_link: e.target.value }))}
+                  placeholder="e.g. instagram.com/yourbusiness"
+                  className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                />
+              </div>
+            </div>
+
             <div>
-              <label className="block text-sm font-medium mb-1 flex items-center gap-1">
-                <Hotel className="h-4 w-4 text-primary" /> Resort / Accommodation Name
-              </label>
+              <label className="block text-sm font-medium mb-1">Address</label>
               <input
                 type="text"
-                value={form.resort_name}
-                onChange={(e) => setForm(f => ({ ...f, resort_name: e.target.value }))}
-                placeholder="e.g. Paradise Cove Beach Resort"
+                value={form.address}
+                onChange={(e) => setForm(f => ({ ...f, address: e.target.value }))}
+                placeholder="Street, Building, etc."
                 className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
               />
             </div>
-          )}
 
-          {userType === 'enterprise' && (
             <div>
-              <label className="block text-sm font-medium mb-1 flex items-center gap-1">
-                <Store className="h-4 w-4 text-primary" /> Store / Business Name
-              </label>
-              <input
-                type="text"
-                value={form.store_name}
-                onChange={(e) => setForm(f => ({ ...f, store_name: e.target.value }))}
-                placeholder="e.g. Mansalay Handicrafts & Weaving"
-                className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+              <label className="block text-sm font-medium mb-1">Business Description</label>
+              <textarea
+                value={form.description}
+                onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Tell customers about your business..."
+                rows={3}
+                className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none resize-none"
               />
             </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1 flex items-center gap-1">
-              <Phone className="h-4 w-4" /> Phone Number (Call Direct)
-            </label>
-            <input
-              type="text"
-              value={form.phone}
-              onChange={(e) => setForm(f => ({ ...f, phone: e.target.value }))}
-              placeholder="09123456789"
-              className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1 flex items-center gap-1">
-              <MapPin className="h-4 w-4" /> Barangay
-            </label>
-            <input
-              type="text"
-              value={form.barangay}
-              onChange={(e) => setForm(f => ({ ...f, barangay: e.target.value }))}
-              placeholder="e.g. Poblacion"
-              className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1 flex items-center gap-1">
-              <span className="font-bold text-blue-600">FB</span> Facebook Page URL / Link
-            </label>
-            <input
-              type="text"
-              value={form.facebook_link}
-              onChange={(e) => setForm(f => ({ ...f, facebook_link: e.target.value }))}
-              placeholder="e.g. facebook.com/yourbusiness"
-              className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1 flex items-center gap-1">
-              <span className="font-bold text-pink-600">IG</span> Instagram Profile URL / Link
-            </label>
-            <input
-              type="text"
-              value={form.instagram_link}
-              onChange={(e) => setForm(f => ({ ...f, instagram_link: e.target.value }))}
-              placeholder="e.g. instagram.com/yourbusiness"
-              className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-            />
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Address</label>
-          <input
-            type="text"
-            value={form.address}
-            onChange={(e) => setForm(f => ({ ...f, address: e.target.value }))}
-            placeholder="Street, Building, etc."
-            className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
-          />
-        </div>
-
-        {(userType === 'enterprise' || userType === 'resort') && (
-          <div>
-            <label className="block text-sm font-medium mb-1">Business Description</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="Tell customers about your business..."
-              rows={3}
-              className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none resize-none"
-            />
           </div>
         )}
 

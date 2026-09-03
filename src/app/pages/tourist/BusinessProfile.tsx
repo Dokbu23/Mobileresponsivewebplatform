@@ -1304,15 +1304,21 @@ export function BusinessProfile() {
             {/* Category Filter Chips */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                {[
-                  { key: 'all', label: 'All Posts' },
-                  { key: 'promotion', label: '🏷️ Promotion' },
-                  { key: 'rooms', label: '🛏️ Rooms' },
-                  { key: 'amenities', label: '🌊 Amenities' },
-                  { key: 'activities', label: '🧭 Activities' },
-                  { key: 'beach_views', label: '🌴 Beach Views' },
-                  { key: 'announcement', label: '📢 Announcement' },
-                ].map((cat) => {
+                {(type === 'resort'
+                  ? [
+                      { key: 'all', label: 'All Posts' },
+                      { key: 'rooms', label: '🛏️ Rooms' },
+                      { key: 'amenities', label: '🌊 Amenities' },
+                      { key: 'activities', label: '🧭 Activities' },
+                      { key: 'beach_views', label: '🌴 Beach Views' },
+                    ]
+                  : [
+                      { key: 'all', label: 'All Posts' },
+                      { key: 'promotion', label: '🏷️ Promotion' },
+                      { key: 'products', label: '📦 Products' },
+                      { key: 'announcement', label: '📢 Announcement' },
+                    ]
+                ).map((cat) => {
                   const count = cat.key === 'all'
                     ? posts.length
                     : posts.filter(p => p.type === cat.key).length;
@@ -1470,13 +1476,18 @@ export function BusinessProfile() {
                                 )}
                               </div>
                             ) : post.image ? (
-                              <div className="rounded-xl overflow-hidden bg-gray-100 border border-gray-100 max-h-72">
+                              <div className="rounded-xl overflow-hidden bg-gray-100 border border-gray-100 max-h-72 relative">
                                 <img
                                   src={getImageUrl(post.image)}
                                   alt="Post"
                                   className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
                                   onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
                                 />
+                                {Array.isArray(post.images) && post.images.length > 1 && (
+                                  <span className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold rounded-full flex items-center gap-1">
+                                    📸 +{post.images.length - 1} photos
+                                  </span>
+                                )}
                               </div>
                             ) : null}
 
@@ -1725,6 +1736,24 @@ export function BusinessProfile() {
                       className="w-full h-full object-cover"
                     />
                   )}
+                </div>
+              ) : (Array.isArray(viewingPost.images) && viewingPost.images.length > 1) ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-gray-500 mb-1">
+                    <span>Photos ({viewingPost.images.length})</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2.5 max-h-[440px] overflow-y-auto">
+                    {viewingPost.images.map((imgUrl: string, imgIdx: number) => (
+                      <div key={imgIdx} className="rounded-xl overflow-hidden bg-gray-100 border border-gray-100 aspect-video">
+                        <img
+                          src={getImageUrl(imgUrl)}
+                          alt={`Post Photo ${imgIdx + 1}`}
+                          className="w-full h-full object-cover hover:scale-105 transition-transform"
+                          onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : viewingPost.image ? (
                 <div className="rounded-2xl overflow-hidden bg-gray-100 border border-gray-100">

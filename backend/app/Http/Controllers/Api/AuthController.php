@@ -256,6 +256,8 @@ class AuthController extends Controller
                 'address' => $user->address,
                 'barangay' => $user->barangay,
                 'description' => $user->description,
+                'facebook_link' => $user->facebook_link,
+                'instagram_link' => $user->instagram_link,
                 'resort_name' => $user->resort_name,
                 'store_name' => $user->store_name,
                 'listing_status' => $user->listing_status,

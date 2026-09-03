@@ -146,12 +146,46 @@ class EnterprisePostController extends Controller
             'video_url'      => 'nullable|string',
         ]);
 
-        if ($request->hasFile('image')) {
-            $folder = ($user && $user->role === 'resort') ? 'resort/posts' : 'enterprise/posts';
+        $uploadedImages = [];
+        $folder = ($user && $user->role === 'resort') ? 'resort/posts' : 'enterprise/posts';
+
+        // 1. Multiple image files upload
+        if ($request->hasFile('images')) {
+            $files = $request->file('images');
+            if (is_array($files)) {
+                foreach ($files as $file) {
+                    if ($file && $file->isValid()) {
+                        $path = $file->store($folder, 'public');
+                        $uploadedImages[] = '/storage/' . $path;
+                    }
+                }
+            } elseif ($files && $files->isValid()) {
+                $path = $files->store($folder, 'public');
+                $uploadedImages[] = '/storage/' . $path;
+            }
+        }
+
+        // 2. Single image file upload fallback
+        if ($request->hasFile('image') && empty($uploadedImages)) {
             $path = $request->file('image')->store($folder, 'public');
-            $data['image'] = '/storage/' . $path;
-        } elseif ($request->filled('image_url')) {
-            $data['image'] = $request->input('image_url');
+            $uploadedImages[] = '/storage/' . $path;
+        }
+
+        // 3. URLs fallback
+        if (empty($uploadedImages)) {
+            if ($request->filled('images') && is_string($request->input('images'))) {
+                $decoded = json_decode($request->input('images'), true);
+                if (is_array($decoded)) {
+                    $uploadedImages = $decoded;
+                }
+            } elseif ($request->filled('image_url')) {
+                $uploadedImages[] = $request->input('image_url');
+            }
+        }
+
+        if (!empty($uploadedImages)) {
+            $data['image'] = $uploadedImages[0];
+            $data['images'] = $uploadedImages;
         }
 
         // Handle video file upload or video link
