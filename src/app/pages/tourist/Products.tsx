@@ -465,7 +465,7 @@ export function Products() {
                       </div>
                     )}
 
-                    <p className="text-xs text-gray-500 line-clamp-2 mb-3 leading-relaxed">{product.description}</p>
+                    <p className="text-xs text-gray-500 line-clamp-2 mb-3 leading-relaxed text-justify" style={{ textAlign: 'justify' }}>{product.description}</p>
                   </div>
 
                   {/* Price & Action Button */}
@@ -598,9 +598,24 @@ export function Products() {
               </div>
 
               {/* Description */}
-              <p className="text-xs text-gray-600 leading-relaxed font-normal">
-                {selectedProduct.description}
-              </p>
+              <div className="text-xs text-gray-600 leading-relaxed font-normal text-justify space-y-3" style={{ textAlign: 'justify' }}>
+                {selectedProduct.description ? (
+                  selectedProduct.description
+                    .replace(/<br\s*[\/]?>/gi, '\n')
+                    .split(/\r?\n+/)
+                    .map((p) => p.trim())
+                    .filter((p) => p.length > 0)
+                    .map((para, idx) => (
+                      <p key={idx} className="text-justify leading-relaxed" style={{ textAlign: 'justify' }}>
+                        {para}
+                      </p>
+                    ))
+                ) : (
+                  <p className="text-justify leading-relaxed" style={{ textAlign: 'justify' }}>
+                    No description available for this product.
+                  </p>
+                )}
+              </div>
 
               {/* Tags */}
               <div className="flex flex-wrap gap-2">

@@ -435,14 +435,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Real-time Wishlist Counter updates & instant broadcast
     try {
+      const token = typeof window !== 'undefined' ? (window.localStorage.getItem('discover-mansalay:token') || window.localStorage.getItem('token')) : null;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       // Non-blocking backend sync
       fetch(`${API_BASE}/api/public/wishlist/toggle`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           item_id: item.id,
           item_type: item.type || 'attraction',
           action: 'save',
+          user_name: currentUser?.name || undefined,
         }),
       })
         .then((res) => res.json())
@@ -499,14 +504,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // Real-time Wishlist Counter updates & instant broadcast
     try {
+      const token = typeof window !== 'undefined' ? (window.localStorage.getItem('discover-mansalay:token') || window.localStorage.getItem('token')) : null;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       // Non-blocking backend sync
       fetch(`${API_BASE}/api/public/wishlist/toggle`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           item_id: id,
           item_type: type || 'attraction',
           action: 'unsave',
+          user_name: currentUser?.name || undefined,
         }),
       })
         .then((res) => res.json())

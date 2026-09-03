@@ -280,10 +280,42 @@ class EnterprisePostController extends Controller
     /**
      * Save a post to wishlist/bookmarks.
      */
-    public function save($id)
+    public function save(Request $request, $id)
     {
         $post = EnterprisePost::findOrFail($id);
         $post->increment('saves');
+
+        try {
+            $user = $request->user();
+            if (!$user && $request->bearerToken()) {
+                $user = auth('api')->user();
+            }
+            $touristName = $user ? ($user->name ?? 'A tourist') : ($request->input('user_name') ?: 'A tourist');
+            $postTitle = $post->title ?: ($post->category ?: 'post');
+            $owner = $post->user;
+            $link = ($owner && $owner->role === 'resort') ? '/resort/dashboard' : '/enterprise/profile';
+
+            if (!empty($post->user_id) && (!$user || (int)$post->user_id !== (int)$user->id)) {
+                $cacheKey = "notif_post_save_{$post->user_id}_{$post->id}_" . ($user ? $user->id : md5($touristName));
+                if (!\Illuminate\Support\Facades\Cache::has($cacheKey)) {
+                    \Illuminate\Support\Facades\Cache::put($cacheKey, true, now()->addMinutes(2));
+                    \App\Models\Notification::notify(
+                        $post->user_id,
+                        'wishlist_saved',
+                        'New Wishlist Save!',
+                        "{$touristName} saved your {$postTitle} to their wishlist.",
+                        [
+                            'post_id'   => $post->id,
+                            'user_id'   => $user ? $user->id : null,
+                            'user_name' => $touristName,
+                        ],
+                        $link
+                    );
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Post save notification failed: ' . $e->getMessage());
+        }
 
         return response()->json([
             'message' => 'Post saved',

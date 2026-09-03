@@ -9,6 +9,7 @@ import {
   MessageCircle,
   UserPlus,
   BadgeCheck,
+  Heart,
   X,
   Check,
   Trash2,
@@ -19,6 +20,8 @@ import { getAuthToken, type ApiNotification } from '../lib/api';
 
 function getIcon(type: string) {
   switch (type) {
+    case 'wishlist_saved':
+      return <Heart className="h-4 w-4 text-pink-500 fill-pink-500" />;
     case 'order_new':
     case 'order_status':
       return <Package className="h-4 w-4 text-pink-500" />;

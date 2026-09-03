@@ -62,6 +62,9 @@ class WishlistController extends Controller
 
         try {
             $user = $request->user();
+            if (!$user && $request->bearerToken()) {
+                $user = auth('api')->user();
+            }
         } catch (\Throwable $e) {
             $user = null;
         }
@@ -72,6 +75,9 @@ class WishlistController extends Controller
             switch ($itemType) {
                 case 'product':
                     $model = Product::find($itemId);
+                    if (!$model) {
+                        $model = \App\Models\EnterprisePost::find($itemId);
+                    }
                     break;
                 case 'attraction':
                     $model = Attraction::find($itemId);
@@ -79,9 +85,15 @@ class WishlistController extends Controller
                 case 'accommodation':
                 case 'resort':
                     $model = Accommodation::find($itemId);
+                    if (!$model) {
+                        $model = \App\Models\EnterprisePost::find($itemId);
+                    }
                     break;
                 case 'event':
                     $model = Event::find($itemId);
+                    break;
+                case 'post':
+                    $model = \App\Models\EnterprisePost::find($itemId);
                     break;
             }
         } catch (\Throwable $e) {
@@ -147,6 +159,69 @@ class WishlistController extends Controller
 
             if ($finalCount === 0) {
                 $finalCount = 1;
+            }
+
+            // Real-time Notification for Resort and Enterprise Owners
+            try {
+                $ownerId = null;
+                $itemName = 'item';
+                $link = null;
+
+                if ($model) {
+                    $ownerId = $model->user_id ?? null;
+                    $itemName = $model->name ?? ($model->title ?? 'item');
+                }
+
+                if ($itemType === 'product') {
+                    if (!$ownerId && $model && !empty($model->name)) {
+                        $ownerId = \App\Models\EnterprisePost::where('title', $model->name)->value('user_id');
+                    }
+                    $link = '/enterprise/profile';
+                } elseif ($itemType === 'accommodation' || $itemType === 'resort') {
+                    if (!$ownerId && $model && !empty($model->name)) {
+                        $ownerId = \App\Models\User::where('role', 'resort')
+                            ->where(function($q) use ($model) {
+                                $q->where('resort_name', $model->name)
+                                  ->orWhere('name', $model->name);
+                            })->value('id');
+                    }
+                    $link = '/resort/dashboard';
+                } else {
+                    $link = '/resort/dashboard';
+                }
+
+                if (!empty($ownerId) && (!$user || (int)$ownerId !== (int)$user->id)) {
+                    $touristName = $user ? ($user->name ?? 'A tourist') : ($request->input('user_name') ?: 'A tourist');
+                    $title = 'New Wishlist Save!';
+                    if ($itemType === 'product') {
+                        $message = "{$touristName} added your product \"{$itemName}\" to their wishlist.";
+                    } elseif ($itemType === 'accommodation' || $itemType === 'resort') {
+                        $message = "{$touristName} added your resort \"{$itemName}\" to their wishlist.";
+                    } else {
+                        $message = "{$touristName} added \"{$itemName}\" to their wishlist.";
+                    }
+
+                    $cacheKey = "notif_wishlist_{$ownerId}_{$itemType}_{$itemId}_" . ($user ? $user->id : md5($touristName));
+                    if (!Cache::has($cacheKey)) {
+                        Cache::put($cacheKey, true, now()->addMinutes(2));
+                        \App\Models\Notification::notify(
+                            $ownerId,
+                            'wishlist_saved',
+                            $title,
+                            $message,
+                            [
+                                'item_id'    => $itemId,
+                                'item_type'  => $itemType,
+                                'item_name'  => $itemName,
+                                'user_id'    => $user ? $user->id : null,
+                                'user_name'  => $touristName,
+                            ],
+                            $link
+                        );
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Failed to dispatch wishlist notification: ' . $e->getMessage());
             }
         } else {
             // Unsave / remove from wishlist

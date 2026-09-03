@@ -1256,14 +1256,13 @@ export function EnterpriseProfile() {
                       <th className="text-left pb-3 font-semibold">Category</th>
                       <th className="text-left pb-3 font-semibold">Price</th>
                       <th className="text-left pb-3 font-semibold">Stock</th>
-                      <th className="text-left pb-3 font-semibold">Sold</th>
                       <th className="text-left pb-3 font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {products.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="py-4 text-center text-muted-foreground">
+                        <td colSpan={6} className="py-4 text-center text-muted-foreground">
                           No products yet
                         </td>
                       </tr>
@@ -1296,7 +1295,6 @@ export function EnterpriseProfile() {
                               {product.stock} units
                             </span>
                           </td>
-                          <td className="py-4">{soldByProduct.get(product.name) || 0}</td>
                           <td className="py-4">
                             <div className="flex gap-2">
                               <button
