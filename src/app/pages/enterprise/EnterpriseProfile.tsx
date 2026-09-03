@@ -375,13 +375,6 @@ export function EnterpriseProfile() {
       iconColor: 'text-blue-600',
     },
     {
-      icon: CreditCard,
-      label: 'Revenue (Live)',
-      value: `₱${orders.reduce((sum, order) => sum + order.total, 0).toLocaleString()}`,
-      color: 'bg-green-50',
-      iconColor: 'text-green-600',
-    },
-    {
       icon: Package,
       label: 'Total Sales',
       value: orders
@@ -389,13 +382,6 @@ export function EnterpriseProfile() {
         .toString(),
       color: 'bg-purple-50',
       iconColor: 'text-purple-600',
-    },
-    {
-      icon: TrendingUp,
-      label: 'Growth',
-      value: `${Math.max(products.length - 1, 0)} live`,
-      color: 'bg-pink-50',
-      iconColor: 'text-pink-600',
     },
   ];
 
@@ -671,7 +657,7 @@ export function EnterpriseProfile() {
             </div>
             <div>
               <h1 className="text-2xl font-bold">Manage Products</h1>
-              <p className="text-sm text-muted-foreground">Add, update, and manage your inventory and product listings</p>
+              <p className="text-sm text-muted-foreground">Add, update, and manage your store products and listings</p>
             </div>
           </div>
           <Link
@@ -685,7 +671,7 @@ export function EnterpriseProfile() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
         {stats.map(stat => {
           const Icon = stat.icon;
           return (
@@ -939,7 +925,7 @@ export function EnterpriseProfile() {
       {/* Products Management */}
       <div className="bg-white border-2 border-primary/20 rounded-lg p-6 mb-8">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold">Product Inventory</h2>
+          <h2 className="text-xl font-bold">Product Listings</h2>
           <button
             onClick={() => {
               if (subscriptionStatus?.subscription_status !== 'paid') {

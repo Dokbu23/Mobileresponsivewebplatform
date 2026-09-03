@@ -661,9 +661,10 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::post('resort-availability-unblock', [ResortAvailabilityController::class, 'destroyByDate']);
     });
 
-    // Posts View (Enterprise, Resort & Admin)
+    // Posts View & Products (Enterprise, Resort & Admin)
     Route::group(['middleware' => ['role:enterprise,resort,admin']], function () {
         Route::get('enterprise-posts', [EnterprisePostController::class, 'index']);
+        Route::get('products', [ProductController::class, 'index']);
     });
 
     // Posts Create/Update/Delete - PROTECTED BY SUBSCRIPTION

@@ -552,11 +552,40 @@ export function EnterpriseDashboard() {
     }
   };
 
+  // Merge database products with any product-type posts to ensure any published product listing immediately appears
+  const allProducts = useMemo(() => {
+    const list = [...products];
+    const existingNames = new Set(list.map((p) => String(p.name).toLowerCase().trim()));
+
+    posts
+      .filter((post) => post.type === 'product' || post.product_name)
+      .forEach((post) => {
+        const pName = String(post.product_name || post.content || '').trim();
+        const pKey = pName.toLowerCase();
+        if (pName && !existingNames.has(pKey)) {
+          existingNames.add(pKey);
+          list.push({
+            id: `post_${post.id}`,
+            name: pName,
+            category: post.category || 'Handicraft',
+            price: post.price ? (typeof post.price === 'string' ? parseFloat(post.price.replace(/[^0-9.]/g, '')) || 0 : post.price) : 0,
+            stock: post.stock ? (typeof post.stock === 'string' ? parseInt(post.stock.replace(/[^0-9]/g, '')) || 10 : post.stock) : 10,
+            image: post.image || (post.images && post.images[0]) || '',
+            user_id: post.user_id,
+            description: post.content,
+            likes: post.likes || 0,
+          });
+        }
+      });
+
+    return list;
+  }, [products, posts]);
+
   // Dynamic wishlist trends based on real products and live wishlist saves
   const wishlistTrends = useMemo(() => {
-    if (products.length === 0) return [];
+    if (allProducts.length === 0) return [];
 
-    const scored = products.map((p) => {
+    const scored = allProducts.map((p) => {
       const count = getWishlistCount(p.id, 'product', p.likes || 0);
       return {
         id: p.id,
@@ -571,14 +600,14 @@ export function EnterpriseDashboard() {
       ...item,
       percentage: item.count > 0 ? Math.min(100, Math.round((item.count / maxScore) * 100)) : 0,
     }));
-  }, [products, wishlistCounts, getWishlistCount]);
+  }, [allProducts, wishlistCounts, getWishlistCount]);
 
   // Compute total real wishlist saves for this enterprise's catalog & posts
   const totalWishlistSaves = useMemo(() => {
     const postSaves = posts.reduce((a, b) => a + Number(b.saves || 0), 0);
-    const productSaves = products.reduce((acc, p) => acc + getWishlistCount(p.id, 'product', p.likes || 0), 0);
+    const productSaves = allProducts.reduce((acc, p) => acc + getWishlistCount(p.id, 'product', p.likes || 0), 0);
     return productSaves + postSaves;
-  }, [products, posts, wishlistCounts, getWishlistCount]);
+  }, [allProducts, posts, wishlistCounts, getWishlistCount]);
 
   // Real store and product views from database + real-time visitor tracking
   const totalViews = useMemo(() => {
@@ -594,14 +623,14 @@ export function EnterpriseDashboard() {
     }
 
     // 2. Products views
-    products.forEach((p) => {
+    allProducts.forEach((p) => {
       const prodViewDB = Number(p.view_count || p.views || 0);
       const prodViewLocal = Number(localCounts[`view_count_product_${p.id}`] || 0);
       total += Math.max(prodViewDB, prodViewLocal);
     });
 
     return total;
-  }, [currentUser?.id, storeProfile?.view_count, currentUser?.view_count, products]);
+  }, [currentUser?.id, storeProfile?.view_count, currentUser?.view_count, allProducts]);
 
   if (loading) {
     return (
@@ -721,12 +750,12 @@ export function EnterpriseDashboard() {
             <Package className="w-5 h-5" />
           </div>
           <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
-            {products.length}
+            {allProducts.length}
           </div>
           <div className="text-xs text-gray-500 mt-0.5">Total Products</div>
           <div className="text-xs font-medium text-emerald-600 flex items-center gap-1 mt-2">
             <TrendingUp className="w-3.5 h-3.5" />
-            +{products.length}
+            +{allProducts.length}
           </div>
         </div>
 
@@ -1572,7 +1601,7 @@ export function EnterpriseDashboard() {
               </Link>
             </div>
 
-            {products.length === 0 ? (
+            {allProducts.length === 0 ? (
               <div className="text-center py-10 border border-dashed border-gray-200 rounded-xl">
                 <Package className="w-10 h-10 mx-auto text-gray-300 mb-2" />
                 <p className="text-xs text-gray-500">No products added yet.</p>
@@ -1585,7 +1614,7 @@ export function EnterpriseDashboard() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {products.map((product) => {
+                {allProducts.map((product) => {
                   const pImg = product.image ? (product.image.startsWith('http') ? product.image : getStorageUrl(product.image)) : 'https://images.unsplash.com/photo-1590736969955-71cc94801759?w=300&auto=format&fit=crop&q=80';
                   return (
                     <div

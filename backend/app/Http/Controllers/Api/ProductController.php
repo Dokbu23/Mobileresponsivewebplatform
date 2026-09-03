@@ -22,22 +22,28 @@ class ProductController extends Controller
                 ->with('owner:id,name,email,phone,store_name,resort_name')
                 ->with('variations');
 
+            // Auto-sync enterprise posts of type product to products table so they immediately appear in directory & my products
+            try {
+                $productPosts = \App\Models\EnterprisePost::where(function($q) {
+                    $q->where('type', 'product')
+                      ->orWhereNotNull('product_name');
+                })->whereNotNull('user_id')->get();
+                foreach ($productPosts as $pPost) {
+                    \App\Http\Controllers\Api\EnterprisePostController::syncProductFromPost($pPost);
+                }
+            } catch (\Throwable $e) {
+                // sync error ignored
+            }
+
             // Enterprise owner view: return their own products
             if ($user && $user->role === 'enterprise') {
                 $query->where('user_id', $user->id);
             } elseif (!$user || $user->role !== 'admin') {
-                // Public non-admin view: show products from admin OR active/approved enterprise accounts
+                // Public tourist view: show products from admin OR enterprise accounts
                 $query->where(function($q) {
                     $q->whereNull('user_id')
                       ->orWhereHas('owner', function($userQuery) {
-                          $userQuery->where('role', 'admin')
-                                    ->orWhere(function($bq) {
-                                        $bq->where('role', 'enterprise')
-                                           ->where(function($subQ) {
-                                               $subQ->whereIn('listing_status', ['approved', 'active', 'pending'])
-                                                    ->orWhereIn('subscription_status', ['paid', 'active']);
-                                           });
-                                    });
+                          $userQuery->whereIn('role', ['admin', 'enterprise']);
                       });
                 });
             }

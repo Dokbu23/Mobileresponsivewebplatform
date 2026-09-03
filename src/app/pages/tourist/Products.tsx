@@ -66,6 +66,39 @@ export function Products() {
       const data = await getPublicJSON('/products').catch(() => []);
       const raw = Array.isArray(data) ? data : data?.data ?? data?.products ?? [];
 
+      try {
+        const postsData = await getPublicJSON('/enterprise-posts').catch(() => []);
+        const rawPosts = Array.isArray(postsData) ? postsData : [];
+        rawPosts
+          .filter((p: any) => p.type === 'product' || p.product_name)
+          .forEach((p: any) => {
+            const pName = p.product_name || p.content;
+            if (!pName) return;
+            const exists = raw.some((r: any) => 
+              (r.name && r.name.toLowerCase().trim() === pName.toLowerCase().trim()) ||
+              (r.id && p.id && String(r.id) === String(p.id))
+            );
+            if (!exists) {
+              raw.unshift({
+                id: `ep_${p.id}`,
+                name: pName,
+                description: p.content || pName,
+                price: p.price ? (typeof p.price === 'string' ? parseFloat(p.price.replace(/[^0-9.]/g, '')) || 0 : p.price) : 0,
+                stock: p.stock ? (typeof p.stock === 'string' ? parseInt(p.stock.replace(/[^0-9]/g, '')) || 10 : p.stock) : 10,
+                image: p.image || '',
+                images: p.image ? [p.image] : [],
+                category: p.category || 'Handicraft',
+                sellerName: p.seller_name || p.user?.store_name || p.user?.name || '',
+                productOwner: p.seller_name || p.user?.store_name || p.user?.name || '',
+                user_id: p.user_id,
+                is_registered: true,
+                likes: p.likes || 0,
+                badge: 'Partner Store',
+              });
+            }
+          });
+      } catch {}
+
       let customProducts: any[] = [];
       try {
         const stored = localStorage.getItem('discover-mansalay:custom_products');

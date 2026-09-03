@@ -36,7 +36,75 @@ class EnterprisePostController extends Controller
 
         $posts = $query->orderBy('created_at', 'desc')->get();
 
+        // Auto-sync any product posts to products table
+        try {
+            foreach ($posts as $p) {
+                if ($p->type === 'product' || !empty($p->product_name)) {
+                    self::syncProductFromPost($p, $p->user ?? $user);
+                }
+            }
+        } catch (\Throwable $e) {
+            // sync error ignored
+        }
+
         return response()->json($posts);
+    }
+
+    /**
+     * Helper to reliably sync an EnterprisePost to a Product database record
+     */
+    public static function syncProductFromPost(EnterprisePost $post, $user = null)
+    {
+        if (!$user && $post->user_id) {
+            $user = \App\Models\User::find($post->user_id);
+        }
+        if (!$user) return null;
+        if ($post->type !== 'product' && empty($post->product_name)) {
+            return null;
+        }
+
+        $prodName = trim($post->product_name ?: '');
+        if (!$prodName && !empty($post->content)) {
+            $prodName = trim(\Illuminate\Support\Str::limit($post->content, 40, ''));
+        }
+        if (!$prodName) {
+            $prodName = 'Mansalay Local Product';
+        }
+
+        $numericPrice = floatval(preg_replace('/[^0-9.]/', '', (string)($post->price ?? '0')));
+        if ($numericPrice <= 0) {
+            $numericPrice = 100;
+        }
+        $numericStock = intval(preg_replace('/[^0-9]/', '', (string)($post->stock ?? '10')));
+        if ($numericStock <= 0) {
+            $numericStock = 10;
+        }
+
+        $prodData = [
+            'name'          => $prodName,
+            'description'   => $post->content ?: $prodName,
+            'price'         => $numericPrice,
+            'stock'         => $numericStock,
+            'category'      => $post->category ?: 'Food',
+            'image'         => $post->image ?: null,
+            'user_id'       => $user->id,
+            'is_registered' => true,
+        ];
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'images')) {
+            $prodData['images'] = !empty($post->image) ? [$post->image] : [];
+        }
+
+        $existing = \App\Models\Product::where('user_id', $user->id)
+            ->where('name', $prodName)
+            ->first();
+
+        if ($existing) {
+            $existing->update($prodData);
+            return $existing;
+        } else {
+            return \App\Models\Product::create($prodData);
+        }
     }
 
     /**
@@ -96,27 +164,7 @@ class EnterprisePostController extends Controller
         // If post type is product or has a product name, also create/sync a Product in products table
         if (($data['type'] === 'product' || !empty($data['product_name'])) && $user) {
             try {
-                $numericPrice = floatval(preg_replace('/[^0-9.]/', '', (string)($data['price'] ?? '0')));
-                if ($numericPrice <= 0) {
-                    $numericPrice = 100;
-                }
-                $numericStock = intval(preg_replace('/[^0-9]/', '', (string)($data['stock'] ?? '10')));
-                if ($numericStock <= 0) {
-                    $numericStock = 10;
-                }
-
-                \App\Models\Product::create([
-                    'name'          => $data['product_name'] ?: ($data['content'] ? \Illuminate\Support\Str::limit($data['content'], 40) : 'Handicraft Item'),
-                    'description'   => $data['content'] ?: ($data['product_name'] ?? ''),
-                    'price'         => $numericPrice,
-                    'stock'         => $numericStock,
-                    'category'      => $data['category'] ?: 'Souvenir',
-                    'image'         => $data['image'] ?? null,
-                    'images'        => !empty($data['image']) ? [$data['image']] : [],
-                    'user_id'       => $user->id,
-                    'is_registered' => true,
-                    'likes'         => 0,
-                ]);
+                self::syncProductFromPost($post, $user);
             } catch (\Throwable $e) {
                 \Log::warning('Failed to sync Product record from EnterprisePost: ' . $e->getMessage());
             }
