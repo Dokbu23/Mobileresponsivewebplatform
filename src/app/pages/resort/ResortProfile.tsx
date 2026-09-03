@@ -139,7 +139,8 @@ export function ResortProfile() {
         formData.append('image', roomImageFiles[0]);
       }
       if (existingRoomImages.length > 0) {
-        formData.append('existing_images', JSON.stringify(existingRoomImages));
+        const cleanExisting = existingRoomImages.map((img: string) => img.replace(API_BASE, ''));
+        formData.append('existing_images', JSON.stringify(cleanExisting));
       }
 
       if (editingRoomId) {

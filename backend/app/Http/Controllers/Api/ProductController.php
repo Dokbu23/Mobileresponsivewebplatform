@@ -113,23 +113,34 @@ class ProductController extends Controller
                 return response()->json(['error' => 'Failed to store file: ' . $e->getMessage()], 400);
             }
         } elseif (is_string($request->input('image')) && !empty($request->input('image'))) {
-            $data['image'] = $request->input('image');
-            if (!in_array($data['image'], $storedImages)) {
-                array_unshift($storedImages, $data['image']);
+            $cleanImg = preg_replace('#^https?://[^/]+#', '', $request->input('image'));
+            $data['image'] = $cleanImg;
+            if (!in_array($cleanImg, $storedImages)) {
+                array_unshift($storedImages, $cleanImg);
             }
         }
 
         // Merge any existing or string images provided in request
         if ($request->has('existing_images')) {
             $existing = $request->input('existing_images');
+            $existingArr = [];
             if (is_string($existing)) {
                 $decoded = json_decode($existing, true);
                 if (is_array($decoded)) {
-                    $storedImages = array_merge($decoded, $storedImages);
+                    $existingArr = $decoded;
                 }
             } elseif (is_array($existing)) {
-                $storedImages = array_merge($existing, $storedImages);
+                $existingArr = $existing;
             }
+
+            $cleanedExisting = array_map(function($img) {
+                if (is_string($img)) {
+                    return preg_replace('#^https?://[^/]+#', '', $img);
+                }
+                return $img;
+            }, $existingArr);
+
+            $storedImages = array_merge($storedImages, $cleanedExisting);
         }
 
         if (!empty($storedImages)) {

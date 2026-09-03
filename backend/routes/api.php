@@ -563,6 +563,14 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::post('admin/accommodations/{id}', [AccommodationController::class, 'update']);
         Route::put('admin/accommodations/{id}', [AccommodationController::class, 'update']);
         Route::delete('admin/accommodations/{id}', [AccommodationController::class, 'destroy']);
+        Route::post('admin/attractions', [AttractionController::class, 'store']);
+        Route::post('admin/attractions/{id}', [AttractionController::class, 'update']);
+        Route::put('admin/attractions/{id}', [AttractionController::class, 'update']);
+        Route::delete('admin/attractions/{id}', [AttractionController::class, 'destroy']);
+        Route::post('admin/events', [EventController::class, 'store']);
+        Route::post('admin/events/{id}', [EventController::class, 'update']);
+        Route::put('admin/events/{id}', [EventController::class, 'update']);
+        Route::delete('admin/events/{id}', [EventController::class, 'destroy']);
     });
 
     // Enterprise-only routes (admin allowed) - PROTECTED BY SUBSCRIPTION

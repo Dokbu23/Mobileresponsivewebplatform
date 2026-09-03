@@ -18,7 +18,7 @@ class PaymentReceiptController extends Controller
             'type' => 'required|in:order,booking',
             'reference_id' => 'required|integer',
             'business_id' => 'required|integer',
-            'receipt_image' => 'required|image|mimes:jpeg,png,jpg,gif|max:5120', // 5MB max
+            'receipt_image' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:10240', // 10MB max
             'amount' => 'required|numeric|min:0',
             'payment_method' => 'required|string',
             'payment_reference' => 'nullable|string',

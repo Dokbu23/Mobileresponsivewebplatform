@@ -184,7 +184,7 @@ class AttractionController extends Controller
             'name' => 'sometimes|required|string|max:255',
             'location' => 'sometimes|nullable|string|max:255',
             'category' => 'sometimes|nullable|string|max:255',
-            'image' => 'sometimes|nullable|file|image|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max
+            'image' => 'sometimes|nullable', // file upload or URL string
             'video' => 'sometimes|nullable', // file or string URL
             'video_url' => 'sometimes|nullable|string',
             'description' => 'sometimes|nullable|string',
@@ -205,6 +205,8 @@ class AttractionController extends Controller
             } catch (\Exception $e) {
                 return response()->json(['error' => 'Failed to store image file: ' . $e->getMessage()], 400);
             }
+        } elseif ($request->filled('image') && is_string($request->input('image'))) {
+            $data['image'] = preg_replace('#^https?://[^/]+#', '', $request->input('image'));
         }
 
         // Handle video upload

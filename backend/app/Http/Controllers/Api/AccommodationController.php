@@ -206,29 +206,27 @@ class AccommodationController extends Controller
         if ($request->hasFile('images')) {
             foreach ((array) $request->file('images') as $file) {
                 if ($file) {
-                    $fileName = time() . '_' . rand(1000, 9999) . '_' . $file->getClientOriginalName();
-                    $file->storeAs('public/accommodations', $fileName);
-                    $imagePaths[] = '/storage/accommodations/' . $fileName;
+                    $path = $file->store('accommodations', 'public');
+                    $imagePaths[] = '/storage/' . $path;
                 }
             }
         }
         if ($request->hasFile('image')) {
             $image = $request->file('image');
-            $imageName = time() . '_' . $image->getClientOriginalName();
-            $image->storeAs('public/accommodations', $imageName);
-            $singlePath = '/storage/accommodations/' . $imageName;
+            $path = $image->store('accommodations', 'public');
+            $singlePath = '/storage/' . $path;
             if (!in_array($singlePath, $imagePaths)) {
                 array_unshift($imagePaths, $singlePath);
             }
             $data['image'] = $singlePath;
         } elseif (!empty($imagePaths)) {
             $data['image'] = $imagePaths[0];
-        } elseif (is_string($request->input('image'))) {
-            $data['image'] = $request->input('image');
+        } elseif ($request->filled('image') && is_string($request->input('image'))) {
+            $data['image'] = preg_replace('#^https?://[^/]+#', '', $request->input('image'));
         }
 
         if (!empty($imagePaths)) {
-            $data['images'] = $imagePaths;
+            $data['images'] = array_values(array_unique(array_filter($imagePaths)));
         }
 
         // Handle video upload
@@ -299,37 +297,76 @@ class AccommodationController extends Controller
         $accommodation = \App\Models\Accommodation::findOrFail($id);
 
         $imagePaths = [];
+        $hasNewFileUpload = false;
+
         if ($request->hasFile('images')) {
             foreach ((array) $request->file('images') as $file) {
                 if ($file) {
-                    $fileName = time() . '_' . rand(1000, 9999) . '_' . $file->getClientOriginalName();
-                    $file->storeAs('public/accommodations', $fileName);
-                    $imagePaths[] = '/storage/accommodations/' . $fileName;
+                    $path = $file->store('accommodations', 'public');
+                    $imagePaths[] = '/storage/' . $path;
+                    $hasNewFileUpload = true;
                 }
             }
         }
+
         if ($request->hasFile('image')) {
             $image = $request->file('image');
-            $imageName = time() . '_' . $image->getClientOriginalName();
-            $image->storeAs('public/accommodations', $imageName);
-            $singlePath = '/storage/accommodations/' . $imageName;
-            if (!in_array($singlePath, $imagePaths)) {
-                array_unshift($imagePaths, $singlePath);
-            }
+            $path = $image->store('accommodations', 'public');
+            $singlePath = '/storage/' . $path;
+            $imagePaths[] = $singlePath;
             $data['image'] = $singlePath;
-        } elseif (!empty($imagePaths)) {
-            $data['image'] = $imagePaths[0];
+            $hasNewFileUpload = true;
+        }
+
+        // Merge existing retained images if provided
+        if ($request->has('existing_images')) {
+            $existing = $request->input('existing_images');
+            $existingArr = [];
+            if (is_string($existing)) {
+                $decoded = json_decode($existing, true);
+                if (is_array($decoded)) {
+                    $existingArr = $decoded;
+                }
+            } elseif (is_array($existing)) {
+                $existingArr = $existing;
+            }
+
+            $cleanedExisting = array_map(function($img) {
+                if (is_string($img)) {
+                    return preg_replace('#^https?://[^/]+#', '', $img);
+                }
+                return $img;
+            }, $existingArr);
+
+            if ($hasNewFileUpload) {
+                $imagePaths = array_merge($imagePaths, $cleanedExisting);
+            } else {
+                $imagePaths = array_merge($cleanedExisting, $imagePaths);
+            }
+        }
+
+        if (!$hasNewFileUpload && $request->filled('image') && is_string($request->input('image'))) {
+            $cleanImg = preg_replace('#^https?://[^/]+#', '', $request->input('image'));
+            $data['image'] = $cleanImg;
+            if (!in_array($cleanImg, $imagePaths)) {
+                array_unshift($imagePaths, $cleanImg);
+            }
         }
 
         if (!empty($imagePaths)) {
+            $imagePaths = array_values(array_unique(array_filter($imagePaths)));
             $data['images'] = $imagePaths;
+            if (empty($data['image'])) {
+                $data['image'] = $imagePaths[0];
+            }
         }
 
         if ($request->hasFile('video')) {
             $video = $request->file('video');
-            $videoName = time() . '_' . $video->getClientOriginalName();
-            $video->storeAs('public/accommodations/videos', $videoName);
-            $data['video'] = '/storage/accommodations/videos/' . $videoName;
+            $path = $video->store('accommodations/videos', 'public');
+            $data['video'] = '/storage/' . $path;
+        } elseif ($request->filled('video') && is_string($request->input('video'))) {
+            $data['video'] = $request->input('video');
         }
 
         $accommodation->update($data);

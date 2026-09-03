@@ -107,8 +107,8 @@ class EventController extends Controller
             } catch (\Exception $e) {
                 return response()->json(['error' => 'Failed to store file: ' . $e->getMessage()], 400);
             }
-        } elseif (is_string($request->input('image'))) {
-            $data['image'] = $request->input('image');
+        } elseif ($request->filled('image') && is_string($request->input('image'))) {
+            $data['image'] = preg_replace('#^https?://[^/]+#', '', $request->input('image'));
         }
 
         $item = \App\Models\Event::create(array_merge($data, [
@@ -166,8 +166,8 @@ class EventController extends Controller
             } catch (\Exception $e) {
                 return response()->json(['error' => 'Failed to store file: ' . $e->getMessage()], 400);
             }
-        } elseif (is_string($request->input('image'))) {
-            $data['image'] = $request->input('image');
+        } elseif ($request->filled('image') && is_string($request->input('image'))) {
+            $data['image'] = preg_replace('#^https?://[^/]+#', '', $request->input('image'));
         }
 
         $item->update($data);

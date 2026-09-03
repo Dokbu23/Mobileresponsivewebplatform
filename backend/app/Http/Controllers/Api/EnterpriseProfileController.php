@@ -45,18 +45,28 @@ class EnterpriseProfileController extends Controller
         $data = $request->validate([
             'store_name'        => 'nullable|string|max:255',
             'store_description' => 'nullable|string',
-            'logo'              => 'nullable|file|mimes:jpg,jpeg,png,webp|max:5120',
-            'banner'            => 'nullable|file|mimes:jpg,jpeg,png,webp|max:5120',
+            'logo'              => 'nullable',
+            'banner'            => 'nullable',
+            'store_logo'        => 'nullable',
+            'store_banner'      => 'nullable',
         ]);
 
         if ($request->hasFile('logo')) {
             $path = $request->file('logo')->store('enterprise/logos', 'public');
             $data['store_logo'] = '/storage/' . $path;
+        } elseif ($request->filled('logo') && is_string($request->input('logo'))) {
+            $data['store_logo'] = preg_replace('#^https?://[^/]+#', '', $request->input('logo'));
+        } elseif ($request->filled('store_logo') && is_string($request->input('store_logo'))) {
+            $data['store_logo'] = preg_replace('#^https?://[^/]+#', '', $request->input('store_logo'));
         }
 
         if ($request->hasFile('banner')) {
             $path = $request->file('banner')->store('enterprise/banners', 'public');
             $data['store_banner'] = '/storage/' . $path;
+        } elseif ($request->filled('banner') && is_string($request->input('banner'))) {
+            $data['store_banner'] = preg_replace('#^https?://[^/]+#', '', $request->input('banner'));
+        } elseif ($request->filled('store_banner') && is_string($request->input('store_banner'))) {
+            $data['store_banner'] = preg_replace('#^https?://[^/]+#', '', $request->input('store_banner'));
         }
 
         $user->update([
@@ -94,18 +104,28 @@ class EnterpriseProfileController extends Controller
             'instagram_link'    => 'nullable|string|max:500',
             'latitude'          => 'nullable|numeric',
             'longitude'         => 'nullable|numeric',
-            'logo'              => 'nullable|file|mimes:jpg,jpeg,png,webp|max:5120',
-            'banner'            => 'nullable|file|mimes:jpg,jpeg,png,webp|max:5120',
+            'logo'              => 'nullable',
+            'banner'            => 'nullable',
+            'store_logo'        => 'nullable',
+            'store_banner'      => 'nullable',
         ]);
 
         if ($request->hasFile('logo')) {
             $path = $request->file('logo')->store('enterprise/logos', 'public');
             $data['store_logo'] = '/storage/' . $path;
+        } elseif ($request->filled('logo') && is_string($request->input('logo'))) {
+            $data['store_logo'] = preg_replace('#^https?://[^/]+#', '', $request->input('logo'));
+        } elseif ($request->filled('store_logo') && is_string($request->input('store_logo'))) {
+            $data['store_logo'] = preg_replace('#^https?://[^/]+#', '', $request->input('store_logo'));
         }
 
         if ($request->hasFile('banner')) {
             $path = $request->file('banner')->store('enterprise/banners', 'public');
             $data['store_banner'] = '/storage/' . $path;
+        } elseif ($request->filled('banner') && is_string($request->input('banner'))) {
+            $data['store_banner'] = preg_replace('#^https?://[^/]+#', '', $request->input('banner'));
+        } elseif ($request->filled('store_banner') && is_string($request->input('store_banner'))) {
+            $data['store_banner'] = preg_replace('#^https?://[^/]+#', '', $request->input('store_banner'));
         }
 
         $updateData = array_filter([

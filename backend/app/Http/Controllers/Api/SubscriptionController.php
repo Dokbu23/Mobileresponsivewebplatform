@@ -54,7 +54,7 @@ class SubscriptionController extends Controller
             'amount' => 'required|numeric',
             'payment_method' => 'required|string',
             'payment_reference' => 'nullable|string',
-            'receipt_image' => 'required|image|mimes:jpeg,png,jpg,gif|max:5120',
+            'receipt_image' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
             'notes' => 'nullable|string'
         ]);
 

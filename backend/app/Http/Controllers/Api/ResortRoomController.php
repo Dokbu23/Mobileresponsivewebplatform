@@ -49,7 +49,7 @@ class ResortRoomController extends Controller
             'capacity'       => 'nullable|integer|min:1',
             'description'    => 'nullable|string',
             'image'          => 'nullable',
-            'images.*'       => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'images'         => 'nullable',
             'is_available'   => 'nullable|boolean',
         ]);
 
@@ -58,8 +58,7 @@ class ResortRoomController extends Controller
         if ($request->hasFile('images')) {
             foreach ((array) $request->file('images') as $file) {
                 if ($file) {
-                    $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-                    $path = $file->storeAs('resort-rooms', $filename, 'public');
+                    $path = $file->store('resort-rooms', 'public');
                     $imagePaths[] = '/storage/' . $path;
                 }
             }
@@ -67,8 +66,7 @@ class ResortRoomController extends Controller
 
         if ($request->hasFile('image')) {
             $image = $request->file('image');
-            $filename = time() . '_' . uniqid() . '.' . $image->getClientOriginalExtension();
-            $path = $image->storeAs('resort-rooms', $filename, 'public');
+            $path = $image->store('resort-rooms', 'public');
             $singlePath = '/storage/' . $path;
             if (!in_array($singlePath, $imagePaths)) {
                 array_unshift($imagePaths, $singlePath);
@@ -76,10 +74,12 @@ class ResortRoomController extends Controller
             $data['image'] = $singlePath;
         } elseif (!empty($imagePaths)) {
             $data['image'] = $imagePaths[0];
+        } elseif ($request->filled('image') && is_string($request->input('image'))) {
+            $data['image'] = preg_replace('#^https?://[^/]+#', '', $request->input('image'));
         }
 
         if (!empty($imagePaths)) {
-            $data['images'] = $imagePaths;
+            $data['images'] = array_values(array_unique(array_filter($imagePaths)));
         }
 
         $data['user_id'] = $user->id;
@@ -105,53 +105,76 @@ class ResortRoomController extends Controller
             'capacity'       => 'nullable|integer|min:1',
             'description'    => 'nullable|string',
             'image'          => 'nullable',
-            'images.*'       => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            'images'         => 'nullable',
             'is_available'   => 'nullable|boolean',
         ]);
 
         $imagePaths = [];
-
-        // Check if existing_images passed
-        if ($request->has('existing_images')) {
-            $existing = $request->input('existing_images');
-            if (is_string($existing)) {
-                try {
-                    $parsed = json_decode($existing, true);
-                    if (is_array($parsed)) $imagePaths = $parsed;
-                    else $imagePaths = [$existing];
-                } catch (\Throwable $e) {
-                    $imagePaths = [$existing];
-                }
-            } elseif (is_array($existing)) {
-                $imagePaths = $existing;
-            }
-        }
+        $hasNewFileUpload = false;
 
         if ($request->hasFile('images')) {
             foreach ((array) $request->file('images') as $file) {
                 if ($file) {
-                    $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-                    $path = $file->storeAs('resort-rooms', $filename, 'public');
+                    $path = $file->store('resort-rooms', 'public');
                     $imagePaths[] = '/storage/' . $path;
+                    $hasNewFileUpload = true;
                 }
             }
         }
 
         if ($request->hasFile('image')) {
             $image = $request->file('image');
-            $filename = time() . '_' . uniqid() . '.' . $image->getClientOriginalExtension();
-            $path = $image->storeAs('resort-rooms', $filename, 'public');
+            $path = $image->store('resort-rooms', 'public');
             $singlePath = '/storage/' . $path;
-            if (!in_array($singlePath, $imagePaths)) {
-                array_unshift($imagePaths, $singlePath);
-            }
+            $imagePaths[] = $singlePath;
             $data['image'] = $singlePath;
-        } elseif (!empty($imagePaths)) {
-            $data['image'] = $imagePaths[0];
+            $hasNewFileUpload = true;
+        }
+
+        // Check if existing_images passed
+        if ($request->has('existing_images')) {
+            $existing = $request->input('existing_images');
+            $existingArr = [];
+            if (is_string($existing)) {
+                try {
+                    $parsed = json_decode($existing, true);
+                    if (is_array($parsed)) $existingArr = $parsed;
+                    else $existingArr = [$existing];
+                } catch (\Throwable $e) {
+                    $existingArr = [$existing];
+                }
+            } elseif (is_array($existing)) {
+                $existingArr = $existing;
+            }
+
+            $cleanedExisting = array_map(function($img) {
+                if (is_string($img)) {
+                    return preg_replace('#^https?://[^/]+#', '', $img);
+                }
+                return $img;
+            }, $existingArr);
+
+            if ($hasNewFileUpload) {
+                $imagePaths = array_merge($imagePaths, $cleanedExisting);
+            } else {
+                $imagePaths = array_merge($cleanedExisting, $imagePaths);
+            }
+        }
+
+        if (!$hasNewFileUpload && $request->filled('image') && is_string($request->input('image'))) {
+            $cleanImg = preg_replace('#^https?://[^/]+#', '', $request->input('image'));
+            $data['image'] = $cleanImg;
+            if (!in_array($cleanImg, $imagePaths)) {
+                array_unshift($imagePaths, $cleanImg);
+            }
         }
 
         if (!empty($imagePaths)) {
+            $imagePaths = array_values(array_unique(array_filter($imagePaths)));
             $data['images'] = $imagePaths;
+            if (empty($data['image'])) {
+                $data['image'] = $imagePaths[0];
+            }
         }
 
         $room->update($data);

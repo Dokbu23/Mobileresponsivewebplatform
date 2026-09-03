@@ -119,12 +119,14 @@ class UserController extends Controller
             'address'     => 'nullable|string|max:500',
             'barangay'    => 'nullable|string|max:100',
             'description' => 'nullable|string|max:1000',
-            'avatar'      => 'nullable|file|mimes:jpg,jpeg,png,webp|max:5120',
+            'avatar'      => 'nullable',
         ]);
 
         if ($request->hasFile('avatar')) {
             $path = $request->file('avatar')->store('avatars', 'public');
             $data['avatar'] = '/storage/' . $path;
+        } elseif ($request->filled('avatar') && is_string($request->input('avatar'))) {
+            $data['avatar'] = preg_replace('#^https?://[^/]+#', '', $request->input('avatar'));
         }
 
         $user->update(array_filter([
