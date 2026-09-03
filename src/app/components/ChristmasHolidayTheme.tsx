@@ -239,8 +239,8 @@ export function ChristmasHolidayTheme() {
           overflow: visible !important;
           border: none !important;
           outline: none !important;
-          box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.12) !important;
-          transition: all 0.35s ease;
+          box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.08) !important;
+          transition: all 0.3s ease;
         }
 
         /* Preserve clean rounded corners on card inner contents */
@@ -265,7 +265,7 @@ export function ChristmasHolidayTheme() {
         body.holiday-theme-active div.group.rounded-xl::before {
           content: '';
           position: absolute;
-          inset: -9px;
+          inset: -7px;
           background-image: 
             /* 1. Top Wavy Snow Margin */
             url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 14'%3E%3Cpath d='M0,14 Q6,2 12,6 Q18,0 24,7 Q30,1 36,6 Q42,0 48,7 Q54,1 60,14 Z' fill='%23ffffff'/%3E%3Cpath d='M0,14 Q6,4 12,8 Q18,2 24,9 Q30,3 36,8 Q42,2 48,9 Q54,3 60,14 Z' fill='%23bae6fd' opacity='0.8'/%3E%3C/svg%3E"),
@@ -286,11 +286,11 @@ export function ChristmasHolidayTheme() {
             repeat-y, 
             repeat-y;
           background-size: 
-            50px 14px, 
-            50px 14px, 
-            14px 50px, 
-            14px 50px;
-          filter: drop-shadow(0 0 3px rgba(2, 132, 199, 0.45));
+            42px 11px, 
+            42px 11px, 
+            11px 42px, 
+            11px 42px;
+          filter: drop-shadow(0 0 2.5px rgba(2, 132, 199, 0.4));
           z-index: 25;
           pointer-events: none;
         }
@@ -301,15 +301,44 @@ export function ChristmasHolidayTheme() {
         body.holiday-theme-active div.group.rounded-xl::after {
           content: '';
           position: absolute;
-          inset: -9px;
+          inset: -7px;
           background-image: 
-            radial-gradient(circle at 8px 8px, #ffffff 6px, #bae6fd 7.5px, transparent 8px),
-            radial-gradient(circle at calc(100% - 8px) 8px, #ffffff 6px, #bae6fd 7.5px, transparent 8px),
-            radial-gradient(circle at 8px calc(100% - 8px), #ffffff 6px, #bae6fd 7.5px, transparent 8px),
-            radial-gradient(circle at calc(100% - 8px) calc(100% - 8px), #ffffff 6px, #bae6fd 7.5px, transparent 8px);
-          filter: drop-shadow(0 0 3px rgba(2, 132, 199, 0.45));
+            radial-gradient(circle at 6px 6px, #ffffff 5px, #bae6fd 6px, transparent 6.5px),
+            radial-gradient(circle at calc(100% - 6px) 6px, #ffffff 5px, #bae6fd 6px, transparent 6.5px),
+            radial-gradient(circle at 6px calc(100% - 6px), #ffffff 5px, #bae6fd 6px, transparent 6.5px),
+            radial-gradient(circle at calc(100% - 6px) calc(100% - 6px), #ffffff 5px, #bae6fd 6px, transparent 6.5px);
+          filter: drop-shadow(0 0 2px rgba(2, 132, 199, 0.4));
           z-index: 26;
           pointer-events: none;
+        }
+
+        /* ── MOBILE OPTIMIZATION: SLIM & PROPORTIONATE WAVY SNOW ── */
+        @media (max-width: 640px) {
+          body.holiday-theme-active div.group.rounded-2xl::before,
+          body.holiday-theme-active div.group.rounded-3xl::before,
+          body.holiday-theme-active div.group.rounded-xl::before {
+            inset: -4px;
+            background-size: 28px 7px, 28px 7px, 7px 28px, 7px 28px;
+            filter: drop-shadow(0 0 1.5px rgba(2, 132, 199, 0.35));
+          }
+
+          body.holiday-theme-active div.group.rounded-2xl::after,
+          body.holiday-theme-active div.group.rounded-3xl::after,
+          body.holiday-theme-active div.group.rounded-xl::after {
+            inset: -4px;
+            background-image: 
+              radial-gradient(circle at 4px 4px, #ffffff 3px, #bae6fd 4px, transparent 4.5px),
+              radial-gradient(circle at calc(100% - 4px) 4px, #ffffff 3px, #bae6fd 4px, transparent 4.5px),
+              radial-gradient(circle at 4px calc(100% - 4px), #ffffff 3px, #bae6fd 4px, transparent 4.5px),
+              radial-gradient(circle at calc(100% - 4px) calc(100% - 4px), #ffffff 3px, #bae6fd 4px, transparent 4.5px);
+            filter: drop-shadow(0 0 1.5px rgba(2, 132, 199, 0.35));
+          }
+
+          body.holiday-theme-active div.group.rounded-2xl,
+          body.holiday-theme-active div.group.rounded-3xl,
+          body.holiday-theme-active div.group.rounded-xl {
+            box-shadow: 0 2px 8px -1px rgba(0, 0, 0, 0.07) !important;
+          }
         }
 
         /* Card Hover - Shimmering Festive Snow Border Glow */
@@ -317,10 +346,10 @@ export function ChristmasHolidayTheme() {
         body.holiday-theme-active div.group.rounded-3xl:hover,
         body.holiday-theme-active div.group.rounded-xl:hover {
           box-shadow: 
-            0 0 20px 6px rgba(56, 189, 248, 0.45),
-            0 0 32px 8px rgba(225, 29, 72, 0.2),
-            0 16px 36px -4px rgba(0, 0, 0, 0.16) !important;
-          transform: translateY(-4px);
+            0 0 16px 4px rgba(56, 189, 248, 0.4),
+            0 0 24px 6px rgba(225, 29, 72, 0.18),
+            0 12px 28px -4px rgba(0, 0, 0, 0.14) !important;
+          transform: translateY(-3px);
         }
 
         /* ── BUTTON CHRISTMAS DESIGN: HOLIDAY RED-PINK GRADIENTS ── */

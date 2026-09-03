@@ -339,11 +339,11 @@ export function Dashboard() {
             )}
 
             {/* Main Heading with Santa Hat */}
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-white leading-tight tracking-tight mb-4">
+            <h1 className="text-3xl sm:text-5xl md:text-6xl font-black text-white leading-tight tracking-tight mb-3 sm:mb-4">
               <span className="relative inline-block">
                 Discover
                 {isHoliday && (
-                  <span className="absolute -top-7 sm:-top-9 -left-3 text-3xl sm:text-4xl select-none pointer-events-none transform -rotate-12 filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)]">
+                  <span className="absolute -top-6 sm:-top-9 -left-2 sm:-left-3 text-2xl sm:text-4xl select-none pointer-events-none transform -rotate-12 filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)]">
                     🎅
                   </span>
                 )}
@@ -359,34 +359,34 @@ export function Dashboard() {
             </h1>
 
             {/* Subtext Paragraph */}
-            <p className="text-sm sm:text-base text-gray-200 font-medium leading-relaxed mb-8 max-w-xl">
+            <p className="text-xs sm:text-base text-gray-200 font-medium leading-relaxed mb-6 sm:mb-8 max-w-xl">
               Explore breathtaking beaches, immerse in indigenous culture, and discover the untouched paradise of Oriental Mindoro.
             </p>
 
             {/* CTA Buttons */}
-            <div className="flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-4">
               <Link
                 to="/attractions"
-                className={`px-7 py-3.5 font-bold rounded-full text-sm flex items-center gap-2.5 shadow-xl transition-all ${
+                className={`px-5 py-2.5 sm:px-7 sm:py-3.5 font-bold rounded-full text-xs sm:text-sm flex items-center gap-2 sm:gap-2.5 shadow-xl transition-all ${
                   isHoliday
                     ? 'bg-gradient-to-r from-red-600 via-pink-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white shadow-red-500/40 hover:scale-105 border border-red-300/40'
                     : 'bg-pink-500 hover:bg-pink-600 active:scale-95 text-white shadow-pink-500/35'
                 }`}
               >
-                {isHoliday && <span className="text-base">❄️</span>}
+                {isHoliday && <span className="text-sm">❄️</span>}
                 <span>Start Exploring</span>
-                <ArrowRight className="h-4 w-4 stroke-[3]" />
+                <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 stroke-[3]" />
               </Link>
               <button
                 onClick={() => setIsVideoModalOpen(true)}
-                className={`px-6 py-3.5 text-white font-semibold backdrop-blur-md rounded-full text-sm flex items-center gap-2 border transition-all cursor-pointer ${
+                className={`px-4 py-2.5 sm:px-6 sm:py-3.5 text-white font-semibold backdrop-blur-md rounded-full text-xs sm:text-sm flex items-center gap-2 border transition-all cursor-pointer ${
                   isHoliday
                     ? 'bg-white/20 hover:bg-white/30 border-white/40 shadow-lg shadow-white/10 hover:scale-105'
                     : 'bg-white/15 hover:bg-white/25 active:scale-95 border-white/25'
                 }`}
               >
-                <div className="w-6 h-6 rounded-full bg-white/25 flex items-center justify-center">
-                  <Play className="h-3 w-3 fill-white text-white translate-x-0.5" />
+                <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-white/25 flex items-center justify-center">
+                  <Play className="h-2.5 w-2.5 sm:h-3 sm:w-3 fill-white text-white translate-x-0.5" />
                 </div>
                 <span>Watch Video</span>
               </button>
@@ -396,65 +396,65 @@ export function Dashboard() {
       </section>
 
       {/* ── 2. STATS BAR SECTION ── */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-10 relative z-30">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 -mt-6 sm:-mt-10 relative z-30">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
           <div
             onClick={() => navigate('/attractions')}
-            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-4 hover:shadow-lg hover:border-blue-200 transition-all cursor-pointer group"
+            className="bg-white p-3 sm:p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-2.5 sm:gap-4 hover:shadow-lg hover:border-blue-200 transition-all cursor-pointer group"
           >
-            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-              <Users className="h-6 w-6" />
+            <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+              <Users className="h-4 w-4 sm:h-6 sm:w-6" />
             </div>
             <div>
-              <p className="text-2xl font-black text-gray-900 leading-tight">
+              <p className="text-base sm:text-2xl font-black text-gray-900 leading-tight">
                 {formatCount(stats?.tourists || stats?.visitor_count || (attractions.reduce((sum, a) => sum + (Number(a.view_count) || 0), 0) + 12))}
               </p>
-              <p className="text-xs text-gray-500 font-medium group-hover:text-blue-600 transition-colors">Visitor Count</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 font-medium group-hover:text-blue-600 transition-colors">Visitor Count</p>
             </div>
           </div>
 
           <div
             onClick={() => navigate('/attractions')}
-            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-4 hover:shadow-lg hover:border-emerald-200 transition-all cursor-pointer group"
+            className="bg-white p-3 sm:p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-2.5 sm:gap-4 hover:shadow-lg hover:border-emerald-200 transition-all cursor-pointer group"
           >
-            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-              <Compass className="h-6 w-6" />
+            <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+              <Compass className="h-4 w-4 sm:h-6 sm:w-6" />
             </div>
             <div>
-              <p className="text-2xl font-black text-gray-900 leading-tight">
+              <p className="text-base sm:text-2xl font-black text-gray-900 leading-tight">
                 {formatCount(attractions.length || stats?.attractions || 8)}
               </p>
-              <p className="text-xs text-gray-500 font-medium group-hover:text-emerald-600 transition-colors">Local Attractions</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 font-medium group-hover:text-emerald-600 transition-colors">Local Attractions</p>
             </div>
           </div>
 
           <div
             onClick={() => navigate('/attractions')}
-            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-4 hover:shadow-lg hover:border-cyan-200 transition-all cursor-pointer group"
+            className="bg-white p-3 sm:p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-2.5 sm:gap-4 hover:shadow-lg hover:border-cyan-200 transition-all cursor-pointer group"
           >
-            <div className="w-12 h-12 rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-              <Waves className="h-6 w-6" />
+            <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-cyan-50 text-cyan-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+              <Waves className="h-4 w-4 sm:h-6 sm:w-6" />
             </div>
             <div>
-              <p className="text-2xl font-black text-gray-900 leading-tight">
+              <p className="text-base sm:text-2xl font-black text-gray-900 leading-tight">
                 {formatCount(displayBeaches.length || 4)}
               </p>
-              <p className="text-xs text-gray-500 font-medium group-hover:text-cyan-600 transition-colors">Beaches</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 font-medium group-hover:text-cyan-600 transition-colors">Beaches</p>
             </div>
           </div>
 
           <div
             onClick={() => navigate('/accommodations')}
-            className="bg-white p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-4 hover:shadow-lg hover:border-pink-200 transition-all cursor-pointer group"
+            className="bg-white p-3 sm:p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-2.5 sm:gap-4 hover:shadow-lg hover:border-pink-200 transition-all cursor-pointer group"
           >
-            <div className="w-12 h-12 rounded-2xl bg-pink-50 text-pink-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-              <Hotel className="h-6 w-6" />
+            <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-pink-50 text-pink-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+              <Hotel className="h-4 w-4 sm:h-6 sm:w-6" />
             </div>
             <div>
-              <p className="text-2xl font-black text-gray-900 leading-tight">
+              <p className="text-base sm:text-2xl font-black text-gray-900 leading-tight">
                 {formatCount(accommodations.length || stats?.resorts || 6)}
               </p>
-              <p className="text-xs text-gray-500 font-medium group-hover:text-pink-600 transition-colors">Resorts</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 font-medium group-hover:text-pink-600 transition-colors">Resorts</p>
             </div>
           </div>
         </div>

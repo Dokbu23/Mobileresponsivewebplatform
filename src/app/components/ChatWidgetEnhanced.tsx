@@ -416,10 +416,10 @@ export default function ChatWidgetEnhanced() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50">
+    <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50">
       <div className="flex items-end flex-col-reverse">
         {open && (
-          <div className="mb-3 w-[420px] max-w-[calc(100vw-2.5rem)] h-[620px] max-h-[82vh] bg-white border border-gray-200 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-slideUp">
+          <div className="mb-2 sm:mb-3 w-[calc(100vw-2rem)] sm:w-[420px] max-w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2.5rem)] h-[540px] max-h-[82vh] bg-white border border-gray-200 rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-slideUp">
             
             {/* ── Chat Header ── */}
             <div className={`px-5 py-4 text-white flex items-center justify-between shadow-md relative ${
@@ -635,7 +635,7 @@ export default function ChatWidgetEnhanced() {
         <button 
           onClick={() => setOpen(o => !o)} 
           title={isHoliday ? "Chat with Santa Claus AI 🎅" : "Chat with AI Tourism Assistant"} 
-          className={`p-4 rounded-3xl shadow-2xl hover:scale-110 active:scale-95 transition-all duration-300 relative group flex items-center justify-center chat-launcher-btn ${
+          className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl shadow-2xl hover:scale-110 active:scale-95 transition-all duration-300 relative group flex items-center justify-center chat-launcher-btn ${
             isHoliday
               ? 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white shadow-red-500/40 border border-red-300/40'
               : 'bg-gradient-to-r from-pink-600 via-rose-600 to-indigo-600 text-white shadow-pink-500/20'
@@ -643,13 +643,13 @@ export default function ChatWidgetEnhanced() {
         >
           {/* Santa Hat perched on top of button */}
           {isHoliday && !open && (
-            <span className="absolute -top-3.5 -left-1.5 text-2xl select-none pointer-events-none transform -rotate-12 filter drop-shadow">
+            <span className="absolute -top-3 sm:-top-3.5 -left-1 sm:-left-1.5 text-xl sm:text-2xl select-none pointer-events-none transform -rotate-12 filter drop-shadow">
               🎅
             </span>
           )}
 
           {!open && (
-            <div className={`absolute -top-1 -right-1 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white shadow-xs animate-bounce ${
+            <div className={`absolute -top-1 -right-1 h-4 w-4 sm:h-5 sm:w-5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-black border-2 border-white shadow-xs animate-bounce ${
               isHoliday ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'
             }`}>
               {isHoliday ? '🎁' : '💬'}
@@ -657,17 +657,17 @@ export default function ChatWidgetEnhanced() {
           )}
 
           {open ? (
-            <X className="h-6 w-6" />
+            <X className="h-5 w-5 sm:h-6 sm:w-6" />
           ) : isHoliday ? (
-            <div className="flex items-center justify-center text-2xl animate-pulse">
+            <div className="flex items-center justify-center text-xl sm:text-2xl animate-pulse">
               🎅
             </div>
           ) : (
-            <Bot className="h-6 w-6" />
+            <Bot className="h-5 w-5 sm:h-6 sm:w-6" />
           )}
           
           {/* Tooltip */}
-          <div className="absolute bottom-full right-0 mb-3 px-3 py-1.5 bg-gray-900 text-white text-xs font-bold rounded-xl opacity-0 group-hover:opacity-100 transition-all pointer-events-none whitespace-nowrap shadow-lg">
+          <div className="absolute bottom-full right-0 mb-3 px-3 py-1.5 bg-gray-900 text-white text-xs font-bold rounded-xl opacity-0 group-hover:opacity-100 transition-all pointer-events-none whitespace-nowrap shadow-lg hidden sm:block">
             {isHoliday
               ? (language === 'filipino' ? 'Ho-ho-ho! Magtanong kay Santa Claus AI! 🎅' : 'Ho-ho-ho! Ask Santa Claus AI! 🎅')
               : (language === 'filipino' ? 'Magtanong sa Tourism Assistant! 🏖️' : 'Ask our Tourism Assistant! 🏖️')}
