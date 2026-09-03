@@ -6,6 +6,7 @@ import { ACCOMMODATION_CATEGORIES } from '../../lib/constants';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
+import { isBerMonths } from '../../components/ChristmasHolidayTheme';
 import { toast } from 'sonner';
 import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
 
@@ -43,6 +44,7 @@ export function Accommodations() {
   const navigate = useNavigate();
   const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist, getWishlistCount } = useApp();
   const isLoggedIn = Boolean(userType && currentUser);
+  const isHoliday = isBerMonths();
 
   const [items, setItems] = useState<AccommodationItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -386,6 +388,17 @@ export function Accommodations() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
                     />
+
+                    {/* Christmas Holiday Stay Badge */}
+                    {isHoliday ? (
+                      <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 bg-gradient-to-r from-red-600 to-rose-600 text-white text-[10px] font-extrabold rounded-full shadow-md z-10 flex items-center gap-1 border border-red-300/40">
+                        <span>🎄</span> Holiday Stay
+                      </span>
+                    ) : acc.badge ? (
+                      <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 bg-pink-500 text-white text-[10px] font-bold rounded-full shadow-xs z-10">
+                        {acc.badge}
+                      </span>
+                    ) : null}
 
                     {/* Top-Right Action Controls (Share + Heart Wishlist) */}
                     <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">

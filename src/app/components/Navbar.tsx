@@ -8,6 +8,7 @@ import { showLogoutConfirm, showLogoutSuccess } from '../lib/sweetAlert';
 import { API_BASE, postJSON, removeAuthToken } from '../lib/api';
 
 import { NotificationBell } from './NotificationBell';
+import { isBerMonths } from './ChristmasHolidayTheme';
 
 type RoleType = 'tourist' | 'admin' | 'resort' | 'enterprise';
 
@@ -132,23 +133,80 @@ export function Navbar() {
   };
 
   const roleInfo = getRoleInfo();
+  const isHoliday = isBerMonths();
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-gray-100 dark:border-slate-800/80 shadow-sm transition-colors duration-200">
       {/* Top Pink Line */}
       <div className="h-1 bg-gradient-to-r from-pink-500 via-rose-400 to-pink-500 w-full" />
 
+      {/* ── ACCUMULATED SNOW MOUNDS ON TOP OF NAVBAR (NAKAUMPOK NA SNOW) ── */}
+      {isHoliday && (
+        <div className="absolute -top-3 left-0 right-0 overflow-hidden pointer-events-none z-20 select-none">
+          <svg
+            className="w-full h-3.5 block text-white fill-current filter drop-shadow-[0_2px_3px_rgba(2,132,199,0.35)]"
+            viewBox="0 0 1440 24"
+            preserveAspectRatio="none"
+          >
+            {/* Base snow mound with gentle curves */}
+            <path
+              d="M0,12 Q30,2 60,10 Q90,18 120,6 Q150,0 180,8 Q210,18 240,12 Q270,4 300,10 Q330,20 360,8 Q390,2 420,14 Q450,22 480,10 Q510,4 540,12 Q570,18 600,6 Q630,0 660,10 Q690,20 720,8 Q750,2 780,14 Q810,20 840,10 Q870,4 900,12 Q930,18 960,6 Q990,0 1020,10 Q1050,20 1080,8 Q1110,2 1140,14 Q1170,22 1200,10 Q1230,4 1260,12 Q1290,18 1320,6 Q1350,2 1380,10 Q1410,18 1440,8 L1440,24 L0,24 Z"
+              fill="#ffffff"
+            />
+            {/* Frosty icy-blue accent layer */}
+            <path
+              d="M0,14 Q30,5 60,12 Q90,20 120,9 Q150,2 180,10 Q210,20 240,14 Q270,6 300,12 Q330,22 360,11 Q390,4 420,16 Q450,24 480,13 Q510,6 540,14 Q570,20 600,9 Q630,2 660,12 Q690,22 720,11 Q750,4 780,16 Q810,22 840,13 Q870,6 900,14 Q930,20 960,9 Q990,2 1020,12 Q1050,22 1080,11 Q1110,4 1140,16 Q1170,24 1200,13 Q1230,6 1260,14 Q1290,20 1320,9 Q1350,4 1380,12 Q1410,20 1440,10 L1440,24 L0,24 Z"
+              fill="#e0f2fe"
+              opacity="0.8"
+            />
+          </svg>
+        </div>
+      )}
+
+      {/* ── SOFT ICICLE / SNOW DRIFTS ALONG BOTTOM OF NAVBAR ── */}
+      {isHoliday && (
+        <div className="absolute -bottom-2 left-0 right-0 overflow-hidden pointer-events-none z-20 select-none">
+          <svg
+            className="w-full h-2.5 block text-white fill-current filter drop-shadow-[0_1px_2px_rgba(2,132,199,0.25)]"
+            viewBox="0 0 1440 16"
+            preserveAspectRatio="none"
+          >
+            <path
+              d="M0,0 L1440,0 L1440,4 Q1415,14 1390,3 Q1365,12 1340,4 Q1315,15 1290,5 Q1265,11 1240,3 Q1215,14 1190,4 Q1165,12 1140,3 Q1115,16 1090,4 Q1065,11 1040,3 Q1015,15 990,4 Q965,11 940,3 Q915,14 890,4 Q865,11 840,3 Q815,15 790,4 Q765,12 740,3 Q715,16 690,4 Q665,11 640,3 Q615,14 590,4 Q565,11 540,3 Q515,15 490,4 Q465,12 440,3 Q415,14 390,4 Q365,11 340,3 Q315,15 290,4 Q265,12 240,3 Q215,14 190,4 Q165,11 140,3 Q115,14 90,4 Q65,11 40,3 Q15,11 0,3 Z"
+              fill="#ffffff"
+            />
+            <path
+              d="M0,0 L1440,0 L1440,2 Q1415,9 1390,2 Q1365,8 1340,3 Q1315,10 1290,3 Q1265,7 1240,2 Q1215,9 1190,3 Q1165,8 1140,2 Q1115,11 1090,3 Q1065,7 1040,2 Q1015,10 990,3 Q965,7 940,2 Q915,9 890,3 Q865,7 840,2 Q815,10 790,3 Q765,8 740,2 Q715,11 690,3 Q665,7 640,2 Q615,9 590,3 Q565,7 540,2 Q515,10 490,3 Q465,8 440,2 Q415,9 390,3 Q365,7 340,2 Q315,10 290,3 Q265,8 240,2 Q215,9 190,3 Q165,7 140,2 Q115,9 90,3 Q65,7 40,2 Q15,7 0,2 Z"
+              fill="#bae6fd"
+              opacity="0.7"
+            />
+          </svg>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           
-          {/* Logo */}
-          <Link to="/dashboard" className="flex items-center gap-2 group">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-400 flex items-center justify-center text-white shadow-md shadow-pink-500/20 group-hover:scale-105 transition-transform">
-              <MapPin className="h-5 w-5 fill-white stroke-pink-500" />
+          {/* Logo with Christmas Santa Hat */}
+          <Link to="/dashboard" className="flex items-center gap-2 group relative">
+            <div className="relative">
+              <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-400 flex items-center justify-center text-white shadow-md shadow-pink-500/20 group-hover:scale-105 transition-transform">
+                <MapPin className="h-5 w-5 fill-white stroke-pink-500" />
+              </div>
+              {isHoliday && (
+                <span className="absolute -top-3.5 -left-2 text-xl select-none pointer-events-none transform -rotate-12 filter drop-shadow">
+                  🎅
+                </span>
+              )}
             </div>
-            <span className="text-lg font-extrabold tracking-tight">
+            <span className="text-lg font-extrabold tracking-tight relative">
               <span className="text-pink-500">Discover</span>
               <span className="text-pink-600 dark:text-pink-400">Mansalay</span>
+              {isHoliday && (
+                <span className="absolute -top-2.5 -right-3.5 text-xs select-none pointer-events-none">
+                  ❄️
+                </span>
+              )}
             </span>
           </Link>
 
@@ -169,12 +227,17 @@ export function Navbar() {
                       navigate('/login');
                     }
                   }}
-                  className={`text-xs xl:text-sm font-semibold transition-all px-3 py-1.5 rounded-full ${
+                  className={`text-xs xl:text-sm font-semibold transition-all px-3 py-1.5 rounded-full relative ${
                     isActive
                       ? 'bg-pink-100/70 dark:bg-pink-500/20 text-pink-600 dark:text-pink-400 font-bold shadow-xs'
                       : 'text-gray-600 dark:text-slate-300 hover:text-pink-600 dark:hover:text-pink-400 hover:bg-pink-50/50 dark:hover:bg-slate-800/60'
                   }`}
                 >
+                  {isHoliday && isActive && (
+                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[10px] select-none pointer-events-none">
+                      ❄️
+                    </span>
+                  )}
                   {link.label}
                 </Link>
               );

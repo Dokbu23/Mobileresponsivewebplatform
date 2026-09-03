@@ -10,11 +10,13 @@ import { useApp } from '../../context/AppContext';
 import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken, decodeHtml } from '../../lib/api';
 import { DetailModal, DetailModalItem } from '../../components/DetailModal';
 import { ShareModal } from '../../components/ShareModal';
+import { isBerMonths } from '../../components/ChristmasHolidayTheme';
 import { toast } from 'sonner';
 
 export function Dashboard() {
   const navigate = useNavigate();
   const { userType, currentUser } = useApp();
+  const isHoliday = isBerMonths();
   const [attractions, setAttractions] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [accommodations, setAccommodations] = useState<any[]>([]);
@@ -320,17 +322,40 @@ export function Dashboard() {
         {/* Hero Content */}
         <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
           <div className="max-w-2xl">
-            {/* Small Pink Label */}
-            <div className="flex items-center gap-2 mb-3">
-              <span className="w-8 h-0.5 bg-pink-500 rounded-full"></span>
-              <span className="text-pink-400 font-bold text-xs uppercase tracking-widest">
-                Oriental Mindoro
-              </span>
-            </div>
+            {/* Small Pink / Holiday Label */}
+            {isHoliday ? (
+              <div className="inline-flex items-center gap-2 mb-3 px-3 py-1 bg-gradient-to-r from-red-600 via-pink-600 to-emerald-700 text-white text-xs font-extrabold rounded-full shadow-lg border border-red-400/50">
+                <span>🎄</span>
+                <span>Maligayang Pasko sa Mansalay!</span>
+                <span className="text-yellow-300">✨</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mb-3">
+                <span className="w-8 h-0.5 bg-pink-500 rounded-full"></span>
+                <span className="text-pink-400 font-bold text-xs uppercase tracking-widest">
+                  Oriental Mindoro
+                </span>
+              </div>
+            )}
 
-            {/* Main Heading */}
+            {/* Main Heading with Santa Hat */}
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-white leading-tight tracking-tight mb-4">
-              Discover <span className="text-pink-400 font-black">Mansalay</span>
+              <span className="relative inline-block">
+                Discover
+                {isHoliday && (
+                  <span className="absolute -top-7 sm:-top-9 -left-3 text-3xl sm:text-4xl select-none pointer-events-none transform -rotate-12 filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)]">
+                    🎅
+                  </span>
+                )}
+              </span>{' '}
+              <span className="text-pink-400 font-black relative inline-block">
+                Mansalay
+                {isHoliday && (
+                  <span className="absolute -top-2 -right-4 text-xs sm:text-sm select-none pointer-events-none animate-spin" style={{ animationDuration: '8s' }}>
+                    ❄️
+                  </span>
+                )}
+              </span>
             </h1>
 
             {/* Subtext Paragraph */}
@@ -342,16 +367,25 @@ export function Dashboard() {
             <div className="flex flex-wrap items-center gap-4">
               <Link
                 to="/attractions"
-                className="px-7 py-3.5 bg-pink-500 hover:bg-pink-600 active:scale-95 text-white font-bold rounded-full text-sm flex items-center gap-2.5 shadow-xl shadow-pink-500/35 transition-all"
+                className={`px-7 py-3.5 font-bold rounded-full text-sm flex items-center gap-2.5 shadow-xl transition-all ${
+                  isHoliday
+                    ? 'bg-gradient-to-r from-red-600 via-pink-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white shadow-red-500/40 hover:scale-105 border border-red-300/40'
+                    : 'bg-pink-500 hover:bg-pink-600 active:scale-95 text-white shadow-pink-500/35'
+                }`}
               >
+                {isHoliday && <span className="text-base">❄️</span>}
                 <span>Start Exploring</span>
                 <ArrowRight className="h-4 w-4 stroke-[3]" />
               </Link>
               <button
                 onClick={() => setIsVideoModalOpen(true)}
-                className="px-6 py-3.5 bg-white/15 hover:bg-white/25 active:scale-95 text-white font-semibold backdrop-blur-md rounded-full text-sm flex items-center gap-2 border border-white/25 transition-all cursor-pointer"
+                className={`px-6 py-3.5 text-white font-semibold backdrop-blur-md rounded-full text-sm flex items-center gap-2 border transition-all cursor-pointer ${
+                  isHoliday
+                    ? 'bg-white/20 hover:bg-white/30 border-white/40 shadow-lg shadow-white/10 hover:scale-105'
+                    : 'bg-white/15 hover:bg-white/25 active:scale-95 border-white/25'
+                }`}
               >
-                <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+                <div className="w-6 h-6 rounded-full bg-white/25 flex items-center justify-center">
                   <Play className="h-3 w-3 fill-white text-white translate-x-0.5" />
                 </div>
                 <span>Watch Video</span>

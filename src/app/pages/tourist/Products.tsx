@@ -7,6 +7,7 @@ import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml, reco
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
+import { isBerMonths } from '../../components/ChristmasHolidayTheme';
 
 interface ProductItem {
   id: string;
@@ -33,6 +34,7 @@ export function Products() {
   const navigate = useNavigate();
   const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist, getWishlistCount } = useApp();
   const isLoggedIn = Boolean(userType && currentUser);
+  const isHoliday = isBerMonths();
 
   const [items, setItems] = useState<ProductItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -360,12 +362,16 @@ export function Products() {
                     intervalMs={3500}
                   />
 
-                  {/* Top Left Badge */}
-                  {product.badge && (
+                  {/* Christmas Holiday Badge */}
+                  {isHoliday ? (
+                    <span className="absolute top-3 left-3 px-2.5 py-0.5 bg-gradient-to-r from-red-600 to-rose-600 text-white text-[10px] font-extrabold rounded-full shadow-md z-10 flex items-center gap-1 border border-red-300/40">
+                      <span>🎄</span> Holiday Item
+                    </span>
+                  ) : product.badge ? (
                     <span className="absolute top-3 left-3 px-3 py-1 bg-pink-500 text-white text-[10px] font-bold rounded-full shadow-xs">
                       {product.badge}
                     </span>
-                  )}
+                  ) : null}
 
                   {/* Top Right Wishlist & Share */}
                   <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20">
@@ -478,9 +484,14 @@ export function Products() {
                     </div>
                     <button
                       onClick={() => setSelectedProduct(product)}
-                      className="px-3.5 py-1.5 bg-gray-900 hover:bg-pink-500 text-white rounded-full text-xs font-bold transition-colors"
+                      className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm ${
+                        isHoliday
+                          ? 'bg-gradient-to-r from-red-600 via-pink-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white shadow-md shadow-red-500/25 hover:scale-105'
+                          : 'bg-gray-900 hover:bg-pink-500 text-white'
+                      }`}
                     >
-                      View Details
+                      {isHoliday && <span className="text-xs">❄️</span>}
+                      <span>View Details</span>
                     </button>
                   </div>
                 </div>

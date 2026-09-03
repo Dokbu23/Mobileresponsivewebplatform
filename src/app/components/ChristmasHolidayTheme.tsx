@@ -1,0 +1,345 @@
+import React, { useEffect, useState, useMemo } from 'react';
+import { Sparkles, X } from 'lucide-react';
+
+/**
+ * Checks if the current date falls within the Philippine "Ber Months"
+ * (September 1 to January 6 - Feast of the Three Kings)
+ */
+export function isBerMonths(): boolean {
+  const now = new Date();
+  const month = now.getMonth(); // 0 = Jan, 8 = Sep, 9 = Oct, 10 = Nov, 11 = Dec
+  const day = now.getDate();
+
+  // September to December OR first 6 days of January
+  return (month >= 8 && month <= 11) || (month === 0 && day <= 6);
+}
+
+// 4 Distinct Detailed Snowflake SVG Designs
+function SnowflakeIcon({ type, size, color }: { type: number; size: number; color: string }) {
+  switch (type % 4) {
+    case 0:
+      // Detailed branching 6-point crystal snowflake
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round">
+          <line x1="12" y1="1" x2="12" y2="23" />
+          <line x1="1" y1="12" x2="23" y2="12" />
+          <line x1="4.22" y1="4.22" x2="19.78" y2="19.78" />
+          <line x1="4.22" y1="19.78" x2="19.78" y2="4.22" />
+          <polyline points="9 4 12 7 15 4" />
+          <polyline points="9 20 12 17 15 20" />
+          <polyline points="4 9 7 12 4 15" />
+          <polyline points="20 9 17 12 20 15" />
+          <circle cx="12" cy="12" r="1.5" fill={color} />
+        </svg>
+      );
+    case 1:
+      // Ornate dendritic snowflake
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.7" strokeLinecap="round">
+          <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14" />
+          <path d="M12 5l-2-2m4 0l-2 2M12 19l-2 2m4 0l-2-2M5 12l-2-2m0 4l2-2M19 12l2-2m0 4l-2-2" />
+          <path d="M7 7l-2 0m2 2l0-2M17 17l2 0m-2-2l0 2" />
+          <circle cx="12" cy="12" r="1.8" fill="#ffffff" stroke={color} />
+        </svg>
+      );
+    case 2:
+      // Crystal star sparkle
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+          <path d="M12 1l2.8 7.2L22 11l-6.2 3.8L17 22l-5-4.2-5 4.2 1.2-7.2L2 11l7.2-2.8z" opacity="0.95" />
+          <circle cx="12" cy="12" r="2.5" fill="#ffffff" />
+        </svg>
+      );
+    case 3:
+    default:
+      // Star ice blossom
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round">
+          <line x1="12" y1="2" x2="12" y2="22" />
+          <line x1="2" y1="12" x2="22" y2="12" />
+          <line x1="5" y1="5" x2="19" y2="19" />
+          <line x1="5" y1="19" x2="19" y2="5" />
+          <polygon points="12,7 13.5,10.5 17,12 13.5,13.5 12,17 10.5,13.5 7,12 10.5,10.5" fill={color} opacity="0.65" />
+          <circle cx="12" cy="12" r="2" fill="#ffffff" />
+        </svg>
+      );
+  }
+}
+
+interface SnowflakeItem {
+  id: number;
+  left: number;
+  size: number;
+  duration: number;
+  delay: number;
+  opacity: number;
+  type: number;
+  color: string;
+  swayDuration: number;
+  rotationDirection: number;
+}
+
+const SNOWFLAKE_COLORS = [
+  '#0284c7', // vibrant cyan-blue
+  '#0369a1', // deep ocean crystal
+  '#38bdf8', // crisp sky ice
+  '#6366f1', // festive holiday indigo
+  '#ec4899', // Mansalay holiday pink
+  '#2563eb', // sapphire frost
+];
+
+export function ChristmasHolidayTheme() {
+  const [active, setActive] = useState(false);
+  const [showBanner, setShowBanner] = useState(() => {
+    const dismissed = sessionStorage.getItem('mansalay_holiday_banner_dismissed');
+    return !dismissed;
+  });
+
+  useEffect(() => {
+    const isHoliday = isBerMonths();
+    setActive(isHoliday);
+    if (isHoliday) {
+      document.body.classList.add('holiday-theme-active');
+    } else {
+      document.body.classList.remove('holiday-theme-active');
+    }
+    return () => {
+      document.body.classList.remove('holiday-theme-active');
+    };
+  }, []);
+
+  // Generate 38 distinct designed crystal snowflakes
+  const snowflakes: SnowflakeItem[] = useMemo(() => {
+    return Array.from({ length: 38 }, (_, i) => ({
+      id: i,
+      left: Math.random() * 98,
+      size: Math.floor(Math.random() * 14) + 16,
+      duration: Math.random() * 9 + 8,
+      delay: Math.random() * 10,
+      opacity: Math.random() * 0.4 + 0.6,
+      type: i % 4,
+      color: SNOWFLAKE_COLORS[i % SNOWFLAKE_COLORS.length],
+      swayDuration: Math.random() * 3 + 3,
+      rotationDirection: i % 2 === 0 ? 1 : -1,
+    }));
+  }, []);
+
+  const handleDismissBanner = () => {
+    setShowBanner(false);
+    sessionStorage.setItem('mansalay_holiday_banner_dismissed', 'true');
+  };
+
+  if (!active) return null;
+
+  return (
+    <>
+      {/* ── 1. FESTIVE TOP HOLIDAY GREETINGS BANNER ── */}
+      {showBanner && (
+        <div className="relative z-50 bg-gradient-to-r from-red-600 via-pink-600 to-emerald-700 text-white text-xs font-semibold py-2 px-4 shadow-md flex items-center justify-between transition-all duration-300">
+          <div className="flex-1 flex items-center justify-center gap-2 text-center truncate">
+            <span className="text-base animate-bounce">🎄</span>
+            <span className="tracking-wide font-bold drop-shadow">
+              Maligayang Pasko at Masaganang Bagong Taon, Mansalay!
+            </span>
+            <Sparkles className="h-4 w-4 text-yellow-300 animate-pulse hidden sm:inline" />
+            <span className="text-base">✨</span>
+          </div>
+          <button
+            onClick={handleDismissBanner}
+            className="text-white/80 hover:text-white p-1 rounded-full hover:bg-white/20 transition-colors ml-2"
+            title="Close"
+            aria-label="Close holiday banner"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* ── 2. FESTIVE FAIRY LIGHTS STRING ACROSS TOP ── */}
+      <div className="fixed top-0 left-0 right-0 z-40 pointer-events-none flex justify-around items-start h-5 overflow-hidden select-none">
+        {Array.from({ length: 24 }).map((_, idx) => {
+          const colors = [
+            'bg-red-500 shadow-red-500/80',
+            'bg-yellow-400 shadow-yellow-400/80',
+            'bg-emerald-500 shadow-emerald-500/80',
+            'bg-sky-400 shadow-sky-400/80',
+            'bg-pink-500 shadow-pink-500/80',
+          ];
+          const color = colors[idx % colors.length];
+          return (
+            <div key={idx} className="flex flex-col items-center">
+              <div className="w-0.5 h-2 bg-gray-700" />
+              <div
+                className={`w-2 h-2.5 rounded-full ${color} shadow-[0_0_8px] animate-pulse`}
+                style={{
+                  animationDuration: `${1.2 + (idx % 5) * 0.3}s`,
+                  animationDelay: `${(idx % 4) * 0.25}s`,
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── 3. VISIBLE DESIGNED CRYSTAL SNOWFLAKES (POINTER-EVENTS-NONE) ── */}
+      <div
+        className="fixed inset-0 pointer-events-none z-30 overflow-hidden select-none"
+        aria-hidden="true"
+      >
+        {snowflakes.map((flake) => (
+          <div
+            key={flake.id}
+            className="absolute transition-transform will-change-transform"
+            style={{
+              left: `${flake.left}%`,
+              top: '-35px',
+              opacity: flake.opacity,
+              animation: `snowFall ${flake.duration}s linear infinite, snowSway ${flake.swayDuration}s ease-in-out infinite alternate, snowSpin ${flake.duration * 0.8}s linear infinite ${flake.rotationDirection < 0 ? 'reverse' : 'normal'}`,
+              animationDelay: `${flake.delay}s, ${flake.delay * 0.3}s, ${flake.delay * 0.5}s`,
+              filter: 'drop-shadow(0 2px 5px rgba(2, 132, 199, 0.45)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.3))',
+            }}
+          >
+            <SnowflakeIcon type={flake.type} size={flake.size} color={flake.color} />
+          </div>
+        ))}
+      </div>
+
+      {/* ── 4. GLOBAL CHRISTMAS CARD & BUTTON STYLES ── */}
+      <style>{`
+        @keyframes snowFall {
+          0% {
+            transform: translateY(-35px);
+          }
+          100% {
+            transform: translateY(105vh);
+          }
+        }
+        @keyframes snowSway {
+          0% {
+            margin-left: -20px;
+          }
+          100% {
+            margin-left: 20px;
+          }
+        }
+        @keyframes snowSpin {
+          0% {
+            rotate: 0deg;
+          }
+          100% {
+            rotate: 360deg;
+          }
+        }
+
+        /* ── CARD CHRISTMAS DESIGN: SNOW SURROUNDING THE CARDS (PAIKOT NA WAVY SNOW SA MARGIN) ── */
+        body.holiday-theme-active div.group.rounded-2xl,
+        body.holiday-theme-active div.group.rounded-3xl,
+        body.holiday-theme-active div.group.rounded-xl {
+          position: relative;
+          overflow: visible !important;
+          border: none !important;
+          outline: none !important;
+          box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.12) !important;
+          transition: all 0.35s ease;
+        }
+
+        /* Preserve clean rounded corners on card inner contents */
+        body.holiday-theme-active div.group.rounded-2xl > div:first-child,
+        body.holiday-theme-active div.group.rounded-3xl > div:first-child,
+        body.holiday-theme-active div.group.rounded-xl > div:first-child {
+          border-top-left-radius: 1.25rem;
+          border-top-right-radius: 1.25rem;
+          overflow: hidden;
+        }
+
+        body.holiday-theme-active div.group.rounded-2xl > div:last-child,
+        body.holiday-theme-active div.group.rounded-3xl > div:last-child,
+        body.holiday-theme-active div.group.rounded-xl > div:last-child {
+          border-bottom-left-radius: 1.25rem;
+          border-bottom-right-radius: 1.25rem;
+        }
+
+        /* Continuous Wavy Snow Border All Around Margin (Top, Bottom, Left, Right) */
+        body.holiday-theme-active div.group.rounded-2xl::before,
+        body.holiday-theme-active div.group.rounded-3xl::before,
+        body.holiday-theme-active div.group.rounded-xl::before {
+          content: '';
+          position: absolute;
+          inset: -9px;
+          background-image: 
+            /* 1. Top Wavy Snow Margin */
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 14'%3E%3Cpath d='M0,14 Q6,2 12,6 Q18,0 24,7 Q30,1 36,6 Q42,0 48,7 Q54,1 60,14 Z' fill='%23ffffff'/%3E%3Cpath d='M0,14 Q6,4 12,8 Q18,2 24,9 Q30,3 36,8 Q42,2 48,9 Q54,3 60,14 Z' fill='%23bae6fd' opacity='0.8'/%3E%3C/svg%3E"),
+            /* 2. Bottom Wavy Snow Margin */
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 14'%3E%3Cpath d='M0,0 Q6,12 12,8 Q18,14 24,7 Q30,13 36,8 Q42,14 48,7 Q54,13 60,0 Z' fill='%23ffffff'/%3E%3Cpath d='M0,0 Q6,10 12,6 Q18,12 24,5 Q30,11 36,6 Q42,12 48,5 Q54,11 60,0 Z' fill='%23bae6fd' opacity='0.8'/%3E%3C/svg%3E"),
+            /* 3. Left Wavy Snow Margin */
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 60'%3E%3Cpath d='M14,0 Q2,6 6,12 Q0,18 7,24 Q1,30 6,36 Q0,42 7,48 Q1,54 14,60 Z' fill='%23ffffff'/%3E%3Cpath d='M14,0 Q4,6 8,12 Q2,18 9,24 Q3,30 8,36 Q2,42 9,48 Q3,54 14,60 Z' fill='%23bae6fd' opacity='0.8'/%3E%3C/svg%3E"),
+            /* 4. Right Wavy Snow Margin */
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 60'%3E%3Cpath d='M0,0 Q12,6 8,12 Q14,18 7,24 Q13,30 8,36 Q14,42 7,48 Q13,54 0,60 Z' fill='%23ffffff'/%3E%3Cpath d='M0,0 Q10,6 6,12 Q12,18 5,24 Q11,30 6,36 Q12,42 5,48 Q11,54 0,60 Z' fill='%23bae6fd' opacity='0.8'/%3E%3C/svg%3E");
+          background-position: 
+            top left, 
+            bottom left, 
+            top left, 
+            top right;
+          background-repeat: 
+            repeat-x, 
+            repeat-x, 
+            repeat-y, 
+            repeat-y;
+          background-size: 
+            50px 14px, 
+            50px 14px, 
+            14px 50px, 
+            14px 50px;
+          filter: drop-shadow(0 0 3px rgba(2, 132, 199, 0.45));
+          z-index: 25;
+          pointer-events: none;
+        }
+
+        /* 4 Fluffy Snowballs in the 4 Corners to connect the waves smoothly */
+        body.holiday-theme-active div.group.rounded-2xl::after,
+        body.holiday-theme-active div.group.rounded-3xl::after,
+        body.holiday-theme-active div.group.rounded-xl::after {
+          content: '';
+          position: absolute;
+          inset: -9px;
+          background-image: 
+            radial-gradient(circle at 8px 8px, #ffffff 6px, #bae6fd 7.5px, transparent 8px),
+            radial-gradient(circle at calc(100% - 8px) 8px, #ffffff 6px, #bae6fd 7.5px, transparent 8px),
+            radial-gradient(circle at 8px calc(100% - 8px), #ffffff 6px, #bae6fd 7.5px, transparent 8px),
+            radial-gradient(circle at calc(100% - 8px) calc(100% - 8px), #ffffff 6px, #bae6fd 7.5px, transparent 8px);
+          filter: drop-shadow(0 0 3px rgba(2, 132, 199, 0.45));
+          z-index: 26;
+          pointer-events: none;
+        }
+
+        /* Card Hover - Shimmering Festive Snow Border Glow */
+        body.holiday-theme-active div.group.rounded-2xl:hover,
+        body.holiday-theme-active div.group.rounded-3xl:hover,
+        body.holiday-theme-active div.group.rounded-xl:hover {
+          box-shadow: 
+            0 0 20px 6px rgba(56, 189, 248, 0.45),
+            0 0 32px 8px rgba(225, 29, 72, 0.2),
+            0 16px 36px -4px rgba(0, 0, 0, 0.16) !important;
+          transform: translateY(-4px);
+        }
+
+        /* ── BUTTON CHRISTMAS DESIGN: HOLIDAY RED-PINK GRADIENTS ── */
+        body.holiday-theme-active button.bg-pink-500,
+        body.holiday-theme-active button.bg-pink-600,
+        body.holiday-theme-active a.bg-pink-500,
+        body.holiday-theme-active a.bg-pink-600 {
+          background-image: linear-gradient(135deg, #e11d48 0%, #ec4899 50%, #f43f5e 100%) !important;
+          box-shadow: 0 4px 14px 0 rgba(225, 29, 72, 0.35) !important;
+        }
+
+        body.holiday-theme-active button.bg-pink-500:hover,
+        body.holiday-theme-active button.bg-pink-600:hover,
+        body.holiday-theme-active a.bg-pink-500:hover,
+        body.holiday-theme-active a.bg-pink-600:hover {
+          background-image: linear-gradient(135deg, #be123c 0%, #db2777 50%, #e11d48 100%) !important;
+          box-shadow: 0 6px 20px 0 rgba(225, 29, 72, 0.5), 0 0 12px rgba(253, 224, 71, 0.45) !important;
+        }
+      `}</style>
+    </>
+  );
+}

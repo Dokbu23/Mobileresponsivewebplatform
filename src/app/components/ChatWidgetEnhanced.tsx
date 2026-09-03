@@ -7,6 +7,7 @@ import {
   Compass, Hotel, Package, Calendar, MapPin, Navigation,
   Globe, Shield, ChevronRight, Phone, Bot, Check, ArrowUpRight
 } from 'lucide-react';
+import { isBerMonths } from './ChristmasHolidayTheme';
 
 type ChatMessage = {
   id: string;
@@ -213,6 +214,7 @@ function generateTourismAiReply(text: string, currentLang: 'filipino' | 'english
 export default function ChatWidgetEnhanced() {
   const { userType, currentUser } = useApp();
   const navigate = useNavigate();
+  const isHoliday = isBerMonths();
   const [open, setOpen] = useState(false);
   const [room, setRoom] = useState<string>(userType ?? 'tourist');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -228,14 +230,24 @@ export default function ChatWidgetEnhanced() {
   // Quick reply pills
   const quickReplies: Record<string, Record<string, QuickReply[]>> = {
     tourist: {
-      filipino: [
+      filipino: isHoliday ? [
+        { text: 'Ano ang magagandang beach at pasyalan?', icon: '🏖️' },
+        { text: 'Saan may available na resort ngayong holiday?', icon: '🏨' },
+        { text: 'Sikat na Pamasko at AWATI Crafts', icon: '🎁' },
+        { text: 'Mungkahi para sa Christmas Itinerary', icon: '🎄' },
+      ] : [
         { text: 'Ano ang magagandang tourist spots?', icon: '🏖️' },
         { text: 'Saan may magandang resort o tulugan?', icon: '🏨' },
         { text: 'Ano ang sikat na pasalubong at AWATI?', icon: '🎁' },
         { text: 'Paano pumunta sa Mansalay?', icon: '🚌' },
         { text: 'Magmungkahi ng 3-Day Itinerary', icon: '🗺️' },
       ],
-      english: [
+      english: isHoliday ? [
+        { text: 'Where are the top beaches & sights?', icon: '🏖️' },
+        { text: 'Any holiday stays or resorts available?', icon: '🏨' },
+        { text: 'Popular Christmas gifts & AWATI crafts', icon: '🎁' },
+        { text: 'Suggest a Holiday Travel Itinerary', icon: '🎄' },
+      ] : [
         { text: 'What are the top tourist spots?', icon: '🏖️' },
         { text: 'Where to stay in Mansalay?', icon: '🏨' },
         { text: 'Popular AWATI souvenirs & crafts', icon: '🎁' },
@@ -314,9 +326,13 @@ export default function ChatWidgetEnhanced() {
         else greeting = 'Good evening';
       }
       
-      const welcomeMsg = language === 'filipino' 
-        ? `${greeting}, **${displayUser}**! 👋\n\nAko ang iyong **Discover Mansalay AI Assistant**. Narito ako upang tulungan kang galugarin ang mga magagandang tanawin, beach tulad ng Buktot, mga resort, katutubong produkto ng AWATI, at direksyon sa bayan ng Mansalay.\n\nAno ang nais mong malaman?`
-        : `${greeting}, **${displayUser}**! 👋\n\nI'm your **Discover Mansalay AI Assistant**. I'm here to help you explore tourist spots, Buktot Beach, resorts, authentic AWATI handicrafts, travel directions, and itineraries.\n\nHow can I help you today?`;
+      const welcomeMsg = isHoliday
+        ? (language === 'filipino'
+          ? `🎅 **Ho-ho-ho! Maligayang Pasko, ${displayUser}!** 🎄✨\n\nAko si **Santa Claus AI**, ang iyong holiday tourism guide sa bayan ng Mansalay! 🏖️🎁\n\nNaghahanap ka ba ng magandang beach tulad ng Buktot, resort na pwedeng tulugan ngayong bakasyon, masasarap na pamasko at katutubong AWATI crafts, o direksyon sa mapa?\n\nSabihin mo lang at tutulungan kita!`
+          : `🎅 **Ho-ho-ho! Merry Christmas, ${displayUser}!** 🎄✨\n\nI'm **Santa Claus AI**, your official holiday tourism assistant in Mansalay! 🏖️🎁\n\nAre you looking for white sand beaches like Buktot, cozy holiday resorts, local pasalubong and AWATI handicrafts, or travel tips?\n\nJust ask and let's explore Mansalay together!`)
+        : (language === 'filipino' 
+          ? `${greeting}, **${displayUser}**! 👋\n\nAko ang iyong **Discover Mansalay AI Assistant**. Narito ako upang tulungan kang galugarin ang mga magagandang tanawin, beach tulad ng Buktot, mga resort, katutubong produkto ng AWATI, at direksyon sa bayan ng Mansalay.\n\nAno ang nais mong malaman?`
+          : `${greeting}, **${displayUser}**! 👋\n\nI'm your **Discover Mansalay AI Assistant**. I'm here to help you explore tourist spots, Buktot Beach, resorts, authentic AWATI handicrafts, travel directions, and itineraries.\n\nHow can I help you today?`);
       
       const greet: ChatMessage = { 
         id: 'greet-bot', 
@@ -406,22 +422,39 @@ export default function ChatWidgetEnhanced() {
           <div className="mb-3 w-[420px] max-w-[calc(100vw-2.5rem)] h-[620px] max-h-[82vh] bg-white border border-gray-200 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-slideUp">
             
             {/* ── Chat Header ── */}
-            <div className="px-5 py-4 bg-gradient-to-r from-pink-600 via-rose-600 to-indigo-700 text-white flex items-center justify-between shadow-md">
+            <div className={`px-5 py-4 text-white flex items-center justify-between shadow-md relative ${
+              isHoliday
+                ? 'bg-gradient-to-r from-red-600 via-rose-600 to-emerald-700'
+                : 'bg-gradient-to-r from-pink-600 via-rose-600 to-indigo-700'
+            }`}>
+              {/* Snow cap on top of chat window */}
+              {isHoliday && (
+                <div className="absolute top-0 left-0 right-0 h-2.5 overflow-hidden pointer-events-none select-none z-10">
+                  <svg className="w-full h-full text-white fill-current opacity-95" viewBox="0 0 200 12" preserveAspectRatio="none">
+                    <path d="M0,6 Q10,0 20,5 Q30,10 40,4 Q50,0 60,6 Q70,11 80,4 Q90,0 100,6 Q110,12 120,5 Q130,0 140,6 Q150,11 160,4 Q170,0 180,6 Q190,11 200,5 L200,12 L0,12 Z" fill="#ffffff" />
+                  </svg>
+                </div>
+              )}
+
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="flex items-center justify-center h-10 w-10 rounded-2xl bg-white/20 backdrop-blur-md shadow-inner text-white">
-                    <Bot className="h-6 w-6" />
+                  <div className={`flex items-center justify-center h-10 w-10 rounded-2xl shadow-inner text-white ${
+                    isHoliday ? 'bg-red-700/60 text-2xl border border-red-300/40' : 'bg-white/20 backdrop-blur-md'
+                  }`}>
+                    {isHoliday ? '🎅' : <Bot className="h-6 w-6" />}
                   </div>
                   <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 bg-emerald-400 rounded-full border-2 border-white"></div>
                 </div>
                 <div>
                   <div className="font-extrabold text-sm flex items-center gap-1.5">
-                    Discover Mansalay AI
-                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-white/25 uppercase tracking-wider">Assistant</span>
+                    {isHoliday ? 'Santa Claus AI' : 'Discover Mansalay AI'}
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-white/25 uppercase tracking-wider">
+                      {isHoliday ? '🎄 Santa Guide' : 'Assistant'}
+                    </span>
                   </div>
                   <div className="text-[11px] text-white/90 flex items-center gap-1.5 mt-0.5">
                     <span className="inline-block h-2 w-2 bg-emerald-400 rounded-full animate-pulse"></span>
-                    Online • Tourist & Local Guide
+                    {isHoliday ? 'Ho-ho-ho! Online • Holiday Tourism Guide' : 'Online • Tourist & Local Guide'}
                   </div>
                 </div>
               </div>
@@ -493,8 +526,12 @@ export default function ChatWidgetEnhanced() {
               {messages.map((msg) => (
                 <div key={msg.id} className={`flex items-end gap-2.5 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} animate-fadeIn`}>
                   {msg.sender === 'bot' && (
-                    <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white flex-shrink-0 shadow-xs">
-                      <Bot className="h-4 w-4" />
+                    <div className={`w-8 h-8 rounded-2xl flex items-center justify-center text-white flex-shrink-0 shadow-xs ${
+                      isHoliday
+                        ? 'bg-gradient-to-br from-red-600 to-rose-600 text-base shadow-red-500/20'
+                        : 'bg-gradient-to-br from-pink-500 to-rose-600'
+                    }`}>
+                      {isHoliday ? '🎅' : <Bot className="h-4 w-4" />}
                     </div>
                   )}
 
@@ -522,8 +559,12 @@ export default function ChatWidgetEnhanced() {
               {/* Typing Animation */}
               {sending && (
                 <div className="flex items-end gap-2.5 justify-start animate-fadeIn">
-                  <div className="w-8 h-8 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white flex-shrink-0">
-                    <Bot className="h-4 w-4" />
+                  <div className={`w-8 h-8 rounded-2xl flex items-center justify-center text-white flex-shrink-0 ${
+                    isHoliday
+                      ? 'bg-gradient-to-br from-red-600 to-rose-600 text-base shadow-red-500/20'
+                      : 'bg-gradient-to-br from-pink-500 to-rose-600'
+                  }`}>
+                    {isHoliday ? '🎅' : <Bot className="h-4 w-4" />}
                   </div>
                   <div className="bg-white rounded-2xl rounded-tl-xs px-4 py-3 shadow-sm border border-gray-100">
                     <div className="flex items-center gap-1.5">
@@ -590,22 +631,46 @@ export default function ChatWidgetEnhanced() {
           </div>
         )}
 
-        {/* ── Floating Chat Launcher Button ── */}
+        {/* ── Floating Chat Launcher Button (SANTA CLAUS AI) ── */}
         <button 
           onClick={() => setOpen(o => !o)} 
-          title="Chat with AI Tourism Assistant" 
-          className="bg-gradient-to-r from-pink-600 via-rose-600 to-indigo-600 text-white p-4 rounded-3xl shadow-2xl hover:shadow-pink-500/20 hover:scale-110 active:scale-95 transition-all duration-300 relative group flex items-center justify-center"
+          title={isHoliday ? "Chat with Santa Claus AI 🎅" : "Chat with AI Tourism Assistant"} 
+          className={`p-4 rounded-3xl shadow-2xl hover:scale-110 active:scale-95 transition-all duration-300 relative group flex items-center justify-center chat-launcher-btn ${
+            isHoliday
+              ? 'bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white shadow-red-500/40 border border-red-300/40'
+              : 'bg-gradient-to-r from-pink-600 via-rose-600 to-indigo-600 text-white shadow-pink-500/20'
+          }`}
         >
+          {/* Santa Hat perched on top of button */}
+          {isHoliday && !open && (
+            <span className="absolute -top-3.5 -left-1.5 text-2xl select-none pointer-events-none transform -rotate-12 filter drop-shadow">
+              🎅
+            </span>
+          )}
+
           {!open && (
-            <div className="absolute -top-1 -right-1 h-5 w-5 bg-emerald-500 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white shadow-xs animate-bounce">
-              💬
+            <div className={`absolute -top-1 -right-1 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white shadow-xs animate-bounce ${
+              isHoliday ? 'bg-red-500 text-white' : 'bg-emerald-500 text-white'
+            }`}>
+              {isHoliday ? '🎁' : '💬'}
             </div>
           )}
-          {open ? <X className="h-6 w-6" /> : <Bot className="h-6 w-6" />}
+
+          {open ? (
+            <X className="h-6 w-6" />
+          ) : isHoliday ? (
+            <div className="flex items-center justify-center text-2xl animate-pulse">
+              🎅
+            </div>
+          ) : (
+            <Bot className="h-6 w-6" />
+          )}
           
           {/* Tooltip */}
           <div className="absolute bottom-full right-0 mb-3 px-3 py-1.5 bg-gray-900 text-white text-xs font-bold rounded-xl opacity-0 group-hover:opacity-100 transition-all pointer-events-none whitespace-nowrap shadow-lg">
-            {language === 'filipino' ? 'Magtanong sa Tourism Assistant! 🏖️' : 'Ask our Tourism Assistant! 🏖️'}
+            {isHoliday
+              ? (language === 'filipino' ? 'Ho-ho-ho! Magtanong kay Santa Claus AI! 🎅' : 'Ho-ho-ho! Ask Santa Claus AI! 🎅')
+              : (language === 'filipino' ? 'Magtanong sa Tourism Assistant! 🏖️' : 'Ask our Tourism Assistant! 🏖️')}
           </div>
         </button>
       </div>
