@@ -466,7 +466,7 @@ export function Accommodations() {
 
                       <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-0.5">{acc.name}</h3>
 
-                      <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 min-h-[32px]">{acc.description}</p>
+                      <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 min-h-[32px] text-justify" style={{ textAlign: 'justify' }}>{acc.description}</p>
                     </div>
 
                     {/* Clickable Resort Host Link */}
@@ -711,9 +711,24 @@ export function Accommodations() {
               </div>
 
               {/* Description */}
-              <p className="text-xs text-gray-600 leading-relaxed font-normal">
-                {selectedAcc.description}
-              </p>
+              <div className="text-xs text-gray-600 leading-relaxed font-normal text-justify space-y-3" style={{ textAlign: 'justify' }}>
+                {selectedAcc.description ? (
+                  selectedAcc.description
+                    .replace(/<br\s*[\/]?>/gi, '\n')
+                    .split(/\r?\n+/)
+                    .map((p) => p.trim())
+                    .filter((p) => p.length > 0)
+                    .map((para, idx) => (
+                      <p key={idx} className="text-justify leading-relaxed" style={{ textAlign: 'justify' }}>
+                        {para}
+                      </p>
+                    ))
+                ) : (
+                  <p className="text-justify leading-relaxed" style={{ textAlign: 'justify' }}>
+                    No description available for this accommodation.
+                  </p>
+                )}
+              </div>
 
               {/* Tags */}
               <div className="flex flex-wrap gap-2">

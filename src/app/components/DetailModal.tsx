@@ -244,7 +244,18 @@ export function DetailModal({ item, onClose }: DetailModalProps) {
               {item.description && (
                 <div>
                   <h4 className="font-semibold mb-2">About this Accommodation</h4>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{item.description}</p>
+                  <div className="text-sm text-muted-foreground leading-relaxed text-justify space-y-3" style={{ textAlign: 'justify' }}>
+                    {item.description
+                      .replace(/<br\s*[\/]?>/gi, '\n')
+                      .split(/\r?\n+/)
+                      .map((p) => p.trim())
+                      .filter((p) => p.length > 0)
+                      .map((para, idx) => (
+                        <p key={idx} className="text-justify leading-relaxed" style={{ textAlign: 'justify' }}>
+                          {para}
+                        </p>
+                      ))}
+                  </div>
                 </div>
               )}
 

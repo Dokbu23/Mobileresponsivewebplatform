@@ -912,9 +912,18 @@ export function BusinessProfile() {
                     </span>
                   </p>
                   {shopDescription && (
-                    <p className="text-xs md:text-sm text-gray-600 mt-2 line-clamp-2 max-w-2xl leading-relaxed">
-                      {shopDescription}
-                    </p>
+                    <div className="text-xs md:text-sm text-gray-600 mt-2 max-w-2xl leading-relaxed text-justify space-y-2" style={{ textAlign: 'justify' }}>
+                      {shopDescription
+                        .replace(/<br\s*[\/]?>/gi, '\n')
+                        .split(/\r?\n+/)
+                        .map((p: string) => p.trim())
+                        .filter((p: string) => p.length > 0)
+                        .map((para: string, idx: number) => (
+                          <p key={idx} className="text-justify leading-relaxed" style={{ textAlign: 'justify' }}>
+                            {para}
+                          </p>
+                        ))}
+                    </div>
                   )}
                 </div>
               </div>
