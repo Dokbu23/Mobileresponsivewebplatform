@@ -392,7 +392,6 @@ export function Profile() {
                   className="w-full px-4 py-2.5 border-2 border-gray-200 bg-gray-50 text-gray-500 rounded-lg cursor-not-allowed outline-none text-sm"
                   title="Your registered email address"
                 />
-                <p className="text-[11px] text-gray-400 mt-1">Verified account email</p>
               </div>
             </div>
 
@@ -400,7 +399,7 @@ export function Profile() {
               <div>
                 <label className="block text-sm font-medium mb-1 text-gray-700 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
-                    <Phone className="h-4 w-4 text-pink-500" /> Phone Number (PH 11 Digits)
+                    <Phone className="h-4 w-4 text-pink-500" /> Phone Number
                   </span>
                   <span className="text-xs font-mono text-gray-400">
                     {form.phone?.length || 0}/11
@@ -418,14 +417,11 @@ export function Profile() {
                   placeholder="09123456789"
                   className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm font-mono tracking-wider transition-all"
                 />
-                <p className="text-[11px] text-gray-400 mt-1">
-                  PH Mobile Number (Halimbawa: 09123456789)
-                </p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium mb-1 text-gray-700 flex items-center gap-1.5">
-                  <MapPin className="h-4 w-4 text-pink-500" /> Complete Address
+                  <MapPin className="h-4 w-4 text-pink-500" /> Address
                 </label>
                 <input
                   type="text"
@@ -434,7 +430,6 @@ export function Profile() {
                   placeholder="Street, Barangay, City/Municipality"
                   className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm transition-all"
                 />
-                <p className="text-[11px] text-gray-400 mt-1">Home or delivery address</p>
               </div>
             </div>
           </div>
