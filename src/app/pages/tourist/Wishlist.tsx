@@ -321,8 +321,8 @@ export function Wishlist() {
       count: counts.products,
       saves: rankedItems.filter(i => i.type === 'product').reduce((acc, i) => acc + i.saves, 0),
       width: Math.round((counts.products / grandTotal) * 100),
-      color: 'bg-emerald-500',
-      bgLight: 'bg-emerald-50 text-emerald-700',
+      color: 'bg-rose-500',
+      bgLight: 'bg-rose-50 text-rose-700',
       to: '/products',
       icon: Package,
       type: 'product' as const
@@ -346,15 +346,7 @@ export function Wishlist() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${
-              isAdministrator
-                ? 'bg-pink-100 text-pink-600'
-                : userType === 'resort'
-                ? 'bg-purple-100 text-purple-600'
-                : userType === 'enterprise'
-                ? 'bg-emerald-100 text-emerald-600'
-                : 'bg-pink-100 text-pink-500'
-            }`}>
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center bg-pink-100 text-pink-600 shadow-sm shadow-pink-500/10">
               <Heart className="h-6 w-6 fill-current" />
             </div>
             <div>
@@ -367,17 +359,17 @@ export function Wishlist() {
                     : 'My Saved & Wishlist'}
                 </h1>
                 {isAdministrator && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-pink-500 text-white uppercase tracking-wider flex items-center gap-1 shadow-xs">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-gradient-to-r from-pink-500 to-rose-500 text-white uppercase tracking-wider flex items-center gap-1 shadow-xs">
                     <ShieldCheck className="h-3 w-3" /> Admin View
                   </span>
                 )}
                 {userType === 'resort' && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-600 text-white uppercase tracking-wider flex items-center gap-1 shadow-xs">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-gradient-to-r from-pink-500 to-rose-500 text-white uppercase tracking-wider flex items-center gap-1 shadow-xs">
                     <Hotel className="h-3 w-3" /> Resort Partner
                   </span>
                 )}
                 {userType === 'enterprise' && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-600 text-white uppercase tracking-wider flex items-center gap-1 shadow-xs">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-gradient-to-r from-pink-500 to-rose-500 text-white uppercase tracking-wider flex items-center gap-1 shadow-xs">
                     <Store className="h-3 w-3" /> Enterprise Partner
                   </span>
                 )}
@@ -406,7 +398,7 @@ export function Wishlist() {
             {userType === 'resort' && (
               <Link
                 to="/resort/dashboard"
-                className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                className="px-3.5 py-2 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 active:scale-95 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-pink-500/20"
               >
                 <LayoutDashboard className="h-4 w-4" />
                 Resort Dashboard
@@ -415,7 +407,7 @@ export function Wishlist() {
             {userType === 'enterprise' && (
               <Link
                 to="/enterprise/dashboard"
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                className="px-3.5 py-2 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 active:scale-95 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-pink-500/20"
               >
                 <LayoutDashboard className="h-4 w-4" />
                 Enterprise Dashboard
@@ -431,26 +423,22 @@ export function Wishlist() {
 
           {/* ── EXCLUSIVE BUSINESS ANALYTICS CARD (For Resort & Enterprise) ── */}
           {isBusinessUser && (
-            <div className={`rounded-3xl p-6 border shadow-sm transition-all ${
-              userType === 'resort'
-                ? 'bg-gradient-to-br from-purple-900 via-indigo-900 to-purple-950 text-white border-purple-800'
-                : 'bg-gradient-to-br from-emerald-900 via-teal-900 to-emerald-950 text-white border-emerald-800'
-            }`}>
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-white/10">
+            <div className="rounded-3xl p-6 border border-pink-400/30 shadow-xl shadow-pink-500/15 bg-gradient-to-r from-pink-500 via-rose-500 to-pink-600 text-white transition-all">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-white/20">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center text-pink-400">
-                    <Heart className="h-6 w-6 fill-pink-400" />
+                  <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shadow-inner">
+                    <Heart className="h-6 w-6 fill-white" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
                       <h2 className="text-lg font-black text-white">
                         {userType === 'resort' ? 'Your Resort Wishlist Performance' : 'Your Store Wishlist Performance'}
                       </h2>
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-pink-500 text-white uppercase">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-white/25 text-white uppercase backdrop-blur-md">
                         Your Listings
                       </span>
                     </div>
-                    <p className="text-xs text-white/70 font-medium mt-0.5">
+                    <p className="text-xs text-white/85 font-medium mt-0.5">
                       {userType === 'resort'
                         ? `Live tracking of tourists saving your resort rooms and accommodations to their wishlists.`
                         : `Live tracking of tourists saving your products and delicacies to their wishlists.`}
@@ -460,7 +448,7 @@ export function Wishlist() {
 
                 <Link
                   to={userType === 'resort' ? '/resort/profile' : '/enterprise/profile'}
-                  className="px-4 py-2 rounded-xl bg-white text-gray-900 hover:bg-pink-50 hover:text-pink-600 text-xs font-bold transition-all self-start md:self-auto flex items-center gap-1.5 shadow-md"
+                  className="px-4 py-2 rounded-xl bg-white text-pink-600 hover:bg-pink-50 active:scale-95 text-xs font-extrabold transition-all self-start md:self-auto flex items-center gap-1.5 shadow-lg shadow-pink-950/15"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   {userType === 'resort' ? 'Manage Rooms' : 'Manage Products'}
@@ -469,41 +457,41 @@ export function Wishlist() {
 
               {/* 4 Business KPI Metrics */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20">
                   <div className="text-2xl font-black text-white flex items-center gap-1.5">
-                    <Heart className="h-5 w-5 text-pink-400 fill-pink-400" />
+                    <Heart className="h-5 w-5 text-white fill-white" />
                     {totalMyBusinessSaves.toLocaleString()}
                   </div>
-                  <div className="text-[11px] text-white/70 font-semibold mt-1">
+                  <div className="text-[11px] text-white/80 font-semibold mt-1">
                     {userType === 'resort' ? 'Total Saves on Your Stays' : 'Total Saves on Your Products'}
                   </div>
                 </div>
 
-                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20">
                   <div className="text-2xl font-black text-white flex items-center gap-1.5">
-                    <Eye className="h-5 w-5 text-teal-300" />
+                    <Eye className="h-5 w-5 text-white" />
                     {totalMyBusinessViews.toLocaleString()}
                   </div>
-                  <div className="text-[11px] text-white/70 font-semibold mt-1">
+                  <div className="text-[11px] text-white/80 font-semibold mt-1">
                     Total Listing Views
                   </div>
                 </div>
 
-                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
-                  <div className="text-sm font-black text-amber-300 truncate">
+                <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20">
+                  <div className="text-sm font-black text-white truncate">
                     {topMyBusinessSavedItem?.name || 'No saves yet'}
                   </div>
-                  <div className="text-[11px] text-white/70 font-semibold mt-1">
+                  <div className="text-[11px] text-white/80 font-semibold mt-1">
                     Top Saved: {topMyBusinessSavedItem ? `${topMyBusinessSavedItem.saves} saves` : 'N/A'}
                   </div>
                 </div>
 
-                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10">
-                  <div className="text-2xl font-black text-emerald-300 flex items-center gap-1.5">
-                    <Layers className="h-5 w-5" />
+                <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20">
+                  <div className="text-2xl font-black text-white flex items-center gap-1.5">
+                    <Layers className="h-5 w-5 text-white" />
                     {myBusinessItems.length}
                   </div>
-                  <div className="text-[11px] text-white/70 font-semibold mt-1">
+                  <div className="text-[11px] text-white/80 font-semibold mt-1">
                     Active Published Listings
                   </div>
                 </div>
@@ -511,8 +499,8 @@ export function Wishlist() {
 
               {/* List of the business's own listings with save badges */}
               {myBusinessItems.length > 0 && (
-                <div className="mt-6 pt-5 border-t border-white/10">
-                  <h3 className="text-xs font-bold text-white/90 uppercase tracking-wider mb-3">
+                <div className="mt-6 pt-5 border-t border-white/20">
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-3">
                     Your Most Wishlisted Offerings
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -520,7 +508,7 @@ export function Wishlist() {
                       <div
                         key={item.id}
                         onClick={() => navigate(item.link)}
-                        className="flex items-center justify-between p-3 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 transition-all cursor-pointer group"
+                        className="flex items-center justify-between p-3 rounded-2xl bg-white/15 hover:bg-white/25 backdrop-blur-md border border-white/20 transition-all cursor-pointer group"
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <img
@@ -530,16 +518,16 @@ export function Wishlist() {
                             onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
                           />
                           <div className="min-w-0">
-                            <h4 className="text-xs font-bold text-white truncate group-hover:text-pink-300 transition-colors">
+                            <h4 className="text-xs font-bold text-white truncate group-hover:text-pink-100 transition-colors">
                               {item.name}
                             </h4>
-                            <p className="text-[10px] text-white/60 font-medium">
+                            <p className="text-[10px] text-white/80 font-medium">
                               {item.category} {item.price ? `· ₱${Number(item.price).toLocaleString()}` : ''}
                             </p>
                           </div>
                         </div>
-                        <div className="px-2.5 py-1 bg-pink-500/80 text-white rounded-lg text-[11px] font-black flex items-center gap-1 flex-shrink-0 ml-2">
-                          <Heart className="h-3 w-3 fill-white" />
+                        <div className="px-2.5 py-1 bg-white text-pink-600 rounded-lg text-[11px] font-black flex items-center gap-1 flex-shrink-0 ml-2 shadow-xs">
+                          <Heart className="h-3 w-3 fill-pink-500 text-pink-500" />
                           <span>{item.saves}</span>
                         </div>
                       </div>
@@ -592,11 +580,11 @@ export function Wishlist() {
               </div>
 
               <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-500 flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-pink-50 text-pink-500 flex items-center justify-center flex-shrink-0">
                   <Sparkles className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-xl font-black text-emerald-600">
+                  <div className="text-xl font-black text-pink-600">
                     {grandTotal > 0 ? Math.round((totalSavesAll / grandTotal) * 10) / 10 : 0}
                   </div>
                   <div className="text-[11px] text-gray-500 font-medium">Avg Saves / Listing</div>
