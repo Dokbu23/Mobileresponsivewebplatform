@@ -252,6 +252,12 @@ class EmailVerificationController extends Controller
             'is_used' => false,
         ]);
 
+        \Log::info('Password Reset OTP Generated', [
+            'email' => $validated['email'],
+            'code' => $code,
+            'expires_at' => $verificationCode->expires_at,
+        ]);
+
         // Send real email via Resend HTTPS API or SMTP
         try {
             $this->deliverEmail($validated['email'], $user->name, $code, 'Password Reset Code - DiscoverMansalay');
@@ -271,6 +277,40 @@ class EmailVerificationController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Verify password reset code without immediately changing password
+     */
+    public function verifyResetCode(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email', 'exists:users,email'],
+            'code'  => ['required', 'string', 'size:6'],
+        ]);
+
+        $verificationCode = EmailVerificationCode::where('email', $validated['email'])
+            ->where('code', $validated['code'])
+            ->where('is_used', false)
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if (!$verificationCode) {
+            return response()->json([
+                'message' => 'Invalid verification code. Please check and try again.',
+            ], 400);
+        }
+
+        if ($verificationCode->isExpired()) {
+            return response()->json([
+                'message' => 'Verification code has expired. Please request a new one.',
+            ], 400);
+        }
+
+        return response()->json([
+            'valid'   => true,
+            'message' => 'Code verified successfully! You can now set your new password.',
+        ]);
     }
 
     /**

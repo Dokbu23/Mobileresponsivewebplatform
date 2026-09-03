@@ -475,6 +475,7 @@ Route::post('email/resend-code', [EmailVerificationController::class, 'resendCod
 
 // Password reset routes (no auth required)
 Route::post('password/forgot', [EmailVerificationController::class, 'sendPasswordResetCode']);
+Route::post('password/verify-code', [EmailVerificationController::class, 'verifyResetCode']);
 Route::post('password/reset', [EmailVerificationController::class, 'resetPassword']);
 
 // Protected routes (authentication required)

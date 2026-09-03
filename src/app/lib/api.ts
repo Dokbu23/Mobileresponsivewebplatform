@@ -584,6 +584,10 @@ export async function sendPasswordResetCode(email: string): Promise<{ message: s
   return await postJSON('/password/forgot', { email }, false);
 }
 
+export async function verifyPasswordResetCode(email: string, code: string): Promise<{ valid: boolean; message: string }> {
+  return await postJSON('/password/verify-code', { email, code }, false);
+}
+
 export async function resetPassword(email: string, code: string, password: string, password_confirmation: string): Promise<{ message: string }> {
   return await postJSON('/password/reset', { email, code, password, password_confirmation }, false);
 }
