@@ -443,8 +443,26 @@ class AccommodationController extends Controller
             ->where('role', 'resort')
             ->firstOrFail();
 
+        // Auto-sync any room posts created by this resort owner into ResortRoom
+        try {
+            $roomPosts = \App\Models\EnterprisePost::where('user_id', $userId)
+                ->where(function($q) {
+                    $q->where('type', 'rooms')
+                      ->orWhere('type', 'room');
+                })
+                ->get();
+            foreach ($roomPosts as $rp) {
+                EnterprisePostController::syncRoomFromPost($rp, $owner);
+            }
+        } catch (\Throwable $e) {
+            // ignore
+        }
+
         $rooms = \App\Models\ResortRoom::where('user_id', $userId)
-            ->where('is_available', true)
+            ->where(function($q) {
+                $q->where('is_available', true)
+                  ->orWhereNull('is_available');
+            })
             ->orderBy('price_per_night', 'asc')
             ->get()
             ->map(function ($r) {
@@ -457,9 +475,32 @@ class AccommodationController extends Controller
                     'price'           => (float) $r->price_per_night,
                     'capacity'        => (int) $r->capacity,
                     'image'           => $r->image,
+                    'images'          => $r->images ?? [],
                     'is_available'    => (bool) $r->is_available,
                 ];
             });
+
+        // Merge any registered Accommodation model entries belonging to this user
+        $staticAccs = \App\Models\Accommodation::where('user_id', $userId)->get();
+        if ($staticAccs->isNotEmpty()) {
+            $existingNames = $rooms->pluck('name')->map(fn($n) => strtolower(trim($n)))->toArray();
+            foreach ($staticAccs as $acc) {
+                if (!in_array(strtolower(trim($acc->name)), $existingNames)) {
+                    $rooms->push([
+                        'id'              => 'acc_' . $acc->id,
+                        'name'            => $acc->name,
+                        'type'            => $acc->type ?: 'Room',
+                        'description'     => $acc->description,
+                        'price_per_night' => (float) ($acc->price_per_night ?: $acc->price ?: 1500),
+                        'price'           => (float) ($acc->price_per_night ?: $acc->price ?: 1500),
+                        'capacity'        => 2,
+                        'image'           => $acc->image,
+                        'images'          => is_array($acc->images) ? $acc->images : (!empty($acc->image) ? [$acc->image] : []),
+                        'is_available'    => true,
+                    ]);
+                }
+            }
+        }
 
         $images = $owner->resort_images ?? [];
         $primaryImage = is_array($images) && count($images) > 0 ? $images[0] : '';
@@ -490,6 +531,9 @@ class AccommodationController extends Controller
             'instagram_link'     => $owner->instagram_link,
             'latitude'           => $owner->latitude,
             'longitude'          => $owner->longitude,
+            'video'              => $owner->video ?? $owner->video_url,
+            'video_url'          => $owner->video_url ?? $owner->video,
+            'video_tour'         => $owner->video ?? $owner->video_url,
             'last_active_at'     => $owner->updated_at,
             'created_at'         => $owner->created_at,
             'payment_details'    => $owner->payment_details,

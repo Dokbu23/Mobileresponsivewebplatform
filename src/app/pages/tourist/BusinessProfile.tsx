@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router';
 import {
   Hotel, Store, MapPin, Phone, Mail, Star,
@@ -9,15 +9,57 @@ import {
   Ticket, Tag, Copy, Check, Plus, MessageSquare,
   Bookmark, Share2, ThumbsUp, Send, Bed, Waves,
   Compass, Palmtree, Megaphone, Calendar, FileText, Clock, Video,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, Users, Film, CheckCircle2, Trash2
 } from 'lucide-react';
-import { getPublicJSON, getAuthToken, API_BASE, recordView } from '../../lib/api';
+import { getPublicJSON, getAuthToken, API_BASE, recordView, formatImageUrl } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
 import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
 import { LocationPicker } from '../../components/LocationPicker';
 
 import { MANSALAY_BARANGAYS } from '../../lib/constants';
+
+export function cleanTags(rawTags: any): string[] {
+  if (!rawTags) return [];
+  let list: any[] = [];
+  if (Array.isArray(rawTags)) {
+    list = rawTags;
+  } else if (typeof rawTags === 'string') {
+    try {
+      const parsed = JSON.parse(rawTags);
+      list = Array.isArray(parsed) ? parsed : [rawTags];
+    } catch {
+      list = rawTags.split(',');
+    }
+  }
+
+  const result: string[] = [];
+  list.forEach((item) => {
+    if (!item) return;
+    const str = String(item);
+    let cleaned = str
+      .replace(/&quot;/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&#039;|&apos;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/\\"/g, '')
+      .replace(/[\[\]"\\]/g, '')
+      .replace(/^#+/, '')
+      .trim();
+
+    if (cleaned.includes(',')) {
+      cleaned.split(',').forEach((sub) => {
+        const s = sub.replace(/[\[\]"\\]/g, '').replace(/^#+/, '').trim();
+        if (s && !result.includes(s)) result.push(s);
+      });
+    } else if (cleaned) {
+      if (!result.includes(cleaned)) result.push(cleaned);
+    }
+  });
+
+  return result;
+}
 
 
 interface BusinessOwner {
@@ -51,8 +93,12 @@ interface BusinessOwner {
   resort_facilities?: string;
   resort_policies?: string;
   resort_is_setup?: boolean;
-  video_tour?: string;
+  avatar?: string;
+  logo?: string;
+  banner?: string;
   video?: string;
+  video_url?: string;
+  video_tour?: string;
 }
 
 interface PromoCodeItem {
@@ -320,7 +366,7 @@ export function BusinessProfile() {
   const { type, userId } = useParams<{ type: 'resort' | 'enterprise'; userId: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { addToCart, userType, currentUser } = useApp();
+  const { addToCart, userType, currentUser, setCurrentUser } = useApp();
   const [data, setData] = useState<BusinessProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -345,12 +391,19 @@ export function BusinessProfile() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  const [videoUrlInput, setVideoUrlInput] = useState<string>('');
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
+  const videoFileInputRef = useRef<HTMLInputElement>(null);
   const [storeLocation, setStoreLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [copiedPromoCode, setCopiedPromoCode] = useState<string | null>(null);
   const [posts, setPosts] = useState<any[]>([]);
   const [activeProfileTab, setActiveProfileTab] = useState<'listings' | 'posts'>('listings');
   const [selectedPostCategory, setSelectedPostCategory] = useState<string>('all');
   const [viewingPost, setViewingPost] = useState<any | null>(null);
+  const [viewingRoom, setViewingRoom] = useState<any | null>(null);
+  const [viewingProduct, setViewingProduct] = useState<any | null>(null);
+  const [activeRoomImageIdx, setActiveRoomImageIdx] = useState<number>(0);
   const [coverMode, setCoverMode] = useState<'video' | 'photo'>('video');
   const [isCoverMuted, setIsCoverMuted] = useState(true);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
@@ -384,59 +437,63 @@ export function BusinessProfile() {
     }
   };
 
-  useEffect(() => {
+  const loadBusinessProfile = async (silent = false) => {
     if (!type) return;
 
     const targetUserId = userId || (currentUser?.id ? String(currentUser.id) : null);
     if (!targetUserId) {
-      setLoading(false);
-      setError(type === 'resort' ? 'Resort profile is not available.' : 'Shop is not available.');
+      if (!silent) {
+        setLoading(false);
+        setError(type === 'resort' ? 'Resort profile is not available.' : 'Shop is not available.');
+      }
       return;
     }
 
-    (async () => {
-      try {
-        setLoading(true);
-        recordView(targetUserId, type === 'resort' ? 'resort' : 'enterprise');
-        const endpoint = type === 'enterprise'
-          ? `/business/enterprise/${targetUserId}`
-          : `/business/resort/${targetUserId}`;
-        const result = await getPublicJSON(endpoint);
-        if (result && result.owner) {
-          setData(result);
-          setError(null);
-        } else {
-          const fallback = createFallbackBusinessProfile(targetUserId);
-          if (fallback) {
-            setData(fallback);
-            setError(null);
-          } else {
-            setError(type === 'resort' ? 'Resort profile is not available or not yet registered.' : 'Shop is not available or not yet registered.');
-          }
-        }
-
-        // Fetch posts created by this business owner
-        try {
-          const ownerId = result?.owner?.id || targetUserId;
-          const postsRes = await getPublicJSON(`/enterprise-posts?user_id=${ownerId}`);
-          if (Array.isArray(postsRes)) {
-            setPosts(postsRes);
-          }
-        } catch {
-          // ignore
-        }
-      } catch {
+    try {
+      if (!silent) setLoading(true);
+      recordView(targetUserId, type === 'resort' ? 'resort' : 'enterprise');
+      const endpoint = type === 'enterprise'
+        ? `/business/enterprise/${targetUserId}`
+        : `/business/resort/${targetUserId}`;
+      const result = await getPublicJSON(endpoint);
+      if (result && result.owner) {
+        setData(result);
+        setError(null);
+      } else {
         const fallback = createFallbackBusinessProfile(targetUserId);
         if (fallback) {
           setData(fallback);
           setError(null);
-        } else {
+        } else if (!silent) {
           setError(type === 'resort' ? 'Resort profile is not available or not yet registered.' : 'Shop is not available or not yet registered.');
         }
-      } finally {
-        setLoading(false);
       }
-    })();
+
+      // Fetch posts created by this business owner
+      try {
+        const ownerId = result?.owner?.id || targetUserId;
+        const postsRes = await getPublicJSON(`/enterprise-posts?user_id=${ownerId}`);
+        if (Array.isArray(postsRes)) {
+          setPosts(postsRes);
+        }
+      } catch {
+        // ignore
+      }
+    } catch {
+      const fallback = createFallbackBusinessProfile(targetUserId);
+      if (fallback) {
+        setData(fallback);
+        setError(null);
+      } else if (!silent) {
+        setError(type === 'resort' ? 'Resort profile is not available or not yet registered.' : 'Shop is not available or not yet registered.');
+      }
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBusinessProfile(false);
   }, [type, userId, currentUser?.id]);
 
   if (loading) {
@@ -490,7 +547,84 @@ export function BusinessProfile() {
   const isResort = type === 'resort';
   const products = data.products || [];
   const accommodations = data.accommodations || [];
-  const items = isResort ? accommodations : products;
+
+  // Merge database accommodations with room-type posts to ensure any room added via posts or resort-rooms immediately appears and increments the room count!
+  const allAccommodations = useMemo(() => {
+    if (!isResort) return [];
+    const list = [...accommodations];
+    const existingNames = new Set(list.map((a: any) => String(a.name || '').toLowerCase().trim()));
+
+    if (Array.isArray(posts)) {
+      posts
+        .filter((post: any) => post.type === 'rooms' || post.type === 'room' || cleanTags(post.tags).some((t: string) => t.toLowerCase() === 'rooms'))
+        .forEach((post: any) => {
+          const rawName = String(post.product_name || post.content || '').trim();
+          const firstLine = rawName.split(/\r?\n/)[0].slice(0, 50).trim();
+          const roomName = firstLine || 'Resort Room & Stay';
+          const rKey = roomName.toLowerCase();
+          if (roomName && !existingNames.has(rKey)) {
+            existingNames.add(rKey);
+            const numPrice = post.price
+              ? (typeof post.price === 'string' ? parseFloat(post.price.replace(/[^0-9.]/g, '')) || 2000 : post.price)
+              : 2000;
+            const numCapacity = post.stock
+              ? (typeof post.stock === 'string' ? parseInt(post.stock.replace(/[^0-9]/g, '')) || 2 : post.stock)
+              : 2;
+
+            list.push({
+              id: `post_room_${post.id}`,
+              name: roomName,
+              type: 'Room',
+              description: post.content || roomName,
+              price_per_night: numPrice,
+              price: numPrice,
+              capacity: numCapacity,
+              image: post.image || (post.images && post.images[0]) || '',
+              images: post.images && post.images.length > 0 ? post.images : (post.image ? [post.image] : []),
+              is_available: true,
+              user_id: post.user_id || owner?.id,
+            });
+          }
+        });
+    }
+
+    return list;
+  }, [accommodations, posts, isResort, owner?.id]);
+
+  // Merge database products with any product-type posts
+  const allProducts = useMemo(() => {
+    if (isResort) return [];
+    const list = [...products];
+    const existingNames = new Set(list.map((p: any) => String(p.name || '').toLowerCase().trim()));
+
+    if (Array.isArray(posts)) {
+      posts
+        .filter((post: any) => post.type === 'product' || post.type === 'products' || post.product_name)
+        .forEach((post: any) => {
+          const pName = String(post.product_name || post.content || '').trim();
+          const pKey = pName.toLowerCase();
+          if (pName && !existingNames.has(pKey)) {
+            existingNames.add(pKey);
+            list.push({
+              id: `post_prod_${post.id}`,
+              name: pName,
+              category: post.category || 'Handicraft',
+              price: post.price ? (typeof post.price === 'string' ? parseFloat(post.price.replace(/[^0-9.]/g, '')) || 0 : post.price) : 0,
+              stock: post.stock ? (typeof post.stock === 'string' ? parseInt(post.stock.replace(/[^0-9]/g, '')) || 10 : post.stock) : 10,
+              image: post.image || (post.images && post.images[0]) || '',
+              images: post.images || (post.image ? [post.image] : []),
+              user_id: post.user_id || owner?.id,
+              description: post.content,
+              likes: post.likes || 0,
+            });
+          }
+        });
+    }
+
+    return list;
+  }, [products, posts, isResort, owner?.id]);
+
+  const items = isResort ? allAccommodations : allProducts;
 
   // Display name & info: Accurate resort_name for resort, store_name for enterprise
   const shopName = isResort
@@ -502,17 +636,24 @@ export function BusinessProfile() {
     : (owner.store_description || owner.description);
 
   const shopBanner = isResort
-    ? (owner.resort_banner || (owner.resort_images && owner.resort_images[0]) || owner.store_banner)
-    : owner.store_banner;
+    ? (owner.resort_banner || (owner.resort_images && owner.resort_images[0]) || owner.store_banner || owner.banner)
+    : (owner.store_banner || owner.banner);
 
   const shopLogo = isResort
-    ? (owner.resort_logo || (owner.resort_images && owner.resort_images[0]) || owner.store_logo)
-    : owner.store_logo;
+    ? (owner.resort_logo || (owner.resort_images && owner.resort_images[0]) || owner.store_logo || owner.avatar || owner.logo)
+    : (owner.store_logo || owner.avatar || owner.logo);
 
-  // Check if this shop / resort has an uploaded video tour (from posts or owner profile)
+  // Check if this shop / resort has an uploaded video tour (from owner profile or posts)
   const videoTourPost = Array.isArray(posts) ? posts.find((p: any) => p.video) : null;
-  const videoTourUrl = videoTourPost?.video || owner.video_tour || owner.video;
+  const videoTourUrl = owner.video || owner.video_url || owner.video_tour || videoTourPost?.video;
   const ytCoverEmbed = videoTourUrl ? getYouTubeEmbedUrl(videoTourUrl) : null;
+
+  // Ensure the cover sticks to the virtual tour video whenever available
+  useEffect(() => {
+    if (videoTourUrl) {
+      setCoverMode('video');
+    }
+  }, [videoTourUrl]);
 
   // Active Now vs time ago logic
   const getActiveStatus = () => {
@@ -532,7 +673,7 @@ export function BusinessProfile() {
 
   const getImageUrl = (img: string) => {
     if (!img) return isResort ? '/assets/default-accommodation.jpg' : '/assets/default-product.jpg';
-    return img.startsWith('http') ? img : `${API_BASE}${img}`;
+    return formatImageUrl(img) || (isResort ? '/assets/default-accommodation.jpg' : '/assets/default-product.jpg');
   };
 
   const totalProducts = items.length;
@@ -540,7 +681,7 @@ export function BusinessProfile() {
 
   // Categories with product images
   const categoryMap = new Map<string, { count: number; image: string }>();
-  products.forEach((p: any) => {
+  allProducts.forEach((p: any) => {
     if (p.category) {
       if (!categoryMap.has(p.category)) {
         categoryMap.set(p.category, { count: 1, image: p.image });
@@ -556,16 +697,16 @@ export function BusinessProfile() {
     image: info.image,
   }));
 
-  const filteredProducts = products.filter((product: any) => {
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         product.description?.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredProducts = allProducts.filter((product: any) => {
+    const matchesSearch = (product.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         (product.description || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
-  const filteredAccommodations = accommodations.filter((accommodation: any) => {
-    return accommodation.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-           accommodation.description?.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredAccommodations = allAccommodations.filter((accommodation: any) => {
+    return (accommodation.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+           (accommodation.description || '').toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   const isManageMode = searchParams.get('manage') === 'true';
@@ -592,6 +733,10 @@ export function BusinessProfile() {
     setLogoPreview(null);
     setBannerFile(null);
     setBannerPreview(null);
+    const existingVideo = owner.video || owner.video_url || owner.video_tour || '';
+    setVideoUrlInput(existingVideo);
+    setVideoFile(null);
+    setVideoPreview(null);
     const lat = owner.latitude ? Number(owner.latitude) : 12.51507;
     const lng = owner.longitude ? Number(owner.longitude) : 121.42810;
     setStoreLocation({ lat, lng });
@@ -614,6 +759,26 @@ export function BusinessProfile() {
     }
   };
 
+  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 500 * 1024 * 1024) {
+        toast.error('Video file size exceeds the 500MB limit');
+        return;
+      }
+      setVideoFile(file);
+      setVideoPreview(URL.createObjectURL(file));
+      setVideoUrlInput('');
+    }
+  };
+
+  const handleRemoveVideo = () => {
+    setVideoFile(null);
+    setVideoPreview(null);
+    setVideoUrlInput('');
+    if (videoFileInputRef.current) videoFileInputRef.current.value = '';
+  };
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editForm.name.trim()) {
@@ -624,6 +789,10 @@ export function BusinessProfile() {
     setIsSaving(true);
     try {
       const token = getAuthToken();
+      if (!token) {
+        toast.error('You must be logged in as the business owner to update profile');
+        return;
+      }
       const formData = new FormData();
 
       if (isResort) {
@@ -640,11 +809,23 @@ export function BusinessProfile() {
         }
         if (logoFile) formData.append('logo', logoFile);
         if (bannerFile) formData.append('banner', bannerFile);
+        if (videoFile) {
+          formData.append('video', videoFile);
+        } else if (videoUrlInput.trim()) {
+          formData.append('video_url', videoUrlInput.trim());
+          formData.append('video', videoUrlInput.trim());
+        } else {
+          formData.append('video_url', '');
+          formData.append('video', '');
+        }
         formData.append('_method', 'PUT');
 
         const res = await fetch(`${API_BASE}/api/resort-profile`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
           body: formData,
         });
 
@@ -656,13 +837,19 @@ export function BusinessProfile() {
         const updated = await res.json();
         toast.success('Resort profile updated successfully!');
 
+        const newLogo = updated?.logo || updated?.resort_logo || updated?.store_logo || updated?.user?.resort_logo || updated?.user?.store_logo || updated?.user?.avatar;
+        const newBanner = updated?.banner || updated?.resort_banner || updated?.store_banner || updated?.user?.resort_banner || updated?.user?.store_banner;
+        const newVideo = updated?.video || updated?.video_url || updated?.user?.video || updated?.user?.video_url || (videoUrlInput ? videoUrlInput.trim() : null);
+
         setData(prev => {
           if (!prev) return prev;
           return {
             ...prev,
             owner: {
               ...prev.owner,
+              name: editForm.name.trim(),
               resort_name: editForm.name.trim(),
+              description: editForm.description.trim(),
               resort_description: editForm.description.trim(),
               phone: editForm.phone.trim(),
               barangay: editForm.barangay,
@@ -671,14 +858,35 @@ export function BusinessProfile() {
               instagram_link: editForm.instagram_link.trim(),
               latitude: storeLocation?.lat ?? prev.owner.latitude,
               longitude: storeLocation?.lng ?? prev.owner.longitude,
-              resort_logo: updated?.logo || updated?.resort_logo || prev.owner.resort_logo,
-              resort_banner: updated?.banner || updated?.resort_banner || prev.owner.resort_banner,
+              resort_logo: newLogo || prev.owner.resort_logo,
+              resort_banner: newBanner || prev.owner.resort_banner,
+              store_logo: newLogo || prev.owner.store_logo,
+              store_banner: newBanner || prev.owner.store_banner,
+              avatar: newLogo || prev.owner.avatar,
+              video: newVideo,
+              video_url: newVideo,
+              video_tour: newVideo,
             }
           };
         });
+
+        if (currentUser) {
+          setCurrentUser({
+            ...currentUser,
+            name: editForm.name.trim(),
+            resort_name: editForm.name.trim(),
+            phone: editForm.phone.trim(),
+            barangay: editForm.barangay,
+            address: editForm.address.trim(),
+            description: editForm.description.trim(),
+            avatar: newLogo || currentUser.avatar,
+          });
+        }
       } else {
         formData.append('store_name', editForm.name.trim());
+        formData.append('name', editForm.name.trim());
         formData.append('store_description', editForm.description.trim());
+        formData.append('description', editForm.description.trim());
         formData.append('phone', editForm.phone.trim());
         formData.append('barangay', editForm.barangay);
         formData.append('address', editForm.address.trim());
@@ -690,11 +898,23 @@ export function BusinessProfile() {
         }
         if (logoFile) formData.append('logo', logoFile);
         if (bannerFile) formData.append('banner', bannerFile);
+        if (videoFile) {
+          formData.append('video', videoFile);
+        } else if (videoUrlInput.trim()) {
+          formData.append('video_url', videoUrlInput.trim());
+          formData.append('video', videoUrlInput.trim());
+        } else {
+          formData.append('video_url', '');
+          formData.append('video', '');
+        }
         formData.append('_method', 'PUT');
 
         const res = await fetch(`${API_BASE}/api/enterprise-profile`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
           body: formData,
         });
 
@@ -706,13 +926,19 @@ export function BusinessProfile() {
         const updated = await res.json();
         toast.success('Shop profile updated successfully!');
 
+        const newLogo = updated?.store_logo || updated?.logo || updated?.user?.store_logo || updated?.user?.avatar;
+        const newBanner = updated?.store_banner || updated?.banner || updated?.user?.store_banner;
+        const newVideo = updated?.video || updated?.video_url || updated?.user?.video || updated?.user?.video_url || (videoUrlInput ? videoUrlInput.trim() : null);
+
         setData(prev => {
           if (!prev) return prev;
           return {
             ...prev,
             owner: {
               ...prev.owner,
+              name: editForm.name.trim(),
               store_name: editForm.name.trim(),
+              description: editForm.description.trim(),
               store_description: editForm.description.trim(),
               phone: editForm.phone.trim(),
               barangay: editForm.barangay,
@@ -721,14 +947,34 @@ export function BusinessProfile() {
               instagram_link: editForm.instagram_link.trim(),
               latitude: storeLocation?.lat ?? prev.owner.latitude,
               longitude: storeLocation?.lng ?? prev.owner.longitude,
-              store_logo: updated?.store_logo || updated?.logo || prev.owner.store_logo,
-              store_banner: updated?.store_banner || updated?.banner || prev.owner.store_banner,
+              store_logo: newLogo || prev.owner.store_logo,
+              store_banner: newBanner || prev.owner.store_banner,
+              avatar: newLogo || prev.owner.avatar,
+              video: newVideo,
+              video_url: newVideo,
+              video_tour: newVideo,
             }
           };
         });
+
+        if (currentUser) {
+          setCurrentUser({
+            ...currentUser,
+            name: editForm.name.trim(),
+            store_name: editForm.name.trim(),
+            phone: editForm.phone.trim(),
+            barangay: editForm.barangay,
+            address: editForm.address.trim(),
+            description: editForm.description.trim(),
+            avatar: newLogo || currentUser.avatar,
+          });
+        }
       }
 
+      window.dispatchEvent(new Event('contentUpdated'));
+      window.dispatchEvent(new CustomEvent('userProfileUpdated'));
       setIsEditModalOpen(false);
+      loadBusinessProfile(true);
     } catch (err: any) {
       toast.error(err.message || 'Failed to save changes');
     } finally {
@@ -1275,12 +1521,22 @@ export function BusinessProfile() {
 
             {/* 📦 PRODUCTS / ROOMS GRID */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="border-b border-gray-100 px-5 py-4 flex items-center justify-between">
-                <h2 className="text-sm font-bold text-gray-800 tracking-widest">
-                  {selectedCategory === 'all' 
-                    ? (isResort ? 'ALL ROOMS & COTTAGES' : 'ALL PRODUCTS')
-                    : selectedCategory.toUpperCase()}
-                </h2>
+              <div className="border-b border-gray-100 px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-bold text-gray-800 tracking-widest flex items-center gap-2">
+                    {isResort ? <Bed className="h-4 w-4 text-pink-500" /> : <Package className="h-4 w-4 text-pink-500" />}
+                    <span>
+                      {selectedCategory === 'all' 
+                        ? (isResort ? 'BOOKABLE ROOMS & COTTAGES' : 'ALL PRODUCTS')
+                        : selectedCategory.toUpperCase()}
+                    </span>
+                  </h2>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    {isResort 
+                      ? 'Official room rates, capacities, and amenities. Click any room to view full photos and details.' 
+                      : 'Browse our catalog of native products and delicacies. Click to view details.'}
+                  </p>
+                </div>
                 <span className="text-xs text-gray-500 font-medium">
                   {isResort ? filteredAccommodations.length : filteredProducts.length} items
                 </span>
@@ -1307,6 +1563,10 @@ export function BusinessProfile() {
                         <AccommodationCard
                           key={accommodation.id}
                           accommodation={accommodation}
+                          onSelect={() => {
+                            setActiveRoomImageIdx(0);
+                            setViewingRoom(accommodation);
+                          }}
                         />
                       ))}
                     </div>
@@ -1336,6 +1596,7 @@ export function BusinessProfile() {
                           key={product.id}
                           product={product}
                           userType={userType}
+                          onSelect={() => setViewingProduct(product)}
                         />
                       ))}
                     </div>
@@ -1540,18 +1801,22 @@ export function BusinessProfile() {
                             ) : null}
 
                             {/* Tags */}
-                            {Array.isArray(post.tags) && post.tags.length > 0 && (
-                              <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                                {post.tags.map((tag: string, tidx: number) => (
-                                  <span
-                                    key={tidx}
-                                    className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-semibold rounded-md"
-                                  >
-                                    #{tag.replace(/^#/, '')}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
+                            {(() => {
+                              const cleaned = cleanTags(post.tags);
+                              if (cleaned.length === 0) return null;
+                              return (
+                                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                                  {cleaned.map((tag: string, tidx: number) => (
+                                    <span
+                                      key={tidx}
+                                      className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-semibold rounded-md"
+                                    >
+                                      #{tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           {/* Post Footer Actions */}
@@ -1814,15 +2079,19 @@ export function BusinessProfile() {
                 </div>
               ) : null}
 
-              {Array.isArray(viewingPost.tags) && viewingPost.tags.length > 0 && (
-                <div className="flex items-center gap-2 flex-wrap pt-2">
-                  {viewingPost.tags.map((t: string, idx: number) => (
-                    <span key={idx} className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs font-semibold rounded-lg">
-                      #{t.replace(/^#/, '')}
-                    </span>
-                  ))}
-                </div>
-              )}
+              {(() => {
+                const cleaned = cleanTags(viewingPost.tags);
+                if (cleaned.length === 0) return null;
+                return (
+                  <div className="flex items-center gap-2 flex-wrap pt-2">
+                    {cleaned.map((t: string, idx: number) => (
+                      <span key={idx} className="px-2.5 py-1 bg-gray-100 text-gray-600 text-xs font-semibold rounded-lg">
+                        #{t}
+                      </span>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Modal Footer */}
@@ -1862,6 +2131,322 @@ export function BusinessProfile() {
         </div>
       )}
 
+      {/* ── 🛏️ MODAL: ROOM & COTTAGE DETAILS VIEWER ── */}
+      {viewingRoom && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-pink-50 via-rose-50 to-pink-50">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-500 text-white flex items-center justify-center shadow-sm flex-shrink-0">
+                  <Hotel className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base sm:text-lg font-extrabold text-gray-900 truncate">
+                      {viewingRoom.name}
+                    </h3>
+                    {viewingRoom.type && (
+                      <span className="px-2.5 py-0.5 bg-pink-100 text-pink-700 text-[10px] font-extrabold rounded-full">
+                        {viewingRoom.type}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 truncate mt-0.5">
+                    {shopName} • {owner.barangay || 'Mansalay'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setViewingRoom(null)}
+                className="w-9 h-9 rounded-full bg-white hover:bg-gray-100 text-gray-500 hover:text-gray-900 flex items-center justify-center transition-colors shadow-xs flex-shrink-0 cursor-pointer"
+                title="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-5">
+              {/* Room Image & Gallery */}
+              {(() => {
+                const roomImages = Array.isArray(viewingRoom.images) && viewingRoom.images.length > 0
+                  ? viewingRoom.images
+                  : [viewingRoom.image || (shopBanner ? getImageUrl(shopBanner) : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80')];
+                const activeImg = roomImages[activeRoomImageIdx] || roomImages[0];
+                const activeImgSrc = activeImg.startsWith('http') ? activeImg : `${API_BASE}${activeImg}`;
+
+                return (
+                  <div className="space-y-2">
+                    <div className="relative h-64 sm:h-80 rounded-2xl overflow-hidden bg-gray-950 shadow-sm border border-gray-100">
+                      <img
+                        src={activeImgSrc}
+                        alt={viewingRoom.name}
+                        className="w-full h-full object-cover transition-all duration-300"
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80';
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+
+                      {/* Bottom Image Overlay Badges */}
+                      <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white">
+                        <div className="flex items-center gap-2">
+                          <span className="px-3 py-1 bg-emerald-500/90 backdrop-blur-md rounded-full text-xs font-bold shadow-xs">
+                            🟢 Available for Booking
+                          </span>
+                          {viewingRoom.capacity && (
+                            <span className="px-3 py-1 bg-black/60 backdrop-blur-md rounded-full text-xs font-bold flex items-center gap-1">
+                              <Users className="h-3.5 w-3.5" /> Max {viewingRoom.capacity} Guests
+                            </span>
+                          )}
+                        </div>
+
+                        {Number(viewingRoom.price_per_night || viewingRoom.price) > 0 && (
+                          <div className="px-3.5 py-1 bg-pink-600/95 backdrop-blur-md rounded-xl text-xs sm:text-sm font-extrabold shadow-md">
+                            ₱{Number(viewingRoom.price_per_night || viewingRoom.price).toLocaleString()}
+                            <span className="text-[10px] font-normal opacity-80"> / night</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Thumbnails if multiple images */}
+                    {roomImages.length > 1 && (
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                        {roomImages.map((img: string, idx: number) => {
+                          const thumbSrc = img.startsWith('http') ? img : `${API_BASE}${img}`;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setActiveRoomImageIdx(idx)}
+                              className={`relative w-16 h-16 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 cursor-pointer ${
+                                activeRoomImageIdx === idx ? 'border-pink-500 ring-2 ring-pink-200 scale-105' : 'border-gray-200 opacity-70 hover:opacity-100'
+                              }`}
+                            >
+                              <img src={thumbSrc} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Rate & Capacity Highlight Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 bg-pink-50/60 rounded-2xl border border-pink-100">
+                  <span className="text-[10px] font-bold text-pink-600 uppercase tracking-wider block mb-0.5">Rate / Night</span>
+                  <div className="text-lg font-black text-pink-600">
+                    ₱{Number(viewingRoom.price_per_night || viewingRoom.price || 0).toLocaleString()}
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-100">
+                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block mb-0.5">Max Occupancy</span>
+                  <div className="text-sm font-bold text-gray-900 flex items-center gap-1.5 mt-0.5">
+                    <Users className="h-4 w-4 text-blue-500" />
+                    <span>{viewingRoom.capacity || 2} Persons</span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-100 col-span-2 sm:col-span-1">
+                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block mb-0.5">Accommodation Type</span>
+                  <div className="text-sm font-bold text-gray-900 flex items-center gap-1.5 mt-0.5">
+                    <Bed className="h-4 w-4 text-emerald-500" />
+                    <span>{viewingRoom.type || 'Standard Room'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Room Description */}
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-extrabold text-gray-900 uppercase tracking-wider">
+                  Room Description & Highlights
+                </h4>
+                <p className="text-xs sm:text-sm text-gray-600 leading-relaxed bg-gray-50/70 p-4 rounded-2xl border border-gray-100">
+                  {viewingRoom.description ||
+                    `Enjoy a relaxing and comfortable stay in our ${viewingRoom.name} at ${shopName}. Equipped with essential amenities, clean bedding, and peaceful surroundings in Mansalay.`}
+                </p>
+              </div>
+
+              {/* Standard Amenities */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-extrabold text-gray-900 uppercase tracking-wider">
+                  Standard Room Features & Amenities
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    '❄️ Air Conditioning',
+                    '🚿 Private Bathroom & Shower',
+                    '📶 Free Wi-Fi Access',
+                    '🛏️ Fresh Linen & Bedding',
+                    '🌊 Ocean / Scenic Garden View',
+                    '🧹 Daily Housekeeping',
+                  ].map((amenity, idx) => (
+                    <div
+                      key={idx}
+                      className="px-3 py-2 bg-white rounded-xl border border-gray-100 shadow-2xs text-[11px] font-semibold text-gray-700 flex items-center gap-1.5"
+                    >
+                      <Check className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                      <span>{amenity}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Resort Host Contact Info */}
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+                    <Hotel className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase block">Hosted by</span>
+                    <span className="font-bold text-gray-900">{shopName}</span>
+                  </div>
+                </div>
+
+                {owner.phone && (
+                  <a
+                    href={`tel:${owner.phone}`}
+                    className="px-3.5 py-1.5 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl font-bold flex items-center gap-1.5 self-start sm:self-auto transition-colors shadow-2xs"
+                  >
+                    <Phone className="h-3.5 w-3.5" />
+                    <span>Call: {owner.phone}</span>
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="p-4 bg-gray-50/90 border-t border-gray-100 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setViewingRoom(null)}
+                className="px-4 py-2.5 bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewingRoom(null);
+                    handleChat();
+                  }}
+                  className="px-6 py-2.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white rounded-xl text-xs font-extrabold shadow-md shadow-pink-500/25 flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  <span>Book / Inquire This Room</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 📦 MODAL: PRODUCT DETAILS VIEWER ── */}
+      {viewingProduct && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-pink-50 via-rose-50 to-pink-50">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-500 text-white flex items-center justify-center shadow-sm flex-shrink-0">
+                  <Package className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-base font-extrabold text-gray-900 truncate">
+                    {viewingProduct.name}
+                  </h3>
+                  <p className="text-xs text-gray-500 truncate mt-0.5">
+                    {shopName} • {viewingProduct.category || 'Local Product'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setViewingProduct(null)}
+                className="w-9 h-9 rounded-full bg-white hover:bg-gray-100 text-gray-500 hover:text-gray-900 flex items-center justify-center transition-colors shadow-xs flex-shrink-0 cursor-pointer"
+                title="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto max-h-[75vh] space-y-4">
+              <div className="relative aspect-square rounded-2xl overflow-hidden bg-gray-100 border border-gray-100">
+                <img
+                  src={
+                    viewingProduct.image
+                      ? (viewingProduct.image.startsWith('http') ? viewingProduct.image : `${API_BASE}${viewingProduct.image}`)
+                      : 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=800&q=80'
+                  }
+                  alt={viewingProduct.name}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.src = 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=800&q=80';
+                  }}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Price</span>
+                  <div className="text-2xl font-black text-pink-600">
+                    ₱{Number(viewingProduct.price || 0).toLocaleString()}
+                  </div>
+                </div>
+
+                {viewingProduct.category && (
+                  <span className="px-3 py-1 bg-pink-50 text-pink-600 text-xs font-bold rounded-full border border-pink-200">
+                    {viewingProduct.category}
+                  </span>
+                )}
+              </div>
+
+              {viewingProduct.description && (
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Description</h4>
+                  <p className="text-xs text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    {viewingProduct.description}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setViewingProduct(null)}
+                className="px-4 py-2 bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setViewingProduct(null);
+                  handleChat();
+                }}
+                className="px-5 py-2.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:opacity-90 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <MessageCircle className="h-4 w-4" />
+                <span>Order / Inquire Product</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── MODAL: EDIT SHOP / RESORT PROFILE ── */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
@@ -1889,34 +2474,164 @@ export function BusinessProfile() {
 
             {/* Modal Form Content */}
             <form onSubmit={handleSaveProfile} className="p-6 overflow-y-auto flex-1 space-y-5">
-              {/* Cover Banner Upload */}
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
-                  Cover Banner Image
-                </label>
-                <div className="relative h-32 rounded-2xl overflow-hidden bg-gray-100 border-2 border-dashed border-gray-200 hover:border-pink-300 transition-colors flex items-center justify-center">
-                  {bannerPreview || shopBanner ? (
-                    <img
-                      src={bannerPreview || getImageUrl(shopBanner || '')}
-                      alt="Cover Preview"
-                      className="w-full h-full object-cover"
-                    />
+              {/* 🌟 COVER BANNER & VIRTUAL TOUR VIDEO (Stuck together in the Cover container) */}
+              <div className="bg-gradient-to-br from-indigo-50/50 via-white to-pink-50/30 p-4 sm:p-5 rounded-2xl border border-indigo-100 shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                      <Video className="w-4 h-4 text-pink-500" />
+                      <span>Cover Virtual Tour & Banner Photo</span>
+                    </label>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      I-set ang virtual video tour o banner photo na magsisilbing cover sa itaas ng inyong profile
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-bold bg-pink-100 text-pink-700 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    Header Cover
+                  </span>
+                </div>
+
+                {/* Cover Preview Container: Shows Virtual Tour Video if set, otherwise Cover Image */}
+                <div className="relative h-48 sm:h-52 rounded-2xl overflow-hidden bg-gray-950 border-2 border-dashed border-gray-200 hover:border-pink-300 transition-colors flex items-center justify-center shadow-inner">
+                  {videoPreview || videoUrlInput ? (
+                    <div className="w-full h-full relative bg-black flex items-center justify-center">
+                      {videoUrlInput && getYouTubeEmbedUrl(videoUrlInput) ? (
+                        <iframe
+                          src={`${getYouTubeEmbedUrl(videoUrlInput)}?autoplay=0`}
+                          title="Cover Virtual Tour Preview"
+                          className="w-full h-full object-cover pointer-events-auto"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      ) : (
+                        <video
+                          src={videoPreview || getImageUrl(videoUrlInput)}
+                          controls
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                      <span className="absolute top-2.5 left-2.5 px-2.5 py-1 bg-pink-600/90 text-white text-[10px] font-bold rounded-full shadow-md flex items-center gap-1.5 backdrop-blur-xs z-10 pointer-events-none">
+                        <Video className="w-3 h-3" />
+                        Cover Virtual Tour Active
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleRemoveVideo}
+                        className="absolute top-2.5 right-2.5 bg-black/70 hover:bg-black/90 text-rose-300 hover:text-rose-200 p-1.5 rounded-full backdrop-blur-xs transition-all z-10 cursor-pointer flex items-center gap-1 text-[11px] font-semibold px-2.5"
+                        title="Remove Virtual Tour"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Clear Video</span>
+                      </button>
+                    </div>
+                  ) : bannerPreview || shopBanner ? (
+                    <div className="w-full h-full relative group">
+                      <img
+                        src={bannerPreview || getImageUrl(shopBanner || '')}
+                        alt="Cover Preview"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = isResort ? '/assets/default-accommodation.jpg' : '/assets/default-product.jpg';
+                        }}
+                      />
+                      <span className="absolute top-2.5 left-2.5 px-2.5 py-1 bg-black/60 text-white text-[10px] font-bold rounded-full shadow-md flex items-center gap-1.5 backdrop-blur-xs pointer-events-none">
+                        <ImageIcon className="w-3 h-3" />
+                        Cover Photo Active
+                      </span>
+                      <label className="absolute inset-0 bg-black/40 hover:bg-black/50 text-white flex items-center justify-center gap-2 text-xs font-bold cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Upload className="h-4 w-4" />
+                        <span>Change Cover Photo</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleBannerChange}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
                   ) : (
-                    <div className="text-center p-4">
-                      <ImageIcon className="h-8 w-8 text-gray-400 mx-auto mb-1" />
-                      <span className="text-xs text-gray-500 font-medium">Upload Cover Banner</span>
+                    <div className="text-center p-6">
+                      <Video className="h-9 w-9 text-gray-400 mx-auto mb-1.5" />
+                      <p className="text-xs font-bold text-gray-700">Wala pang Cover Virtual Tour o Banner</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">Mag-upload ng video o photo sa ibaba</p>
                     </div>
                   )}
-                  <label className="absolute inset-0 bg-black/35 hover:bg-black/45 text-white flex items-center justify-center gap-2 text-xs font-bold cursor-pointer opacity-0 hover:opacity-100 transition-opacity">
-                    <Upload className="h-4 w-4" />
-                    <span>Change Cover Photo</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleBannerChange}
-                      className="hidden"
-                    />
-                  </label>
+                </div>
+
+                {/* Upload Controls for Cover: Video Link + Video File Dropzone + Photo Upload Button */}
+                <div className="space-y-3 pt-1">
+                  {/* Virtual Tour Video Link Input */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 flex items-center gap-1">
+                      <ExternalLink className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>Virtual Tour Video Link (YouTube o MP4 URL)</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="url"
+                        value={videoUrlInput}
+                        onChange={(e) => {
+                          setVideoUrlInput(e.target.value);
+                          if (e.target.value.trim()) {
+                            setVideoFile(null);
+                            setVideoPreview(null);
+                            if (videoFileInputRef.current) videoFileInputRef.current.value = '';
+                          }
+                        }}
+                        placeholder="https://www.youtube.com/watch?v=... o https://example.com/resort-tour.mp4"
+                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Dual Upload Row: Video File & Optional Photo Cover */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {/* Video File Dropzone */}
+                    <div>
+                      <input
+                        ref={videoFileInputRef}
+                        type="file"
+                        accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                        onChange={handleVideoFileChange}
+                        className="hidden"
+                      />
+                      <div
+                        onClick={() => videoFileInputRef.current?.click()}
+                        className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 rounded-xl p-3 text-center bg-white hover:bg-indigo-50/30 transition-all cursor-pointer group flex flex-col items-center justify-center min-h-[76px]"
+                      >
+                        <Film className="h-5 w-5 text-indigo-500 mb-1 group-hover:scale-110 transition-transform" />
+                        <span className="text-xs font-bold text-gray-800">Upload Video Tour File</span>
+                        <span className="text-[10px] text-gray-400 font-medium">MP4, WebM (hanggang 500MB)</span>
+                        {videoFile && (
+                          <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-[10px] font-bold">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            <span>{videoFile.name.slice(0, 16)}... ({(videoFile.size / (1024 * 1024)).toFixed(1)} MB)</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Banner Photo Upload */}
+                    <div>
+                      <label className="border-2 border-dashed border-pink-200 hover:border-pink-400 rounded-xl p-3 text-center bg-white hover:bg-pink-50/30 transition-all cursor-pointer group flex flex-col items-center justify-center min-h-[76px]">
+                        <ImageIcon className="h-5 w-5 text-pink-500 mb-1 group-hover:scale-110 transition-transform" />
+                        <span className="text-xs font-bold text-gray-800">Upload Cover Photo</span>
+                        <span className="text-[10px] text-gray-400 font-medium">JPG, PNG para sa banner</span>
+                        {bannerFile && (
+                          <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 bg-pink-50 border border-pink-200 text-pink-700 rounded-full text-[10px] font-bold">
+                            <CheckCircle2 className="h-3 w-3 text-pink-600" />
+                            <span>{bannerFile.name.slice(0, 16)}...</span>
+                          </div>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleBannerChange}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1932,6 +2647,9 @@ export function BusinessProfile() {
                         src={logoPreview || getImageUrl(shopLogo || '')}
                         alt="Logo Preview"
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = isResort ? '/assets/default-accommodation.jpg' : '/assets/default-product.jpg';
+                        }}
                       />
                     ) : (
                       <div className="w-full h-full bg-pink-50 flex items-center justify-center text-pink-500">
@@ -2117,11 +2835,12 @@ export function BusinessProfile() {
 }
 
 // Clean Product Card
-function ProductCard({ product }: any) {
+function ProductCard({ product, onSelect }: any) {
   const { isInWishlist, addToWishlist, removeFromWishlist, getWishlistCount, userType } = useApp();
-  const imageUrl = product.image
-    ? (product.image.startsWith('http') ? product.image : `${API_BASE}${product.image}`)
-    : '/assets/default-product.jpg';
+  const rawImage = product.image || (Array.isArray(product.images) && product.images[0]);
+  const imageUrl = rawImage
+    ? (rawImage.startsWith('http') ? rawImage : `${API_BASE}${rawImage}`)
+    : 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=800&q=80';
 
   const isSaved = isInWishlist(product.id, 'product');
   const count = getWishlistCount(product.id, 'product', product.likes || 0);
@@ -2138,7 +2857,7 @@ function ProductCard({ product }: any) {
         id: product.id,
         type: 'product',
         title: product.name,
-        image: product.image,
+        image: rawImage,
         category: product.category,
         price: product.price,
         likes: product.likes,
@@ -2147,14 +2866,17 @@ function ProductCard({ product }: any) {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-pink-300 transition-all duration-300 group cursor-pointer flex flex-col justify-between">
+    <div
+      onClick={onSelect}
+      className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-xl hover:border-pink-300 transition-all duration-300 group cursor-pointer flex flex-col justify-between"
+    >
       {/* Image */}
       <div className="relative aspect-square bg-gray-100 overflow-hidden">
         <img
           src={imageUrl}
           alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          onError={(e) => { e.currentTarget.src = '/assets/default-product.jpg'; }}
+          onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=800&q=80'; }}
         />
         {Array.isArray(product.images) && product.images.length > 1 && (
           <div className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-md text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
@@ -2164,7 +2886,7 @@ function ProductCard({ product }: any) {
         {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
           <button
             onClick={toggleSave}
-            className="absolute top-2 right-2 w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
+            className="absolute top-2 right-2 w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors shadow-xs"
             title="Save to wishlist"
           >
             <Heart className={`h-3.5 w-3.5 ${isSaved ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
@@ -2174,11 +2896,18 @@ function ProductCard({ product }: any) {
           <Heart className="h-3 w-3 fill-pink-500 text-pink-500" />
           <span>{count}</span>
         </div>
+
+        {/* View overlay */}
+        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+          <span className="px-3 py-1 bg-white/95 backdrop-blur-xs text-gray-900 text-xs font-bold rounded-full shadow-md transform translate-y-2 group-hover:translate-y-0 transition-transform">
+            View Details
+          </span>
+        </div>
       </div>
 
       {/* Product Info */}
       <div className="p-3">
-        <h3 className="text-sm text-gray-900 line-clamp-2 min-h-[40px] leading-snug mb-2 font-medium">
+        <h3 className="text-sm text-gray-900 line-clamp-2 min-h-[40px] leading-snug mb-2 font-medium group-hover:text-pink-600 transition-colors">
           {product.name}
         </h3>
 
@@ -2194,12 +2923,13 @@ function ProductCard({ product }: any) {
   );
 }
 
-// Clean Accommodation Card
-function AccommodationCard({ accommodation }: any) {
+// Clean Accommodation Card with click-to-view and robust fallback
+function AccommodationCard({ accommodation, onSelect }: any) {
   const { isInWishlist, addToWishlist, removeFromWishlist, getWishlistCount, userType } = useApp();
-  const imageUrl = accommodation.image
-    ? (accommodation.image.startsWith('http') ? accommodation.image : `${API_BASE}${accommodation.image}`)
-    : '/assets/default-accommodation.jpg';
+  const rawImage = accommodation.image || (Array.isArray(accommodation.images) && accommodation.images[0]);
+  const imageUrl = rawImage
+    ? (rawImage.startsWith('http') ? rawImage : `${API_BASE}${rawImage}`)
+    : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80';
 
   const price = Number(accommodation.price_per_night || accommodation.price || 0);
   const isSaved = isInWishlist(accommodation.id, 'accommodation');
@@ -2217,7 +2947,7 @@ function AccommodationCard({ accommodation }: any) {
         id: accommodation.id,
         type: 'accommodation',
         title: accommodation.name,
-        image: accommodation.image,
+        image: rawImage,
         price: price,
         likes: accommodation.likes,
       } as any);
@@ -2225,23 +2955,26 @@ function AccommodationCard({ accommodation }: any) {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-pink-300 transition-all duration-300 group cursor-pointer flex flex-col justify-between">
+    <div
+      onClick={onSelect}
+      className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-xl hover:border-pink-300 transition-all duration-300 group cursor-pointer flex flex-col justify-between"
+    >
       <div className="aspect-square bg-gray-100 overflow-hidden relative">
         <img
           src={imageUrl}
           alt={accommodation.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          onError={(e) => { e.currentTarget.src = '/assets/default-accommodation.jpg'; }}
+          onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80'; }}
         />
         {accommodation.type && (
-          <span className="absolute top-2 left-2 px-2 py-0.5 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold rounded-md">
+          <span className="absolute top-2 left-2 px-2.5 py-0.5 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold rounded-lg shadow-xs">
             {accommodation.type}
           </span>
         )}
         {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
           <button
             onClick={toggleSave}
-            className="absolute top-2 right-2 w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
+            className="absolute top-2 right-2 w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors shadow-xs"
             title="Save to wishlist"
           >
             <Heart className={`h-3.5 w-3.5 ${isSaved ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
@@ -2251,21 +2984,30 @@ function AccommodationCard({ accommodation }: any) {
           <Heart className="h-3 w-3 fill-pink-500 text-pink-500" />
           <span>{count}</span>
         </div>
+
+        {/* View overlay */}
+        <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+          <span className="px-3.5 py-1.5 bg-white/95 backdrop-blur-xs text-gray-900 text-xs font-bold rounded-full shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform flex items-center gap-1">
+            <span>View Room</span>
+            <span>→</span>
+          </span>
+        </div>
       </div>
       <div className="p-3 flex-1 flex flex-col justify-between">
         <div>
-          <h3 className="text-sm text-gray-900 line-clamp-2 min-h-[36px] leading-snug mb-1 font-bold">
+          <h3 className="text-sm text-gray-900 line-clamp-2 min-h-[36px] leading-snug mb-1 font-bold group-hover:text-pink-600 transition-colors">
             {accommodation.name}
           </h3>
           {accommodation.capacity ? (
-            <div className="text-[11px] text-gray-500 mb-2">
-              👥 Max {accommodation.capacity} Guests
+            <div className="text-[11px] text-gray-500 mb-2 flex items-center gap-1">
+              <Users className="h-3 w-3 text-gray-400" />
+              <span>Max {accommodation.capacity} Guests</span>
             </div>
           ) : null}
         </div>
         {price > 0 && (
-          <div className="text-pink-600 font-extrabold text-sm">
-            ₱{price.toLocaleString()}
+          <div className="text-pink-600 font-extrabold text-sm flex items-baseline gap-0.5">
+            <span>₱{price.toLocaleString()}</span>
             <span className="text-[10px] font-normal text-gray-400"> / night</span>
           </div>
         )}

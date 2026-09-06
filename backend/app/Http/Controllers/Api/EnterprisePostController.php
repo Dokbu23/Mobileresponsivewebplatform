@@ -36,11 +36,25 @@ class EnterprisePostController extends Controller
 
         $posts = $query->orderBy('created_at', 'desc')->get();
 
-        // Auto-sync any product posts to products table
+        // Clean tags and auto-sync products/rooms
         try {
             foreach ($posts as $p) {
+                if (!empty($p->tags)) {
+                    $cleaned = self::cleanTags($p->tags);
+                    $p->tags = $cleaned;
+
+                    // Clean any dirty tags stored in database (e.g. &[quot;...])
+                    $raw = (string) $p->getRawOriginal('tags');
+                    if (str_contains($raw, 'quot') || str_contains($raw, '[&quot;') || str_contains($raw, '\\"') || str_contains($raw, '#[')) {
+                        $p->tags = $cleaned;
+                        $p->saveQuietly();
+                    }
+                }
+
                 if ($p->type === 'product' || !empty($p->product_name)) {
                     self::syncProductFromPost($p, $p->user ?? $user);
+                } elseif ($p->type === 'rooms' || $p->type === 'room') {
+                    self::syncRoomFromPost($p, $p->user ?? $user);
                 }
             }
         } catch (\Throwable $e) {
@@ -48,6 +62,44 @@ class EnterprisePostController extends Controller
         }
 
         return response()->json($posts);
+    }
+
+    /**
+     * Clean and normalize tags: unescape HTML entities, strip brackets/quotes, remove hash prefixes
+     */
+    public static function cleanTags($rawTags): array
+    {
+        if (empty($rawTags)) return [];
+        if (is_string($rawTags)) {
+            $rawDecoded = html_entity_decode($rawTags, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $decoded = json_decode($rawDecoded, true);
+            $rawArray = is_array($decoded) ? $decoded : explode(',', $rawDecoded);
+        } elseif (is_array($rawTags)) {
+            $rawArray = $rawTags;
+        } else {
+            $rawArray = [];
+        }
+
+        $cleanList = [];
+        foreach ($rawArray as $t) {
+            if (!empty($t)) {
+                $tClean = trim(html_entity_decode((string)$t, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                $tClean = trim($tClean, "[]\"' \t\n\r\0\x0B\\");
+                $tClean = ltrim($tClean, '#');
+                if (str_contains($tClean, ',')) {
+                    foreach (explode(',', $tClean) as $sub) {
+                        $s = trim(trim($sub), "[]\"' \t\n\r\0\x0B\\");
+                        $s = ltrim($s, '#');
+                        if (!empty($s) && !in_array($s, $cleanList)) {
+                            $cleanList[] = $s;
+                        }
+                    }
+                } elseif (!empty($tClean) && !in_array($tClean, $cleanList)) {
+                    $cleanList[] = $tClean;
+                }
+            }
+        }
+        return $cleanList;
     }
 
     /**
@@ -120,6 +172,72 @@ class EnterprisePostController extends Controller
             return $existing;
         } else {
             return \App\Models\Product::create($prodData);
+        }
+    }
+
+    /**
+     * Helper to reliably sync an EnterprisePost to a ResortRoom database record
+     */
+    public static function syncRoomFromPost(EnterprisePost $post, $user = null)
+    {
+        if (!$user && $post->user_id) {
+            $user = \App\Models\User::find($post->user_id);
+        }
+        if (!$user) return null;
+        if ($post->type !== 'rooms' && $post->type !== 'room') {
+            return null;
+        }
+
+        $roomName = trim($post->product_name ?: '');
+        if (!$roomName && !empty($post->content)) {
+            $firstLine = trim(explode("\n", $post->content)[0]);
+            $roomName = trim(\Illuminate\Support\Str::limit($firstLine, 50, ''));
+        }
+        if (!$roomName) {
+            $roomName = 'Resort Room & Stay';
+        }
+
+        $numericPrice = floatval(preg_replace('/[^0-9.]/', '', (string)($post->price ?? '0')));
+        if ($numericPrice <= 0) {
+            $numericPrice = 2000;
+        }
+        $capacity = intval(preg_replace('/[^0-9]/', '', (string)($post->stock ?? '2')));
+        if ($capacity <= 0) {
+            $capacity = 2;
+        }
+
+        $images = is_array($post->images) && count($post->images) > 0
+            ? $post->images
+            : (!empty($post->image) ? [$post->image] : []);
+
+        $roomData = [
+            'user_id'         => $user->id,
+            'name'            => $roomName,
+            'type'            => 'Room',
+            'price_per_night' => $numericPrice,
+            'capacity'        => $capacity,
+            'description'     => $post->content ?: $roomName,
+            'image'           => $post->image ?: (count($images) > 0 ? $images[0] : null),
+            'images'          => $images,
+            'is_available'    => true,
+        ];
+
+        $existing = \App\Models\ResortRoom::where('user_id', $user->id)
+            ->where('name', $roomName)
+            ->first();
+
+        if ($existing) {
+            $existing->update([
+                'price_per_night' => $numericPrice,
+                'capacity'        => $capacity,
+                'description'     => $post->content ?: $roomName,
+                'image'           => $existing->image ?: ($post->image ?: (count($images) > 0 ? $images[0] : null)),
+                'images'          => !empty($existing->images) ? $existing->images : $images,
+                'is_available'    => true,
+            ]);
+            return $existing;
+        } else {
+            return \App\Models\ResortRoom::create($roomData);
         }
     }
 
@@ -199,9 +317,8 @@ class EnterprisePostController extends Controller
             $data['video'] = $request->input('video');
         }
 
-        if (isset($data['tags']) && is_string($data['tags'])) {
-            $decoded = json_decode($data['tags'], true);
-            $data['tags'] = is_array($decoded) ? $decoded : array_map('trim', explode(',', $data['tags']));
+        if (isset($data['tags'])) {
+            $data['tags'] = self::cleanTags($data['tags']);
         }
 
         $data['user_id'] = $user ? $user->id : null;
@@ -217,6 +334,12 @@ class EnterprisePostController extends Controller
                 self::syncProductFromPost($post, $user);
             } catch (\Throwable $e) {
                 \Log::warning('Failed to sync Product record from EnterprisePost: ' . $e->getMessage());
+            }
+        } elseif (($data['type'] === 'rooms' || $data['type'] === 'room') && $user) {
+            try {
+                self::syncRoomFromPost($post, $user);
+            } catch (\Throwable $e) {
+                \Log::warning('Failed to sync ResortRoom record from EnterprisePost: ' . $e->getMessage());
             }
         }
 
@@ -270,9 +393,8 @@ class EnterprisePostController extends Controller
             $data['video'] = $request->input('video');
         }
 
-        if (isset($data['tags']) && is_string($data['tags'])) {
-            $decoded = json_decode($data['tags'], true);
-            $data['tags'] = is_array($decoded) ? $decoded : array_map('trim', explode(',', $data['tags']));
+        if (isset($data['tags'])) {
+            $data['tags'] = self::cleanTags($data['tags']);
         }
 
         $post->update(array_filter($data, fn($v) => !is_null($v)));

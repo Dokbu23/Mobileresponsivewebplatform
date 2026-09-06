@@ -120,6 +120,11 @@ class ResortProfileController extends Controller
             }
         }
 
+        // If resort_name is updated, also update base name
+        if (isset($updateData['resort_name']) && $updateData['resort_name'] !== '') {
+            $updateData['name'] = $updateData['resort_name'];
+        }
+
         // If resort_description is updated, also update base description
         if (isset($updateData['resort_description'])) {
             $updateData['description'] = $updateData['resort_description'];
@@ -137,12 +142,29 @@ class ResortProfileController extends Controller
         if ($request->hasFile('logo')) {
             $path = $request->file('logo')->store('resort-profiles/logos', 'public');
             $updateData['store_logo'] = '/storage/' . $path;
+            $updateData['avatar'] = '/storage/' . $path;
         }
 
         // Handle banner upload
         if ($request->hasFile('banner')) {
             $path = $request->file('banner')->store('resort-profiles/banners', 'public');
             $updateData['store_banner'] = '/storage/' . $path;
+        }
+
+        // Handle video upload or link
+        if ($request->hasFile('video')) {
+            $path = $request->file('video')->store('resort-profiles/videos', 'public');
+            $updateData['video'] = '/storage/' . $path;
+            $updateData['video_url'] = '/storage/' . $path;
+        } elseif ($request->filled('video_url')) {
+            $updateData['video_url'] = $request->input('video_url');
+            $updateData['video'] = $request->input('video_url');
+        } elseif ($request->filled('video')) {
+            $updateData['video'] = $request->input('video');
+            $updateData['video_url'] = $request->input('video');
+        } elseif ($request->has('video_url') && $request->input('video_url') === '') {
+            $updateData['video_url'] = null;
+            $updateData['video'] = null;
         }
 
         if (!empty($updateData)) {
@@ -152,14 +174,21 @@ class ResortProfileController extends Controller
         $fresh = $user->fresh();
         $images = $fresh->resort_images ?? [];
         $primary = is_array($images) && count($images) > 0 ? $images[0] : '';
-        $logo = $fresh->store_logo ?: $primary;
+        $logo = $fresh->store_logo ?: ($fresh->avatar ?: $primary);
         $banner = $fresh->store_banner ?: $primary;
+        $video = $fresh->video ?? $fresh->video_url;
 
         return response()->json([
-            'message' => 'Resort profile updated successfully',
-            'user'    => $fresh,
-            'logo'    => $logo,
-            'banner'  => $banner,
+            'message'      => 'Resort profile updated successfully',
+            'user'         => $fresh,
+            'logo'         => $logo,
+            'banner'       => $banner,
+            'store_logo'   => $logo,
+            'store_banner' => $banner,
+            'resort_logo'  => $logo,
+            'resort_banner'=> $banner,
+            'video'        => $video,
+            'video_url'    => $video,
             'profile' => [
                 'user_id'                => $fresh->id,
                 'resort_name'            => $fresh->resort_name ?: $fresh->name,
@@ -180,7 +209,9 @@ class ResortProfileController extends Controller
                 'store_logo'             => $logo,
                 'store_banner'           => $banner,
                 'resort_logo'            => $logo,
-                'resort_banner'          => $banner,
+                'resort_banner'=> $banner,
+                'video'                  => $video,
+                'video_url'              => $video,
             ],
         ]);
     }

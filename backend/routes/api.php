@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\EnterpriseProfileController;
 use App\Http\Controllers\Api\EnterprisePostController;
 use App\Http\Controllers\Api\LandmarkController;
 use App\Http\Controllers\Api\WishlistController;
+use App\Http\Controllers\Api\SiteSettingController;
 
 use App\Models\User;
 
@@ -59,6 +60,7 @@ Route::group(['prefix' => 'public'], function () {
     // Public Wishlist & Likes API
     Route::post('wishlist/toggle', [WishlistController::class, 'toggle']);
     Route::get('wishlist/counts', [WishlistController::class, 'counts']);
+    Route::get('site-settings/home-background', [SiteSettingController::class, 'getHomeBackground']);
 
     // Public resort rooms (for tourists when booking)
     Route::get('resort-rooms/{userId}', [ResortRoomController::class, 'publicIndex']);
@@ -92,6 +94,7 @@ Route::group(['prefix' => 'public'], function () {
     Route::get('enterprise-posts', [EnterprisePostController::class, 'index']);
     Route::post('enterprise-posts/{id}/like', [EnterprisePostController::class, 'like']);
     Route::post('enterprise-posts/{id}/save', [EnterprisePostController::class, 'save']);
+    Route::get('site-settings/home-background', [SiteSettingController::class, 'getHomeBackground']);
 
     // Public Subscription / Payment Settings
     Route::get('subscription/settings', function() {
@@ -538,6 +541,10 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::put('payment-methods/{id}', [PaymentSettingsController::class, 'update']);
         Route::delete('payment-methods/{id}', [PaymentSettingsController::class, 'destroy']);
         Route::patch('payment-methods/{id}/toggle', [PaymentSettingsController::class, 'toggle']);
+
+        // Site Settings / Homepage Background
+        Route::post('site-settings/home-background', [SiteSettingController::class, 'updateHomeBackground']);
+        Route::delete('site-settings/home-background', [SiteSettingController::class, 'resetHomeBackground']);
     });
 
     // Tourist-only routes

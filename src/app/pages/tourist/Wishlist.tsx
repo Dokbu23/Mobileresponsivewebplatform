@@ -680,8 +680,8 @@ export function Wishlist() {
                               </span>
                             )}
                             {item.views > 0 && (
-                              <span className="text-[10px] text-gray-400 font-medium flex items-center gap-1">
-                                <Eye className="h-3 w-3" /> {item.views.toLocaleString()} views
+                              <span className="text-[10px] text-gray-400 font-medium">
+                                {item.views.toLocaleString()} views
                               </span>
                             )}
                           </div>
@@ -690,11 +690,9 @@ export function Wishlist() {
 
                       {/* Saves count badge */}
                       <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                        <div className="px-3 py-1.5 bg-pink-50 text-pink-600 rounded-xl text-xs font-black flex items-center gap-1.5 border border-pink-100">
-                          <Heart className="h-3.5 w-3.5 fill-pink-500" />
+                        <div className="px-3 py-1.5 bg-pink-50 text-pink-600 rounded-xl text-xs font-black border border-pink-100">
                           <span>{item.saves} saves</span>
                         </div>
-                        <ArrowRight className="h-4 w-4 text-gray-300 group-hover:text-pink-500 group-hover:translate-x-1 transition-all" />
                       </div>
                     </div>
                   ))}
@@ -827,15 +825,14 @@ export function Wishlist() {
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
                                 {item.category || 'Attraction'}
                               </span>
-                              <span className="text-[10px] text-gray-400 font-medium flex items-center gap-1">
-                                <Eye className="h-3 w-3" /> {item.views.toLocaleString()} views
+                              <span className="text-[10px] text-gray-400 font-medium">
+                                {item.views.toLocaleString()} views
                               </span>
                             </div>
                           </div>
 
-                          <div className="px-2.5 py-1 bg-pink-50 text-pink-600 text-[10px] font-bold rounded-full flex items-center gap-1">
-                            <Heart className="h-3 w-3 fill-pink-500" />
-                            <span>{item.saves}</span>
+                          <div className="px-2.5 py-1 bg-pink-50 text-pink-600 text-[10px] font-bold rounded-full">
+                            <span>{item.saves} saves</span>
                           </div>
                         </div>
                       ))

@@ -33,6 +33,7 @@ import { useApp } from '../../context/AppContext';
 import { SubscriptionPaymentModal } from '../../components/SubscriptionPaymentModal';
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
+import { cleanTags } from '../tourist/BusinessProfile';
 
 const OPEN_TIME_OPTIONS = [
   '6:00 AM',
@@ -117,23 +118,26 @@ interface EnterprisePost {
   title?: string;
   content: string;
   image?: string;
+  images?: string[];
   video?: string;
   video_url?: string;
   product_name?: string;
   productName?: string;
-  price?: string;
+  price?: string | number;
   category?: string;
   seller_name?: string;
   sellerName?: string;
   location?: string;
   business_hours?: string;
   businessHours?: string;
-  stock?: string;
+  stock?: string | number;
   tags?: string[];
   likes: number;
   saves: number;
   created_at?: string;
   createdAt?: string;
+  user_id?: number | string;
+  [key: string]: any;
 }
 
 export function EnterpriseDashboard() {
@@ -1186,26 +1190,28 @@ export function EnterpriseDashboard() {
 
           {/* VIRTUAL TOUR / VIDEO UPLOAD SECTION (For Virtual Tour / Update) */}
           {postType === 'update' && (
-            <div className="bg-gradient-to-br from-pink-50/50 via-white to-purple-50/30 p-4.5 sm:p-5 rounded-2xl border border-pink-100/80 shadow-xs space-y-4">
+            <div className="bg-gradient-to-br from-indigo-50/60 via-white to-pink-50/40 p-5 rounded-2xl border border-indigo-100 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-pink-500/10 text-pink-600 rounded-lg">
+                  <div className="p-1.5 bg-indigo-500/10 text-indigo-600 rounded-lg">
                     <Video className="w-4 h-4" />
                   </div>
                   <div>
-                    <h3 className="text-xs font-bold text-gray-900">Virtual Tour Video Upload</h3>
-                    <p className="text-[11px] text-gray-500 font-medium">Upload a video file or paste a video link (YouTube, Facebook, MP4)</p>
+                    <h4 className="text-xs font-bold text-gray-900">
+                      Virtual Video Tour <span className="text-gray-400 font-normal">(Optional)</span>
+                    </h4>
+                    <p className="text-[11px] text-gray-500 font-medium">Add a video link (YouTube / MP4) or upload a video tour file</p>
                   </div>
                 </div>
-                <span className="text-[10px] font-bold bg-pink-100 text-pink-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  Optional Video Tour
+                <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Virtual Tour
                 </span>
               </div>
 
               {/* Video Link Input */}
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                  Video Link (YouTube, Facebook, or Direct Video URL)
+                  Video Tour Link (YouTube, Facebook, or Direct Video URL)
                 </label>
                 <div className="relative">
                   <ExternalLink className="w-3.5 h-3.5 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -1220,8 +1226,8 @@ export function EnterpriseDashboard() {
                         if (videoFileInputRef.current) videoFileInputRef.current.value = '';
                       }
                     }}
-                    placeholder="https://www.youtube.com/watch?v=... or https://example.com/tour.mp4"
-                    className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 transition-all font-medium"
+                    placeholder="https://www.youtube.com/watch?v=... or https://example.com/attraction-tour.mp4"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                   />
                 </div>
               </div>
@@ -1245,10 +1251,10 @@ export function EnterpriseDashboard() {
 
                 <div
                   onClick={() => videoFileInputRef.current?.click()}
-                  className="border-2 border-dashed border-gray-200 hover:border-pink-400 rounded-xl p-5 text-center bg-white/70 hover:bg-pink-50/30 transition-all cursor-pointer group"
+                  className="border-2 border-dashed border-gray-200 hover:border-indigo-400 rounded-xl p-5 text-center bg-white/70 hover:bg-indigo-50/30 transition-all cursor-pointer group"
                 >
-                  <Film className="h-7 w-7 text-gray-400 group-hover:text-pink-500 mx-auto mb-1.5 transition-colors" />
-                  <p className="text-xs font-bold text-gray-700">Click to choose video file</p>
+                  <Film className="h-7 w-7 text-gray-400 group-hover:text-indigo-500 mx-auto mb-1.5 transition-colors" />
+                  <p className="text-xs font-bold text-gray-700">Click to choose video tour file</p>
                   <p className="text-[11px] text-gray-400 mt-0.5 font-medium">MP4, WebM, MOV (Up to 500MB)</p>
                   {videoFile && (
                     <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-[11px] font-bold">
@@ -1264,8 +1270,8 @@ export function EnterpriseDashboard() {
                 <div className="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <Play className="h-3.5 w-3.5 text-pink-400 fill-pink-400" />
-                      <span>Video Tour Preview</span>
+                      <Play className="h-3.5 w-3.5 text-indigo-400 fill-indigo-400" />
+                      <span>Virtual Tour Video Preview</span>
                     </span>
                     <button
                       type="button"
@@ -1430,13 +1436,13 @@ export function EnterpriseDashboard() {
                 const videoUrl = post.video ? (post.video.startsWith('http') ? post.video : getStorageUrl(post.video)) : null;
                 const ytEmbed = videoUrl ? getYouTubeEmbedUrl(videoUrl) : null;
                 const prodTitle = post.product_name || post.productName;
-                const priceText = post.price;
+                const priceText = post.price !== undefined && post.price !== null ? String(post.price) : '';
                 const categoryText = post.category;
                 const locText = post.location;
                 const hoursText = post.business_hours || post.businessHours;
                 const stockText = post.stock;
                 const timeAgo = formatTimeAgo(post.created_at || post.createdAt);
-                const tagList = Array.isArray(post.tags) ? post.tags : [];
+                const tagList = cleanTags(post.tags);
 
                 return (
                   <div

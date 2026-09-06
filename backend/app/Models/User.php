@@ -62,6 +62,7 @@ class User extends Authenticatable
         'resort_logo',
         'resort_banner',
         'video_url',
+        'video',
         'store_name', 
         'store_description', 
         'store_logo', 

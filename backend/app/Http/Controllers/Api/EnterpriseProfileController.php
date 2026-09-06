@@ -95,9 +95,11 @@ class EnterpriseProfileController extends Controller
         $user = $request->user();
 
         $data = $request->validate([
-            'store_name'        => 'sometimes|required|string|max:255',
+            'name'              => 'nullable|string|max:255',
+            'store_name'        => 'nullable|string|max:255',
+            'description'       => 'nullable|string',
             'store_description' => 'nullable|string',
-            'phone'             => 'nullable|string|max:20',
+            'phone'             => 'nullable|string|max:50',
             'address'           => 'nullable|string|max:500',
             'barangay'          => 'nullable|string|max:100',
             'facebook_link'     => 'nullable|string|max:500',
@@ -128,25 +130,72 @@ class EnterpriseProfileController extends Controller
             $data['store_banner'] = preg_replace('#^https?://[^/]+#', '', $request->input('store_banner'));
         }
 
-        $updateData = array_filter([
-            'store_name'        => $data['store_name'] ?? null,
-            'store_description' => $data['store_description'] ?? null,
-            'store_logo'        => $data['store_logo'] ?? null,
-            'store_banner'      => $data['store_banner'] ?? null,
-            'phone'             => $data['phone'] ?? null,
-            'address'           => $data['address'] ?? null,
-            'barangay'          => $data['barangay'] ?? null,
-            'facebook_link'     => $data['facebook_link'] ?? null,
-            'instagram_link'    => $data['instagram_link'] ?? null,
-            'latitude'          => $data['latitude'] ?? null,
-            'longitude'         => $data['longitude'] ?? null,
-        ], fn($v) => $v !== null);
+        $updateData = [];
 
-        $user->update($updateData);
+        $storeName = $data['store_name'] ?? ($data['name'] ?? null);
+        $storeDesc = $data['store_description'] ?? ($data['description'] ?? null);
+
+        if ($storeName !== null && trim($storeName) !== '') {
+            $updateData['name'] = trim($storeName);
+            $updateData['store_name'] = trim($storeName);
+        }
+
+        if ($storeDesc !== null) {
+            $updateData['description'] = trim($storeDesc);
+            $updateData['store_description'] = trim($storeDesc);
+        }
+
+        if (!empty($data['store_logo'])) {
+            $updateData['store_logo'] = $data['store_logo'];
+            $updateData['avatar'] = $data['store_logo'];
+        }
+
+        if (!empty($data['store_banner'])) {
+            $updateData['store_banner'] = $data['store_banner'];
+        }
+
+        // Handle video upload or link
+        if ($request->hasFile('video')) {
+            $path = $request->file('video')->store('enterprise/videos', 'public');
+            $updateData['video'] = '/storage/' . $path;
+            $updateData['video_url'] = '/storage/' . $path;
+        } elseif ($request->filled('video_url')) {
+            $updateData['video_url'] = $request->input('video_url');
+            $updateData['video'] = $request->input('video_url');
+        } elseif ($request->filled('video')) {
+            $updateData['video'] = $request->input('video');
+            $updateData['video_url'] = $request->input('video');
+        } elseif ($request->has('video_url') && $request->input('video_url') === '') {
+            $updateData['video_url'] = null;
+            $updateData['video'] = null;
+        }
+
+        foreach (['phone', 'address', 'barangay', 'facebook_link', 'instagram_link', 'latitude', 'longitude'] as $field) {
+            if ($request->has($field)) {
+                $updateData[$field] = $request->input($field);
+            }
+        }
+
+        $updateData['store_is_setup'] = true;
+
+        if (!empty($updateData)) {
+            $user->update($updateData);
+        }
+
+        $fresh = $user->fresh();
+        $logo = $fresh->store_logo ?? $fresh->avatar;
+        $banner = $fresh->store_banner;
+        $video = $fresh->video ?? $fresh->video_url;
 
         return response()->json([
-            'message' => 'Store profile updated successfully.',
-            'user'    => $user->fresh(),
+            'message'      => 'Store profile updated successfully.',
+            'user'         => $fresh,
+            'store_logo'   => $logo,
+            'store_banner' => $banner,
+            'logo'         => $logo,
+            'banner'       => $banner,
+            'video'        => $video,
+            'video_url'    => $video,
         ]);
     }
 
@@ -212,6 +261,9 @@ class EnterpriseProfileController extends Controller
                 'instagram_link'   => $owner->instagram_link,
                 'latitude'         => $owner->latitude,
                 'longitude'        => $owner->longitude,
+                'video'            => $owner->video ?? $owner->video_url,
+                'video_url'        => $owner->video_url ?? $owner->video,
+                'video_tour'       => $owner->video ?? $owner->video_url,
                 'last_active_at'   => $owner->updated_at,
                 'created_at'       => $owner->created_at,
             ],

@@ -37,29 +37,48 @@ export function Dashboard() {
     return localStorage.getItem('discover-mansalay:heroVideo');
   });
 
+  // Active Homepage Hero Background Image (Persisted from database)
+  const [heroBackground, setHeroBackground] = useState<string>(() => {
+    return localStorage.getItem('discover-mansalay:homeBackground') || '/assets/mansalay_hero_bg.jpg';
+  });
+
   useEffect(() => {
     const syncHeroVideo = () => {
       setHeroVideo(localStorage.getItem('discover-mansalay:heroVideo'));
     };
+    const syncHeroBg = () => {
+      const bg = localStorage.getItem('discover-mansalay:homeBackground');
+      if (bg) setHeroBackground(bg);
+    };
     window.addEventListener('heroVideoUpdated', syncHeroVideo);
+    window.addEventListener('homeBackgroundUpdated', syncHeroBg);
     window.addEventListener('storage', syncHeroVideo);
+    window.addEventListener('storage', syncHeroBg);
     return () => {
       window.removeEventListener('heroVideoUpdated', syncHeroVideo);
+      window.removeEventListener('homeBackgroundUpdated', syncHeroBg);
       window.removeEventListener('storage', syncHeroVideo);
+      window.removeEventListener('storage', syncHeroBg);
     };
   }, []);
 
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      const [attractionsRes, productsRes, accommodationsRes, eventsRes, heroVideoRes, statsRes] = await Promise.all([
+      const [attractionsRes, productsRes, accommodationsRes, eventsRes, heroVideoRes, statsRes, bgRes] = await Promise.all([
         getPublicJSON('/attractions').catch(() => []),
         getPublicJSON('/products').catch(() => []),
         getPublicJSON('/accommodations').catch(() => []),
         getPublicJSON('/events').catch(() => []),
         getPublicJSON('/hero-video').catch(() => null),
         getPublicJSON('/stats').catch(() => null),
+        getPublicJSON('/site-settings/home-background').catch(() => null),
       ]);
+
+      if (bgRes?.background_image) {
+        setHeroBackground(bgRes.background_image);
+        localStorage.setItem('discover-mansalay:homeBackground', bgRes.background_image);
+      }
 
       if (statsRes?.success && statsRes?.stats) {
         setStats(statsRes.stats);
@@ -311,9 +330,18 @@ export function Dashboard() {
       <section className="relative w-full h-[520px] md:h-[580px] overflow-hidden bg-gray-950 flex items-center">
         {/* Background Hero Image */}
         <img
-          src="/assets/mansalay_hero_bg.jpg"
+          src={
+            heroBackground
+              ? heroBackground.startsWith('http') || heroBackground.startsWith('/assets') || heroBackground.startsWith('data:')
+                ? heroBackground
+                : `${API_BASE}${heroBackground}`
+              : '/assets/mansalay_hero_bg.jpg'
+          }
           alt="Discover Mansalay"
           className="absolute inset-0 w-full h-full object-cover object-center scale-105 animate-in fade-in duration-700"
+          onError={(e) => {
+            e.currentTarget.src = '/assets/mansalay_hero_bg.jpg';
+          }}
         />
         {/* Dark Left-to-Right Gradient Overlay */}
         <div className="absolute inset-0 bg-gradient-to-r from-gray-950/90 via-gray-950/65 to-transparent z-10" />

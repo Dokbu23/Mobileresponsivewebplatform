@@ -31,7 +31,11 @@ import {
   RotateCcw,
   ChevronDown,
   Mail,
-  ExternalLink
+  ExternalLink,
+  Image as ImageIcon,
+  Sparkles,
+  RefreshCw,
+  Save
 } from 'lucide-react';
 import { getPublicJSON, postJSON, deleteJSON, API_BASE } from '../../lib/api';
 import {
@@ -43,7 +47,7 @@ import {
 } from '../../lib/constants';
 
 type ContentTab = 'resort' | 'product' | 'attraction' | 'event' | 'itinerary';
-type MainMode = 'publish' | 'videos' | 'manage';
+type MainMode = 'publish' | 'background' | 'videos' | 'manage';
 
 // 🛡️ SECURITY CONSTANTS & VALIDATORS FOR VIDEO UPLOADS
 const ALLOWED_VIDEO_MIME_TYPES = [
@@ -523,6 +527,145 @@ export function AdminContent() {
       }
     })();
   }, []);
+
+  // 🌄 Homepage Background Image State
+  const [currentHomeBg, setCurrentHomeBg] = useState<string>(() => {
+    return localStorage.getItem('discover-mansalay:homeBackground') || '/assets/mansalay_hero_bg.jpg';
+  });
+  const [isCustomHomeBg, setIsCustomHomeBg] = useState<boolean>(false);
+  const [bgImageFile, setBgImageFile] = useState<File | null>(null);
+  const [bgImagePreview, setBgImagePreview] = useState<string | null>(null);
+  const [bgUrlInput, setBgUrlInput] = useState<string>('');
+  const [isSavingBg, setIsSavingBg] = useState<boolean>(false);
+  const bgFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Load home background from backend database on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await getPublicJSON('/site-settings/home-background');
+        if (res?.background_image) {
+          setCurrentHomeBg(res.background_image);
+          setIsCustomHomeBg(!!res.is_custom);
+          localStorage.setItem('discover-mansalay:homeBackground', res.background_image);
+        }
+      } catch (err) {
+        console.warn('Failed to load home background setting:', err);
+      }
+    })();
+  }, []);
+
+  const handleSelectBgFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select a valid image file (JPG, PNG, WEBP).');
+      return;
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      toast.error('Image size exceeds 15MB limit.');
+      return;
+    }
+
+    setBgImageFile(file);
+    const previewUrl = URL.createObjectURL(file);
+    setBgImagePreview(previewUrl);
+    setBgUrlInput('');
+    toast.success(`Image "${file.name}" selected and ready to save!`);
+  };
+
+  const handleSaveHomeBackground = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!bgImageFile && !bgUrlInput.trim()) {
+      toast.error('Please choose an image file or enter an image URL.');
+      return;
+    }
+
+    setIsSavingBg(true);
+    setUploadFileName(bgImageFile ? bgImageFile.name : 'Homepage Background Image');
+    setUploadStatusText('Saving background to database...');
+    setUploadProgress(20);
+    setUploadModalOpen(true);
+
+    try {
+      let res: any;
+      const token = localStorage.getItem('discover-mansalay:token') || sessionStorage.getItem('discover-mansalay:token');
+
+      if (bgImageFile) {
+        setUploadProgress(45);
+        const formData = new FormData();
+        formData.append('image', bgImageFile);
+
+        const response = await fetch(`${API_BASE}/admin/site-settings/home-background`, {
+          method: 'POST',
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            Accept: 'application/json',
+          },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData?.message || `Server error (${response.status})`);
+        }
+
+        res = await response.json();
+      } else {
+        setUploadProgress(45);
+        res = await postJSON('/admin/site-settings/home-background', {
+          image_url: bgUrlInput.trim(),
+        });
+      }
+
+      setUploadProgress(85);
+      const savedPath = res?.background_image || bgImagePreview || bgUrlInput.trim();
+
+      setCurrentHomeBg(savedPath);
+      setIsCustomHomeBg(true);
+      localStorage.setItem('discover-mansalay:homeBackground', savedPath);
+      window.dispatchEvent(new Event('homeBackgroundUpdated'));
+      window.dispatchEvent(new Event('storage'));
+
+      setUploadProgress(100);
+      setUploadStatusText('Homepage background saved to database!');
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      setUploadModalOpen(false);
+
+      toast.success('🎉 Homepage background updated and saved in database!');
+      setBgImageFile(null);
+      setBgImagePreview(null);
+      setBgUrlInput('');
+      if (bgFileInputRef.current) bgFileInputRef.current.value = '';
+    } catch (err: any) {
+      setUploadModalOpen(false);
+      toast.error(err.message || 'Failed to save homepage background');
+    } finally {
+      setIsSavingBg(false);
+    }
+  };
+
+  const handleResetHomeBackground = async () => {
+    try {
+      await deleteJSON('/admin/site-settings/home-background');
+    } catch (err) {
+      console.warn('Backend reset notice:', err);
+    }
+
+    const defaultBg = '/assets/mansalay_hero_bg.jpg';
+    setCurrentHomeBg(defaultBg);
+    setIsCustomHomeBg(false);
+    setBgImageFile(null);
+    setBgImagePreview(null);
+    setBgUrlInput('');
+    localStorage.removeItem('discover-mansalay:homeBackground');
+    localStorage.setItem('discover-mansalay:homeBackground', defaultBg);
+    window.dispatchEvent(new Event('homeBackgroundUpdated'));
+    window.dispatchEvent(new Event('storage'));
+    toast.success('Homepage background reset to default image.');
+  };
 
   // 🛡️ SECURE VIDEO SAVE & PUBLISH HANDLER WITH ACCURATE UPLOAD PROGRESS
   const handleSaveVideo = async (e: React.FormEvent) => {
@@ -1087,6 +1230,18 @@ export function AdminContent() {
           >
             <Plus className="h-3.5 w-3.5" />
             <span>+ Publish</span>
+          </button>
+
+          <button
+            onClick={() => setMainMode('background')}
+            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 ${
+              mainMode === 'background'
+                ? 'bg-pink-500 text-white shadow-md shadow-pink-500/20'
+                : 'bg-white border border-gray-200 text-gray-700 hover:border-pink-300 hover:text-pink-600'
+            }`}
+          >
+            <ImageIcon className="h-3.5 w-3.5" />
+            <span>🌄 Home Background</span>
           </button>
 
           <button
@@ -1996,6 +2151,193 @@ export function AdminContent() {
           </div>
         )}
 
+        {/* ── 🌄 HOMEPAGE HERO BACKGROUND MANAGEMENT MODE ── */}
+        {mainMode === 'background' && (
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 sm:p-8 space-y-6 font-sans">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-gray-100">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-8 h-8 rounded-xl bg-pink-100 text-pink-600 flex items-center justify-center">
+                    <ImageIcon className="h-4 w-4" />
+                  </div>
+                  <h3 className="text-base font-extrabold text-gray-900">Homepage Hero Background Image</h3>
+                </div>
+                <p className="text-xs text-gray-500 font-medium">
+                  Upload, change, and automatically save the main background wallpaper for the tourist Home page.
+                </p>
+              </div>
+
+              {isCustomHomeBg && (
+                <button
+                  type="button"
+                  onClick={handleResetHomeBackground}
+                  className="px-3.5 py-2 bg-gray-100 hover:bg-rose-50 text-gray-700 hover:text-rose-600 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+                  title="Reset to default background"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Reset to Default</span>
+                </button>
+              )}
+            </div>
+
+            {/* Live Interactive Preview */}
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+                Live Homepage Hero Preview
+              </label>
+              <div className="relative w-full h-56 sm:h-72 md:h-80 rounded-2xl overflow-hidden bg-gray-950 shadow-md border border-gray-200 group">
+                <img
+                  src={
+                    bgImagePreview
+                      ? bgImagePreview
+                      : currentHomeBg.startsWith('http') || currentHomeBg.startsWith('/assets') || currentHomeBg.startsWith('data:')
+                      ? currentHomeBg
+                      : `${API_BASE}${currentHomeBg}`
+                  }
+                  alt="Homepage Hero Preview"
+                  className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
+                  onError={(e) => {
+                    e.currentTarget.src = '/assets/mansalay_hero_bg.jpg';
+                  }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-gray-950/90 via-gray-950/60 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-gray-950/70 via-transparent to-transparent" />
+
+                {/* Hero Overlay Mock Text */}
+                <div className="absolute inset-0 p-6 sm:p-8 flex flex-col justify-center max-w-lg pointer-events-none">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-6 h-0.5 bg-pink-500 rounded-full"></span>
+                    <span className="text-pink-400 font-bold text-[11px] uppercase tracking-widest">
+                      Oriental Mindoro
+                    </span>
+                  </div>
+                  <h1 className="text-2xl sm:text-4xl font-black text-white leading-tight">
+                    Discover <span className="text-pink-400">Mansalay</span>
+                  </h1>
+                  <p className="text-xs text-white/80 mt-2 line-clamp-2">
+                    Your portal to pristine beaches, lush mangrove parks, Mangyan heritage, and authentic local delicacies.
+                  </p>
+                </div>
+
+                {/* Status Badges */}
+                <div className="absolute top-3 right-3 flex items-center gap-2">
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-extrabold backdrop-blur-md shadow-sm flex items-center gap-1 ${
+                    isCustomHomeBg
+                      ? 'bg-emerald-500/90 text-white border border-emerald-400/40'
+                      : 'bg-black/60 text-white/90 border border-white/20'
+                  }`}>
+                    {isCustomHomeBg ? '✓ Custom Database Background Active' : 'Default Wallpaper'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Upload Controls */}
+            <form onSubmit={handleSaveHomeBackground} className="space-y-4 pt-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* File Upload Drop Area */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1.5">
+                    <Upload className="w-4 h-4 text-pink-500" />
+                    Upload Image File
+                  </label>
+                  <input
+                    ref={bgFileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    onChange={handleSelectBgFile}
+                    className="hidden"
+                    id="home-bg-file-input"
+                  />
+                  <label
+                    htmlFor="home-bg-file-input"
+                    className="w-full border-2 border-dashed border-gray-200 hover:border-pink-400 bg-gray-50/60 hover:bg-pink-50/20 rounded-2xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all group min-h-[110px]"
+                  >
+                    <Upload className="h-6 w-6 text-gray-400 group-hover:text-pink-500 transition-colors mb-1.5" />
+                    <span className="text-xs font-bold text-gray-700 group-hover:text-pink-600">
+                      {bgImageFile ? bgImageFile.name : 'Click to select or drop background image'}
+                    </span>
+                    <span className="text-[10px] text-gray-400 mt-0.5">
+                      Supports JPG, PNG, WEBP up to 15MB (High-Res 1920x1080 recommended)
+                    </span>
+                  </label>
+                </div>
+
+                {/* Image URL Input */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1.5">
+                    <Globe className="w-4 h-4 text-pink-500" />
+                    Or Paste Image URL
+                  </label>
+                  <div className="space-y-2">
+                    <input
+                      type="url"
+                      value={bgUrlInput}
+                      onChange={(e) => {
+                        setBgUrlInput(e.target.value);
+                        if (e.target.value) {
+                          setBgImagePreview(e.target.value);
+                          setBgImageFile(null);
+                          if (bgFileInputRef.current) bgFileInputRef.current.value = '';
+                        }
+                      }}
+                      placeholder="https://example.com/mansalay_beach_view.jpg"
+                      className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500 transition-all font-mono"
+                    />
+                    <p className="text-[10px] text-gray-400">
+                      Paste a direct link to any high-definition hosted image.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between pt-2">
+                <div className="text-[11px] text-gray-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Awtomatikong mag-a-update ang background sa home page para sa lahat ng users.</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {(bgImageFile || bgUrlInput) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBgImageFile(null);
+                        setBgImagePreview(null);
+                        setBgUrlInput('');
+                        if (bgFileInputRef.current) bgFileInputRef.current.value = '';
+                      }}
+                      className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isSavingBg || (!bgImageFile && !bgUrlInput.trim())}
+                    className="px-6 py-2.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold shadow-md shadow-pink-500/25 transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    {isSavingBg ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Saving to Database...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Save Background to Database</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        )}
+
         {/* ── 🎥 SECURE VIDEOS MODE ── */}
         {mainMode === 'videos' && (
           <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 sm:p-8 space-y-6 font-sans">
@@ -2007,22 +2349,6 @@ export function AdminContent() {
               <p className="text-xs text-gray-500 font-medium">
                 Upload local video files or paste video URLs safely with built-in MIME checking, size limits, and sanitization.
               </p>
-            </div>
-
-            {/* SECURITY PROTOCOL BADGES */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-3 bg-emerald-50/60 border border-emerald-200/60 rounded-2xl flex items-center gap-2.5">
-                <ShieldCheck className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-                <span className="text-[11px] font-bold text-emerald-800">Strict Extension & MIME Validation</span>
-              </div>
-              <div className="p-3 bg-blue-50/60 border border-blue-200/60 rounded-2xl flex items-center gap-2.5">
-                <Lock className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                <span className="text-[11px] font-bold text-blue-800">XSS & Script Payload Protection</span>
-              </div>
-              <div className="p-3 bg-purple-50/60 border border-purple-200/60 rounded-2xl flex items-center gap-2.5">
-                <Film className="h-4 w-4 text-purple-600 flex-shrink-0" />
-                <span className="text-[11px] font-bold text-purple-800">500MB File Size Memory Limit</span>
-              </div>
             </div>
 
             {/* VIDEO SAVE FORM */}
@@ -2110,10 +2436,10 @@ export function AdminContent() {
 
               <button
                 type="submit"
-                className="w-full py-3.5 bg-pink-500 hover:bg-pink-600 active:scale-98 text-white font-extrabold rounded-2xl text-xs sm:text-sm shadow-md shadow-pink-500/20 transition-all flex items-center justify-center gap-2 uppercase tracking-wider"
+                className="w-full py-3.5 bg-pink-500 hover:bg-pink-600 active:scale-98 text-white font-extrabold rounded-2xl text-xs sm:text-sm shadow-md shadow-pink-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider"
               >
-                <ShieldCheck className="h-4 w-4" />
-                <span>Save Video to Homepage Hero</span>
+                <Upload className="h-4 w-4" />
+                <span>Upload</span>
               </button>
             </form>
           </div>
