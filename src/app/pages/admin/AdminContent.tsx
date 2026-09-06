@@ -2438,8 +2438,8 @@ export function AdminContent() {
                 type="submit"
                 className="w-full py-3.5 bg-pink-500 hover:bg-pink-600 active:scale-98 text-white font-extrabold rounded-2xl text-xs sm:text-sm shadow-md shadow-pink-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer uppercase tracking-wider"
               >
-                <Upload className="h-4 w-4" />
-                <span>Upload</span>
+                <ShieldCheck className="h-4 w-4" />
+                <span>Save to Homepage</span>
               </button>
             </form>
           </div>
