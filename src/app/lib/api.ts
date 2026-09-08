@@ -781,3 +781,162 @@ export async function getOSRMRoute(
     return null;
   }
 }
+
+// ============================================================================
+// Google Maps Directions API — Accurate Philippines Road Routing
+// Re-exported from lib/googleMaps.ts for a single import point.
+// Falls back to OSRM when no VITE_GOOGLE_MAPS_API_KEY is set.
+// ============================================================================
+
+export { getGoogleMapsRoute, hasGoogleMapsKey, loadGoogleMapsAPI } from './googleMaps';
+export type { GoogleRouteResult, GoogleRouteStep } from './googleMaps';
+export { getMapboxRoute, hasMapboxToken } from './mapbox';
+export type { MapboxRouteResult, MapboxRouteStep } from './mapbox';
+
+/**
+ * Primary route-fetching function for the app.
+ * Tries Google Maps Directions API first (if enabled),
+ * then Mapbox Directions API (100k free reqs, highly accurate turn-by-turn with road names),
+ * and automatically falls back to OSRM if keys are missing or offline.
+ *
+ * Returns coords in Leaflet-compatible [lat, lng][] format.
+ */
+export async function getRouteWithFallback(
+  startLat: number,
+  startLng: number,
+  endLat: number,
+  endLng: number,
+  mode: 'DRIVING' | 'WALKING' | 'BICYCLING' = 'DRIVING'
+): Promise<{
+  routeCoords: [number, number][];
+  steps: Array<{
+    instruction: string;
+    distanceMeters: number;
+    icon: 'straight' | 'right' | 'left' | 'uturn' | 'destination';
+    roadName?: string;
+    location?: [number, number];
+  }>;
+  totalDistanceMeters: number;
+  totalDurationSeconds: number;
+  source: 'google' | 'mapbox' | 'osrm';
+} | null> {
+  // --- 1. Try Google Maps first (if key configured and Directions API enabled) ---
+  const { getGoogleMapsRoute: _getGoogleRoute, hasGoogleMapsKey: _hasKey } = await import('./googleMaps');
+
+  if (_hasKey()) {
+    try {
+      const gResult = await _getGoogleRoute(startLat, startLng, endLat, endLng, mode);
+      if (gResult) {
+        return { ...gResult, source: 'google' };
+      }
+    } catch (gErr) {
+      console.warn('[Route] Google Maps failed, checking Mapbox:', gErr);
+    }
+  }
+
+  // --- 2. Try Mapbox Directions API (Accurate Philippine Highway & Street Navigation) ---
+  const { getMapboxRoute: _getMapboxRoute, hasMapboxToken: _hasMapbox } = await import('./mapbox');
+
+  if (_hasMapbox()) {
+    try {
+      const mbResult = await _getMapboxRoute(startLat, startLng, endLat, endLng, mode);
+      if (mbResult && mbResult.routeCoords.length > 0) {
+        return { ...mbResult, source: 'mapbox' };
+      }
+    } catch (mbErr) {
+      console.warn('[Route] Mapbox failed, falling back to OSRM:', mbErr);
+    }
+  }
+
+  // --- Fallback to OSRM ---
+  try {
+    const osrmData = await getOSRMRoute(startLat, startLng, endLat, endLng);
+    if (!osrmData || !osrmData.routes[0]) return null;
+
+    const route = osrmData.routes[0];
+    const routeCoords: [number, number][] = route.geometry.coordinates.map(
+      ([lng, lat]) => [lat, lng]
+    );
+
+    const steps = route.legs[0]?.steps?.map((s, idx) => {
+      const isLast = idx === route.legs[0].steps.length - 1;
+      const mod = (s.maneuver.modifier || '').toLowerCase();
+      const type = (s.maneuver.type || '').toLowerCase();
+      let icon: 'straight' | 'right' | 'left' | 'uturn' | 'destination' = 'straight';
+      if (isLast || type === 'arrive') icon = 'destination';
+      else if (mod.includes('uturn')) icon = 'uturn';
+      else if (mod.includes('right')) icon = 'right';
+      else if (mod.includes('left')) icon = 'left';
+
+      const rawName = s.name?.trim() || '';
+      const hasName = rawName.length > 0;
+      const roadName = hasName ? rawName : 'local road';
+
+      // Format distance nicely
+      const distM = Math.round(s.distance);
+      const distLabel = distM >= 1000
+        ? `${(distM / 1000).toFixed(1)} km`
+        : `${distM} m`;
+
+      // Cardinal direction from maneuver bearing (0=N, 90=E, 180=S, 270=W)
+      const bearing = (s.maneuver as any)?.bearing_after ?? null;
+      let cardinal = '';
+      if (bearing !== null) {
+        if (bearing >= 337.5 || bearing < 22.5) cardinal = 'north';
+        else if (bearing < 67.5) cardinal = 'northeast';
+        else if (bearing < 112.5) cardinal = 'east';
+        else if (bearing < 157.5) cardinal = 'southeast';
+        else if (bearing < 202.5) cardinal = 'south';
+        else if (bearing < 247.5) cardinal = 'southwest';
+        else if (bearing < 292.5) cardinal = 'west';
+        else cardinal = 'northwest';
+      }
+
+      let instruction = '';
+      if (icon === 'destination') {
+        instruction = `You have arrived at your destination`;
+      } else if (icon === 'uturn') {
+        instruction = hasName
+          ? `Make a U-turn onto ${roadName}`
+          : `Make a U-turn and continue for ${distLabel}`;
+      } else if (icon === 'right') {
+        instruction = hasName
+          ? `Turn right onto ${roadName}`
+          : `Turn right and continue for ${distLabel}`;
+      } else if (icon === 'left') {
+        instruction = hasName
+          ? `Turn left onto ${roadName}`
+          : `Turn left and continue for ${distLabel}`;
+      } else if (type === 'depart') {
+        instruction = hasName
+          ? `Head ${cardinal ? cardinal + ' on ' : 'on '}${roadName}`
+          : `Head ${cardinal || 'forward'} for ${distLabel}`;
+      } else {
+        instruction = hasName
+          ? `Continue on ${roadName}`
+          : `Continue straight for ${distLabel}`;
+      }
+
+      return {
+        instruction,
+        distanceMeters: Math.round(s.distance),
+        icon,
+        roadName,
+        location: s.maneuver.location
+          ? [s.maneuver.location[1], s.maneuver.location[0]] as [number, number]
+          : undefined,
+      };
+    }) ?? [];
+
+    return {
+      routeCoords,
+      steps,
+      totalDistanceMeters: route.distance,
+      totalDurationSeconds: route.duration,
+      source: 'osrm',
+    };
+  } catch (osrmErr) {
+    console.error('[Route] OSRM fallback also failed:', osrmErr);
+    return null;
+  }
+}

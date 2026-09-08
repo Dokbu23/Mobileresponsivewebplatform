@@ -18,10 +18,55 @@ import {
   Play,
   RotateCcw,
   AlertTriangle,
+  ExternalLink,
+  Sparkles,
+  RefreshCw,
+  Copy,
+  Check,
+  Bus,
+  ShieldCheck,
+  DollarSign,
+  Phone,
+  Users,
+  Info,
+  ChevronRight,
 } from 'lucide-react';
 import type { MapMarker } from './MansalayMap';
 import type { Map as LeafletMap, Polyline as LeafletPolyline } from 'leaflet';
-import { getOSRMRoute, OSRMRouteResponse } from '../lib/api';
+import { getRouteWithFallback } from '../lib/api';
+import { getAICommuteGuide, type AICommuteResult } from '../lib/geminiCommute';
+
+// Essential companion phrases for commuters & foreign tourists
+const COMMUTE_COMPANION_PHRASES = [
+  {
+    id: 'fare',
+    icon: '🪙',
+    tagalog: 'Magkano po hanggang doon?',
+    english: 'How much is the fare to get there?',
+    pronunciation: 'Mahg-KAH-noh poh hahng-gahng DOH-on?',
+  },
+  {
+    id: 'drop',
+    icon: '🛑',
+    tagalog: 'Pakibaba po ako sa tabi.',
+    english: 'Please drop me off by the side of the road.',
+    pronunciation: 'Pah-kee-BAH-bah poh ah-KOH sah TAH-bee.',
+  },
+  {
+    id: 'change',
+    icon: '💵',
+    tagalog: 'May barya po ba kayo sa limang daan (500)?',
+    english: 'Do you have change for a 500 peso bill?',
+    pronunciation: 'Mye bar-YAH poh bah kah-YOH sah lee-MAHNG dah-AHN?',
+  },
+  {
+    id: 'stop',
+    icon: '✋',
+    tagalog: 'Para po! Dito na lang po.',
+    english: 'Stop please! Right here.',
+    pronunciation: 'PAH-rah poh! DEE-toh nah lahng poh.',
+  },
+];
 
 interface NavigationStep {
   instruction: string;
@@ -37,6 +82,13 @@ interface InAppNavigationModalProps {
   startCoords: [number, number];
   destination: MapMarker;
   distanceKm: number;
+  initialMode?: 'car' | 'bike' | 'walk' | 'transit';
+}
+
+// Smart distance formatter: shows metres under 1 km, kilometres above
+function formatDist(meters: number): string {
+  if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+  return `${Math.round(meters)} m`;
 }
 
 // Distance helper between two lat/lng points in meters
@@ -73,19 +125,68 @@ export function InAppNavigationModal({
   startCoords,
   destination,
   distanceKm,
+  initialMode,
 }: InAppNavigationModalProps) {
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
-  const [travelMode, setTravelMode] = useState<'car' | 'bike' | 'walk'>('car');
+  const [travelMode, setTravelMode] = useState<'car' | 'bike' | 'walk' | 'transit'>(initialMode || 'car');
+  const [commuteLang, setCommuteLang] = useState<'tl' | 'en'>('tl');
+  const [transitTab, setTransitTab] = useState<'itinerary' | 'card' | 'fares'>('itinerary');
+  const [isCopiedDriverPhrase, setIsCopiedDriverPhrase] = useState(false);
+  const [passengerCount, setPassengerCount] = useState<number>(1);
+  const [isCharteredSpecial, setIsCharteredSpecial] = useState<boolean>(false);
+  const [isFullscreenFlashcard, setIsFullscreenFlashcard] = useState<boolean>(false);
+  const [activeDriverPhrase, setActiveDriverPhrase] = useState<string>('');
+  const [isSpeakingPhrase, setIsSpeakingPhrase] = useState<boolean>(false);
+  const [aiCommutePlan, setAiCommutePlan] = useState<AICommuteResult | null>(null);
+  const [isLoadingAiCommute, setIsLoadingAiCommute] = useState(false);
   const [isNavigating, setIsNavigating] = useState(true);
-  const [osrmRoute, setOsrmRoute] = useState<OSRMRouteResponse | null>(null);
   const [routeGeometry, setRouteGeometry] = useState<[number, number][]>([]);
   const [steps, setSteps] = useState<NavigationStep[]>([]);
   const [totalMins, setTotalMins] = useState(Math.max(1, Math.round(distanceKm * 2.5)));
   const [totalDistanceKm, setTotalDistanceKm] = useState(distanceKm);
   const [userPos, setUserPos] = useState<[number, number]>(startCoords);
   const [isOffRoute, setIsOffRoute] = useState(false);
+
+  const handleSpeakPhrase = (text: string) => {
+    if ('speechSynthesis' in window && text) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'fil-PH';
+      utterance.rate = 0.88;
+      utterance.onstart = () => setIsSpeakingPhrase(true);
+      utterance.onend = () => setIsSpeakingPhrase(false);
+      utterance.onerror = () => setIsSpeakingPhrase(false);
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const handleCopyPhrase = (text: string) => {
+    if (!text) return;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+    }
+    setIsCopiedDriverPhrase(true);
+    setTimeout(() => setIsCopiedDriverPhrase(false), 2200);
+  };
+
+  const getDynamicFareDisplay = () => {
+    if (!aiCommutePlan) return '₱0';
+    if (isCharteredSpecial && aiCommutePlan.specialFare) {
+      return aiCommutePlan.specialFare;
+    }
+    const sourceStr = aiCommutePlan.regularFare || aiCommutePlan.estimatedFare || '';
+    const match = sourceStr.match(/₱?\s*(\d+)/);
+    const baseNumber = match ? parseInt(match[1], 10) : 0;
+    if (baseNumber > 0) {
+      const total = baseNumber * passengerCount;
+      return `₱${total} (${passengerCount} pax)`;
+    }
+    return aiCommutePlan.estimatedFare;
+  };
+
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const [routeSource, setRouteSource] = useState<'google' | 'mapbox' | 'osrm' | null>(null);
 
   const mapRef = useRef<LeafletMap | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -94,101 +195,115 @@ export function InAppNavigationModal({
   const watchIdRef = useRef<number | null>(null);
   const isFetchingRouteRef = useRef(false);
 
-  // Fetch real OSRM road route
-  const fetchRoute = async (currentLat: number, currentLng: number) => {
+  // Sync initialMode when modal opens
+  useEffect(() => {
+    if (isOpen && initialMode) {
+      setTravelMode(initialMode);
+    }
+  }, [isOpen, initialMode]);
+
+  // Fetch AI Commute Guide when transit mode is selected or language changes
+  useEffect(() => {
+    if (isOpen && travelMode === 'transit' && destination) {
+      setIsLoadingAiCommute(true);
+      getAICommuteGuide(
+        userPos[0],
+        userPos[1],
+        destination.name,
+        destination.location,
+        destination.lat,
+        destination.lng,
+        commuteLang
+      )
+        .then((plan) => {
+          if (plan) {
+            setAiCommutePlan(plan);
+            setActiveDriverPhrase(plan.driverPhrase);
+          }
+        })
+        .finally(() => {
+          setIsLoadingAiCommute(false);
+        });
+    }
+  }, [isOpen, travelMode, destination, userPos, commuteLang]);
+
+  // Map travel mode UI → Google Maps / Mapbox / OSRM profile string
+  const getTravelModeStr = (mode: 'car' | 'bike' | 'walk' | 'transit'): 'DRIVING' | 'BICYCLING' | 'WALKING' => {
+    if (mode === 'bike') return 'BICYCLING';
+    if (mode === 'walk') return 'WALKING';
+    return 'DRIVING';
+  };
+
+  // PH road speed correction: OSRM uses European speed profiles (~50-80 km/h).
+  // Mansalay rural roads average 30-40 km/h — apply 1.35x multiplier for OSRM only.
+  // Google Maps & Mapbox already incorporate local road geometry and speed calibration.
+  const applySpeedCorrection = (durationSecs: number, source: 'google' | 'mapbox' | 'osrm') =>
+    source === 'osrm' ? Math.round(durationSecs * 1.35) : durationSecs;
+
+  // Fetch accurate road route — Google Maps first, OSRM fallback
+  const fetchRoute = async (currentLat: number, currentLng: number, mode?: 'car' | 'bike' | 'walk' | 'transit') => {
     if (isFetchingRouteRef.current) return;
     isFetchingRouteRef.current = true;
     setIsRecalculating(true);
     try {
-      const data = await getOSRMRoute(currentLat, currentLng, destination.lat, destination.lng);
-      if (data && data.routes && data.routes[0]) {
-        const route = data.routes[0];
-        setOsrmRoute(data);
+      const activeMode = mode ?? travelMode;
+      const result = await getRouteWithFallback(
+        currentLat,
+        currentLng,
+        destination.lat,
+        destination.lng,
+        getTravelModeStr(activeMode)
+      );
 
-        // Extract GeoJSON coordinates [lng, lat] -> convert to [lat, lng]
-        const rawCoords = route.geometry.coordinates;
-        const latLngs: [number, number][] = rawCoords.map(([lng, lat]) => [lat, lng]);
-        setRouteGeometry(latLngs);
+      if (result) {
+        setRouteGeometry(result.routeCoords);
+        setTotalDistanceKm(Math.round((result.totalDistanceMeters / 1000) * 10) / 10);
+        // Apply PH road correction for OSRM; Google Maps is already accurate
+        const correctedSecs = applySpeedCorrection(result.totalDurationSeconds, result.source);
+        setTotalMins(Math.max(1, Math.round(correctedSecs / 60)));
+        setRouteSource(result.source);
 
-        setTotalDistanceKm(Math.round((route.distance / 1000) * 10) / 10);
-        setTotalMins(Math.max(1, Math.round(route.duration / 60)));
+        // Map unified steps into NavigationStep[] directly from routing engine
+        const parsedSteps: NavigationStep[] = result.steps.map((s, idx) => {
+          const isLast = idx === result.steps.length - 1;
+          const instructionText = (isLast && destination?.name)
+            ? `Arrive at ${destination.name}`
+            : s.instruction;
 
-        // Extract OSRM step maneuvers accurately matching real road geometry
-        if (route.legs && route.legs[0] && route.legs[0].steps) {
-          const parsedSteps: NavigationStep[] = route.legs[0].steps.map((s, idx) => {
-            let iconType: 'straight' | 'right' | 'left' | 'uturn' | 'destination' = 'straight';
-            const mod = (s.maneuver.modifier || '').toLowerCase();
-            const type = (s.maneuver.type || '').toLowerCase();
-            const rawRoadName = s.name ? s.name.trim() : '';
-            const roadName = rawRoadName || 'Unnamed road';
+          return {
+            instruction: instructionText,
+            distanceMeters: s.distanceMeters,
+            icon: s.icon,
+            roadName: s.roadName,
+            location: s.location,
+          };
+        });
 
-            if (idx === route.legs[0].steps.length - 1 || type === 'arrive') {
-              iconType = 'destination';
-            } else if (mod.includes('uturn')) {
-              iconType = 'uturn';
-            } else if (mod.includes('right')) {
-              iconType = 'right';
-            } else if (mod.includes('left')) {
-              iconType = 'left';
-            } else {
-              iconType = 'straight';
-            }
-
-            let instruction = '';
-            if (iconType === 'destination') {
-              instruction = `You have arrived at ${destination.name}`;
-            } else if (iconType === 'uturn') {
-              instruction = `Make a U-turn onto ${roadName}`;
-            } else if (iconType === 'right') {
-              instruction = mod.includes('slight')
-                ? `Bear right onto ${roadName}`
-                : mod.includes('sharp')
-                ? `Sharp right onto ${roadName}`
-                : `Turn right onto ${roadName}`;
-            } else if (iconType === 'left') {
-              instruction = mod.includes('slight')
-                ? `Bear left onto ${roadName}`
-                : mod.includes('sharp')
-                ? `Sharp left onto ${roadName}`
-                : `Turn left onto ${roadName}`;
-            } else {
-              instruction = type === 'depart'
-                ? `Head ${mod ? mod + ' ' : ''}on ${roadName}`
-                : `Continue straight on ${roadName}`;
-            }
-
-            const stepLoc: [number, number] = s.maneuver.location
-              ? [s.maneuver.location[1], s.maneuver.location[0]]
-              : [0, 0];
-
-            return {
-              instruction,
-              distanceMeters: Math.round(s.distance),
-              icon: iconType,
-              roadName,
-              location: stepLoc,
-            };
-          });
-
-          setSteps(parsedSteps);
-          setCurrentStepIdx(0);
-        }
+        setSteps(parsedSteps);
+        setCurrentStepIdx(0);
         setIsOffRoute(false);
       }
     } catch (err) {
-      console.error('OSRM navigation error:', err);
+      console.error('Route fetch error:', err);
     } finally {
       isFetchingRouteRef.current = false;
       setIsRecalculating(false);
     }
   };
 
-  // Initial OSRM Route Request
+  // Initial Route Request (Google Maps → OSRM fallback)
   useEffect(() => {
     if (isOpen) {
-      fetchRoute(startCoords[0], startCoords[1]);
+      fetchRoute(startCoords[0], startCoords[1], travelMode);
     }
   }, [isOpen, startCoords, destination]);
+
+  // Re-fetch when travel mode changes
+  useEffect(() => {
+    if (isOpen && startCoords) {
+      fetchRoute(userPos[0], userPos[1], travelMode);
+    }
+  }, [travelMode]);
 
   // Continuous watchPosition during Navigation
   useEffect(() => {
@@ -258,6 +373,17 @@ export function InAppNavigationModal({
     } catch {
       // Ignore audio synthesis errors
     }
+  };
+
+  const openGoogleMapsApp = () => {
+    const origin = `${userPos[0]},${userPos[1]}`;
+    const dest = `${destination.lat},${destination.lng}`;
+    const mode = travelMode === 'bike' ? 'two_wheeler' : travelMode === 'walk' ? 'walking' : 'driving';
+    window.open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&travelmode=${mode}`, '_blank');
+  };
+
+  const openWazeApp = () => {
+    window.open(`https://waze.com/ul?ll=${destination.lat},${destination.lng}&navigate=yes`, '_blank');
   };
 
   // Announce step change
@@ -366,20 +492,28 @@ export function InAppNavigationModal({
     });
   }, [userPos, routeGeometry]);
 
-  // Calculate real progress percentage from user's live GPS position
-  const remainingDistanceMeters = getDistanceMeters(userPos[0], userPos[1], destination.lat, destination.lng);
-  const totalDistanceMeters = Math.max(1, totalDistanceKm * 1000);
-  const progressPercent = Math.min(
-    100,
-    Math.max(0, Math.round(((totalDistanceMeters - remainingDistanceMeters) / totalDistanceMeters) * 100))
-  );
+  // Calculate remaining road distance from remaining steps (decreases as user advances)
+  const remainingSteps = steps.slice(currentStepIdx);
+  const remainingDistMeters = remainingSteps.reduce((sum, s) => sum + s.distanceMeters, 0);
+  const totalRouteMeters = Math.max(1, totalDistanceKm * 1000);
+  // Remaining time = proportion of remaining road distance × total trip time
+  const remainingMins = remainingDistMeters > 0
+    ? Math.max(1, Math.round((remainingDistMeters / totalRouteMeters) * totalMins))
+    : totalMins;
 
-  // ETA Calculation
+  // ETA = now + remaining minutes (updates live as steps advance)
   const now = new Date();
-  const etaTime = new Date(now.getTime() + totalMins * 60000).toLocaleTimeString([], {
+  const etaTime = new Date(now.getTime() + remainingMins * 60000).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
   });
+
+  // Straight-line distance to destination (used for progress bar only)
+  const remainingDistanceMeters = getDistanceMeters(userPos[0], userPos[1], destination.lat, destination.lng);
+  const progressPercent = Math.min(
+    100,
+    Math.max(0, Math.round(((totalRouteMeters - remainingDistMeters) / totalRouteMeters) * 100))
+  );
 
   const defaultStep: NavigationStep = {
     instruction: `Head towards ${destination?.name || 'Mansalay Destination'}`,
@@ -411,12 +545,23 @@ export function InAppNavigationModal({
               <div className="flex items-center gap-2 text-xs font-semibold text-emerald-200 uppercase tracking-wider">
                 <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping"></span>
                 <span>Live GPS Navigation Mode</span>
+                {routeSource && (
+                  <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
+                    routeSource === 'google'
+                      ? 'bg-blue-500/30 text-blue-200 border-blue-400/30'
+                      : routeSource === 'mapbox'
+                      ? 'bg-purple-500/30 text-purple-200 border-purple-400/30'
+                      : 'bg-white/10 text-emerald-200 border-white/20'
+                  }`}>
+                    {routeSource === 'google' ? '🗺 Google Maps' : routeSource === 'mapbox' ? '🗺 Mapbox Navigation' : 'OSRM'}
+                  </span>
+                )}
               </div>
               <h2 className="text-base sm:text-lg font-extrabold text-white leading-tight line-clamp-1">
                 {currentStep.instruction}
               </h2>
               <p className="text-xs text-emerald-100/90 font-medium">
-                In {currentStep.distanceMeters} meters
+                In {formatDist(currentStep.distanceMeters)}
               </p>
             </div>
           </div>
@@ -466,7 +611,7 @@ export function InAppNavigationModal({
             </div>
 
             {/* Travel Mode Selector Floating Pills */}
-            <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-black/75 backdrop-blur-md p-1.5 rounded-2xl border border-white/15 shadow-xl z-10">
+            <div className="absolute bottom-4 left-4 flex items-center gap-1.5 bg-black/75 backdrop-blur-md p-1.5 rounded-2xl border border-white/15 shadow-xl z-10 flex-wrap">
               <button
                 onClick={() => setTravelMode('car')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
@@ -474,7 +619,7 @@ export function InAppNavigationModal({
                 }`}
               >
                 <Car className="h-3.5 w-3.5" />
-                <span>Car/Tricycle</span>
+                <span>Car/Trike</span>
               </button>
               <button
                 onClick={() => setTravelMode('bike')}
@@ -494,58 +639,676 @@ export function InAppNavigationModal({
                 <Footprints className="h-3.5 w-3.5" />
                 <span>Walking</span>
               </button>
+              <button
+                onClick={() => setTravelMode('transit')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  travelMode === 'transit'
+                    ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-md shadow-pink-500/25 ring-1 ring-white/30'
+                    : 'text-pink-300 hover:text-white bg-pink-950/40 border border-pink-500/30'
+                }`}
+              >
+                <Sparkles className="h-3.5 w-3.5 text-pink-200 animate-pulse" />
+                <span>AI Commute</span>
+              </button>
             </div>
           </div>
 
-          {/* Right Column: Step-by-Step Directions List */}
-          <div className="w-full md:w-80 bg-gray-950 border-t md:border-t-0 md:border-l border-white/10 p-5 flex flex-col justify-between overflow-y-auto">
+          {/* Right Column: Step-by-Step Directions List OR AI Commute Guide */}
+          <div className="w-full md:w-[420px] lg:w-[460px] bg-gray-950/95 backdrop-blur-md border-t md:border-t-0 md:border-l border-white/10 p-4 sm:p-5 flex flex-col justify-between overflow-y-auto transition-all duration-300">
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Compass className="h-4 w-4 text-emerald-400" />
-                  <span>Live Turn-by-Turn Steps</span>
-                </h4>
-                <span className="text-xs font-semibold text-emerald-400">
-                  {currentStepIdx + 1} / {steps.length}
-                </span>
-              </div>
-
-              {/* Steps List */}
-              <div className="space-y-3">
-                {steps.map((step, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => setCurrentStepIdx(idx)}
-                    className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${
-                      idx === currentStepIdx
-                        ? 'bg-emerald-950/60 border-emerald-500/60 text-white ring-1 ring-emerald-500/30'
-                        : idx < currentStepIdx
-                        ? 'bg-gray-900/40 border-gray-800 text-gray-500'
-                        : 'bg-gray-900 border-gray-800 text-gray-300 hover:bg-gray-850'
-                    }`}
-                  >
-                    <div
-                      className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-bold ${
-                        idx === currentStepIdx
-                          ? 'bg-emerald-500 text-white'
-                          : idx < currentStepIdx
-                          ? 'bg-gray-800 text-gray-500'
-                          : 'bg-gray-800 text-gray-300'
-                      }`}
-                    >
-                      {idx + 1}
+              {travelMode === 'transit' ? (
+                <div className="space-y-3.5">
+                  {/* Executive Header with Bilingual Toggle & Live Refresh */}
+                  <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="text-xs font-black text-white uppercase tracking-wider">
+                            {commuteLang === 'en' ? 'Smart Transit AI' : 'AI Commute Engine'}
+                          </h4>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30 font-bold">
+                            Mindoro LGU
+                          </span>
+                        </div>
+                        <p className="text-[9px] text-gray-400">
+                          {commuteLang === 'en' ? 'Official Transit & Tariff Guide' : 'Opisyal na Gabay sa Byahe at Pamasahe'}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold leading-snug">{step.instruction}</p>
-                      <p className="text-[10px] text-gray-400 mt-1">{step.distanceMeters} meters</p>
+
+                    <div className="flex items-center gap-1.5">
+                      {/* Language Switcher Toggle */}
+                      <div className="flex items-center bg-black/80 p-0.5 rounded-xl border border-white/10 text-[10px]">
+                        <button
+                          onClick={() => setCommuteLang('tl')}
+                          className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                            commuteLang === 'tl'
+                              ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-sm'
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                          title="Tagalog version"
+                        >
+                          🇵🇭 TL
+                        </button>
+                        <button
+                          onClick={() => setCommuteLang('en')}
+                          className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                            commuteLang === 'en'
+                              ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-sm'
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                          title="English version for foreign tourists"
+                        >
+                          🌐 EN
+                        </button>
+                      </div>
+
+                      {/* Re-analyze Button */}
+                      <button
+                        onClick={() => {
+                          setIsLoadingAiCommute(true);
+                          getAICommuteGuide(
+                            userPos[0],
+                            userPos[1],
+                            destination.name,
+                            destination.location,
+                            destination.lat,
+                            destination.lng,
+                            commuteLang
+                          ).then((plan) => {
+                            if (plan) {
+                              setAiCommutePlan(plan);
+                              setActiveDriverPhrase(plan.driverPhrase);
+                            }
+                          }).finally(() => {
+                            setIsLoadingAiCommute(false);
+                          });
+                        }}
+                        className="p-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-gray-300 hover:text-white transition-all"
+                        title={commuteLang === 'en' ? 'Recalculate Route' : 'Suriing muli'}
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 ${isLoadingAiCommute ? 'animate-spin text-pink-400' : ''}`} />
+                      </button>
                     </div>
                   </div>
-                ))}
-              </div>
+
+                  {isLoadingAiCommute ? (
+                    <div className="py-12 px-4 text-center bg-white/[0.02] border border-white/10 rounded-2xl">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-600 flex items-center justify-center mx-auto mb-3 animate-bounce shadow-lg shadow-pink-500/30">
+                        <Sparkles className="h-6 w-6 text-white" />
+                      </div>
+                      <p className="text-xs font-bold text-white mb-1">
+                        {commuteLang === 'en' ? 'Calculating Inter-Town Transit...' : 'Sinusuri ang Network ng Sasakyan...'}
+                      </p>
+                      <p className="text-[11px] text-gray-400 leading-relaxed max-w-xs mx-auto">
+                        {commuteLang === 'en'
+                          ? `Resolving GPS coordinates, highway vans, TODA tricycles, and LGU fare tariffs to ${destination.name}.`
+                          : `Kinakalkula ang tamang sakayan, sasakyan, pamasahe, at oras patungong ${destination.name}.`}
+                      </p>
+                    </div>
+                  ) : aiCommutePlan ? (
+                    <div className="space-y-3.5 text-left">
+                      {/* Executive Digital Boarding Pass Ticket */}
+                      <div className="relative overflow-hidden p-3.5 bg-gradient-to-br from-gray-900/95 via-purple-950/40 to-gray-900/95 border border-purple-500/30 rounded-2xl shadow-2xl space-y-3">
+                        {/* Ticket Perforations Aesthetic */}
+                        <div className="flex items-center justify-between text-[9px] font-mono text-purple-300 uppercase tracking-widest border-b border-white/10 pb-2">
+                          <span className="flex items-center gap-1 font-bold">
+                            <Compass className="h-3 w-3 text-pink-400" />
+                            <span>{commuteLang === 'en' ? 'TRANSIT BOARDING PASS' : 'TIKETA SA PAGBIYAHE'}</span>
+                          </span>
+                          <span className="text-gray-400">
+                            {aiCommutePlan.isNightTrip ? '🌙 NIGHT TRIP' : '☀️ DAY TRIP'}
+                          </span>
+                        </div>
+
+                        {/* Origin -> Destination Visual Flow */}
+                        <div className="space-y-2">
+                          <div className="flex items-start gap-2.5">
+                            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 mt-1 flex-shrink-0 ring-4 ring-emerald-500/20" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[9px] text-gray-400 uppercase font-semibold">
+                                {commuteLang === 'en' ? 'Origin (Current Location)' : 'Pinanggalingan (Nasaang Lugar)'}
+                              </p>
+                              <p className="text-xs font-bold text-white truncate">{aiCommutePlan.currentBarangay}</p>
+                            </div>
+                          </div>
+
+                          <div className="pl-1 border-l-2 border-dashed border-white/20 ml-1 py-0.5 text-[9px] text-pink-300 font-bold flex items-center justify-between">
+                            <div className="flex items-center gap-1">
+                              <ArrowRight className="h-2.5 w-2.5" />
+                              <span>
+                                {aiCommutePlan.distanceKm !== undefined ? `${aiCommutePlan.distanceKm.toFixed(1)} km` : ''}{' '}
+                                {aiCommutePlan.isLongDistance 
+                                  ? (commuteLang === 'en' ? '• Nautical Highway Corridor' : '• Nautical Highway Corridor') 
+                                  : (commuteLang === 'en' ? '• Local Feeder Route' : '• Lokal na Byahe')}
+                              </span>
+                            </div>
+                            <span className="text-[8px] px-1.5 py-0.2 rounded bg-white/10 text-gray-300 font-normal">
+                              {aiCommutePlan.vehicleType}
+                            </span>
+                          </div>
+
+                          <div className="flex items-start gap-2.5">
+                            <div className="w-2.5 h-2.5 rounded-full bg-rose-500 mt-1 flex-shrink-0 ring-4 ring-rose-500/20" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[9px] text-gray-400 uppercase font-semibold">
+                                {commuteLang === 'en' ? 'Destination' : 'Destinasyon'}
+                              </p>
+                              <p className="text-xs font-bold text-white truncate">{destination.name}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Departure -> Arrival ETA Schedule Bar */}
+                        <div className="grid grid-cols-3 gap-1.5 pt-2.5 border-t border-dashed border-white/15 text-center">
+                          <div className="p-1.5 bg-black/50 rounded-xl border border-white/5">
+                            <p className="text-[8px] uppercase tracking-wider text-gray-400 font-bold">
+                              {commuteLang === 'en' ? 'Departure' : 'Alis'}
+                            </p>
+                            <p className="text-[11px] font-black text-gray-200 mt-0.5">
+                              {aiCommutePlan.departureTime}
+                            </p>
+                          </div>
+                          <div className="p-1.5 bg-black/50 rounded-xl border border-white/5">
+                            <p className="text-[8px] uppercase tracking-wider text-gray-400 font-bold">
+                              {commuteLang === 'en' ? 'Est. Duration' : 'Tagal ng Byahe'}
+                            </p>
+                            <p className="text-[11px] font-black text-white mt-0.5">
+                              {aiCommutePlan.estimatedTime}
+                            </p>
+                          </div>
+                          <div className="p-1.5 bg-black/50 rounded-xl border border-white/5">
+                            <p className="text-[8px] uppercase tracking-wider text-cyan-400 font-bold">
+                              {commuteLang === 'en' ? 'Arrival ETA' : 'Oras Dating'}
+                            </p>
+                            <p className="text-[11px] font-black text-cyan-300 mt-0.5">
+                              {aiCommutePlan.estimatedArrivalClockTime || 'Calculated'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Interactive Passenger & Fare Sub-bar */}
+                        <div className="pt-2 border-t border-white/10 flex items-center justify-between">
+                          {/* Passenger Selector */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] text-gray-400 font-semibold uppercase flex items-center gap-0.5">
+                              <Users className="h-2.5 w-2.5 text-pink-400" />
+                              <span>{commuteLang === 'en' ? 'Pax:' : 'Tao:'}</span>
+                            </span>
+                            <div className="flex items-center bg-black/60 border border-white/10 rounded-lg text-[10px]">
+                              <button
+                                onClick={() => setPassengerCount(Math.max(1, passengerCount - 1))}
+                                className="px-2 py-0.5 text-gray-300 hover:text-white transition-colors"
+                              >
+                                -
+                              </button>
+                              <span className="px-1.5 font-black text-white">{passengerCount}</span>
+                              <button
+                                onClick={() => setPassengerCount(Math.min(6, passengerCount + 1))}
+                                className="px-2 py-0.5 text-gray-300 hover:text-white transition-colors"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Dynamic Fare Output */}
+                          <div className="text-right">
+                            <p className="text-[8px] uppercase tracking-wider text-emerald-400 font-bold">
+                              {commuteLang === 'en' ? 'Estimated Total Fare' : 'Tinatayang Pamasahe'}
+                            </p>
+                            <p className="text-xs font-black text-emerald-300">
+                              {getDynamicFareDisplay()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Navigation Sub-Tabs Segmented Control */}
+                      <div className="grid grid-cols-3 gap-1 bg-gray-900/90 p-1 rounded-xl border border-white/10 text-[10px] font-bold">
+                        <button
+                          onClick={() => setTransitTab('itinerary')}
+                          className={`py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${
+                            transitTab === 'itinerary'
+                              ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-md'
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          <Navigation className="h-3 w-3" />
+                          <span>{commuteLang === 'en' ? 'Itinerary' : 'Ruta'}</span>
+                        </button>
+                        <button
+                          onClick={() => setTransitTab('card')}
+                          className={`py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${
+                            transitTab === 'card'
+                              ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-md'
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          <CheckCircle2 className="h-3 w-3" />
+                          <span>{commuteLang === 'en' ? 'Driver Card' : 'Ipakita'}</span>
+                        </button>
+                        <button
+                          onClick={() => setTransitTab('fares')}
+                          className={`py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 ${
+                            transitTab === 'fares'
+                              ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-md'
+                              : 'text-gray-400 hover:text-white'
+                          }`}
+                        >
+                          <ShieldCheck className="h-3 w-3" />
+                          <span>{commuteLang === 'en' ? 'Fares & Info' : 'Pamasahe'}</span>
+                        </button>
+                      </div>
+
+                      {/* TAB 1: ITINERARY (METRO-STYLE CONNECTED TRANSIT LINE) */}
+                      {transitTab === 'itinerary' && (
+                        <div className="space-y-3 animate-fadeIn">
+                          {/* Recommended Vehicle Banner */}
+                          {aiCommutePlan.recommendedVehicle && (
+                            <div className="p-2.5 bg-gradient-to-r from-pink-950/60 to-purple-950/60 border border-pink-500/30 rounded-xl flex items-center gap-2">
+                              <Sparkles className="h-4 w-4 text-pink-400 flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-[8px] uppercase tracking-wider font-bold text-pink-300">
+                                  {commuteLang === 'en' ? 'Optimal Vehicle Recommendation' : 'Pinaka-Rekomendadong Sakyan'}
+                                </p>
+                                <p className="text-xs font-bold text-white truncate">{aiCommutePlan.recommendedVehicle}</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Metro Connected Timeline */}
+                          <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-gradient-to-b before:from-emerald-400 via-amber-400 to-rose-500">
+                            
+                            {/* Stop 1: Boarding */}
+                            <div className="relative">
+                              <div className="absolute -left-6 top-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-gray-950 shadow-md ring-2 ring-emerald-400/30 flex items-center justify-center text-[7px] font-black text-white">
+                                1
+                              </div>
+                              <div className="p-2.5 bg-gray-900/90 border border-white/10 rounded-xl">
+                                <div className="flex items-center justify-between gap-1 mb-1">
+                                  <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider">
+                                    {commuteLang === 'en' ? 'Boarding Stop' : 'Saan Sasakay'}
+                                  </span>
+                                  <span className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30 font-semibold">
+                                    {aiCommutePlan.vehicleType}
+                                  </span>
+                                </div>
+                                <p className="text-xs font-bold text-white">{aiCommutePlan.boardingPoint}</p>
+                              </div>
+                            </div>
+
+                            {/* Stop 2: Transfer Junction (if applicable) */}
+                            {aiCommutePlan.transferPoint && 
+                             !aiCommutePlan.transferPoint.toLowerCase().includes('direct') && 
+                             !aiCommutePlan.transferPoint.toLowerCase().includes('wala') && (
+                              <div className="relative">
+                                <div className="absolute -left-6 top-1 w-3.5 h-3.5 rounded-full bg-amber-500 border-2 border-gray-950 shadow-md ring-2 ring-amber-400/30 flex items-center justify-center text-[7px] font-black text-white">
+                                  2
+                                </div>
+                                <div className="p-2.5 bg-gray-900/90 border border-white/10 rounded-xl">
+                                  <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider block mb-1">
+                                    {commuteLang === 'en' ? 'Transfer Junction' : 'Lilipat / Kanto Junction'}
+                                  </span>
+                                  <p className="text-xs font-bold text-white">{aiCommutePlan.transferPoint}</p>
+                                  <p className="text-[10px] text-gray-400 mt-0.5">
+                                    {commuteLang === 'en' 
+                                      ? 'Disembark here to switch to a connecting local ride.' 
+                                      : 'Bumaba rito upang lumipat sa lokal na sasakyan.'}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Stop 3: Final Arrival */}
+                            <div className="relative">
+                              <div className="absolute -left-6 top-1 w-3.5 h-3.5 rounded-full bg-rose-500 border-2 border-gray-950 shadow-md ring-2 ring-rose-400/30 flex items-center justify-center text-[7px] font-black text-white">
+                                🏁
+                              </div>
+                              <div className="p-2.5 bg-gray-900/90 border border-white/10 rounded-xl">
+                                <span className="text-[9px] font-bold text-rose-400 uppercase tracking-wider block mb-1">
+                                  {commuteLang === 'en' ? 'Final Drop-Off' : 'Huling Babaan'}
+                                </span>
+                                <p className="text-xs font-bold text-white">{aiCommutePlan.dropoffPoint}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Step-by-Step Breakdown Accordion */}
+                          {aiCommutePlan.steps && aiCommutePlan.steps.length > 0 && (
+                            <div className="space-y-2 pt-1">
+                              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
+                                {commuteLang === 'en' ? 'Step-by-Step Instructions' : 'Hakbang-hakbang na Gabay'}
+                              </p>
+                              {aiCommutePlan.steps.map((s, idx) => (
+                                <div key={idx} className="p-2.5 bg-black/40 border border-white/10 rounded-xl space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-pink-300">
+                                      {s.title}
+                                    </span>
+                                    {s.vehicle && (
+                                      <span className="text-[8px] px-1.5 py-0.2 rounded bg-white/10 text-gray-300">
+                                        {s.vehicle}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-gray-200 leading-relaxed">{s.details}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Summary Note */}
+                          <div className="p-2.5 bg-white/[0.03] border border-white/10 rounded-xl">
+                            <p className="text-[11px] text-gray-300 leading-relaxed">
+                              {aiCommutePlan.summary}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TAB 2: SHOW TO DRIVER FLASHCARD */}
+                      {transitTab === 'card' && (
+                        <div className="space-y-3 animate-fadeIn">
+                          <div className="p-4 bg-gradient-to-br from-blue-950/90 via-indigo-950/80 to-gray-900 border-2 border-blue-500/40 rounded-2xl shadow-2xl space-y-3">
+                            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                              <span className="text-[9px] font-extrabold text-blue-300 uppercase tracking-wider flex items-center gap-1">
+                                <span>💬</span>
+                                <span>{commuteLang === 'en' ? 'Passenger Flashcard' : 'Ipakita kay Manong Driver'}</span>
+                              </span>
+                              <button
+                                onClick={() => setIsFullscreenFlashcard(true)}
+                                className="text-[9px] px-2 py-0.5 rounded-full bg-blue-500/30 hover:bg-blue-500/50 text-blue-200 border border-blue-400/40 font-bold transition-colors flex items-center gap-1"
+                                title="Enlarge for showing driver"
+                              >
+                                <span>⛶</span>
+                                <span>{commuteLang === 'en' ? 'Fullscreen' : 'Palakihin'}</span>
+                              </button>
+                            </div>
+
+                            {/* Huge Readable Destination Phrase */}
+                            <div className="p-3.5 bg-black/70 rounded-xl border border-white/15 text-center">
+                              <p className="text-base font-black text-white tracking-wide leading-relaxed">
+                                "{activeDriverPhrase || aiCommutePlan.driverPhrase}"
+                              </p>
+                            </div>
+
+                            {/* Pronunciation & Meaning for foreign tourists */}
+                            {aiCommutePlan.driverPhrasePronunciation && (
+                              <div className="p-2 bg-blue-950/50 rounded-lg border border-blue-500/20 text-[10px] space-y-1">
+                                <p className="text-blue-200">
+                                  <span className="font-bold">🗣️ {commuteLang === 'en' ? 'How to Pronounce:' : 'Bigkas:'}</span>{' '}
+                                  <span className="italic">{aiCommutePlan.driverPhrasePronunciation}</span>
+                                </p>
+                                {aiCommutePlan.driverPhraseEnglish && (
+                                  <p className="text-gray-300">
+                                    <span className="font-bold">🇬🇧 Meaning:</span> "{aiCommutePlan.driverPhraseEnglish}"
+                                  </p>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Interactive Actions: Play Voice Audio & Copy */}
+                            <div className="grid grid-cols-2 gap-2 pt-1">
+                              <button
+                                onClick={() => handleSpeakPhrase(activeDriverPhrase || aiCommutePlan.driverPhrase)}
+                                className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all shadow-md active:scale-95 ${
+                                  isSpeakingPhrase 
+                                    ? 'bg-emerald-600 text-white animate-pulse' 
+                                    : 'bg-blue-600 hover:bg-blue-500 text-white'
+                                }`}
+                              >
+                                <Volume2 className={`h-3.5 w-3.5 ${isSpeakingPhrase ? 'animate-bounce' : ''}`} />
+                                <span>{isSpeakingPhrase ? (commuteLang === 'en' ? 'Speaking...' : 'Nagsasalita...') : (commuteLang === 'en' ? 'Play Voice' : 'Pakinggan')}</span>
+                              </button>
+                              <button
+                                onClick={() => handleCopyPhrase(activeDriverPhrase || aiCommutePlan.driverPhrase)}
+                                className="flex items-center justify-center gap-1.5 py-2 px-3 bg-white/10 hover:bg-white/15 text-white rounded-xl text-xs font-bold transition-all border border-white/15 active:scale-95"
+                              >
+                                {isCopiedDriverPhrase ? (
+                                  <>
+                                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                                    <span className="text-emerald-400">{commuteLang === 'en' ? 'Copied!' : 'Nakopya!'}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="h-3.5 w-3.5" />
+                                    <span>{commuteLang === 'en' ? 'Copy Text' : 'Kopyahin'}</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+
+                            <p className="text-[9px] text-gray-400 text-center italic">
+                              {commuteLang === 'en'
+                                ? 'Flash your smartphone screen to the driver in noisy terminals or roadside stops.'
+                                : 'Ipakita ang screen na ito sa driver para mas mabilis kayong magkaintindihan.'}
+                            </p>
+                          </div>
+
+                          {/* Quick Companion Phrases Carousel / Chips */}
+                          <div className="p-3 bg-gray-900/90 border border-white/10 rounded-2xl space-y-2">
+                            <p className="text-[10px] font-bold text-gray-300 uppercase tracking-wider flex items-center justify-between">
+                              <span>{commuteLang === 'en' ? 'Quick Passenger Phrases:' : 'Mabilisang Salita sa Byahe:'}</span>
+                              <span className="text-[8px] text-pink-400 font-semibold">{commuteLang === 'en' ? 'Tap to Speak' : 'Pindutin para marinig'}</span>
+                            </p>
+                            <div className="grid grid-cols-1 gap-1.5">
+                              {COMMUTE_COMPANION_PHRASES.map((item) => (
+                                <button
+                                  key={item.id}
+                                  onClick={() => {
+                                    setActiveDriverPhrase(item.tagalog);
+                                    handleSpeakPhrase(item.tagalog);
+                                  }}
+                                  className="text-left p-2 rounded-xl bg-black/40 hover:bg-blue-950/60 border border-white/5 hover:border-blue-500/30 transition-all flex items-center justify-between group"
+                                >
+                                  <div className="min-w-0 pr-2">
+                                    <p className="text-xs font-bold text-white group-hover:text-blue-200 truncate">
+                                      {item.icon} "{item.tagalog}"
+                                    </p>
+                                    <p className="text-[9px] text-gray-400 truncate">
+                                      {commuteLang === 'en' ? item.english : item.pronunciation}
+                                    </p>
+                                  </div>
+                                  <Volume2 className="h-3.5 w-3.5 text-gray-400 group-hover:text-blue-400 flex-shrink-0" />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TAB 3: FARES & TRANSPORT MATRIX */}
+                      {transitTab === 'fares' && (
+                        <div className="space-y-3 animate-fadeIn">
+                          {/* Night Commute Notice Banner (If Night) */}
+                          {aiCommutePlan.isNightTrip && aiCommutePlan.nightCommuteAdvisory && (
+                            <div className="p-2.5 bg-gradient-to-r from-indigo-950/90 via-purple-950/80 to-blue-950/90 border border-indigo-500/40 rounded-xl space-y-1 shadow-md shadow-indigo-950/50">
+                              <div className="flex items-center gap-1.5 text-indigo-300 font-extrabold text-[10px] uppercase tracking-wider">
+                                <span>🌙</span>
+                                <span>{commuteLang === 'en' ? 'Night Transit Advisory' : 'Paalala sa Panggabing Byahe'}</span>
+                              </div>
+                              <p className="text-[10px] text-indigo-100 leading-relaxed font-medium">
+                                {aiCommutePlan.nightCommuteAdvisory}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Oriental Mindoro Fare Matrix Card */}
+                          <div className="p-3 bg-gray-900/90 border border-white/10 rounded-2xl space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+                              <span className="text-[10px] font-extrabold text-emerald-300 uppercase tracking-wider flex items-center gap-1">
+                                <span>🪙</span>
+                                <span>{commuteLang === 'en' ? 'Official Mindoro Fare Standards' : 'Singilan Dine sa Oriental Mindoro'}</span>
+                              </span>
+                              <span className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30">
+                                LTFRB & MTFRB
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              {aiCommutePlan.regularFare && (
+                                <div className="p-2 bg-black/40 rounded-xl border border-white/5">
+                                  <p className="text-[8px] text-gray-400 uppercase font-semibold">
+                                    {commuteLang === 'en' ? 'Regular Passenger Fare' : 'Regular na Pasahe'}
+                                  </p>
+                                  <p className="text-xs font-black text-emerald-400 mt-0.5">{aiCommutePlan.regularFare}</p>
+                                </div>
+                              )}
+                              {aiCommutePlan.specialFare && (
+                                <div className="p-2 bg-black/40 rounded-xl border border-white/5">
+                                  <p className="text-[8px] text-gray-400 uppercase font-semibold">
+                                    {commuteLang === 'en' ? 'Special / Chartered Trip' : 'Special / Pakyaw na Byahe'}
+                                  </p>
+                                  <p className="text-xs font-black text-amber-300 mt-0.5">{aiCommutePlan.specialFare}</p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Statutory 20% Discount Notice */}
+                            <div className="p-2 bg-white/[0.02] border border-white/5 rounded-xl text-[9px] text-gray-300 flex items-center gap-1.5">
+                              <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 flex-shrink-0" />
+                              <span>
+                                {commuteLang === 'en'
+                                  ? '20% Statutory Discount applies to Senior Citizens, PWDs, and Students with valid IDs (RA 9994 / RA 10905).'
+                                  : 'May 20% Diskwento ang Senior Citizens, PWDs, at Estudyante alinsunod sa batas (RA 9994 / RA 10905).'}
+                              </span>
+                            </div>
+
+                            {aiCommutePlan.fareNotes && (
+                              <p className="text-[10px] text-gray-300 bg-black/30 p-2 rounded-lg border border-white/5">
+                                📌 <span className="italic">{aiCommutePlan.fareNotes}</span>
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Available Vehicles in Area */}
+                          {aiCommutePlan.availableVehiclesInArea && aiCommutePlan.availableVehiclesInArea.length > 0 && (
+                            <div className="p-3 bg-gray-900/90 border border-white/10 rounded-2xl space-y-2">
+                              <p className="text-[10px] font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1">
+                                <span>🛵</span>
+                                <span>{commuteLang === 'en' ? 'Available Vehicles in Area:' : 'Mga Sasakyan sa Lugar:'}</span>
+                              </p>
+                              <div className="space-y-1.5">
+                                {aiCommutePlan.availableVehiclesInArea.map((v, i) => (
+                                  <div key={i} className="p-2 bg-black/50 rounded-xl border border-white/5 flex flex-col gap-0.5">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-bold text-emerald-400">• {v.vehicle}</span>
+                                      <span className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-500/30">
+                                        {v.status}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-gray-400 leading-snug">{v.availabilityNotes}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Emergency & Assistance Hotlines */}
+                          <div className="p-3 bg-gray-900/90 border border-white/10 rounded-2xl space-y-2">
+                            <p className="text-[10px] font-bold text-rose-300 uppercase tracking-wider flex items-center gap-1">
+                              <Phone className="h-3 w-3 text-rose-400" />
+                              <span>{commuteLang === 'en' ? 'Mansalay Assistance & Safety:' : 'Tulong at Emergency Hotline:'}</span>
+                            </p>
+                            <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                              <a
+                                href="tel:09985986080"
+                                className="p-2 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-500/30 rounded-xl text-rose-200 transition-colors flex flex-col"
+                              >
+                                <span className="font-bold">🚔 PNP Mansalay</span>
+                                <span className="text-[9px] text-gray-400">0998-598-6080</span>
+                              </a>
+                              <a
+                                href="tel:09178046282"
+                                className="p-2 bg-orange-950/40 hover:bg-orange-900/50 border border-orange-500/30 rounded-xl text-orange-200 transition-colors flex flex-col"
+                              >
+                                <span className="font-bold">🚑 MDRRMO Rescue</span>
+                                <span className="text-[9px] text-gray-400">0917-804-6282</span>
+                              </a>
+                            </div>
+                          </div>
+
+                          {/* Practical Traveler Tips */}
+                          {aiCommutePlan.tips && aiCommutePlan.tips.length > 0 && (
+                            <div className="p-2.5 bg-gray-900/60 rounded-xl border border-white/5 space-y-1">
+                              <p className="text-[9px] font-bold text-gray-400 uppercase">
+                                {commuteLang === 'en' ? '💡 Practical Commuter Tips' : '💡 Mga Paalala sa Biyahe'}
+                              </p>
+                              {aiCommutePlan.tips.map((tip, i) => {
+                                const tipText = typeof tip === 'object' && (tip as any).tipText ? `${(tip as any).tipTitle ? (tip as any).tipTitle + ': ' : ''}${(tip as any).tipText}` : String(tip);
+                                return (
+                                  <p key={i} className="text-[10px] text-gray-300 flex items-start gap-1">
+                                    <span className="text-pink-400">•</span>
+                                    <span>{tipText}</span>
+                                  </p>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center text-xs text-gray-400 bg-white/[0.02] rounded-2xl border border-white/5">
+                      <p>{commuteLang === 'en' ? 'No transit route retrieved. Click refresh.' : 'Walang nakuhang transit route. Pindutin ang refresh.'}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Compass className="h-4 w-4 text-emerald-400" />
+                      <span>Live Turn-by-Turn Steps</span>
+                    </h4>
+                    <span className="text-xs font-semibold text-emerald-400">
+                      {currentStepIdx + 1} / {steps.length}
+                    </span>
+                  </div>
+
+                  {/* Steps List */}
+                  <div className="space-y-3">
+                    {steps.map((step, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => setCurrentStepIdx(idx)}
+                        className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${
+                          idx === currentStepIdx
+                            ? 'bg-emerald-950/60 border-emerald-500/60 text-white ring-1 ring-emerald-500/30'
+                            : idx < currentStepIdx
+                            ? 'bg-gray-900/40 border-gray-800 text-gray-500'
+                            : 'bg-gray-900 border-gray-800 text-gray-300 hover:bg-gray-850'
+                        }`}
+                      >
+                        <div
+                          className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-bold ${
+                            idx === currentStepIdx
+                              ? 'bg-emerald-500 text-white'
+                              : idx < currentStepIdx
+                              ? 'bg-gray-800 text-gray-500'
+                              : 'bg-gray-800 text-gray-300'
+                          }`}
+                        >
+                          {idx + 1}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs font-semibold leading-snug">{step.instruction}</p>
+                          <p className="text-[10px] text-gray-400 mt-1">{formatDist(step.distanceMeters)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Bottom Controls */}
-            <div className="pt-4 border-t border-gray-800 mt-4">
+            <div className="pt-4 border-t border-gray-800 mt-4 space-y-2">
               <button
                 onClick={() => {
                   setCurrentStepIdx(0);
@@ -556,6 +1319,25 @@ export function InAppNavigationModal({
                 <RotateCcw className="h-3.5 w-3.5" />
                 <span>Restart Navigation</span>
               </button>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={openGoogleMapsApp}
+                  className="py-2.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1.5"
+                  title="Open route in Google Maps app"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 text-blue-400" />
+                  <span>Google Maps</span>
+                </button>
+                <button
+                  onClick={openWazeApp}
+                  className="py-2.5 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1.5"
+                  title="Open destination in Waze app"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 text-cyan-400" />
+                  <span>Waze App</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -564,18 +1346,34 @@ export function InAppNavigationModal({
         <div className="bg-gray-900 border-t border-white/10 p-4 flex items-center justify-between z-20">
           <div className="flex items-center gap-4">
             <div>
-              <p className="text-[10px] text-gray-400 font-semibold uppercase">Est. Travel Time</p>
-              <p className="text-xl font-extrabold text-emerald-400">{totalMins} mins</p>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">
+                {travelMode === 'transit' && aiCommutePlan ? (commuteLang === 'en' ? 'Transit Duration' : 'Tagal ng Byahe') : 'Est. Travel Time'}
+              </p>
+              <p className="text-xl font-extrabold text-emerald-400">
+                {travelMode === 'transit' && aiCommutePlan
+                  ? aiCommutePlan.estimatedTime
+                  : `${remainingMins} min${remainingMins !== 1 ? 's' : ''}`}
+              </p>
             </div>
             <div className="h-8 w-px bg-gray-800" />
             <div>
               <p className="text-[10px] text-gray-400 font-semibold uppercase">Total Distance</p>
-              <p className="text-sm font-bold text-white">{distanceKm} km</p>
+              <p className="text-sm font-bold text-white">
+                {travelMode === 'transit' && aiCommutePlan && aiCommutePlan.distanceKm !== undefined
+                  ? `${aiCommutePlan.distanceKm.toFixed(1)} km`
+                  : `${totalDistanceKm} km`}
+              </p>
             </div>
             <div className="h-8 w-px bg-gray-800" />
             <div>
-              <p className="text-[10px] text-gray-400 font-semibold uppercase">ETA Arrival</p>
-              <p className="text-sm font-bold text-white">{etaTime}</p>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">
+                {travelMode === 'transit' && aiCommutePlan ? (commuteLang === 'en' ? 'Arrival ETA' : 'Oras Dating') : 'ETA Arrival'}
+              </p>
+              <p className="text-sm font-bold text-white">
+                {travelMode === 'transit' && aiCommutePlan && aiCommutePlan.estimatedArrivalClockTime
+                  ? aiCommutePlan.estimatedArrivalClockTime
+                  : etaTime}
+              </p>
             </div>
           </div>
 
@@ -587,6 +1385,103 @@ export function InAppNavigationModal({
           </button>
         </div>
       </div>
+
+      {/* Fullscreen Driver Flashcard Modal for Terminal & Street Communication */}
+      {isFullscreenFlashcard && aiCommutePlan && (
+        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col justify-between p-6 sm:p-10 animate-fadeIn">
+          {/* Top Bar */}
+          <div className="flex items-center justify-between border-b border-white/15 pb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">💬</span>
+              <div>
+                <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-wider">
+                  {commuteLang === 'en' ? 'Passenger Card (Show to Driver)' : 'Ipakita sa Driver'}
+                </h3>
+                <p className="text-xs text-gray-400">
+                  {commuteLang === 'en' ? 'Hold up your phone towards the driver' : 'Itapat ang screen sa tsuper o konduktor'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setIsFullscreenFlashcard(false)}
+              className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+              title="Close Fullscreen"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+
+          {/* Giant Center Display */}
+          <div className="my-auto py-8 text-center space-y-6 max-w-2xl mx-auto w-full">
+            <div className="p-6 sm:p-10 bg-gradient-to-br from-blue-950/70 to-black border-2 border-blue-500/50 rounded-3xl shadow-2xl space-y-4">
+              <p className="text-xs font-mono uppercase tracking-widest text-blue-300 font-bold">
+                🇵🇭 TAGALOG PHRASE:
+              </p>
+              <h2 className="text-2xl sm:text-4xl font-black text-white tracking-wide leading-relaxed">
+                "{activeDriverPhrase || aiCommutePlan.driverPhrase}"
+              </h2>
+
+              {aiCommutePlan.driverPhrasePronunciation && (
+                <div className="pt-2 border-t border-white/10 text-xs sm:text-sm text-blue-200">
+                  <span className="font-bold">🗣️ Pronunciation: </span>
+                  <span className="italic">{aiCommutePlan.driverPhrasePronunciation}</span>
+                </div>
+              )}
+
+              {aiCommutePlan.driverPhraseEnglish && (
+                <p className="text-xs sm:text-sm text-gray-300">
+                  <span className="font-bold">🇬🇧 English: </span>
+                  "{aiCommutePlan.driverPhraseEnglish}"
+                </p>
+              )}
+            </div>
+
+            {/* Giant Audio Playback */}
+            <button
+              onClick={() => handleSpeakPhrase(activeDriverPhrase || aiCommutePlan.driverPhrase)}
+              className={`w-full py-4 px-6 rounded-2xl text-base font-black flex items-center justify-center gap-3 transition-all shadow-xl active:scale-95 ${
+                isSpeakingPhrase
+                  ? 'bg-emerald-600 text-white ring-4 ring-emerald-500/30 animate-pulse'
+                  : 'bg-blue-600 hover:bg-blue-500 text-white'
+              }`}
+            >
+              <Volume2 className={`h-6 w-6 ${isSpeakingPhrase ? 'animate-bounce' : ''}`} />
+              <span>
+                {isSpeakingPhrase
+                  ? (commuteLang === 'en' ? 'Speaking Tagalog Now...' : 'Nagsasalita sa Tagalog...')
+                  : (commuteLang === 'en' ? 'Play Voice Audio to Driver' : 'Pakinggan ang Boses')}
+              </span>
+            </button>
+          </div>
+
+          {/* Bottom Quick Phrases Row */}
+          <div className="border-t border-white/15 pt-4 space-y-2">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider text-center">
+              {commuteLang === 'en' ? 'Tap phrase to switch display:' : 'Pindutin para palitan ang sasabihin:'}
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {COMMUTE_COMPANION_PHRASES.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveDriverPhrase(item.tagalog);
+                    handleSpeakPhrase(item.tagalog);
+                  }}
+                  className={`p-2.5 rounded-xl border text-xs font-bold transition-all truncate text-left ${
+                    activeDriverPhrase === item.tagalog
+                      ? 'bg-blue-600 border-blue-400 text-white ring-2 ring-blue-400/30'
+                      : 'bg-white/5 hover:bg-white/10 border-white/10 text-gray-300'
+                  }`}
+                >
+                  <span className="mr-1">{item.icon}</span>
+                  <span>{item.tagalog}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

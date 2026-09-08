@@ -4,12 +4,6 @@ import type { Map as LeafletMap } from 'leaflet';
 
 // Mansalay, Oriental Mindoro exact bounds
 const MANSALAY_CENTER: [number, number] = [12.5167, 121.4333];
-const MANSALAY_BOUNDS = {
-  south: 12.45,
-  north: 12.60,
-  west: 121.38,
-  east: 121.50,
-};
 
 interface LocationPickerProps {
   initialLat?: number | null;
@@ -42,20 +36,15 @@ export function LocationPicker({
       const map = L.map(containerRef.current, {
         center: selected ?? MANSALAY_CENTER,
         zoom: 14,
-        maxBounds: [
-          [MANSALAY_BOUNDS.south, MANSALAY_BOUNDS.west],
-          [MANSALAY_BOUNDS.north, MANSALAY_BOUNDS.east],
-        ],
-        maxBoundsViscosity: 1.0,
-        minZoom: 12,
-        maxZoom: 18,
+        minZoom: 6,
+        maxZoom: 19,
       });
 
       mapRef.current = map;
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
-        maxZoom: 18,
+        maxZoom: 19,
       }).addTo(map);
 
       // Custom pink pin icon
@@ -87,33 +76,15 @@ export function LocationPicker({
       map.on('click', (e: any) => {
         const { lat, lng } = e.latlng;
 
-        // Clamp to Mansalay bounds
-        const clampedLat = Math.max(MANSALAY_BOUNDS.south, Math.min(MANSALAY_BOUNDS.north, lat));
-        const clampedLng = Math.max(MANSALAY_BOUNDS.west, Math.min(MANSALAY_BOUNDS.east, lng));
-
         if (markerRef.current) {
-          markerRef.current.setLatLng([clampedLat, clampedLng]);
+          markerRef.current.setLatLng([lat, lng]);
         } else {
-          markerRef.current = L.marker([clampedLat, clampedLng], { icon: pinIcon }).addTo(map);
+          markerRef.current = L.marker([lat, lng], { icon: pinIcon }).addTo(map);
         }
 
-        setSelected([clampedLat, clampedLng]);
-        onLocationSelect(clampedLat, clampedLng);
+        setSelected([lat, lng]);
+        onLocationSelect(lat, lng);
       });
-
-      // Add Mansalay boundary rectangle
-      L.rectangle(
-        [
-          [MANSALAY_BOUNDS.south, MANSALAY_BOUNDS.west],
-          [MANSALAY_BOUNDS.north, MANSALAY_BOUNDS.east],
-        ],
-        {
-          color: '#FF69B4',
-          weight: 2,
-          fillOpacity: 0.03,
-          dashArray: '6 4',
-        }
-      ).addTo(map);
     });
 
     return () => {

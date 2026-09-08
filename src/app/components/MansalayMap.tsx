@@ -36,24 +36,6 @@ interface MansalayMapProps {
 }
 
 const MANSALAY_CENTER: [number, number] = [12.5311, 121.4394];
-const MANSALAY_BOUNDS: [[number, number], [number, number]] = [
-  [12.4200, 121.3200],
-  [12.6200, 121.5500],
-];
-
-const MANSALAY_POLYGON: [number, number][] = [
-  [12.6150, 121.3250],
-  [12.6180, 121.4100],
-  [12.5950, 121.4850],
-  [12.5650, 121.5250],
-  [12.5100, 121.5450],
-  [12.4450, 121.5200],
-  [12.4250, 121.4650],
-  [12.4220, 121.3900],
-  [12.4500, 121.3300],
-  [12.5300, 121.3180],
-  [12.6150, 121.3250],
-];
 
 const TYPE_COLORS: Record<string, string> = {
   attraction: '#EC4899', // Pink
@@ -79,8 +61,8 @@ export function MansalayMap({
   const routeLineRef = useRef<LeafletPolyline | null>(null);
   const userMarkerRef = useRef<any>(null);
   const userAccuracyCircleRef = useRef<any>(null);
-  const polygonOverlayRef = useRef<any>(null);
   const onMapClickRef = useRef(onMapClick);
+  const hasCenteredUserRef = useRef(false);
 
   useEffect(() => {
     onMapClickRef.current = onMapClick;
@@ -104,10 +86,8 @@ export function MansalayMap({
         zoom,
         zoomControl: true,
         scrollWheelZoom: true,
-        maxBounds: MANSALAY_BOUNDS,
-        maxBoundsViscosity: 1.0,
-        minZoom: 12,
-        maxZoom: 18,
+        minZoom: 6,
+        maxZoom: 19,
       });
 
       mapRef.current = map;
@@ -115,15 +95,6 @@ export function MansalayMap({
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors | Mansalay Tourism GPS',
         maxZoom: 19,
-      }).addTo(map);
-
-      // Render official 2D Mansalay Municipality Boundary Polygon Overlay
-      polygonOverlayRef.current = L.polygon(MANSALAY_POLYGON, {
-        color: '#EC4899',
-        weight: 3,
-        fillColor: '#EC4899',
-        fillOpacity: 0.04,
-        dashArray: '8, 8',
       }).addTo(map);
 
       // Handle map click
@@ -267,6 +238,12 @@ export function MansalayMap({
               <span style="font-size:10px;font-family:monospace;color:#6B7280;">${activeUserCoords[0].toFixed(6)}°, ${activeUserCoords[1].toFixed(6)}°</span>
             </div>
           `);
+
+        // Automatically center map on user's live position when first acquired (especially outside Mansalay)
+        if (!hasCenteredUserRef.current && !routeCoords) {
+          map.panTo(activeUserCoords, { animate: true });
+          hasCenteredUserRef.current = true;
+        }
       }
 
       // 3. Render Real Road Route Polyline (from OSRM GeoJSON road geometry)

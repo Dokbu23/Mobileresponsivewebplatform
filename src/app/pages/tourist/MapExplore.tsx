@@ -1,8 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { MapPin, Hotel, Store, Mountain, Filter, Navigation, Compass, Crosshair, ExternalLink, X, Clock, Search, CheckCircle2, Plus, PlusCircle, Building2, Activity, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { MapPin, Hotel, Store, Mountain, Filter, Navigation, Compass, Crosshair, ExternalLink, X, Clock, Search, CheckCircle2, Plus, PlusCircle, Building2, Activity, AlertTriangle, ShieldCheck, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { getPublicJSON, getPublicLandmarks, createLandmark, isPointInMansalayPolygon, getOSRMRoute, getCurrentUserRole, getAuthToken, decodeHtml } from '../../lib/api';
+import { getPublicJSON, getPublicLandmarks, createLandmark, isPointInMansalayPolygon, getRouteWithFallback, getCurrentUserRole, getAuthToken, decodeHtml } from '../../lib/api';
 import { MansalayMap, MapMarker, UserGpsData } from '../../components/MansalayMap';
 import { InAppNavigationModal } from '../../components/InAppNavigationModal';
 import { useApp } from '../../context/AppContext';
@@ -91,7 +91,9 @@ export function MapExplore() {
   const [locating, setLocating] = useState(false);
   const [selectedDestination, setSelectedDestination] = useState<MapMarker | null>(null);
   const [osrmRouteCoords, setOsrmRouteCoords] = useState<[number, number][] | null>(null);
+  const [routeDistanceKm, setRouteDistanceKm] = useState<number | null>(null);
   const [isInAppNavOpen, setIsInAppNavOpen] = useState(false);
+  const [navInitialMode, setNavInitialMode] = useState<'car' | 'bike' | 'walk' | 'transit'>('car');
 
   // Landmark Creation & Geofence State
   const [showAddLandmarkModal, setShowAddLandmarkModal] = useState(false);
@@ -151,109 +153,28 @@ export function MapExplore() {
     };
   }, []);
 
-  // Fetch OSRM Road Route whenever selected destination changes
+  // Fetch route whenever selected destination changes (Google Maps → OSRM fallback)
   useEffect(() => {
     if (!selectedDestination) {
       setOsrmRouteCoords(null);
+      setRouteDistanceKm(null);
       return;
     }
 
     const startLat = rawGps ? rawGps.lat : (userLocation ? userLocation[0] : MANSALAY_CENTER[0]);
     const startLng = rawGps ? rawGps.lng : (userLocation ? userLocation[1] : MANSALAY_CENTER[1]);
 
-    getOSRMRoute(startLat, startLng, selectedDestination.lat, selectedDestination.lng).then((res) => {
-      if (res && res.routes && res.routes[0]) {
-        const coords = res.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng] as [number, number]);
-        setOsrmRouteCoords(coords);
+    getRouteWithFallback(startLat, startLng, selectedDestination.lat, selectedDestination.lng).then((res) => {
+      if (res && res.routeCoords.length > 0) {
+        setOsrmRouteCoords(res.routeCoords);
+        // Use actual road distance from routing engine (not straight-line)
+        setRouteDistanceKm(Math.round((res.totalDistanceMeters / 1000) * 10) / 10);
       } else {
         setOsrmRouteCoords(null);
+        setRouteDistanceKm(null);
       }
     });
   }, [selectedDestination, rawGps, userLocation]);
-
-  // Accurate Location Directory matching Figma Designs
-  const directoryLocations: DirectoryLocation[] = [
-    {
-      id: 'dir-1',
-      name: 'Buktot Beach',
-      category: 'Beach',
-      icon: '🌊',
-      iconBg: 'bg-blue-50 text-blue-600',
-      description: 'Most popular beach in Mansalay featuring pristine white sand and crystal clear ocean waters.',
-      address: 'Barangay Buktot, Mansalay, Oriental Mindoro',
-      coords: [12.5532, 121.4688]
-    },
-    {
-      id: 'dir-2',
-      name: 'Sidell Beach & Kite Grounds',
-      category: 'Beach',
-      icon: '🪁',
-      iconBg: 'bg-pink-50 text-pink-600',
-      description: 'Golden sands and optimal sea breeze for kite flying, sunsets, and relaxation.',
-      address: 'Sidell Beach, Mansalay, Oriental Mindoro',
-      coords: [12.5315, 121.4552]
-    },
-    {
-      id: 'dir-3',
-      name: 'PGD Beach Marine Sanctuary',
-      category: 'Beach',
-      icon: '🤿',
-      iconBg: 'bg-teal-50 text-teal-600',
-      description: 'Pristine marine protected area with coral reefs, ideal for snorkeling and swimming.',
-      address: 'PGD Coast, Mansalay, Oriental Mindoro',
-      coords: [12.4988, 121.4520]
-    },
-    {
-      id: 'dir-4',
-      name: 'Mangyan Cultural Village',
-      category: 'Cultural',
-      icon: '🏹',
-      iconBg: 'bg-amber-50 text-amber-600',
-      description: 'Authentic Hanunuo Mangyan ancestral village highlighting traditional crafts and heritage.',
-      address: 'Panaytayan, Mansalay, Oriental Mindoro',
-      coords: [12.5185, 121.3980]
-    },
-    {
-      id: 'dir-5',
-      name: 'Mangyan Burial Cave',
-      category: 'Heritage',
-      icon: '🏛️',
-      iconBg: 'bg-purple-50 text-purple-600',
-      description: 'Sacred heritage cave site holding ancient burial artifacts of indigenous ancestors.',
-      address: 'Mansalay Hills, Oriental Mindoro',
-      coords: [12.5450, 121.4120]
-    },
-    {
-      id: 'dir-6',
-      name: 'Melzar Mountain Trek Trail',
-      category: 'Adventure',
-      icon: '⛰️',
-      iconBg: 'bg-emerald-50 text-emerald-600',
-      description: 'Scenic mountain trail with panoramic summit views of Mansalay Bay and lush valleys.',
-      address: 'Mansalay Highlands, Oriental Mindoro',
-      coords: [12.5620, 121.4280]
-    },
-    {
-      id: 'dir-7',
-      name: 'Mansalay Heritage Plaza',
-      category: 'Landmark',
-      icon: '🏛️',
-      iconBg: 'bg-amber-50 text-amber-600',
-      description: 'Historic town plaza and civic center preserving Oriental Mindoro culture and events.',
-      address: 'Poblacion Town Center, Mansalay, Oriental Mindoro',
-      coords: [12.5311, 121.4394]
-    },
-    {
-      id: 'dir-8',
-      name: 'MB Hiraya Beach Resort',
-      category: 'Resort',
-      icon: '🏨',
-      iconBg: 'bg-rose-50 text-rose-600',
-      description: 'Top-rated beachfront resort with outdoor pools, luxury rooms, and oceanfront dining.',
-      address: 'Mansalay Beachfront, Oriental Mindoro',
-      coords: [12.5410, 121.4610]
-    }
-  ];
 
   const [dynamicLocations, setDynamicLocations] = useState<DirectoryLocation[]>([]);
 
@@ -296,8 +217,9 @@ export function MapExplore() {
 
       const attractionMarkers: MapMarker[] = rawAttractions.map((a: any) => ({
         id: `attraction-${a.id}`,
-        lat: getCoords(a.location)[0],
-        lng: getCoords(a.location)[1],
+        // Use precise DB coordinates if available, else fall back to barangay-level approximation
+        lat: (a.latitude && a.longitude) ? Number(a.latitude) : getCoords(a.location)[0],
+        lng: (a.latitude && a.longitude) ? Number(a.longitude) : getCoords(a.location)[1],
         name: decodeHtml(a.name),
         type: 'attraction',
         description: decodeHtml(a.description),
@@ -306,8 +228,9 @@ export function MapExplore() {
 
       const resortMarkers: MapMarker[] = rawAccommodations.map((a: any) => ({
         id: `resort-${a.id}`,
-        lat: getCoords(a.location)[0],
-        lng: getCoords(a.location)[1],
+        // Use precise DB coordinates if available, else fall back to barangay-level approximation
+        lat: (a.latitude && a.longitude) ? Number(a.latitude) : getCoords(a.location)[0],
+        lng: (a.latitude && a.longitude) ? Number(a.longitude) : getCoords(a.location)[1],
         name: decodeHtml(a.name || a.resort_name),
         type: 'resort',
         description: decodeHtml(a.description),
@@ -332,11 +255,13 @@ export function MapExplore() {
         id: `att-${a.id}`,
         name: decodeHtml(a.name),
         category: decodeHtml(a.category || 'Beach'),
-        icon: a.category === 'Beach' ? '🌊' : a.category === 'Cultural' ? '🏛️' : '🏔️',
+        icon: a.category === 'Beach' ? '🌊' : a.category === 'Cultural' ? '🏙️' : '🏔️',
         iconBg: 'bg-blue-50 text-blue-600',
         description: decodeHtml(a.description || 'Attraction in Mansalay'),
         address: decodeHtml(a.location || 'Mansalay, Oriental Mindoro'),
-        coords: getCoords(a.location),
+        coords: (a.latitude && a.longitude)
+          ? [Number(a.latitude), Number(a.longitude)]
+          : getCoords(a.location),
       }));
 
       const mappedResortDirs: DirectoryLocation[] = rawAccommodations.map((a: any) => ({
@@ -347,7 +272,9 @@ export function MapExplore() {
         iconBg: 'bg-rose-50 text-rose-600',
         description: decodeHtml(a.description || 'Resort in Mansalay'),
         address: decodeHtml(a.location || 'Mansalay, Oriental Mindoro'),
-        coords: getCoords(a.location),
+        coords: (a.latitude && a.longitude)
+          ? [Number(a.latitude), Number(a.longitude)]
+          : getCoords(a.location),
       }));
 
       const mappedLandmarkDirs: DirectoryLocation[] = rawLandmarks.map((l: any) => ({
@@ -466,7 +393,17 @@ export function MapExplore() {
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setUserLocation([pos.coords.latitude, pos.coords.longitude]);
+        const { latitude, longitude, accuracy, heading, speed, altitude } = pos.coords;
+        setRawGps({
+          lat: latitude,
+          lng: longitude,
+          accuracy: Math.round(accuracy),
+          heading: heading !== null && !isNaN(heading) ? Math.round(heading) : null,
+          speed: speed !== null && !isNaN(speed) ? Math.round(speed * 10) / 10 : null,
+          timestamp: pos.timestamp,
+          altitude: altitude !== null && !isNaN(altitude) ? Math.round(altitude) : null,
+        });
+        setUserLocation([latitude, longitude]);
         setIsUsingLiveGps(true);
         setLocating(false);
       },
@@ -479,10 +416,13 @@ export function MapExplore() {
     );
   };
 
-  const startPoint: [number, number] = userLocation || MANSALAY_CENTER;
-  const distanceKm = selectedDestination
+  const startPoint: [number, number] = rawGps ? [rawGps.lat, rawGps.lng] : (userLocation || MANSALAY_CENTER);
+  // Straight-line estimate (used as placeholder while route loads)
+  const straightLineKm = selectedDestination
     ? getDistanceKm(startPoint[0], startPoint[1], selectedDestination.lat, selectedDestination.lng)
     : 0;
+  // Actual road distance from routing engine (replaces straight-line once loaded)
+  const displayDistanceKm = routeDistanceKm ?? straightLineKm;
 
   const categories = useMemo(() => {
     const cats = Array.from(new Set(dynamicLocations.map(loc => loc.category).filter(Boolean)));
@@ -553,7 +493,7 @@ export function MapExplore() {
               <button
                 onClick={() => handleMapClick({ lat: MANSALAY_CENTER[0], lng: MANSALAY_CENTER[1] })}
                 className="px-4 py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20 whitespace-nowrap"
-                title="Add Landmark inside Mansalay Boundary"
+                title="Add Landmark on Map"
               >
                 <PlusCircle className="h-4 w-4" />
                 <span>+ Add Landmark</span>
@@ -569,9 +509,6 @@ export function MapExplore() {
             <div className="flex items-center gap-2 text-xs font-bold text-gray-800 flex-wrap">
               <MapPin className="h-4 w-4 text-pink-500" />
               <span>Mansalay, Oriental Mindoro</span>
-              <span className="text-[11px] font-bold text-pink-600 bg-pink-50 px-2.5 py-0.5 rounded-full border border-pink-200">
-                🔒 Strict Mansalay Boundary
-              </span>
               <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
                 {isUsingLiveGps ? '📍 Based on your GPS' : '📍 Mansalay Center'}
               </span>
@@ -690,15 +627,35 @@ export function MapExplore() {
                     <p className="text-[10px] text-gray-500 font-medium">
                       {isUsingLiveGps ? 'Distance from your GPS' : 'Distance from Town Center'}
                     </p>
-                    <p className="text-base font-extrabold text-pink-600">{distanceKm} km</p>
+                    <p className="text-base font-extrabold text-pink-600">
+                      {displayDistanceKm} km
+                      {routeDistanceKm === null && selectedDestination && (
+                        <span className="text-[10px] text-gray-400 font-normal ml-1">(est.)</span>
+                      )}
+                    </p>
                   </div>
                   <button
-                    onClick={() => setIsInAppNavOpen(true)}
+                    onClick={() => {
+                      setNavInitialMode('car');
+                      setIsInAppNavOpen(true);
+                    }}
                     className="px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white font-bold rounded-full text-xs shadow-md shadow-pink-500/20 transition-all flex items-center gap-1"
                   >
                     <Compass className="h-3.5 w-3.5" /> Start Live Nav
                   </button>
                 </div>
+
+                {/* AI Commute Route Advisor */}
+                <button
+                  onClick={() => {
+                    setNavInitialMode('transit');
+                    setIsInAppNavOpen(true);
+                  }}
+                  className="w-full mb-2 py-2.5 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white font-extrabold rounded-xl text-xs shadow-md shadow-pink-500/25 transition-all flex items-center justify-center gap-1.5 active:scale-[0.98]"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-pink-100 animate-pulse" />
+                  <span>AI Commute Guide (Saan Sasakay/Bababa)</span>
+                </button>
 
                 <button
                   onClick={() => openGoogleMapsDirections(selectedDestination.lat, selectedDestination.lng, selectedDestination.name)}
@@ -834,7 +791,8 @@ export function MapExplore() {
           onClose={() => setIsInAppNavOpen(false)}
           startCoords={startPoint}
           destination={selectedDestination}
-          distanceKm={distanceKm}
+          distanceKm={displayDistanceKm}
+          initialMode={navInitialMode}
         />
       )}
 

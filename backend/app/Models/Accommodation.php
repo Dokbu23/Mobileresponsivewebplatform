@@ -14,6 +14,8 @@ class Accommodation extends Model
         'is_registered',
         'name',
         'location',
+        'latitude',
+        'longitude',
         'category',
         'type',
         'description',
@@ -33,8 +35,10 @@ class Accommodation extends Model
 
     protected $casts = [
         'availability' => 'array',
-        'images' => 'array',
-        'is_registered' => 'boolean',
+        'images'       => 'array',
+        'is_registered'=> 'boolean',
+        'latitude'     => 'float',
+        'longitude'    => 'float',
     ];
 
     public function owner()

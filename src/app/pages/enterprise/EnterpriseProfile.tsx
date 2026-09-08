@@ -1230,8 +1230,8 @@ export function EnterpriseProfile() {
                   setEditingProductId(null);
                   setNewProduct({ name: '', description: '', price: 0, stock: 0, category: '' });
                   setVariations([]);
-                  setImageFile(null);
-                  setImagePreview(null);
+                  setImageFiles([]);
+                  setImagePreviews([]);
                 }}
                 className="px-6 py-2 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors font-medium"
               >

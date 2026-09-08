@@ -1,7 +1,10 @@
 node_modules
 dist
 .env
+.env.local
+.env.*.local
 backend/.env
+backend/.env.local
 backend/vendor
 backend/node_modules
 *.log
