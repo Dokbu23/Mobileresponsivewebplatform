@@ -452,18 +452,17 @@ class EnterprisePostController extends Controller
             $link = ($owner && $owner->role === 'resort') ? '/resort/dashboard' : '/enterprise/profile';
 
             if (!empty($post->user_id) && (!$user || (int)$post->user_id !== (int)$user->id)) {
-                $cacheKey = "notif_post_save_{$post->user_id}_{$post->id}_" . ($user ? $user->id : md5($touristName));
+                $cacheKey = "notif_post_save_{$post->user_id}_{$post->id}_" . ($user ? $user->id : 'guest');
                 if (!\Illuminate\Support\Facades\Cache::has($cacheKey)) {
                     \Illuminate\Support\Facades\Cache::put($cacheKey, true, now()->addMinutes(2));
                     \App\Models\Notification::notify(
                         $post->user_id,
                         'wishlist_saved',
                         'New Wishlist Save!',
-                        "{$touristName} saved your {$postTitle} to their wishlist.",
+                        "Your {$postTitle} was saved to a tourist's wishlist! (Total: {$post->saves} saves)",
                         [
-                            'post_id'   => $post->id,
-                            'user_id'   => $user ? $user->id : null,
-                            'user_name' => $touristName,
+                            'post_id' => $post->id,
+                            'saves'   => $post->saves,
                         ],
                         $link
                     );

@@ -469,7 +469,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           item_id: item.id,
           item_type: item.type || 'attraction',
           action: 'save',
-          user_name: currentUser?.name || undefined,
         }),
       })
         .then((res) => res.json())
@@ -538,7 +537,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           item_id: id,
           item_type: type || 'attraction',
           action: 'unsave',
-          user_name: currentUser?.name || undefined,
         }),
       })
         .then((res) => res.json())

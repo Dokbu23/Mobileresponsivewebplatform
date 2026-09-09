@@ -191,17 +191,16 @@ class WishlistController extends Controller
                 }
 
                 if (!empty($ownerId) && (!$user || (int)$ownerId !== (int)$user->id)) {
-                    $touristName = $user ? ($user->name ?? 'A tourist') : ($request->input('user_name') ?: 'A tourist');
                     $title = 'New Wishlist Save!';
                     if ($itemType === 'product') {
-                        $message = "{$touristName} added your product \"{$itemName}\" to their wishlist.";
+                        $message = "Your product \"{$itemName}\" was saved to a tourist's wishlist! (Total: {$finalCount} saves)";
                     } elseif ($itemType === 'accommodation' || $itemType === 'resort') {
-                        $message = "{$touristName} added your resort \"{$itemName}\" to their wishlist.";
+                        $message = "Your resort stay \"{$itemName}\" was saved to a tourist's wishlist! (Total: {$finalCount} saves)";
                     } else {
-                        $message = "{$touristName} added \"{$itemName}\" to their wishlist.";
+                        $message = "\"{$itemName}\" was saved to a tourist's wishlist! (Total: {$finalCount} saves)";
                     }
 
-                    $cacheKey = "notif_wishlist_{$ownerId}_{$itemType}_{$itemId}_" . ($user ? $user->id : md5($touristName));
+                    $cacheKey = "notif_wishlist_{$ownerId}_{$itemType}_{$itemId}_" . ($user ? $user->id : 'guest');
                     if (!Cache::has($cacheKey)) {
                         Cache::put($cacheKey, true, now()->addMinutes(2));
                         \App\Models\Notification::notify(
@@ -213,8 +212,7 @@ class WishlistController extends Controller
                                 'item_id'    => $itemId,
                                 'item_type'  => $itemType,
                                 'item_name'  => $itemName,
-                                'user_id'    => $user ? $user->id : null,
-                                'user_name'  => $touristName,
+                                'saves'      => $finalCount,
                             ],
                             $link
                         );

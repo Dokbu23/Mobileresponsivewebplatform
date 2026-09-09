@@ -63,6 +63,16 @@ function formatRelativeTime(timestamp: string) {
   return date.toLocaleDateString();
 }
 
+function formatNotificationMessage(notification: ApiNotification): string {
+  if (notification.type === 'wishlist_saved') {
+    const msg = notification.message || '';
+    if (msg.includes('added your') || msg.includes('saved your')) {
+      return msg.replace(/^.*? (added your|saved your) /i, 'A tourist $1 ');
+    }
+  }
+  return notification.message;
+}
+
 export function NotificationBell() {
   const { currentUser } = useApp();
   const {
@@ -214,7 +224,7 @@ export function NotificationBell() {
                           )}
                         </div>
                         <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 line-clamp-2">
-                          {notification.message}
+                          {formatNotificationMessage(notification)}
                         </p>
                         <div className="flex items-center justify-between mt-1">
                           <p className="text-[11px] text-gray-400 dark:text-gray-500">
