@@ -91,13 +91,13 @@ export interface DetectedBarangayInfo {
 const GEMINI_API_KEY = (import.meta as any).env?.VITE_GEMINI_API_KEY || '';
 const MAPBOX_ACCESS_TOKEN = (import.meta as any).env?.VITE_MAPBOX_ACCESS_TOKEN || '';
 
-// Primary models to try in sequence for high availability
+// Primary models with highest availability & throughput
 const GEMINI_MODELS = [
-  'gemini-flash-latest',
+  'gemini-flash-lite-latest',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
   'gemini-3.6-flash',
-  'gemini-3.7-flash',
-  'gemini-3.5-flash',
-  'gemini-pro-latest',
+  'gemini-flash-latest',
 ];
 
 // In-memory cache to prevent duplicate calls and avoid 429 rate limits
@@ -629,12 +629,11 @@ Respond with ONLY a valid JSON object matching this structure:
       });
 
       if (response.status === 429) {
-        console.info('[Gemini AI] Quota / Rate limit reached (429); seamlessly activating local transit engine.');
+        console.info('[Gemini AI] Free tier quota reached; seamlessly using built-in local transit engine.');
         break; // Do not hammer remaining models on same key
       }
 
       if (!response.ok) {
-        console.warn(`[Gemini AI] Model ${model} returned HTTP ${response.status}`);
         continue;
       }
 
@@ -666,8 +665,8 @@ Respond with ONLY a valid JSON object matching this structure:
         commuteCache.set(cacheKey, { plan: parsed, timestamp: Date.now() });
         return parsed;
       }
-    } catch (err) {
-      console.warn(`[Gemini AI] Error with model ${model}:`, err);
+    } catch {
+      // Continue to next model or fallback
     }
   }
 
