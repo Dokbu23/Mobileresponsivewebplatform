@@ -102,6 +102,8 @@ function stripHtml(html: string): string {
  * @param mode      Travel mode — defaults to DRIVING
  * @returns         Parsed route result, or null on failure
  */
+let isGoogleBillingDisabled = false;
+
 export async function getGoogleMapsRoute(
   startLat: number,
   startLng: number,
@@ -109,6 +111,10 @@ export async function getGoogleMapsRoute(
   endLng: number,
   mode: 'DRIVING' | 'WALKING' | 'BICYCLING' = 'DRIVING'
 ): Promise<GoogleRouteResult | null> {
+  if (isGoogleBillingDisabled) {
+    return null;
+  }
+
   try {
     await loadGoogleMapsAPI();
   } catch (loadErr) {
@@ -129,8 +135,14 @@ export async function getGoogleMapsRoute(
           provideRouteAlternatives: false,
         },
         (result, status) => {
+          if (status === google.maps.DirectionsStatus.REQUEST_DENIED) {
+            isGoogleBillingDisabled = true;
+            console.info('[GoogleMaps] Google Directions requires billing; seamlessly using Mapbox navigation engine.');
+            resolve(null);
+            return;
+          }
+
           if (status !== google.maps.DirectionsStatus.OK || !result) {
-            console.warn('[GoogleMaps] DirectionsService status:', status);
             resolve(null);
             return;
           }

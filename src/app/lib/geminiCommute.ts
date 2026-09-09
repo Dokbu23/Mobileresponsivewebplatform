@@ -100,6 +100,9 @@ const GEMINI_MODELS = [
   'gemini-pro-latest',
 ];
 
+// In-memory cache to prevent duplicate calls and avoid 429 rate limits
+const commuteCache = new Map<string, { plan: AICommuteResult; timestamp: number }>();
+
 /**
  * Compute straight-line distance in kilometers using the Haversine formula
  */
@@ -205,11 +208,22 @@ export async function resolveBarangayFromCoordinates(
  * Clean and parse JSON returned by Gemini (handles markdown fences like ```json ... ```)
  */
 function extractJsonFromText(raw: string): any {
+  if (!raw || typeof raw !== 'string') return null;
   let cleaned = raw.trim();
   if (cleaned.startsWith('```')) {
     cleaned = cleaned.replace(/^```[a-zA-Z]*\n?/, '').replace(/\n?```$/, '').trim();
   }
-  return JSON.parse(cleaned);
+  const startIdx = cleaned.indexOf('{');
+  const endIdx = cleaned.lastIndexOf('}');
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    cleaned = cleaned.slice(startIdx, endIdx + 1);
+  }
+  try {
+    return JSON.parse(cleaned);
+  } catch (err) {
+    console.warn('[Gemini AI] JSON parse failed, using fallback plan:', err);
+    return null;
+  }
 }
 
 /**
@@ -477,6 +491,13 @@ export async function getAICommuteGuide(
 
   const isEnglish = lang === 'en';
 
+  // Check in-memory cache to prevent duplicate calls and rate limits
+  const cacheKey = `${startLat.toFixed(3)}_${startLng.toFixed(3)}_${destName}_${lang}`;
+  const cached = commuteCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000) {
+    return cached.plan;
+  }
+
   // If no Gemini API key is configured, immediately return robust local transit fallback
   if (!GEMINI_API_KEY) {
     console.info('[Gemini AI] No VITE_GEMINI_API_KEY found; utilizing built-in local transit engine.');
@@ -601,10 +622,16 @@ Respond with ONLY a valid JSON object matching this structure:
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.2,
-            maxOutputTokens: 1600,
+            maxOutputTokens: 4096,
+            responseMimeType: 'application/json',
           },
         }),
       });
+
+      if (response.status === 429) {
+        console.info('[Gemini AI] Quota / Rate limit reached (429); seamlessly activating local transit engine.');
+        break; // Do not hammer remaining models on same key
+      }
 
       if (!response.ok) {
         console.warn(`[Gemini AI] Model ${model} returned HTTP ${response.status}`);
@@ -636,6 +663,7 @@ Respond with ONLY a valid JSON object matching this structure:
         parsed.estimatedArrivalClockTime = formatClockTime(arrivalDate);
         parsed.durationMinutes = mins;
 
+        commuteCache.set(cacheKey, { plan: parsed, timestamp: Date.now() });
         return parsed;
       }
     } catch (err) {
@@ -644,8 +672,8 @@ Respond with ONLY a valid JSON object matching this structure:
   }
 
   // Gracefully fall back to local transit engine if Gemini API failed or was rate-limited
-  console.info('[Gemini AI] Gemini API call finished without response; using local transit plan.');
-  return generateLocalFallbackCommutePlan(
+  console.info('[Gemini AI] Activating high-fidelity local transit engine.');
+  const fallback = generateLocalFallbackCommutePlan(
     startLat,
     startLng,
     destName,
@@ -659,4 +687,6 @@ Respond with ONLY a valid JSON object matching this structure:
     currentClockTime,
     lang
   );
+  commuteCache.set(cacheKey, { plan: fallback, timestamp: Date.now() });
+  return fallback;
 }
