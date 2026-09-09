@@ -7,6 +7,7 @@ import {
   ShieldCheck, Store, Bed, Plus, Tag
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { PushPinIcon } from '../../components/PushPinIcon';
 import { getPublicJSON, API_BASE, decodeHtml, formatImageUrl } from '../../lib/api';
 
 export function Wishlist() {
@@ -346,8 +347,8 @@ export function Wishlist() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl flex items-center justify-center bg-pink-100 text-pink-600 shadow-sm shadow-pink-500/10">
-              <MapPin className="h-6 w-6 fill-current" />
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center bg-rose-50 text-rose-600 shadow-sm border border-rose-100">
+              <PushPinIcon alwaysTilted size={24} idPrefix="wishlist-hdr" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -909,8 +910,8 @@ export function Wishlist() {
           {/* Tourist Personal Saved Grid or Empty State */}
           {wishlist.length === 0 ? (
             <div className="max-w-md mx-auto text-center px-4 py-16">
-              <div className="w-16 h-16 rounded-full bg-pink-50 text-pink-500 flex items-center justify-center mx-auto mb-4">
-                <MapPin className="h-8 w-8 text-pink-400 stroke-1" />
+              <div className="w-16 h-16 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-4 border border-rose-100/80 shadow-xs">
+                <PushPinIcon alwaysTilted size={34} idPrefix="wishlist-empty" />
               </div>
               <h3 className="text-lg font-extrabold text-gray-900 mb-1">Your saved list is empty</h3>
               <p className="text-xs text-gray-500 mb-6">

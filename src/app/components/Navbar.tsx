@@ -9,6 +9,11 @@ import { API_BASE, postJSON, removeAuthToken, formatImageUrl } from '../lib/api'
 
 import { NotificationBell } from './NotificationBell';
 import { isBerMonths } from './ChristmasHolidayTheme';
+import { PushPinIcon } from './PushPinIcon';
+
+const PushPinNavIcon = ({ className }: { className?: string }) => (
+  <PushPinIcon alwaysTilted size={16} idPrefix="nav-item" className={className} />
+);
 
 type RoleType = 'tourist' | 'admin' | 'resort' | 'enterprise';
 
@@ -58,7 +63,7 @@ export function Navbar() {
   const roleMenuItems: Record<RoleType, RoleMenuItem[]> = {
     tourist: [
       { to: '/profile', label: 'My Profile', icon: User },
-      { to: '/wishlist', label: 'My Saved Places', icon: MapPin },
+      { to: '/wishlist', label: 'My Saved Places', icon: PushPinNavIcon },
       { to: '/itinerary', label: 'My Itineraries', icon: Calendar },
       { to: '/settings', label: 'Settings', icon: Settings },
     ],
@@ -67,19 +72,19 @@ export function Navbar() {
       { to: '/admin/users', label: 'Account Management', icon: User },
       { to: '/admin/subscriptions', label: 'Manage Subscriptions', icon: CreditCard },
       { to: '/admin/publish', label: 'Publish Content', icon: Plus },
-      { to: '/wishlist', label: 'Analytics & Save', icon: MapPin },
+      { to: '/wishlist', label: 'Analytics & Save', icon: PushPinNavIcon },
     ],
     resort: [
       { to: '/resort/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: `/business/resort/${currentUser?.id ?? ''}?manage=true`, label: 'My Shop Profile', icon: Hotel },
       { to: '/resort/profile', label: 'Manage Rooms', icon: Bed },
-      { to: '/wishlist', label: 'Analytics & Save', icon: MapPin },
+      { to: '/wishlist', label: 'Analytics & Save', icon: PushPinNavIcon },
     ],
     enterprise: [
       { to: '/enterprise/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: `/business/enterprise/${currentUser?.id ?? ''}?manage=true`, label: 'My Shop Profile', icon: Store },
       { to: '/enterprise/profile', label: 'Manage Products', icon: Package },
-      { to: '/wishlist', label: 'Analytics & Save', icon: MapPin },
+      { to: '/wishlist', label: 'Analytics & Save', icon: PushPinNavIcon },
     ],
   };
 
@@ -262,7 +267,7 @@ export function Navbar() {
                 className="p-2 text-gray-600 dark:text-slate-300 hover:text-pink-500 dark:hover:text-pink-400 hover:bg-pink-50 dark:hover:bg-slate-800 rounded-full transition-colors relative"
                 title={userType === 'tourist' ? 'My Saved Places' : 'Analytics & Save'}
               >
-                <MapPin className="h-5 w-5" />
+                <PushPinIcon alwaysTilted size={20} idPrefix="nav-wishlist" />
               </button>
             )}
 

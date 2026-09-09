@@ -10,6 +10,8 @@ export interface MapMarker {
   description?: string;
   image?: string;
   location?: string;
+  virtual_tour_scenes?: any[];
+  userId?: string | number;
 }
 
 export interface UserGpsData {
@@ -32,6 +34,7 @@ interface MansalayMapProps {
   routeCoords?: [number, number][] | null;
   selectedMarker?: MapMarker | null;
   onSelectMarker?: (marker: MapMarker) => void;
+  onOpenVirtualTour?: (marker: MapMarker) => void;
   onMapClick?: (coords: { lat: number; lng: number }) => void;
 }
 
@@ -53,6 +56,7 @@ export function MansalayMap({
   routeCoords = null,
   selectedMarker = null,
   onSelectMarker,
+  onOpenVirtualTour,
   onMapClick,
 }: MansalayMapProps) {
   const mapRef = useRef<LeafletMap | null>(null);
@@ -164,13 +168,21 @@ export function MansalayMap({
         const emoji = marker.type === 'resort' ? '🏨' : marker.type === 'enterprise' ? '🛍️' : '📍';
         const icon = L.divIcon({
           html: `
-            <div style="background-color:${color};width:34px;height:34px;border-radius:50%;border:3px solid white;box-shadow:0 4px 12px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;font-size:15px;cursor:pointer;">
-              ${emoji}
+            <div style="filter:drop-shadow(0 4px 10px rgba(0,0,0,0.45));cursor:pointer;position:relative;width:34px;height:46px;">
+              <svg width="34" height="46" viewBox="0 0 34 46" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;">
+                <path d="M17 0C7.61 0 0 7.61 0 17C0 29.75 17 46 17 46C17 46 34 29.75 34 17C34 7.61 26.39 0 17 0Z" fill="${color}"/>
+                <path d="M17 1C8.16 1 1 8.16 1 17C1 28.5 15.5 43.5 17 45C18.5 43.5 33 28.5 33 17C33 8.16 25.84 1 17 1Z" stroke="rgba(0,0,0,0.25)" stroke-width="1.2"/>
+                <circle cx="17" cy="17" r="10" fill="#FFFFFF"/>
+              </svg>
+              <div style="position:absolute;top:5px;left:0;width:34px;height:24px;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;pointer-events:none;">
+                ${emoji}
+              </div>
             </div>
           `,
           className: '',
-          iconSize: [34, 34],
-          iconAnchor: [17, 17],
+          iconSize: [34, 46],
+          iconAnchor: [17, 46],
+          popupAnchor: [0, -44],
         });
 
         const popupContent = `
@@ -179,16 +191,27 @@ export function MansalayMap({
             <div style="font-size:14px;font-weight:800;color:#111827;margin-bottom:4px;line-height:1.2;">${marker.name}</div>
             ${marker.location ? `<div style="font-size:11px;color:#6B7280;margin-bottom:6px;">📍 ${marker.location}</div>` : ''}
             ${marker.description ? `<div style="font-size:11px;color:#4B5563;line-height:1.4;margin-bottom:10px;max-height:60px;overflow:hidden;">${marker.description}</div>` : ''}
-            <button id="btn-route-${marker.id}" style="width:100%;background:linear-gradient(to right, #EC4899, #F43F5E);color:white;border:none;padding:7px 12px;border-radius:999px;font-weight:700;font-size:11px;cursor:pointer;box-shadow:0 2px 8px rgba(236,72,153,0.3);">
-              🧭 Show Directions & Live Route
-            </button>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <button id="btn-tour-${marker.id}" style="width:100%;background:linear-gradient(to right, #10B981, #0D9488);color:white;border:none;padding:8px 12px;border-radius:999px;font-weight:800;font-size:11px;cursor:pointer;box-shadow:0 2px 8px rgba(16,185,129,0.3);display:flex;align-items:center;justify-content:center;gap:5px;">
+                🌐 View 360° Walkthrough
+              </button>
+              <button id="btn-route-${marker.id}" style="width:100%;background:linear-gradient(to right, #EC4899, #F43F5E);color:white;border:none;padding:7px 12px;border-radius:999px;font-weight:700;font-size:11px;cursor:pointer;box-shadow:0 2px 8px rgba(236,72,153,0.3);display:flex;align-items:center;justify-content:center;gap:5px;">
+                🧭 Show Directions & Live Route
+              </button>
+            </div>
           </div>
         `;
 
         const leafletMarker = L.marker([marker.lat, marker.lng], { icon })
-          .bindPopup(popupContent, { maxWidth: 260 });
+          .bindPopup(popupContent, { maxWidth: 270 });
 
         leafletMarker.on('popupopen', () => {
+          const btnTour = document.getElementById(`btn-tour-${marker.id}`);
+          if (btnTour) {
+            btnTour.onclick = () => {
+              if (onOpenVirtualTour) onOpenVirtualTour(marker);
+            };
+          }
           const btn = document.getElementById(`btn-route-${marker.id}`);
           if (btn) {
             btn.onclick = () => {
@@ -203,7 +226,7 @@ export function MansalayMap({
       layerGroup.addTo(map);
       markersLayerRef.current = layerGroup;
     });
-  }, [markers, onSelectMarker]);
+  }, [markers, onSelectMarker, onOpenVirtualTour]);
 
   // Handle User Location pin, Dynamic Accuracy Circle & OSRM Road Route Line
   useEffect(() => {

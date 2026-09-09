@@ -1,14 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Hotel, MapPin, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink } from 'lucide-react';
+import { Hotel, MapPin, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink, Footprints } from 'lucide-react';
 import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
 import { ACCOMMODATION_CATEGORIES } from '../../lib/constants';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
+import { VirtualTourModal } from '../../components/VirtualTourModal';
 import { isBerMonths } from '../../components/ChristmasHolidayTheme';
 import { toast } from 'sonner';
 import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
+import { PushPinIcon } from '../../components/PushPinIcon';
 
 interface AccommodationItem {
   id: string;
@@ -38,6 +40,13 @@ interface AccommodationItem {
   rooms_count?: number;
   capacity?: number;
   is_room?: boolean;
+  virtual_tour_video?: string;
+  video?: string;
+  phone?: string;
+  latitude?: number | string;
+  longitude?: number | string;
+  lat?: number;
+  lng?: number;
 }
 
 export function Accommodations() {
@@ -54,6 +63,7 @@ export function Accommodations() {
   const [selectedResortFilter, setSelectedResortFilter] = useState<string | null>(null);
   const [savedAccIds, setSavedAccIds] = useState<string[]>([]);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [isVirtualTourOpen, setIsVirtualTourOpen] = useState(false);
   const [shareData, setShareData] = useState<{ title: string; description?: string; image?: string; category?: string } | null>(null);
 
   const loadAccommodations = async () => {
@@ -420,15 +430,17 @@ export function Accommodations() {
                       {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
                         <button
                           onClick={(e) => toggleSaveAcc(acc, e)}
-                          className="w-7 h-7 bg-white/80 hover:bg-white rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 shadow-xs cursor-pointer"
+                          className={`w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer ${
+                            isInWishlist(acc.id, 'accommodation')
+                              ? 'bg-rose-50 border border-rose-200'
+                              : 'bg-white/80 hover:bg-white'
+                          }`}
                           title={isInWishlist(acc.id, 'accommodation') ? 'Remove from saved places' : 'Pin to saved places'}
                         >
-                          <MapPin
-                            className={`h-3.5 w-3.5 transition-all ${
-                              isInWishlist(acc.id, 'accommodation')
-                                ? 'fill-pink-500 text-pink-500'
-                                : 'text-pink-500 fill-transparent stroke-2'
-                            }`}
+                          <PushPinIcon
+                            isPinned={isInWishlist(acc.id, 'accommodation')}
+                            size={16}
+                            idPrefix={`acc-tr-${acc.id}`}
                           />
                         </button>
                       )}
@@ -440,10 +452,11 @@ export function Accommodations() {
                         className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/70 backdrop-blur-md rounded-full text-white text-[11px] font-bold z-10 border border-white/10 whitespace-nowrap shadow-xs"
                         title="Total Tourist Saves"
                       >
-                        <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
-                          <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
-                        </svg>
+                        <PushPinIcon
+                          alwaysTilted
+                          size={14}
+                          idPrefix={`acc-admin-${acc.id}`}
+                        />
                         <span className="text-white font-extrabold whitespace-nowrap">
                           Save: {getWishlistCount(acc.id, 'accommodation', acc.likes)}
                         </span>
@@ -454,10 +467,11 @@ export function Accommodations() {
                         className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 z-10 whitespace-nowrap"
                         title={isInWishlist(acc.id, 'accommodation') ? 'Saved in pins' : 'Click to pin stay'}
                       >
-                        <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill={isInWishlist(acc.id, 'accommodation') ? '#F43F5E' : '#FDA4AF'} />
-                          <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
-                        </svg>
+                        <PushPinIcon
+                          isPinned={isInWishlist(acc.id, 'accommodation')}
+                          size={14}
+                          idPrefix={`acc-bl-${acc.id}`}
+                        />
                         <span className={isInWishlist(acc.id, 'accommodation') ? 'text-pink-400 font-extrabold whitespace-nowrap' : 'text-white whitespace-nowrap'}>
                           Save: {getWishlistCount(acc.id, 'accommodation', acc.likes)}
                         </span>
@@ -534,12 +548,10 @@ export function Accommodations() {
                 className="absolute bottom-3 left-4 flex items-center gap-1.5 px-3 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-xs font-bold transition-all cursor-pointer z-10"
                 title={isInWishlist(selectedAcc.id, 'accommodation') ? 'Saved in pins' : 'Click to pin'}
               >
-                <MapPin
-                  className={`h-3.5 w-3.5 transition-all ${
-                    isInWishlist(selectedAcc.id, 'accommodation')
-                      ? 'fill-pink-500 text-pink-500'
-                      : 'text-pink-400 fill-transparent stroke-2'
-                  }`}
+                <PushPinIcon
+                  isPinned={isInWishlist(selectedAcc.id, 'accommodation')}
+                  size={15}
+                  idPrefix={`modal-acc-bl-${selectedAcc.id}`}
                 />
                 <span className={isInWishlist(selectedAcc.id, 'accommodation') ? 'text-pink-400 font-extrabold' : 'text-white'}>
                   {getWishlistCount(selectedAcc.id, 'accommodation', selectedAcc.likes)} saves
@@ -587,19 +599,17 @@ export function Accommodations() {
                   </button>
                   <button
                     onClick={() => toggleSaveAcc(selectedAcc)}
-                    className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer ${
+                    className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ${
                       isInWishlist(selectedAcc.id, 'accommodation')
-                        ? 'bg-pink-50 border-pink-300'
+                        ? 'bg-rose-50 border-rose-300 shadow-sm'
                         : 'border-gray-200 hover:bg-pink-50'
                     }`}
                     title={isInWishlist(selectedAcc.id, 'accommodation') ? 'Remove from saved places' : 'Pin to saved places'}
                   >
-                    <MapPin
-                      className={`h-4 w-4 transition-all ${
-                        isInWishlist(selectedAcc.id, 'accommodation')
-                          ? 'fill-pink-500 text-pink-500'
-                          : 'text-pink-500 fill-transparent stroke-2'
-                      }`}
+                    <PushPinIcon
+                      isPinned={isInWishlist(selectedAcc.id, 'accommodation')}
+                      size={18}
+                      idPrefix={`modal-acc-tr-${selectedAcc.id}`}
                     />
                   </button>
                 </div>
@@ -765,8 +775,16 @@ export function Accommodations() {
                   <a href="https://instagram.com" target="_blank" rel="noreferrer" className="px-3.5 py-2 bg-pink-50 text-pink-700 hover:bg-pink-100 border border-pink-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5">
                     <Instagram className="h-3.5 w-3.5" /> Instagram
                   </a>
-
                 </div>
+
+                {/* 360° Walkthrough & Virtual Tour Button */}
+                <button
+                  onClick={() => setIsVirtualTourOpen(true)}
+                  className="w-full mt-2 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-md shadow-emerald-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
+                >
+                  <Footprints className="h-4 w-4 text-emerald-100" />
+                  <span>360° Walkthrough & Virtual Tour</span>
+                </button>
               </div>
             </div>
           </div>
@@ -831,6 +849,21 @@ export function Accommodations() {
           description={shareData.description}
           image={shareData.image}
           category={shareData.category}
+        />
+      )}
+
+      {/* ── 360° VIRTUAL WALKTHROUGH MODAL ── */}
+      {selectedAcc && (
+        <VirtualTourModal
+          isOpen={isVirtualTourOpen}
+          onClose={() => setIsVirtualTourOpen(false)}
+          attractionName={selectedAcc.name || selectedAcc.resort_name || 'Resort Stay'}
+          category={selectedAcc.type || 'Resort & Stay'}
+          mainImage={selectedAcc.image}
+          videoUrl={selectedAcc.virtual_tour_video || (selectedAcc as any).video}
+          phone={selectedAcc.contact_number || selectedAcc.phone}
+          lat={Number(selectedAcc.latitude || selectedAcc.lat) || undefined}
+          lng={Number(selectedAcc.longitude || selectedAcc.lng) || undefined}
         />
       )}
     </div>

@@ -25,7 +25,8 @@ import {
   Film,
   Play,
   ShieldCheck,
-  Upload
+  Upload,
+  Megaphone
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { getJSON, getPublicJSON, postJSON, deleteJSON, getStorageUrl } from '../../lib/api';
@@ -161,12 +162,6 @@ export function EnterpriseDashboard() {
   const [postImageFile, setPostImageFile] = useState<File | null>(null);
   const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
 
-  // Video Tour upload & link state
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoPreview, setVideoPreview] = useState<string | null>(null);
-  const [videoUrlInput, setVideoUrlInput] = useState('');
-  const videoFileInputRef = useRef<HTMLInputElement | null>(null);
-  
   // Product details
   const [productName, setProductName] = useState('');
   const [price, setPrice] = useState('');
@@ -190,30 +185,7 @@ export function EnterpriseDashboard() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
 
-    const validation = validateSecureVideoFile(file);
-    if (!validation.valid) {
-      toast.error(validation.error || 'Invalid video file');
-      if (videoFileInputRef.current) videoFileInputRef.current.value = '';
-      return;
-    }
-
-    setVideoFile(file);
-    const objectUrl = URL.createObjectURL(file);
-    setVideoPreview(objectUrl);
-    setVideoUrlInput('');
-    toast.success(`Video "${file.name}" is ready!`);
-  };
-
-  const handleRemoveVideo = () => {
-    setVideoFile(null);
-    setVideoPreview(null);
-    setVideoUrlInput('');
-    if (videoFileInputRef.current) videoFileInputRef.current.value = '';
-  };
 
   // Click outside listener to close dropdowns
   useEffect(() => {
@@ -371,8 +343,8 @@ export function EnterpriseDashboard() {
       return;
     }
 
-    if (!postContent.trim() && !productName.trim() && !videoFile && !videoUrlInput.trim()) {
-      toast.error('Please write some content or upload a video / image for the post.');
+    if (!postContent.trim() && !productName.trim() && !postImageFile && !postImagePreview) {
+      toast.error('Please write some content or upload an image for the post.');
       return;
     }
 
@@ -389,7 +361,7 @@ export function EnterpriseDashboard() {
       
       const defaultContent = 
         postType === 'update'
-          ? (videoFile || videoUrlInput ? 'Virtual Video Tour & Updates from Mansalay!' : 'Store updates and announcements from Mansalay!')
+          ? 'Store updates and announcements from Mansalay!'
           : `Featuring ${productName || 'our products'} at Mansalay!`;
 
       formData.append('content', postContent.trim() || defaultContent);
@@ -407,19 +379,12 @@ export function EnterpriseDashboard() {
       } else if (postType === 'update') {
         formData.append('location', storeProfile?.barangay ? `${storeProfile.address ? storeProfile.address + ', ' : ''}${storeProfile.barangay}` : 'Mansalay, Oriental Mindoro');
         formData.append('seller_name', storeProfile?.store_name || currentUser?.name || 'Mansalay Enterprise');
-
-        // Video file or link for Virtual Tour / Update
-        if (videoFile) {
-          formData.append('video', videoFile);
-        } else if (videoUrlInput.trim()) {
-          formData.append('video_url', videoUrlInput.trim());
-        }
       }
 
       const computedTags = tags.length > 0
         ? tags
         : postType === 'update'
-        ? (videoFile || videoUrlInput ? ['VirtualTour', 'Video', 'Mansalay'] : ['Update', 'Mansalay'])
+        ? ['Update', 'Announcement', 'Mansalay']
         : [category || 'Handicraft', 'Product', 'Mansalay'].filter(Boolean);
 
       formData.append('tags', JSON.stringify(computedTags));
@@ -465,7 +430,6 @@ export function EnterpriseDashboard() {
       setTagInput('');
       setPostImageFile(null);
       setPostImagePreview(null);
-      handleRemoveVideo();
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -902,8 +866,8 @@ export function EnterpriseDashboard() {
                 : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
             }`}
           >
-            <Video className="w-3.5 h-3.5" />
-            Virtual Tour / Update
+            <Megaphone className="w-3.5 h-3.5" />
+            Shop Announcement
           </button>
         </div>
 
@@ -1188,127 +1152,23 @@ export function EnterpriseDashboard() {
             </div>
           )}
 
-          {/* VIRTUAL TOUR / VIDEO UPLOAD SECTION (For Virtual Tour / Update) */}
-          {postType === 'update' && (
-            <div className="bg-gradient-to-br from-indigo-50/60 via-white to-pink-50/40 p-5 rounded-2xl border border-indigo-100 shadow-xs space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-indigo-500/10 text-indigo-600 rounded-lg">
-                    <Video className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-900">
-                      Virtual Video Tour <span className="text-gray-400 font-normal">(Optional)</span>
-                    </h4>
-                    <p className="text-[11px] text-gray-500 font-medium">Add a video link (YouTube / MP4) or upload a video tour file</p>
-                  </div>
-                </div>
-                <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  Virtual Tour
-                </span>
+          {/* Tip to configure Cover Video in My Shop Profile */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 p-3.5 bg-gradient-to-r from-pink-50/70 to-rose-50/50 border border-pink-100 rounded-2xl text-xs text-gray-700">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-pink-500/10 text-pink-600 flex items-center justify-center flex-shrink-0">
+                <Video className="w-3.5 h-3.5" />
               </div>
-
-              {/* Video Link Input */}
-              <div>
-                <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                  Video Tour Link (YouTube, Facebook, or Direct Video URL)
-                </label>
-                <div className="relative">
-                  <ExternalLink className="w-3.5 h-3.5 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="url"
-                    value={videoUrlInput}
-                    onChange={(e) => {
-                      setVideoUrlInput(e.target.value);
-                      if (e.target.value.trim()) {
-                        setVideoFile(null);
-                        setVideoPreview(null);
-                        if (videoFileInputRef.current) videoFileInputRef.current.value = '';
-                      }
-                    }}
-                    placeholder="https://www.youtube.com/watch?v=... or https://example.com/attraction-tour.mp4"
-                    className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
-                  />
-                </div>
-              </div>
-
-              {/* OR Divider */}
-              <div className="flex items-center gap-3">
-                <div className="flex-1 border-t border-gray-200"></div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">OR Upload Video File</span>
-                <div className="flex-1 border-t border-gray-200"></div>
-              </div>
-
-              {/* Secure Video File Dropzone */}
-              <div>
-                <input
-                  ref={videoFileInputRef}
-                  type="file"
-                  accept="video/mp4,video/webm,video/ogg,video/quicktime"
-                  onChange={handleVideoFileChange}
-                  className="hidden"
-                />
-
-                <div
-                  onClick={() => videoFileInputRef.current?.click()}
-                  className="border-2 border-dashed border-gray-200 hover:border-indigo-400 rounded-xl p-5 text-center bg-white/70 hover:bg-indigo-50/30 transition-all cursor-pointer group"
-                >
-                  <Film className="h-7 w-7 text-gray-400 group-hover:text-indigo-500 mx-auto mb-1.5 transition-colors" />
-                  <p className="text-xs font-bold text-gray-700">Click to choose video tour file</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5 font-medium">MP4, WebM, MOV (Up to 500MB)</p>
-                  {videoFile && (
-                    <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-[11px] font-bold">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>{videoFile.name} ({(videoFile.size / (1024 * 1024)).toFixed(1)} MB)</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Live Video Preview Player */}
-              {(videoPreview || videoUrlInput) && (
-                <div className="p-3.5 bg-gray-950 rounded-xl border border-gray-800 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <Play className="h-3.5 w-3.5 text-indigo-400 fill-indigo-400" />
-                      <span>Virtual Tour Video Preview</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleRemoveVideo}
-                      className="px-2 py-0.5 bg-rose-500/20 text-rose-300 hover:bg-rose-500 hover:text-white text-[11px] font-bold rounded-md transition-all cursor-pointer"
-                    >
-                      Remove Video
-                    </button>
-                  </div>
-
-                  {videoPreview ? (
-                    <video
-                      controls
-                      playsInline
-                      className="w-full max-h-56 object-cover rounded-lg bg-black"
-                      src={videoPreview}
-                    />
-                  ) : getYouTubeEmbedUrl(videoUrlInput) ? (
-                    <iframe
-                      src={getYouTubeEmbedUrl(videoUrlInput)!}
-                      title="YouTube video player"
-                      className="w-full aspect-video max-h-56 rounded-lg"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
-                  ) : (
-                    <video
-                      controls
-                      playsInline
-                      className="w-full max-h-56 object-cover rounded-lg bg-black"
-                      src={videoUrlInput}
-                    />
-                  )}
-                </div>
-              )}
+              <span className="text-xs text-gray-600">
+                Gusto mo bang maglagay ng Cover Video para sa iyong shop? I-upload ito sa <strong className="text-gray-900">My Shop Profile</strong>.
+              </span>
             </div>
-          )}
+            <Link
+              to={`/business/enterprise/${currentUser?.id ?? ''}?manage=true`}
+              className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white rounded-full font-bold text-[11px] shadow-xs hover:shadow transition-all whitespace-nowrap"
+            >
+              Open My Shop Profile
+            </Link>
+          </div>
 
           {/* Added Tags Chips (if any) */}
           {tags.length > 0 && (

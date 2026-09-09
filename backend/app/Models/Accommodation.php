@@ -31,6 +31,7 @@ class Accommodation extends Model
         'image',
         'images',
         'availability',
+        'virtual_tour_scenes',
     ];
 
     protected $casts = [
@@ -39,6 +40,7 @@ class Accommodation extends Model
         'is_registered'=> 'boolean',
         'latitude'     => 'float',
         'longitude'    => 'float',
+        'virtual_tour_scenes' => 'array',
     ];
 
     public function owner()

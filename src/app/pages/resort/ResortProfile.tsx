@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { useApp } from '../../context/AppContext';
 import { API_BASE, deleteJSON, getJSON, patchJSON, postJSON, getAuthToken } from '../../lib/api';
 import { showPaymentMethodSuccess, showProductSuccess, showStatusUpdateSuccess } from '../../lib/sweetAlert';
+import { ResortVirtualTourManager } from '../../components/ResortVirtualTourManager';
 
 interface ApiBooking {
   id: number;
@@ -987,6 +988,12 @@ export function ResortProfile() {
           )}
         </div>
       </div>
+
+      {/* ── 360° VIRTUAL TOUR SCENES MANAGER (CUSTOMIZABLE WALKTHROUGH) ── */}
+      <ResortVirtualTourManager
+        resortId={currentUser?.id}
+        resortName={resortProfile?.resort_name || currentUser?.name || 'Our Resort'}
+      />
 
       {/* Pending Payment Receipts */}
       {receipts.filter((r: any) => r.status === 'pending').length > 0 && (

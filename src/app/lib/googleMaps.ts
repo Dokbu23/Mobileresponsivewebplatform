@@ -212,3 +212,44 @@ export async function getGoogleMapsRoute(
 export function hasGoogleMapsKey(): boolean {
   return Boolean(GOOGLE_MAPS_API_KEY);
 }
+
+/**
+ * Checks if Google Street View is available at a specific latitude & longitude within a radius.
+ */
+export async function checkStreetViewAvailability(
+  lat: number,
+  lng: number,
+  radiusMeters: number = 800
+): Promise<{ available: boolean; panoId?: string; lat?: number; lng?: number }> {
+  try {
+    await loadGoogleMapsAPI();
+    if (typeof google === 'undefined' || !google.maps?.StreetViewService) {
+      return { available: false };
+    }
+    return new Promise((resolve) => {
+      const svService = new google.maps.StreetViewService();
+      svService.getPanorama(
+        {
+          location: new google.maps.LatLng(lat, lng),
+          radius: radiusMeters,
+          source: google.maps.StreetViewSource.OUTDOOR,
+        },
+        (data, status) => {
+          if (status === google.maps.StreetViewStatus.OK && data?.location?.latLng) {
+            resolve({
+              available: true,
+              panoId: data.location.pano,
+              lat: data.location.latLng.lat(),
+              lng: data.location.latLng.lng(),
+            });
+          } else {
+            resolve({ available: false });
+          }
+        }
+      );
+    });
+  } catch (e) {
+    console.warn('[GoogleMaps] StreetView check failed:', e);
+    return { available: false };
+  }
+}

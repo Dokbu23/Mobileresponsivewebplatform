@@ -1,10 +1,11 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { MapPin, Hotel, Store, Mountain, Filter, Navigation, Compass, Crosshair, ExternalLink, X, Clock, Search, CheckCircle2, Plus, PlusCircle, Building2, AlertTriangle, ShieldCheck, Sparkles } from 'lucide-react';
+import { MapPin, Hotel, Store, Mountain, Filter, Navigation, Compass, Crosshair, ExternalLink, X, Clock, Search, CheckCircle2, Plus, PlusCircle, Building2, AlertTriangle, ShieldCheck, Sparkles, Footprints } from 'lucide-react';
 import { toast } from 'sonner';
 import { getPublicJSON, getPublicLandmarks, createLandmark, isPointInMansalayPolygon, getRouteWithFallback, getCurrentUserRole, getAuthToken, decodeHtml } from '../../lib/api';
 import { MansalayMap, MapMarker, UserGpsData } from '../../components/MansalayMap';
 import { InAppNavigationModal } from '../../components/InAppNavigationModal';
+import { VirtualTourModal, Tour360Scene } from '../../components/VirtualTourModal';
 import { useApp } from '../../context/AppContext';
 
 const MANSALAY_CENTER: [number, number] = [12.5311, 121.4394];
@@ -58,6 +59,29 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): 
   return Math.round(R * c * 10) / 10;
 }
 
+function getStoredScenes(type: string, id?: string | number): Tour360Scene[] | undefined {
+  try {
+    if (id) {
+      const fromId = localStorage.getItem(`discover-mansalay:${type}_360_scenes_${id}`);
+      if (fromId) {
+        const parsed = JSON.parse(fromId);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      const fromLm = localStorage.getItem(`discover-mansalay:landmark_360_scenes_${id}`);
+      if (fromLm) {
+        const parsed = JSON.parse(fromLm);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    }
+    const fromGeneral = localStorage.getItem(`discover-mansalay:${type}_360_scenes`);
+    if (fromGeneral) {
+      const parsed = JSON.parse(fromGeneral);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return undefined;
+}
+
 interface DirectoryLocation {
   id: string;
   name: string;
@@ -67,6 +91,7 @@ interface DirectoryLocation {
   description: string;
   address: string;
   coords: [number, number];
+  virtual_tour_scenes?: Tour360Scene[];
 }
 
 export function MapExplore() {
@@ -94,6 +119,14 @@ export function MapExplore() {
   const [routeDistanceKm, setRouteDistanceKm] = useState<number | null>(null);
   const [isInAppNavOpen, setIsInAppNavOpen] = useState(false);
   const [navInitialMode, setNavInitialMode] = useState<'car' | 'bike' | 'transit'>('car');
+  const [isVirtualTourOpen, setIsVirtualTourOpen] = useState(false);
+  const [tour360Data, setTour360Data] = useState<{
+    name: string;
+    category?: string;
+    lat: number;
+    lng: number;
+    scenes?: Tour360Scene[];
+  } | null>(null);
 
   // Landmark Creation & Geofence State
   const [showAddLandmarkModal, setShowAddLandmarkModal] = useState(false);
@@ -224,6 +257,7 @@ export function MapExplore() {
         type: 'attraction',
         description: decodeHtml(a.description),
         location: decodeHtml(a.location),
+        virtual_tour_scenes: a.virtual_tour_scenes,
       }));
 
       const resortMarkers: MapMarker[] = rawAccommodations.map((a: any) => ({
@@ -235,6 +269,8 @@ export function MapExplore() {
         type: 'resort',
         description: decodeHtml(a.description),
         location: decodeHtml(a.location),
+        virtual_tour_scenes: a.virtual_tour_scenes || getStoredScenes('resort', a.user_id || a.id),
+        userId: a.user_id || a.id,
       }));
 
       const dbLandmarkMarkers: MapMarker[] = rawLandmarks.map((l: any) => ({
@@ -246,6 +282,8 @@ export function MapExplore() {
         description: decodeHtml(l.description),
         location: decodeHtml(l.address),
         image: l.image,
+        virtual_tour_scenes: l.virtual_tour_scenes || l.user?.virtual_tour_scenes || getStoredScenes(l.type || 'resort', l.id) || getStoredScenes(l.type || 'resort', l.user_id),
+        userId: l.user_id || l.userId,
       }));
 
       setMarkers([...attractionMarkers, ...resortMarkers, ...dbLandmarkMarkers]);
@@ -262,6 +300,7 @@ export function MapExplore() {
         coords: (a.latitude && a.longitude)
           ? [Number(a.latitude), Number(a.longitude)]
           : getCoords(a.location),
+        virtual_tour_scenes: a.virtual_tour_scenes,
       }));
 
       const mappedResortDirs: DirectoryLocation[] = rawAccommodations.map((a: any) => ({
@@ -275,6 +314,7 @@ export function MapExplore() {
         coords: (a.latitude && a.longitude)
           ? [Number(a.latitude), Number(a.longitude)]
           : getCoords(a.location),
+        virtual_tour_scenes: a.virtual_tour_scenes || getStoredScenes('resort', a.user_id || a.id),
       }));
 
       const mappedLandmarkDirs: DirectoryLocation[] = rawLandmarks.map((l: any) => ({
@@ -286,6 +326,7 @@ export function MapExplore() {
         description: l.description || 'Landmark in Mansalay',
         address: l.address || 'Mansalay, Oriental Mindoro',
         coords: [Number(l.latitude), Number(l.longitude)],
+        virtual_tour_scenes: l.virtual_tour_scenes || l.user?.virtual_tour_scenes || getStoredScenes(l.type || 'resort', l.id) || getStoredScenes(l.type || 'resort', l.user_id),
       }));
 
       setDynamicLocations([...mappedAttractionsDirs, ...mappedResortDirs, ...mappedLandmarkDirs]);
@@ -306,6 +347,36 @@ export function MapExplore() {
     if (userType === 'enterprise' || currentUser?.role === 'enterprise') return 'enterprise';
     return getCurrentUserRole();
   }, [isAdmin, userType, currentUser]);
+
+  const getMarkerScenes = (marker: MapMarker): Tour360Scene[] | undefined => {
+    if (Array.isArray(marker.virtual_tour_scenes) && marker.virtual_tour_scenes.length > 0) {
+      return marker.virtual_tour_scenes;
+    }
+    const fromStored = getStoredScenes(marker.type, marker.id);
+    if (fromStored) return fromStored;
+    if (marker.userId) {
+      const fromUser = getStoredScenes(marker.type, marker.userId);
+      if (fromUser) return fromUser;
+    }
+    if (currentUser?.virtual_tour_scenes && (currentUser.role === marker.type || userRole === marker.type)) {
+      return currentUser.virtual_tour_scenes;
+    }
+    const generalStored = getStoredScenes(marker.type);
+    if (generalStored) return generalStored;
+    return undefined;
+  };
+
+  const handleOpen360Tour = (marker: MapMarker) => {
+    const scenes = getMarkerScenes(marker);
+    setTour360Data({
+      name: marker.name,
+      category: marker.type,
+      lat: marker.lat,
+      lng: marker.lng,
+      scenes,
+    });
+    setIsVirtualTourOpen(true);
+  };
 
   const handleMapClick = (coords: { lat: number; lng: number }) => {
     const { lat, lng } = coords;
@@ -358,6 +429,17 @@ export function MapExplore() {
 
     const finalType = userRole === 'resort' ? 'resort' : userRole === 'enterprise' ? 'enterprise' : landmarkForm.type;
 
+    // Attach active 360 scenes from user profile or localstorage to this landmark
+    let scenesToAttach: Tour360Scene[] | undefined = undefined;
+    try {
+      if (Array.isArray(currentUser?.virtual_tour_scenes) && currentUser.virtual_tour_scenes.length > 0) {
+        scenesToAttach = currentUser.virtual_tour_scenes;
+      } else {
+        const stored = getStoredScenes(finalType, currentUser?.id) || getStoredScenes(finalType);
+        if (stored) scenesToAttach = stored;
+      }
+    } catch {}
+
     setIsSubmittingLandmark(true);
     try {
       await createLandmark({
@@ -369,9 +451,10 @@ export function MapExplore() {
         latitude: clickedCoords.lat,
         longitude: clickedCoords.lng,
         image: landmarkForm.image,
+        virtual_tour_scenes: scenesToAttach,
       });
 
-      toast.success('Landmark added successfully! Marker is now visible to all users.');
+      toast.success('Landmark added successfully! 360° Walkthrough is linked to your landmark.');
       setShowAddLandmarkModal(false);
       setClickedCoords(null);
 
@@ -533,6 +616,7 @@ export function MapExplore() {
               routeCoords={osrmRouteCoords}
               selectedMarker={selectedDestination}
               onSelectMarker={(marker) => setSelectedDestination(marker)}
+              onOpenVirtualTour={handleOpen360Tour}
               onMapClick={handleMapClick}
             />
 
@@ -593,6 +677,17 @@ export function MapExplore() {
                     <Compass className="h-3.5 w-3.5" /> Start Live Nav
                   </button>
                 </div>
+
+                {/* 360° Virtual Walkthrough & Street View */}
+                <button
+                  onClick={() => {
+                    handleOpen360Tour(selectedDestination);
+                  }}
+                  className="w-full mb-2 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-md shadow-emerald-500/25 transition-all flex items-center justify-center gap-1.5 active:scale-[0.98] cursor-pointer"
+                >
+                  <Footprints className="h-3.5 w-3.5 text-emerald-100" />
+                  <span>360° Walkthrough & Google Street View</span>
+                </button>
 
                 {/* AI Commute Route Advisor */}
                 <button
@@ -718,6 +813,30 @@ export function MapExplore() {
                     </button>
 
                     <button
+                      onClick={() => {
+                        const matchedMarker = markers.find(m => m.id === loc.id || m.name === loc.name);
+                        if (matchedMarker) {
+                          handleOpen360Tour(matchedMarker);
+                        } else {
+                          handleOpen360Tour({
+                            id: loc.id,
+                            lat: coords[0],
+                            lng: coords[1],
+                            name: loc.name,
+                            type: (loc.category === 'Resort' ? 'resort' : loc.category === 'Market' ? 'enterprise' : 'attraction') as any,
+                            location: loc.address,
+                            virtual_tour_scenes: loc.virtual_tour_scenes,
+                          });
+                        }
+                      }}
+                      className="py-2 px-3 bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 font-bold rounded-full text-xs transition-colors flex items-center justify-center gap-1"
+                      title="Open 360° Virtual Walkthrough"
+                    >
+                      <Footprints className="h-3 w-3" />
+                      <span>360°</span>
+                    </button>
+
+                    <button
                       onClick={() => openGoogleMapsDirections(coords[0], coords[1], loc.name)}
                       className="w-8 h-8 rounded-full bg-gray-50 hover:bg-gray-100 text-gray-600 flex items-center justify-center transition-colors flex-shrink-0"
                       title="Open Google Maps Driving Directions"
@@ -742,6 +861,19 @@ export function MapExplore() {
           destination={selectedDestination}
           distanceKm={displayDistanceKm}
           initialMode={navInitialMode}
+        />
+      )}
+
+      {/* 360° Virtual Walkthrough & Google Street View Modal */}
+      {tour360Data && (
+        <VirtualTourModal
+          isOpen={isVirtualTourOpen}
+          onClose={() => setIsVirtualTourOpen(false)}
+          attractionName={tour360Data.name}
+          category={tour360Data.category}
+          lat={tour360Data.lat}
+          lng={tour360Data.lng}
+          customScenes={tour360Data.scenes}
         />
       )}
 
@@ -867,6 +999,26 @@ export function MapExplore() {
                   placeholder="https://images.unsplash.com/..."
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-xl text-xs font-medium outline-none transition-all"
                 />
+              </div>
+
+              {/* 360 Virtual Walkthrough Status */}
+              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs text-emerald-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+                    🌐
+                  </div>
+                  <div>
+                    <div className="font-extrabold text-emerald-900">360° Virtual Walkthrough</div>
+                    <div className="text-[11px] text-emerald-700">
+                      {currentUser?.virtual_tour_scenes?.length || getStoredScenes(userRole === 'enterprise' ? 'enterprise' : 'resort', currentUser?.id)?.length
+                        ? `Connected (${(currentUser?.virtual_tour_scenes || getStoredScenes(userRole === 'enterprise' ? 'enterprise' : 'resort', currentUser?.id))?.length} 360 scenes from your Profile attached)`
+                        : 'Your 360 scenes from Profile will automatically link to this map marker'}
+                    </div>
+                  </div>
+                </div>
+                <span className="bg-emerald-100 text-emerald-900 font-bold px-2 py-0.5 rounded-lg text-[10px] whitespace-nowrap">
+                  Auto-Linked
+                </span>
               </div>
 
               {/* Action Buttons */}

@@ -562,7 +562,27 @@ export async function getPublicPaymentSettings(): Promise<PublicPaymentSettings>
 
 // Landmark API Functions
 export async function getPublicLandmarks() {
-  return await getPublicJSON('/landmarks');
+  let apiLandmarks: any[] = [];
+  try {
+    const res = await getPublicJSON('/landmarks');
+    if (Array.isArray(res)) {
+      apiLandmarks = res;
+    }
+  } catch {}
+
+  try {
+    const localStr = localStorage.getItem('discover-mansalay:local_landmarks');
+    if (localStr) {
+      const local: any[] = JSON.parse(localStr);
+      if (Array.isArray(local) && local.length > 0) {
+        const apiIds = new Set(apiLandmarks.map((l: any) => String(l.id)));
+        const uniqueLocal = local.filter((l: any) => !apiIds.has(String(l.id)));
+        return [...uniqueLocal, ...apiLandmarks];
+      }
+    }
+  } catch {}
+
+  return apiLandmarks;
 }
 
 export async function createLandmark(data: {
@@ -574,8 +594,36 @@ export async function createLandmark(data: {
   latitude: number;
   longitude: number;
   image?: string;
+  virtual_tour_scenes?: any[];
 }) {
-  return await postJSON('/landmarks', data, true);
+  let created: any = null;
+  try {
+    created = await postJSON('/landmarks', data, true);
+  } catch (err) {
+    console.warn('Backend landmark creation endpoint error, storing locally:', err);
+  }
+
+  // Always mirror in localStorage to ensure instant availability and 360 scene persistence
+  try {
+    const localStr = localStorage.getItem('discover-mansalay:local_landmarks');
+    const local = localStr ? JSON.parse(localStr) : [];
+    const newLandmark = {
+      id: created?.landmark?.id || created?.id || `local-lm-${Date.now()}`,
+      ...data,
+      created_at: new Date().toISOString(),
+      is_active: true,
+    };
+    local.unshift(newLandmark);
+    localStorage.setItem('discover-mansalay:local_landmarks', JSON.stringify(local));
+
+    if (data.virtual_tour_scenes && data.virtual_tour_scenes.length > 0) {
+      localStorage.setItem(`discover-mansalay:landmark_360_scenes_${newLandmark.id}`, JSON.stringify(data.virtual_tour_scenes));
+    }
+
+    return created || { landmark: newLandmark };
+  } catch {}
+
+  return created;
 }
 
 

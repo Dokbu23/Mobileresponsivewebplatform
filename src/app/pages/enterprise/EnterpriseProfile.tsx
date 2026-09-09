@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext';
 import { getAuthToken, getJSON, getPublicJSON, postJSON, putJSON, patchJSON, deleteJSON, API_BASE, getStorageUrl } from '../../lib/api';
 import { showPaymentMethodSuccess, showProductSuccess, showStatusUpdateSuccess } from '../../lib/sweetAlert';
 
+import { ResortVirtualTourManager } from '../../components/ResortVirtualTourManager';
 import { MANSALAY_BARANGAYS } from '../../lib/constants';
 
 interface ProductVariationForm {
@@ -1376,9 +1377,16 @@ export function EnterpriseProfile() {
         })()}
       </div>
 
-
-
-      {/* Receipts Modal */}
+      {/* 🌟 360° VIRTUAL WALKTHROUGH SCENE MANAGER FOR ENTERPRISE */}
+      <ResortVirtualTourManager
+        resortId={currentUser?.id}
+        businessType="enterprise"
+        resortName={storeProfile?.store_name || currentUser?.name || 'Our Shop'}
+        initialScenes={storeProfile?.virtual_tour_scenes || currentUser?.virtual_tour_scenes}
+        onSaveSuccess={(scenes) => {
+          setStoreProfile((prev: any) => ({ ...prev, virtual_tour_scenes: scenes }));
+        }}
+      />
       {showReceiptsModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[80vh] overflow-y-auto">

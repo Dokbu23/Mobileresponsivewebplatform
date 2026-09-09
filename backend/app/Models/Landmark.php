@@ -20,12 +20,14 @@ class Landmark extends Model
         'longitude',
         'image',
         'is_active',
+        'virtual_tour_scenes',
     ];
 
     protected $casts = [
         'latitude' => 'float',
         'longitude' => 'float',
         'is_active' => 'boolean',
+        'virtual_tour_scenes' => 'array',
     ];
 
     /**

@@ -7,6 +7,7 @@ import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
 import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
+import { PushPinIcon } from '../../components/PushPinIcon';
 
 interface EventType {
   id: string;
@@ -296,16 +297,25 @@ export function Events() {
                     <button
                       onClick={(e) => toggleSaveEvent(event, e)}
                       title={isInWishlist(event.id, 'event') ? 'Remove from saved items' : 'Pin to saved items'}
-                      className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/80 hover:bg-white text-gray-700 shadow-sm flex items-center justify-center backdrop-blur-md transition-colors"
+                      className={`absolute top-3 right-3 w-8 h-8 rounded-full shadow-sm flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 cursor-pointer ${
+                        isInWishlist(event.id, 'event')
+                          ? 'bg-rose-50 border border-rose-200'
+                          : 'bg-white/80 hover:bg-white text-gray-700'
+                      }`}
                     >
-                      <MapPin className={`h-4 w-4 ${isInWishlist(event.id, 'event') ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
+                      <PushPinIcon
+                        isPinned={isInWishlist(event.id, 'event')}
+                        size={16}
+                        idPrefix={`event-${event.id}`}
+                      />
                     </button>
                   ) : (
                     <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-bold text-white flex items-center gap-1.5 whitespace-nowrap shadow-xs">
-                      <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
-                        <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
-                      </svg>
+                      <PushPinIcon
+                        alwaysTilted
+                        size={13}
+                        idPrefix={`event-admin-${event.id}`}
+                      />
                       <span className="whitespace-nowrap">Save: {getWishlistCount(event.id, 'event', event.likes)}</span>
                     </div>
                   )}
@@ -480,21 +490,26 @@ export function Events() {
                 {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' ? (
                   <button
                     onClick={() => toggleSaveEvent(selectedEvent)}
-                    className={`flex-1 py-2.5 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-2 border ${
+                    className={`flex-1 py-2.5 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-2 border cursor-pointer hover:scale-[1.02] active:scale-98 ${
                       isInWishlist(selectedEvent.id, 'event')
-                        ? 'bg-pink-500 text-white border-pink-500 shadow-md shadow-pink-500/20'
-                        : 'border-pink-300 text-pink-600 hover:bg-pink-50'
+                        ? 'bg-rose-500 text-white border-rose-500 shadow-md shadow-rose-500/25'
+                        : 'border-rose-300 text-rose-600 hover:bg-rose-50'
                     }`}
                   >
-                    <MapPin className={`h-4 w-4 ${isInWishlist(selectedEvent.id, 'event') ? 'fill-white' : ''}`} />
+                    <PushPinIcon
+                      isPinned={isInWishlist(selectedEvent.id, 'event')}
+                      size={16}
+                      idPrefix={`modal-event-${selectedEvent.id}`}
+                    />
                     <span>{isInWishlist(selectedEvent.id, 'event') ? 'Pinned to Saved' : 'Pin Event'} ({getWishlistCount(selectedEvent.id, 'event', selectedEvent.likes)})</span>
                   </button>
                 ) : (
-                  <div className="flex-1 py-2.5 rounded-full text-xs font-bold flex items-center justify-center gap-2 bg-pink-50 text-pink-600 border border-pink-100 whitespace-nowrap">
-                    <svg className="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-                      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
-                      <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
-                    </svg>
+                  <div className="flex-1 py-2.5 rounded-full text-xs font-bold flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-100 whitespace-nowrap">
+                    <PushPinIcon
+                      alwaysTilted
+                      size={15}
+                      idPrefix={`modal-event-admin-${selectedEvent.id}`}
+                    />
                     <span>Save: {getWishlistCount(selectedEvent.id, 'event', selectedEvent.likes)}</span>
                   </div>
                 )}

@@ -9,6 +9,7 @@ import { ShareModal } from '../../components/ShareModal';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
 import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
+import { PushPinIcon } from '../../components/PushPinIcon';
 
 interface AttractionType {
   id: string;
@@ -407,15 +408,17 @@ export function Attractions() {
                     {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
                       <button
                         onClick={(e) => handleToggleLike(e, attraction)}
-                        className="w-7 h-7 bg-white/90 backdrop-blur-sm hover:bg-white rounded-full flex items-center justify-center shadow-sm transition-all hover:scale-110 cursor-pointer"
+                        className={`w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition-all hover:scale-110 active:scale-95 cursor-pointer ${
+                          isInWishlist(attraction.id, 'attraction')
+                            ? 'bg-rose-50 border border-rose-200'
+                            : 'bg-white/90 backdrop-blur-sm hover:bg-white'
+                        }`}
                         title={isInWishlist(attraction.id, 'attraction') ? 'Remove from saved places' : 'Pin to saved places'}
                       >
-                        <MapPin 
-                          className={`h-3.5 w-3.5 transition-all ${
-                            isInWishlist(attraction.id, 'attraction')
-                              ? 'fill-pink-500 text-pink-500'
-                              : 'text-pink-500 fill-transparent stroke-2'
-                          }`} 
+                        <PushPinIcon
+                          isPinned={isInWishlist(attraction.id, 'attraction')}
+                          size={17}
+                          idPrefix={`attr-${attraction.id}`}
                         />
                       </button>
                     )}
@@ -553,14 +556,33 @@ export function Attractions() {
                 {getSpecialBadge(selectedAttraction, 0) || 'Must Visit'}
               </div>
 
-              {/* Top-Right Close Button */}
-              <button
-                onClick={() => setSelectedAttraction(null)}
-                className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 backdrop-blur-sm transition-colors z-20"
-                title="Close"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              {/* Top-Right Action Buttons */}
+              <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
+                {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
+                  <button
+                    onClick={(e) => handleToggleLike(e, selectedAttraction)}
+                    className={`w-9 h-9 rounded-full flex items-center justify-center shadow-md backdrop-blur-sm transition-all hover:scale-110 active:scale-95 cursor-pointer ${
+                      isInWishlist(selectedAttraction.id, 'attraction')
+                        ? 'bg-white text-rose-600'
+                        : 'bg-black/50 hover:bg-black/70 text-white'
+                    }`}
+                    title={isInWishlist(selectedAttraction.id, 'attraction') ? 'Remove from saved places' : 'Pin to saved places'}
+                  >
+                    <PushPinIcon
+                      isPinned={isInWishlist(selectedAttraction.id, 'attraction')}
+                      size={18}
+                      idPrefix={`modal-attr-${selectedAttraction.id}`}
+                    />
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedAttraction(null)}
+                  className="bg-black/50 hover:bg-black/70 text-white rounded-full p-2 backdrop-blur-sm transition-colors"
+                  title="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
 
               {/* Left & Right Navigation Arrows */}
               {selectedAttraction.images && selectedAttraction.images.length > 1 && (
@@ -719,6 +741,8 @@ export function Attractions() {
           category={selectedAttraction.category}
           mainImage={selectedAttraction.image}
           videoUrl={selectedAttraction.video}
+          lat={Number((selectedAttraction as any).lat || (selectedAttraction as any).latitude) || undefined}
+          lng={Number((selectedAttraction as any).lng || (selectedAttraction as any).longitude) || undefined}
         />
       )}
 

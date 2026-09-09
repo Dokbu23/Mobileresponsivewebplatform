@@ -95,6 +95,7 @@ export interface CurrentUser {
   instagram_link?: string;
   description?: string;
   view_count?: number;
+  virtual_tour_scenes?: any;
 }
 
 interface AppContextType {

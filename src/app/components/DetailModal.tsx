@@ -368,7 +368,7 @@ export function DetailModal({ item, onClose }: DetailModalProps) {
         </div>
       </div>
 
-      {/* ── Virtual Tour Video Modal ── */}
+      {/* ── Virtual Tour Video & 360 Walkthrough Modal ── */}
       {isVirtualTourOpen && (
         <VirtualTourModal
           isOpen={isVirtualTourOpen}
@@ -380,6 +380,8 @@ export function DetailModal({ item, onClose }: DetailModalProps) {
           phone={item.contact_number || item.phone}
           facebook={item.facebook_link || item.facebook}
           instagram={item.instagram_link || item.instagram}
+          lat={Number(item.latitude || item.lat) || undefined}
+          lng={Number(item.longitude || item.lng) || undefined}
         />
       )}
     </div>

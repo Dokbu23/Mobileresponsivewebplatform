@@ -15,8 +15,9 @@ import { getPublicJSON, getAuthToken, API_BASE, recordView, formatImageUrl } fro
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
 import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
-import { LocationPicker } from '../../components/LocationPicker';
 
+import { ResortVirtualTourManager } from '../../components/ResortVirtualTourManager';
+import { PushPinIcon } from '../../components/PushPinIcon';
 import { MANSALAY_BARANGAYS } from '../../lib/constants';
 
 export function cleanTags(rawTags: any): string[] {
@@ -99,6 +100,7 @@ interface BusinessOwner {
   video?: string;
   video_url?: string;
   video_tour?: string;
+  virtual_tour_scenes?: any;
 }
 
 interface PromoCodeItem {
@@ -398,7 +400,7 @@ export function BusinessProfile() {
   const [storeLocation, setStoreLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [copiedPromoCode, setCopiedPromoCode] = useState<string | null>(null);
   const [posts, setPosts] = useState<any[]>([]);
-  const [activeProfileTab, setActiveProfileTab] = useState<'listings' | 'posts'>('listings');
+  const [activeProfileTab, setActiveProfileTab] = useState<'listings' | 'posts' | 'tour'>('listings');
   const [selectedPostCategory, setSelectedPostCategory] = useState<string>('all');
   const [viewingPost, setViewingPost] = useState<any | null>(null);
   const [viewingRoom, setViewingRoom] = useState<any | null>(null);
@@ -496,57 +498,10 @@ export function BusinessProfile() {
     loadBusinessProfile(false);
   }, [type, userId, currentUser?.id]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="animate-pulse space-y-4">
-            <div className="h-40 bg-gray-200 rounded-2xl" />
-            <div className="h-48 bg-gray-200 rounded-2xl" />
-            <div className="h-32 bg-gray-200 rounded-2xl" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !data) {
-    const isResort = type === 'resort';
-    return (
-      <div className="min-h-screen bg-gray-50/80 flex items-center justify-center px-4 py-12">
-        <div className="max-w-md w-full text-center bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
-          <div className="w-20 h-20 rounded-full bg-pink-50 flex items-center justify-center mx-auto mb-5 text-pink-500 shadow-xs">
-            {isResort ? <Hotel className="h-10 w-10 text-pink-500" /> : <Store className="h-10 w-10 text-pink-500" />}
-          </div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-2">
-            {isResort ? 'Resort Profile Not Available' : 'Shop Not Available'}
-          </h2>
-          <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-            {error || (isResort ? 'This resort does not have an active registered profile yet.' : 'This shop does not have an active registered profile yet.')}
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <button
-              onClick={() => navigate(isResort ? '/accommodations' : '/products')}
-              className="w-full sm:w-auto px-6 py-2.5 bg-pink-500 hover:bg-pink-600 active:scale-95 text-white rounded-full text-xs sm:text-sm font-bold shadow-md shadow-pink-500/25 transition-all"
-            >
-              {isResort ? 'Explore Stays & Resorts' : 'Explore All Products'}
-            </button>
-            <button
-              onClick={() => navigate(-1)}
-              className="w-full sm:w-auto px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-xs sm:text-sm font-semibold transition-colors"
-            >
-              Go Back
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const { owner } = data;
+  const owner = data?.owner;
   const isResort = type === 'resort';
-  const products = data.products || [];
-  const accommodations = data.accommodations || [];
+  const products = data?.products || [];
+  const accommodations = data?.accommodations || [];
 
   // Merge database accommodations with room-type posts to ensure any room added via posts or resort-rooms immediately appears and increments the room count!
   const allAccommodations = useMemo(() => {
@@ -556,7 +511,7 @@ export function BusinessProfile() {
 
     if (Array.isArray(posts)) {
       posts
-        .filter((post: any) => post.type === 'rooms' || post.type === 'room' || cleanTags(post.tags).some((t: string) => t.toLowerCase() === 'rooms'))
+        .filter((post: any) => post.type === 'rooms' || post.type === 'room')
         .forEach((post: any) => {
           const rawName = String(post.product_name || post.content || '').trim();
           const firstLine = rawName.split(/\r?\n/)[0].slice(0, 50).trim();
@@ -624,6 +579,64 @@ export function BusinessProfile() {
     return list;
   }, [products, posts, isResort, owner?.id]);
 
+  // Check if this shop / resort has an uploaded video tour (from owner profile or posts)
+  const videoTourPost = Array.isArray(posts) ? posts.find((p: any) => p.video) : null;
+  const videoTourUrl = owner?.video || owner?.video_url || owner?.video_tour || videoTourPost?.video;
+
+  // Ensure the cover sticks to the virtual tour video whenever available
+  useEffect(() => {
+    if (videoTourUrl) {
+      setCoverMode('video');
+    }
+  }, [videoTourUrl]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="animate-pulse space-y-4">
+            <div className="h-40 bg-gray-200 rounded-2xl" />
+            <div className="h-48 bg-gray-200 rounded-2xl" />
+            <div className="h-32 bg-gray-200 rounded-2xl" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !data || !owner) {
+    const isResortErr = type === 'resort';
+    return (
+      <div className="min-h-screen bg-gray-50/80 flex items-center justify-center px-4 py-12">
+        <div className="max-w-md w-full text-center bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
+          <div className="w-20 h-20 rounded-full bg-pink-50 flex items-center justify-center mx-auto mb-5 text-pink-500 shadow-xs">
+            {isResortErr ? <Hotel className="h-10 w-10 text-pink-500" /> : <Store className="h-10 w-10 text-pink-500" />}
+          </div>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-2">
+            {isResortErr ? 'Resort Profile Not Available' : 'Shop Not Available'}
+          </h2>
+          <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+            {error || (isResortErr ? 'This resort does not have an active registered profile yet.' : 'This shop does not have an active registered profile yet.')}
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={() => navigate(isResortErr ? '/accommodations' : '/products')}
+              className="w-full sm:w-auto px-6 py-2.5 bg-pink-500 hover:bg-pink-600 active:scale-95 text-white rounded-full text-xs sm:text-sm font-bold shadow-md shadow-pink-500/25 transition-all"
+            >
+              {isResortErr ? 'Explore Stays & Resorts' : 'Explore All Products'}
+            </button>
+            <button
+              onClick={() => navigate(-1)}
+              className="w-full sm:w-auto px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-xs sm:text-sm font-semibold transition-colors"
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const items = isResort ? allAccommodations : allProducts;
 
   // Display name & info: Accurate resort_name for resort, store_name for enterprise
@@ -643,17 +656,7 @@ export function BusinessProfile() {
     ? (owner.resort_logo || (owner.resort_images && owner.resort_images[0]) || owner.store_logo || owner.avatar || owner.logo)
     : (owner.store_logo || owner.avatar || owner.logo);
 
-  // Check if this shop / resort has an uploaded video tour (from owner profile or posts)
-  const videoTourPost = Array.isArray(posts) ? posts.find((p: any) => p.video) : null;
-  const videoTourUrl = owner.video || owner.video_url || owner.video_tour || videoTourPost?.video;
   const ytCoverEmbed = videoTourUrl ? getYouTubeEmbedUrl(videoTourUrl) : null;
-
-  // Ensure the cover sticks to the virtual tour video whenever available
-  useEffect(() => {
-    if (videoTourUrl) {
-      setCoverMode('video');
-    }
-  }, [videoTourUrl]);
 
   // Active Now vs time ago logic
   const getActiveStatus = () => {
@@ -1034,11 +1037,11 @@ export function BusinessProfile() {
                   />
                 )}
 
-                {/* Virtual Tour Overlay Badges */}
+                {/* Video Overlay Badges */}
                 <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none z-10">
                   <span className="px-3 py-1 bg-pink-600/90 text-white text-[11px] font-extrabold rounded-full shadow-md backdrop-blur-xs flex items-center gap-1.5 border border-pink-400/30">
                     <Video className="w-3.5 h-3.5" />
-                    Virtual Video Tour Active
+                    Video
                   </span>
                 </div>
               </div>
@@ -1054,7 +1057,7 @@ export function BusinessProfile() {
 
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20 pointer-events-none" />
 
-            {/* Switch between Video Tour and Photo Cover if both exist */}
+            {/* Switch between Video and Image Cover if both exist */}
             {videoTourUrl && shopBanner && (
               <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-black/60 backdrop-blur-md p-1 rounded-full border border-white/20 z-10">
                 <button
@@ -1067,7 +1070,7 @@ export function BusinessProfile() {
                   }`}
                 >
                   <Video className="w-3 h-3" />
-                  <span>Video Tour</span>
+                  <span>Video</span>
                 </button>
                 <button
                   type="button"
@@ -1079,7 +1082,7 @@ export function BusinessProfile() {
                   }`}
                 >
                   <ImageIcon className="w-3 h-3" />
-                  <span>Photo</span>
+                  <span>Image</span>
                 </button>
               </div>
             )}
@@ -1336,6 +1339,23 @@ export function BusinessProfile() {
                   {posts.length}
                 </span>
               )}
+            </button>
+
+            <button
+              onClick={() => setActiveProfileTab('tour')}
+              className={`px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer ${
+                activeProfileTab === 'tour'
+                  ? 'bg-pink-500 text-white shadow-md shadow-pink-500/20'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Compass className="h-4 w-4" />
+              <span>360° Walkthrough</span>
+              <span className={`px-2 py-0.5 text-[10px] rounded-full font-extrabold ${
+                activeProfileTab === 'tour' ? 'bg-white text-pink-600' : 'bg-emerald-100 text-emerald-800'
+              }`}>
+                360°
+              </span>
             </button>
           </div>
 
@@ -1860,106 +1880,82 @@ export function BusinessProfile() {
           </div>
         )}
 
-        {/* 📍 SHOP LOCATION & CONTACT INFO SECTION */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
-          {/* Shop Location & Interactive Map Card */}
-          <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-pink-50 text-pink-500 flex items-center justify-center">
-                  <MapPin className="h-4 w-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
-                    {isResort ? 'Resort Location & Landmark' : 'Shop Location & Landmark'}
-                  </h3>
-                  <p className="text-xs text-gray-500">
-                    {[owner.address, owner.barangay, 'Mansalay, Oriental Mindoro'].filter(Boolean).join(', ')}
-                  </p>
-                </div>
-              </div>
-              {isOwner && (
-                <button
-                  onClick={handleOpenEditModal}
-                  className="px-3 py-1 bg-pink-50 hover:bg-pink-100 text-pink-600 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors"
-                >
-                  <Pencil className="h-3 w-3" />
-                  Edit Pin
-                </button>
-              )}
-            </div>
+        {/* ── TAB 3: 360° VIRTUAL WALKTHROUGH ── */}
+        {activeProfileTab === 'tour' && (
+          <div className="space-y-6 animate-in fade-in duration-150 mb-6">
+            <ResortVirtualTourManager
+              resortId={owner?.id}
+              businessType={isResort ? 'resort' : 'enterprise'}
+              resortName={shopName}
+              initialScenes={owner?.virtual_tour_scenes}
+              onSaveSuccess={(scenes) => {
+                setData((prev: any) => prev ? { ...prev, owner: { ...prev.owner, virtual_tour_scenes: scenes } } : prev);
+              }}
+            />
+          </div>
+        )}
 
-            {/* Map Display */}
-            <div className="rounded-xl overflow-hidden border border-gray-200 mt-2">
-              <LocationPicker
-                initialLat={owner.latitude ? Number(owner.latitude) : 12.51507}
-                initialLng={owner.longitude ? Number(owner.longitude) : 121.42810}
-                onLocationSelect={() => {}}
-                height="190px"
-              />
+        {/* 📞 CONTACT INFORMATION SECTION */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mt-4">
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="w-8 h-8 rounded-xl bg-pink-50 text-pink-500 flex items-center justify-center">
+              <Phone className="h-4 w-4" />
             </div>
-            
-            {owner.address && (
-              <div className="mt-3 text-xs bg-gray-50 p-2.5 rounded-xl border border-gray-100 flex items-center gap-2">
-                <span className="font-bold text-gray-700">Landmark / Directions:</span>
-                <span className="text-gray-600">{owner.address}</span>
-              </div>
-            )}
+            <div>
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
+                Contact Information
+              </h3>
+              <p className="text-xs text-gray-500">
+                Get in touch with {shopName} directly
+              </p>
+            </div>
           </div>
 
-          {/* 📞 CONTACT INFO */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-4">
-                CONTACT INFORMATION
-              </h3>
-              <div className="space-y-3">
-                {owner.email && (
-                  <a href={`mailto:${owner.email}`} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-pink-300 hover:bg-pink-50/50 transition-all">
-                    <div className="w-9 h-9 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Mail className="h-4 w-4 text-pink-500" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[10px] text-gray-400 font-bold uppercase">Email Address</div>
-                      <div className="text-xs text-gray-800 truncate font-semibold">{owner.email}</div>
-                    </div>
-                  </a>
-                )}
-                {owner.phone && (
-                  <a href={`tel:${owner.phone}`} className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-pink-300 hover:bg-pink-50/50 transition-all">
-                    <div className="w-9 h-9 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Phone className="h-4 w-4 text-pink-500" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[10px] text-gray-400 font-bold uppercase">Contact Phone</div>
-                      <div className="text-xs text-gray-800 font-semibold">{owner.phone}</div>
-                    </div>
-                  </a>
-                )}
-                {owner.facebook_link && (
-                  <a href={owner.facebook_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-blue-300 hover:bg-blue-50/50 transition-all">
-                    <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <ExternalLink className="h-4 w-4 text-blue-600" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[10px] text-gray-400 font-bold uppercase">Facebook Page</div>
-                      <div className="text-xs text-blue-600 font-semibold truncate">Visit Facebook</div>
-                    </div>
-                  </a>
-                )}
-                {owner.instagram_link && (
-                  <a href={owner.instagram_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 border border-gray-100 rounded-xl hover:border-pink-300 hover:bg-pink-50/50 transition-all">
-                    <div className="w-9 h-9 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <ExternalLink className="h-4 w-4 text-pink-600" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[10px] text-gray-400 font-bold uppercase">Instagram</div>
-                      <div className="text-xs text-pink-600 font-semibold truncate">Visit Instagram</div>
-                    </div>
-                  </a>
-                )}
-              </div>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {owner.email && (
+              <a href={`mailto:${owner.email}`} className="flex items-center gap-3 p-3.5 border border-gray-100 rounded-xl hover:border-pink-300 hover:bg-pink-50/50 transition-all">
+                <div className="w-9 h-9 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Mail className="h-4 w-4 text-pink-500" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] text-gray-400 font-bold uppercase">Email Address</div>
+                  <div className="text-xs text-gray-800 truncate font-semibold">{owner.email}</div>
+                </div>
+              </a>
+            )}
+            {owner.phone && (
+              <a href={`tel:${owner.phone}`} className="flex items-center gap-3 p-3.5 border border-gray-100 rounded-xl hover:border-pink-300 hover:bg-pink-50/50 transition-all">
+                <div className="w-9 h-9 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Phone className="h-4 w-4 text-pink-500" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] text-gray-400 font-bold uppercase">Contact Phone</div>
+                  <div className="text-xs text-gray-800 font-semibold">{owner.phone}</div>
+                </div>
+              </a>
+            )}
+            {owner.facebook_link && (
+              <a href={owner.facebook_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3.5 border border-gray-100 rounded-xl hover:border-blue-300 hover:bg-blue-50/50 transition-all">
+                <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <ExternalLink className="h-4 w-4 text-blue-600" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] text-gray-400 font-bold uppercase">Facebook Page</div>
+                  <div className="text-xs text-blue-600 font-semibold truncate">Visit Facebook</div>
+                </div>
+              </a>
+            )}
+            {owner.instagram_link && (
+              <a href={owner.instagram_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3.5 border border-gray-100 rounded-xl hover:border-pink-300 hover:bg-pink-50/50 transition-all">
+                <div className="w-9 h-9 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <ExternalLink className="h-4 w-4 text-pink-600" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] text-gray-400 font-bold uppercase">Instagram</div>
+                  <div className="text-xs text-pink-600 font-semibold truncate">Visit Instagram</div>
+                </div>
+              </a>
+            )}
           </div>
         </div>
       </div>
@@ -2600,7 +2596,7 @@ export function BusinessProfile() {
                         className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 rounded-xl p-3 text-center bg-white hover:bg-indigo-50/30 transition-all cursor-pointer group flex flex-col items-center justify-center min-h-[76px]"
                       >
                         <Film className="h-5 w-5 text-indigo-500 mb-1 group-hover:scale-110 transition-transform" />
-                        <span className="text-xs font-bold text-gray-800">Upload Video Tour File</span>
+                        <span className="text-xs font-bold text-gray-800">Upload Video File</span>
                         <span className="text-[10px] text-gray-400 font-medium">MP4, WebM (hanggang 500MB)</span>
                         {videoFile && (
                           <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-[10px] font-bold">
@@ -2730,30 +2726,7 @@ export function BusinessProfile() {
                   />
                 </div>
 
-                {/* Map Location & Landmark Pinning */}
-                <div className="sm:col-span-2">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5 text-pink-500" />
-                      Pin Exact Location on Mansalay Map
-                    </label>
-                    <span className="text-[11px] text-pink-500 font-medium">Click on map to place pin</span>
-                  </div>
-                  <div className="rounded-2xl overflow-hidden border-2 border-pink-200 shadow-xs mb-2">
-                    <LocationPicker
-                      initialLat={storeLocation?.lat || 12.51507}
-                      initialLng={storeLocation?.lng || 121.42810}
-                      onLocationSelect={(lat, lng) => setStoreLocation({ lat, lng })}
-                      height="200px"
-                    />
-                  </div>
-                  {storeLocation && (
-                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-semibold bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
-                      <CheckCircle className="h-3.5 w-3.5" />
-                      Pinned Coordinates: {storeLocation.lat.toFixed(5)}, {storeLocation.lng.toFixed(5)}
-                    </div>
-                  )}
-                </div>
+
 
                 {/* Facebook Link */}
                 <div>
@@ -2886,22 +2859,23 @@ function ProductCard({ product, onSelect }: any) {
         {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' ? (
           <button
             onClick={toggleSave}
-            className="absolute top-2 right-2 w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors shadow-xs"
+            className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer ${
+              isSaved
+                ? 'bg-rose-50 border border-rose-200'
+                : 'bg-white/80 hover:bg-white text-gray-700'
+            }`}
             title={isSaved ? "Remove from saved items" : "Pin to saved items"}
           >
-            <MapPin className={`h-3.5 w-3.5 ${isSaved ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
+            <PushPinIcon isPinned={isSaved} size={15} idPrefix={`bp-prod-${product.id}`} />
           </button>
         ) : (
           <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full text-[9px] font-bold text-white flex items-center gap-1 whitespace-nowrap">
-            <svg className="h-3 w-3 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
-              <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
-            </svg>
+            <PushPinIcon alwaysTilted size={12} idPrefix={`bp-prod-adm-${product.id}`} />
             <span>Save: {count}</span>
           </div>
         )}
         <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-md text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
-          <MapPin className="h-3 w-3 fill-pink-500 text-pink-500" />
+          <PushPinIcon alwaysTilted size={12} idPrefix={`bp-prod-cnt-${product.id}`} />
           <span>{count}</span>
         </div>
 
@@ -2982,22 +2956,23 @@ function AccommodationCard({ accommodation, onSelect }: any) {
         {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' ? (
           <button
             onClick={toggleSave}
-            className="absolute top-2 right-2 w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors shadow-xs"
+            className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer ${
+              isSaved
+                ? 'bg-rose-50 border border-rose-200'
+                : 'bg-white/80 hover:bg-white text-gray-700'
+            }`}
             title={isSaved ? "Remove from saved items" : "Pin to saved items"}
           >
-            <MapPin className={`h-3.5 w-3.5 ${isSaved ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
+            <PushPinIcon isPinned={isSaved} size={15} idPrefix={`bp-acc-${accommodation.id}`} />
           </button>
         ) : (
           <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full text-[9px] font-bold text-white flex items-center gap-1 whitespace-nowrap">
-            <svg className="h-3 w-3 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
-              <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
-            </svg>
+            <PushPinIcon alwaysTilted size={12} idPrefix={`bp-acc-adm-${accommodation.id}`} />
             <span>Save: {count}</span>
           </div>
         )}
         <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-md text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
-          <MapPin className="h-3 w-3 fill-pink-500 text-pink-500" />
+          <PushPinIcon alwaysTilted size={12} idPrefix={`bp-acc-cnt-${accommodation.id}`} />
           <span>{count}</span>
         </div>
 

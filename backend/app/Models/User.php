@@ -70,6 +70,7 @@ class User extends Authenticatable
         'store_is_setup',
         'facebook_link',
         'instagram_link',
+        'virtual_tour_scenes',
     ];
 
     /**
@@ -120,6 +121,7 @@ class User extends Authenticatable
         'resort_is_setup' => 'boolean',
         'store_is_setup'  => 'boolean',
         'resort_price_per_night' => 'float',
+        'virtual_tour_scenes' => 'array',
     ];
 
     /**

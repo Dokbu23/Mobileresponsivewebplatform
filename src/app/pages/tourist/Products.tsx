@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { Store, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, MessageSquare, Facebook, Navigation, MapPin, ExternalLink, Lock, Filter, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
+import { PushPinIcon } from '../../components/PushPinIcon';
 import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
@@ -393,15 +394,17 @@ export function Products() {
                     {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
                       <button
                         onClick={(e) => toggleSaveProduct(product, e)}
-                        className="w-7 h-7 bg-white/80 hover:bg-white rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 shadow-xs cursor-pointer"
+                        className={`w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer ${
+                          isInWishlist(product.id, 'product')
+                            ? 'bg-rose-50 border border-rose-200'
+                            : 'bg-white/80 hover:bg-white'
+                        }`}
                         title={isInWishlist(product.id, 'product') ? 'Remove from saved items' : 'Pin to saved items'}
                       >
-                        <MapPin
-                          className={`h-3.5 w-3.5 transition-all ${
-                            isInWishlist(product.id, 'product')
-                              ? 'fill-pink-500 text-pink-500'
-                              : 'text-pink-500 fill-transparent stroke-2'
-                          }`}
+                        <PushPinIcon
+                          isPinned={isInWishlist(product.id, 'product')}
+                          size={16}
+                          idPrefix={`prod-tr-${product.id}`}
                         />
                       </button>
                     )}
@@ -417,10 +420,11 @@ export function Products() {
                         className="flex items-center gap-1.5 px-2.5 py-1 bg-black/70 backdrop-blur-md rounded-full text-white text-[11px] font-bold border border-white/10 whitespace-nowrap shadow-xs"
                         title="Total Tourist Saves"
                       >
-                        <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
-                          <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
-                        </svg>
+                        <PushPinIcon
+                          alwaysTilted
+                          size={14}
+                          idPrefix={`prod-admin-${product.id}`}
+                        />
                         <span className="text-white font-extrabold whitespace-nowrap">
                           Save: {getWishlistCount(product.id, 'product', product.likes)}
                         </span>
@@ -431,10 +435,11 @@ export function Products() {
                         className="flex items-center gap-1.5 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 whitespace-nowrap"
                         title={isInWishlist(product.id, 'product') ? 'Saved in pins' : 'Click to pin product'}
                       >
-                        <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill={isInWishlist(product.id, 'product') ? '#F43F5E' : '#FDA4AF'} />
-                          <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
-                        </svg>
+                        <PushPinIcon
+                          isPinned={isInWishlist(product.id, 'product')}
+                          size={14}
+                          idPrefix={`prod-bl-${product.id}`}
+                        />
                         <span className={isInWishlist(product.id, 'product') ? 'text-pink-400 font-extrabold whitespace-nowrap' : 'text-white whitespace-nowrap'}>
                           Save: {getWishlistCount(product.id, 'product', product.likes)}
                         </span>
@@ -552,19 +557,17 @@ export function Products() {
                   {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
                     <button
                       onClick={() => toggleSaveProduct(selectedProduct)}
-                      className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer ${
+                      className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ${
                         isInWishlist(selectedProduct.id, 'product')
-                          ? 'bg-pink-50 border-pink-300'
+                          ? 'bg-rose-50 border-rose-300 shadow-sm'
                           : 'border-gray-200 hover:bg-pink-50'
                       }`}
                       title={isInWishlist(selectedProduct.id, 'product') ? 'Remove from saved items' : 'Pin to saved items'}
                     >
-                      <MapPin
-                        className={`h-4 w-4 transition-all ${
-                          isInWishlist(selectedProduct.id, 'product')
-                            ? 'fill-pink-500 text-pink-500'
-                            : 'text-pink-500 fill-transparent stroke-2'
-                        }`}
+                      <PushPinIcon
+                        isPinned={isInWishlist(selectedProduct.id, 'product')}
+                        size={18}
+                        idPrefix={`modal-prod-${selectedProduct.id}`}
                       />
                     </button>
                   )}

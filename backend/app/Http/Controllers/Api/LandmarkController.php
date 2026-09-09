@@ -58,9 +58,20 @@ class LandmarkController extends Controller
      */
     public function index()
     {
-        $landmarks = Landmark::where('is_active', true)
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $landmarks = Landmark::with(['user' => function ($q) {
+            $q->select('id', 'name', 'role', 'resort_name', 'store_name', 'virtual_tour_scenes');
+        }])
+        ->where('is_active', true)
+        ->orderBy('created_at', 'desc')
+        ->get();
+
+        // If landmark doesn't have virtual_tour_scenes explicitly, inherit from owner user
+        $landmarks->transform(function ($lm) {
+            if (empty($lm->virtual_tour_scenes) && $lm->user && !empty($lm->user->virtual_tour_scenes)) {
+                $lm->virtual_tour_scenes = $lm->user->virtual_tour_scenes;
+            }
+            return $lm;
+        });
 
         return response()->json($landmarks);
     }
@@ -90,6 +101,7 @@ class LandmarkController extends Controller
             'latitude' => 'required|numeric',
             'longitude' => 'required|numeric',
             'image' => 'nullable|string|max:500',
+            'virtual_tour_scenes' => 'nullable|array',
         ], [
             'type.in' => 'Only Resort and Enterprise landmarks are allowed.',
         ]);
@@ -130,6 +142,11 @@ class LandmarkController extends Controller
             ], 422);
         }
 
+        $scenes = $request->input('virtual_tour_scenes');
+        if (empty($scenes) && $user && !empty($user->virtual_tour_scenes)) {
+            $scenes = $user->virtual_tour_scenes;
+        }
+
         $landmark = Landmark::create([
             'user_id' => $user ? $user->id : null,
             'name' => $request->name,
@@ -140,6 +157,7 @@ class LandmarkController extends Controller
             'latitude' => $lat,
             'longitude' => $lng,
             'image' => $request->image,
+            'virtual_tour_scenes' => $scenes,
             'is_active' => true,
         ]);
 
