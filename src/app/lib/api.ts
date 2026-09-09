@@ -820,21 +820,7 @@ export async function getRouteWithFallback(
   totalDurationSeconds: number;
   source: 'google' | 'mapbox' | 'osrm';
 } | null> {
-  // --- 1. Try Google Maps first (if key configured and Directions API enabled) ---
-  const { getGoogleMapsRoute: _getGoogleRoute, hasGoogleMapsKey: _hasKey } = await import('./googleMaps');
-
-  if (_hasKey()) {
-    try {
-      const gResult = await _getGoogleRoute(startLat, startLng, endLat, endLng, mode);
-      if (gResult) {
-        return { ...gResult, source: 'google' };
-      }
-    } catch (gErr) {
-      console.warn('[Route] Google Maps failed, checking Mapbox:', gErr);
-    }
-  }
-
-  // --- 2. Try Mapbox Directions API (Accurate Philippine Highway & Street Navigation) ---
+  // --- 1. Try Mapbox Directions API first (Free 100,000 req/mo, no Google billing needed, calibrated for PH roads) ---
   const { getMapboxRoute: _getMapboxRoute, hasMapboxToken: _hasMapbox } = await import('./mapbox');
 
   if (_hasMapbox()) {
@@ -844,7 +830,21 @@ export async function getRouteWithFallback(
         return { ...mbResult, source: 'mapbox' };
       }
     } catch (mbErr) {
-      console.warn('[Route] Mapbox failed, falling back to OSRM:', mbErr);
+      console.warn('[Route] Mapbox failed, checking Google Maps:', mbErr);
+    }
+  }
+
+  // --- 2. Try Google Maps (if key configured and Directions API enabled) ---
+  const { getGoogleMapsRoute: _getGoogleRoute, hasGoogleMapsKey: _hasKey } = await import('./googleMaps');
+
+  if (_hasKey()) {
+    try {
+      const gResult = await _getGoogleRoute(startLat, startLng, endLat, endLng, mode);
+      if (gResult) {
+        return { ...gResult, source: 'google' };
+      }
+    } catch (gErr) {
+      console.warn('[Route] Google Maps failed, falling back to OSRM:', gErr);
     }
   }
 
