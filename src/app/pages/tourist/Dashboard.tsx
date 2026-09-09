@@ -4,7 +4,7 @@ import {
   MapPin, Calendar, Hotel, ArrowRight,
   Star, Package, Sparkles, Compass, Utensils,
   Clock, TrendingUp, User, Play, ChevronLeft, ChevronRight,
-  Users, Waves, Trees, Info, Heart, Share2, Eye, Camera, CheckCircle, X
+  Users, Waves, Trees, Info, Share2, Eye, Camera, CheckCircle, X
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken, decodeHtml } from '../../lib/api';
@@ -1007,11 +1007,11 @@ export function Dashboard() {
             </div>
           </div>
 
-          {/* Most Wishlisted */}
+          {/* Most Wishlisted / Analytics & Save */}
           <div className="bg-pink-50/40 border border-pink-100 p-6 rounded-3xl">
             <div className="flex items-center gap-2 text-gray-900 font-extrabold text-lg mb-4">
-              <Heart className="h-5 w-5 text-pink-500 fill-pink-500" />
-              <span>Most Wishlisted</span>
+              <MapPin className="h-5 w-5 text-pink-500 fill-pink-500" />
+              <span>{userType === 'admin' || userType === 'resort' || userType === 'enterprise' ? 'Analytics & Save' : 'Top Saved Places'}</span>
             </div>
             <div className="space-y-3">
               {mostWishlistedItems.length > 0 ? (
@@ -1029,7 +1029,7 @@ export function Dashboard() {
                       <div>
                         <h4 className="text-xs font-bold text-gray-900 line-clamp-1">{item.name || item.resort_name}</h4>
                         <p className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5">
-                          <Heart className="h-3 w-3 text-pink-500 fill-pink-500" /> {item.likes || Math.floor(Math.random() * 200) + 45} saves
+                          <MapPin className="h-3 w-3 text-pink-500 fill-pink-500" /> {item.likes || Math.floor(Math.random() * 200) + 45} saves
                         </p>
                       </div>
                     </div>
@@ -1037,7 +1037,7 @@ export function Dashboard() {
                   </div>
                 ))
               ) : (
-                <p className="text-xs text-gray-500 text-center py-4">No wishlisted items currently available</p>
+                <p className="text-xs text-gray-500 text-center py-4">No saved items currently available</p>
               )}
             </div>
           </div>

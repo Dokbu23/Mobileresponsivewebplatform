@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
-  Heart, TrendingUp, BarChart2, MapPin, Star,
+  TrendingUp, BarChart2, MapPin, Star,
   Compass, Hotel, Package, Calendar, Trash2, ArrowRight, Eye,
   Award, Layers, CheckCircle2, Bookmark, Sparkles, LayoutDashboard,
   ShieldCheck, Store, Bed, Plus, Tag
@@ -347,16 +347,14 @@ export function Wishlist() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl flex items-center justify-center bg-pink-100 text-pink-600 shadow-sm shadow-pink-500/10">
-              <Heart className="h-6 w-6 fill-current" />
+              <MapPin className="h-6 w-6 fill-current" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-black text-gray-900">
-                  {isAdministrator
-                    ? 'Most Saved & Platform Analytics'
-                    : isBusinessUser
-                    ? 'Wishlist Analytics & Market Trends'
-                    : 'My Saved & Wishlist'}
+                  {isAdministrator || isBusinessUser
+                    ? 'Analytics & Save'
+                    : 'My Saved Places'}
                 </h1>
                 {isAdministrator && (
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-gradient-to-r from-pink-500 to-rose-500 text-white uppercase tracking-wider flex items-center gap-1 shadow-xs">
@@ -376,9 +374,9 @@ export function Wishlist() {
               </div>
               <p className="text-xs text-gray-500 font-medium mt-0.5">
                 {isAdministrator
-                  ? 'Real-time platform analytics on tourist wishlists, top-saved destinations, and community engagement.'
+                  ? 'Real-time platform analytics on tourist saves, top-pinned destinations, and community engagement.'
                   : isBusinessUser
-                  ? 'Your specific wishlist saves performance alongside platform-wide tourist trends in Discover Mansalay.'
+                  ? 'Your specific saves & pins performance alongside platform-wide tourist trends in Discover Mansalay.'
                   : `${wishlist.length} saved places & experiences · visible only to you`}
               </p>
             </div>
@@ -427,12 +425,12 @@ export function Wishlist() {
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-white/20">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shadow-inner">
-                    <Heart className="h-6 w-6 fill-white" />
+                    <MapPin className="h-6 w-6 fill-white" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
                       <h2 className="text-lg font-black text-white">
-                        {userType === 'resort' ? 'Your Resort Wishlist Performance' : 'Your Store Wishlist Performance'}
+                        {userType === 'resort' ? 'Your Resort Analytics & Save Performance' : 'Your Store Analytics & Save Performance'}
                       </h2>
                       <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-white/25 text-white uppercase backdrop-blur-md">
                         Your Listings
@@ -440,8 +438,8 @@ export function Wishlist() {
                     </div>
                     <p className="text-xs text-white/85 font-medium mt-0.5">
                       {userType === 'resort'
-                        ? `Live tracking of tourists saving your resort rooms and accommodations to their wishlists.`
-                        : `Live tracking of tourists saving your products and delicacies to their wishlists.`}
+                        ? `Live tracking of tourists saving your resort rooms and accommodations to their saved places.`
+                        : `Live tracking of tourists saving your products and delicacies to their saved places.`}
                     </p>
                   </div>
                 </div>
@@ -459,7 +457,7 @@ export function Wishlist() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
                 <div className="bg-white/15 backdrop-blur-md rounded-2xl p-4 border border-white/20">
                   <div className="text-2xl font-black text-white flex items-center gap-1.5">
-                    <Heart className="h-5 w-5 text-white fill-white" />
+                    <MapPin className="h-5 w-5 text-white fill-white" />
                     {totalMyBusinessSaves.toLocaleString()}
                   </div>
                   <div className="text-[11px] text-white/80 font-semibold mt-1">
@@ -501,7 +499,7 @@ export function Wishlist() {
               {myBusinessItems.length > 0 && (
                 <div className="mt-6 pt-5 border-t border-white/20">
                   <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-3">
-                    Your Most Wishlisted Offerings
+                    Your Most Saved & Pinned Offerings
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {myBusinessItems.slice(0, 6).map((item) => (
@@ -527,7 +525,7 @@ export function Wishlist() {
                           </div>
                         </div>
                         <div className="px-2.5 py-1 bg-white text-pink-600 rounded-lg text-[11px] font-black flex items-center gap-1 flex-shrink-0 ml-2 shadow-xs">
-                          <Heart className="h-3 w-3 fill-pink-500 text-pink-500" />
+                          <MapPin className="h-3 w-3 fill-pink-500 text-pink-500" />
                           <span>{item.saves}</span>
                         </div>
                       </div>
@@ -605,7 +603,7 @@ export function Wishlist() {
                     Most Saved Destinations & Offerings
                   </h2>
                   <p className="text-xs text-gray-400 font-medium">
-                    Ranked by real tourist wishlist additions across Mansalay
+                    Ranked by real tourist saves and pins across Mansalay
                   </p>
                 </div>
 
@@ -709,7 +707,7 @@ export function Wishlist() {
                       <BarChart2 className="h-4 w-4" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-extrabold text-gray-900">Category Wishlist Analytics</h3>
+                      <h3 className="text-sm font-extrabold text-gray-900">Category Analytics & Save Breakdown</h3>
                       <p className="text-[11px] text-gray-400 font-medium">Saves distribution by tourism section</p>
                     </div>
                   </div>
@@ -912,11 +910,11 @@ export function Wishlist() {
           {wishlist.length === 0 ? (
             <div className="max-w-md mx-auto text-center px-4 py-16">
               <div className="w-16 h-16 rounded-full bg-pink-50 text-pink-500 flex items-center justify-center mx-auto mb-4">
-                <Heart className="h-8 w-8 text-pink-400 stroke-1" />
+                <MapPin className="h-8 w-8 text-pink-400 stroke-1" />
               </div>
-              <h3 className="text-lg font-extrabold text-gray-900 mb-1">Your wishlist is empty</h3>
+              <h3 className="text-lg font-extrabold text-gray-900 mb-1">Your saved list is empty</h3>
               <p className="text-xs text-gray-500 mb-6">
-                Explore destinations, beach stays, and products in Mansalay and save them to your personal collection.
+                Explore destinations, beach stays, and products in Mansalay and pin them to your personal collection.
               </p>
               <div className="flex flex-wrap justify-center gap-2">
                 <Link
@@ -951,7 +949,7 @@ export function Wishlist() {
                       <button
                         onClick={() => removeFromWishlist(item.id, item.type)}
                         className="absolute top-3 right-3 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center shadow hover:bg-pink-50 transition-colors text-pink-500"
-                        title="Remove from wishlist"
+                        title="Remove from saved places"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

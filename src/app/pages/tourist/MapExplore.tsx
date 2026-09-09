@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { MapPin, Hotel, Store, Mountain, Filter, Navigation, Compass, Crosshair, ExternalLink, X, Clock, Search, CheckCircle2, Plus, PlusCircle, Building2, Activity, AlertTriangle, ShieldCheck, Sparkles } from 'lucide-react';
+import { MapPin, Hotel, Store, Mountain, Filter, Navigation, Compass, Crosshair, ExternalLink, X, Clock, Search, CheckCircle2, Plus, PlusCircle, Building2, AlertTriangle, ShieldCheck, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { getPublicJSON, getPublicLandmarks, createLandmark, isPointInMansalayPolygon, getRouteWithFallback, getCurrentUserRole, getAuthToken, decodeHtml } from '../../lib/api';
 import { MansalayMap, MapMarker, UserGpsData } from '../../components/MansalayMap';
@@ -93,7 +93,7 @@ export function MapExplore() {
   const [osrmRouteCoords, setOsrmRouteCoords] = useState<[number, number][] | null>(null);
   const [routeDistanceKm, setRouteDistanceKm] = useState<number | null>(null);
   const [isInAppNavOpen, setIsInAppNavOpen] = useState(false);
-  const [navInitialMode, setNavInitialMode] = useState<'car' | 'bike' | 'walk' | 'transit'>('car');
+  const [navInitialMode, setNavInitialMode] = useState<'car' | 'bike' | 'transit'>('car');
 
   // Landmark Creation & Geofence State
   const [showAddLandmarkModal, setShowAddLandmarkModal] = useState(false);
@@ -480,8 +480,8 @@ export function MapExplore() {
               disabled={locating}
               className={`px-4 py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-2 shadow-md ${
                 isUsingLiveGps
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
-                  : 'bg-pink-500 hover:bg-pink-600 text-white shadow-pink-500/20'
+                  ? 'bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white shadow-pink-500/25 ring-2 ring-pink-300/40'
+                  : 'bg-white hover:bg-pink-50 text-pink-600 border border-pink-200 shadow-sm'
               }`}
               title="Locate My GPS Position"
             >
@@ -492,7 +492,7 @@ export function MapExplore() {
             {userRole !== 'tourist' && (
               <button
                 onClick={() => handleMapClick({ lat: MANSALAY_CENTER[0], lng: MANSALAY_CENTER[1] })}
-                className="px-4 py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md shadow-emerald-600/20 whitespace-nowrap"
+                className="px-4 py-2.5 rounded-full text-xs font-bold transition-all flex items-center gap-2 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white shadow-md shadow-pink-500/25 whitespace-nowrap active:scale-95"
                 title="Add Landmark on Map"
               >
                 <PlusCircle className="h-4 w-4" />
@@ -509,7 +509,7 @@ export function MapExplore() {
             <div className="flex items-center gap-2 text-xs font-bold text-gray-800 flex-wrap">
               <MapPin className="h-4 w-4 text-pink-500" />
               <span>Mansalay, Oriental Mindoro</span>
-              <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+              <span className="text-[11px] font-medium text-pink-600 bg-pink-50 px-2.5 py-0.5 rounded-full border border-pink-200">
                 {isUsingLiveGps ? '📍 Based on your GPS' : '📍 Mansalay Center'}
               </span>
             </div>
@@ -536,58 +536,7 @@ export function MapExplore() {
               onMapClick={handleMapClick}
             />
 
-            {/* GPS Telemetry HUD Panel Overlay (Top Left) */}
-            <div className="absolute top-4 left-4 z-20 bg-slate-900/90 backdrop-blur-md rounded-2xl p-3.5 shadow-2xl border border-slate-700/60 text-white font-mono text-[11px] w-72">
-              <div className="flex items-center justify-between border-b border-slate-700/80 pb-2 mb-2">
-                <div className="flex items-center gap-1.5 font-bold text-pink-400 uppercase tracking-wider text-[10px]">
-                  <Activity className="h-3.5 w-3.5 animate-pulse" />
-                  <span>GPS Telemetry HUD</span>
-                </div>
-                {rawGps ? (
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                    rawGps.accuracy <= 10 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
-                    rawGps.accuracy <= 30 ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30' :
-                    rawGps.accuracy <= 100 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
-                    'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                  }`}>
-                    {rawGps.accuracy <= 10 ? 'Excellent' : rawGps.accuracy <= 30 ? 'Good' : rawGps.accuracy <= 100 ? 'Fair' : 'Weak'}
-                  </span>
-                ) : (
-                  <span className="text-slate-400 text-[9px]">Acquiring...</span>
-                )}
-              </div>
 
-              <div className="space-y-1 text-slate-300">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Latitude:</span>
-                  <span className="font-semibold">{rawGps ? rawGps.lat.toFixed(6) : 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Longitude:</span>
-                  <span className="font-semibold">{rawGps ? rawGps.lng.toFixed(6) : 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Accuracy:</span>
-                  <span className="font-semibold">{rawGps ? `±${rawGps.accuracy} m` : 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Heading:</span>
-                  <span className="font-semibold">{rawGps && rawGps.heading !== null ? `${rawGps.heading}°` : 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Speed:</span>
-                  <span className="font-semibold">{rawGps && rawGps.speed !== null ? `${rawGps.speed} m/s` : 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Altitude:</span>
-                  <span className="font-semibold">{rawGps && rawGps.altitude !== null ? `${rawGps.altitude} m` : 'N/A'}</span>
-                </div>
-                <div className="flex justify-between pt-1 border-t border-slate-800 text-[10px] text-slate-500">
-                  <span>Timestamp:</span>
-                  <span>{rawGps ? new Date(rawGps.timestamp || Date.now()).toLocaleTimeString() : 'N/A'}</span>
-                </div>
-              </div>
-            </div>
 
             {/* GPS Quality Banner (Bottom Overlay inside Map) */}
             {rawGps && rawGps.accuracy > 100 && (
@@ -820,9 +769,9 @@ export function MapExplore() {
 
             <form onSubmit={handleSaveLandmark} className="p-6 space-y-5">
               {/* Coordinates Badge */}
-              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 flex items-center justify-between text-xs text-emerald-800">
+              <div className="bg-pink-50 border border-pink-200 rounded-2xl p-3 flex items-center justify-between text-xs text-pink-800">
                 <span className="font-semibold">✅ Geofence Verified: Inside Mansalay</span>
-                <span className="font-mono bg-emerald-100 px-2 py-0.5 rounded-lg text-[11px]">
+                <span className="font-mono bg-pink-100 px-2 py-0.5 rounded-lg text-[11px] text-pink-900 font-bold">
                   {clickedCoords.lat.toFixed(4)}, {clickedCoords.lng.toFixed(4)}
                 </span>
               </div>
@@ -847,7 +796,7 @@ export function MapExplore() {
                       onClick={() => setLandmarkForm({ ...landmarkForm, type: 'resort', category: 'Resort' })}
                       className={`p-3.5 border-2 rounded-2xl font-bold text-xs flex flex-col items-center gap-2 transition-all ${
                         landmarkForm.type === 'resort'
-                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md shadow-emerald-500/10'
+                          ? 'border-pink-500 bg-pink-50 text-pink-700 shadow-md shadow-pink-500/10'
                           : 'border-gray-200 hover:border-gray-300 text-gray-600 bg-white'
                       }`}
                     >

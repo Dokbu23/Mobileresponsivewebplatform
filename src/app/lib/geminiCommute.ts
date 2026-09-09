@@ -93,9 +93,10 @@ const MAPBOX_ACCESS_TOKEN = (import.meta as any).env?.VITE_MAPBOX_ACCESS_TOKEN |
 
 // Primary models to try in sequence for high availability
 const GEMINI_MODELS = [
-  'gemini-flash-lite-latest',
-  'gemini-flash-latest',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash',
   'gemini-2.5-flash',
+  'gemini-1.5-pro',
 ];
 
 /**
@@ -218,9 +219,217 @@ function formatClockTime(date: Date): string {
 }
 
 /**
+ * Local Fallback Transit Engine for Mansalay & Oriental Mindoro.
+ * Automatically generates accurate commute guidance when Gemini API key
+ * is missing, rate-limited, or unavailable.
+ */
+function generateLocalFallbackCommutePlan(
+  startLat: number,
+  startLng: number,
+  destName: string,
+  destLocation: string | undefined,
+  locationInfo: DetectedBarangayInfo,
+  distanceKm: number,
+  isLongDistance: boolean,
+  isNightTrip: boolean,
+  timeOfDayStr: string,
+  timeOfDayCategory: 'morning' | 'afternoon' | 'evening' | 'late_night',
+  currentClockTime: string,
+  lang: 'tl' | 'en'
+): AICommuteResult {
+  const isEnglish = lang === 'en';
+  const durationMinutes = Math.max(15, Math.round(distanceKm * 1.5));
+  const arrivalDate = new Date(Date.now() + durationMinutes * 60000);
+  const arrivalClockTime = formatClockTime(arrivalDate);
+
+  if (isLongDistance) {
+    // Inter-town trip along Strong Republic Nautical Highway (e.g. Gloria / Bongabong / Roxas to Mansalay)
+    const vanFare = Math.max(60, Math.round(distanceKm * 2.8));
+    const trikeFare = 30;
+    const totalFareEst = `₱${vanFare + trikeFare} - ₱${vanFare + trikeFare + 40}`;
+
+    return {
+      language: lang,
+      currentBarangay: locationInfo.barangay,
+      areaType: isEnglish ? 'Inter-Town Highway Corridor' : 'Inter-Town Highway Corridor',
+      distanceKm: Math.round(distanceKm * 10) / 10,
+      isLongDistance: true,
+      timeOfDay: timeOfDayStr,
+      timeOfDayCategory,
+      isNightTrip,
+      nightCommuteAdvisory: isNightTrip
+        ? (isEnglish
+            ? 'Night Commute Advisory: Regular public jeepneys stop after ~7:00 PM. Along the Strong Republic Nautical Highway, take southbound UV Express vans or Ceres provincial buses heading to Mansalay. Upon arrival at Mansalay Town Proper, local tricycles operate as chartered special trips.'
+            : 'Paalala sa Panggabing Byahe: Wala nang regular na jeep sa highway paglampas ng 7:00 PM. Sumakay ng panggabing UV Express Van o Ceres Bus sa highway patungong Mansalay. Pagdating sa bayan ng Mansalay, special trip na ang mga tricycle.')
+        : undefined,
+      availableVehiclesInArea: [
+        {
+          vehicle: isNightTrip
+            ? (isEnglish ? 'Night UV Express Van / Provincial Bus' : 'Panggabing UV Express Van / Ceres Bus')
+            : (isEnglish ? 'UV Express Van / Provincial Bus' : 'UV Express Van / Ceres Bus / Jeepney'),
+          status: isEnglish ? 'Available on Highway' : 'Dumadaan sa Highway',
+          availabilityNotes: isEnglish
+            ? 'Operates along Strong Republic Nautical Highway connecting Oriental Mindoro towns.'
+            : 'Bumibiyahe sa kahabaan ng Strong Republic Nautical Highway.',
+        },
+        {
+          vehicle: isEnglish ? 'Local Tricycle (Town Proper)' : 'Lokal na Tricycle (Poblacion)',
+          status: isNightTrip ? (isEnglish ? 'Special Trip / Chartered' : 'Special Trip / Pakyaw') : (isEnglish ? 'Available' : 'Bumabyahe'),
+          availabilityNotes: isEnglish
+            ? 'Takes passengers from Mansalay terminal directly to tourist destination.'
+            : 'Naghahatid mula sa terminal ng Mansalay patungo sa mismong destinasyon.',
+        },
+      ],
+      recommendedVehicle: isEnglish
+        ? 'Southbound UV Express Van / Bus to Mansalay, then Local Tricycle'
+        : 'UV Express Van o Provincial Bus patungong Mansalay, tapos Tricycle',
+      summary: isEnglish
+        ? `From ${locationInfo.municipality}, take a southbound public van or Ceres bus along the highway to Mansalay Poblacion (${(distanceKm * 0.85).toFixed(1)} km), then transfer to a local tricycle to reach ${destName}.`
+        : `Mula sa ${locationInfo.municipality}, sumakay ng southbound UV Express o Ceres Bus sa highway patungong Mansalay Poblacion, at doon sumakay ng tricycle papunta sa ${destName}.`,
+      vehicleType: isEnglish ? 'UV Express Van / Bus + Local Tricycle' : 'UV Express / Bus + Tricycle',
+      boardingPoint: isEnglish
+        ? `Strong Republic Nautical Highway near ${locationInfo.barangay}, ${locationInfo.municipality}`
+        : `Highway sa ${locationInfo.barangay}, ${locationInfo.municipality}`,
+      transferPoint: isEnglish ? 'Mansalay Town Proper / Poblacion Terminal' : 'Mansalay Poblacion Terminal',
+      dropoffPoint: destName,
+      driverPhrase: `Manong, sa ${destName} po.`,
+      driverPhraseEnglish: `Sir, please take me to ${destName}.`,
+      driverPhrasePronunciation: `Mah-NONG, sah ${destName} poh.`,
+      estimatedFare: isEnglish ? `${totalFareEst} total (~$2-$3 USD)` : `${totalFareEst} kabuuang pamasahe`,
+      regularFare: isEnglish ? `₱${vanFare} (Van/Bus) + ₱${trikeFare} (Tricycle)` : `₱${vanFare} (Van/Bus) + ₱${trikeFare} (Tricycle)`,
+      specialFare: isNightTrip
+        ? (isEnglish ? '₱100 - ₱150 for night chartered tricycle leg' : '₱100 - ₱150 pakyaw sa panggabing tricycle')
+        : (isEnglish ? '₱80 - ₱120 chartered tricycle rate' : '₱80 - ₱120 special trip sa tricycle'),
+      fareNotes: isEnglish
+        ? 'Pay the van/bus conductor when boarded. Prepare small peso bills (₱20, ₱50, ₱100).'
+        : 'Magbayad sa konduktor sa bus o driver ng van. Maghanda ng barya.',
+      durationMinutes,
+      estimatedTime: isEnglish ? `${durationMinutes} mins` : `${durationMinutes} minuto`,
+      estimatedArrivalClockTime: arrivalClockTime,
+      departureTime: currentClockTime,
+      steps: [
+        {
+          stepNumber: 1,
+          title: isEnglish ? '1. Board Southbound Van or Bus' : '1. Sumakay ng Southbound Bus / Van',
+          location: `${locationInfo.barangay}, ${locationInfo.municipality}`,
+          vehicle: isEnglish ? 'UV Express Van / Ceres Bus' : 'UV Express Van / Ceres Bus',
+          details: isEnglish
+            ? `Flag down a southbound public van or Ceres bus along the highway heading toward Mansalay / Roxas. Tell the conductor you will alight at Mansalay Poblacion.`
+            : `Pumara ng southbound na van o Ceres bus sa highway. Sabihin sa konduktor na bababa sa Mansalay Poblacion.`,
+          fare: `₱${vanFare}`,
+        },
+        {
+          stepNumber: 2,
+          title: isEnglish ? '2. Alight at Mansalay Poblacion' : '2. Bumaba sa Mansalay Poblacion',
+          location: 'Mansalay Poblacion Terminal / Highway Stop',
+          vehicle: isEnglish ? 'Walking / Transfer' : 'Paglipat ng Sasakyan',
+          details: isEnglish
+            ? `Alight at the Mansalay municipal town center. Walk a few meters to the local tricycle terminal or roadside queue.`
+            : `Bumaba sa bayan ng Mansalay. Lumakad patungo sa pila ng mga lokal na tricycle.`,
+        },
+        {
+          stepNumber: 3,
+          title: isEnglish ? `3. Tricycle to ${destName}` : `3. Tricycle papuntang ${destName}`,
+          location: destName,
+          vehicle: isEnglish ? 'Local Tricycle' : 'Tricycle',
+          details: isEnglish
+            ? `Board a tricycle to ${destName}. Say or flash to driver: "Manong, sa ${destName} po."`
+            : `Sumakay ng tricycle papuntang ${destName}. Sabihin o ipakita: "Manong, sa ${destName} po."`,
+          fare: isNightTrip ? '₱80 - ₱120 (Special)' : `₱${trikeFare} - ₱50`,
+        },
+      ],
+      tips: [
+        isEnglish
+          ? 'Show this screen directly to local drivers if you need assistance.'
+          : 'Ipakita ang screen na ito sa driver para mabilis kayong magkaintindihan.',
+        isEnglish
+          ? 'Keep ₱20, ₱50, and ₱100 notes handy; drivers rarely have change for ₱1000 bills.'
+          : 'Maghanda ng barya o maliliit na papel na pera (₱20, ₱50, ₱100).',
+        isNightTrip
+          ? (isEnglish ? 'Tricycles after 7:00 PM usually charge chartered special trip rates.' : 'Pakyaw o special trip na ang karamihang tricycle paglagpas ng 7 PM.')
+          : (isEnglish ? 'Always ask and confirm fare before boarding.' : 'Itanong at linawin ang pamasahe bago sumakay.'),
+      ],
+    };
+  }
+
+  // Local short distance within Mansalay (<=10km)
+  return {
+    language: lang,
+    currentBarangay: locationInfo.barangay,
+    areaType: isEnglish ? 'Local Mansalay Area' : 'Lokal na Bayan ng Mansalay',
+    distanceKm: Math.round(distanceKm * 10) / 10,
+    isLongDistance: false,
+    timeOfDay: timeOfDayStr,
+    timeOfDayCategory,
+    isNightTrip,
+    nightCommuteAdvisory: isNightTrip
+      ? (isEnglish
+          ? 'Night Advisory: Local tricycles operate primarily on special chartered rates at night.'
+          : 'Paalala sa Gabi: Special trip o pakyaw ang singil ng tricycle sa gabi.')
+      : undefined,
+    availableVehiclesInArea: [
+      {
+        vehicle: isEnglish ? 'Local Tricycle' : 'Lokal na Tricycle',
+        status: isNightTrip ? (isEnglish ? 'Chartered / Special' : 'Special Trip') : (isEnglish ? 'Available' : 'Bumabyahe'),
+        availabilityNotes: isEnglish
+          ? 'Primary mode of transport throughout Mansalay barangays.'
+          : 'Pangunahing sasakyan sa loob ng mga barangay ng Mansalay.',
+      },
+    ],
+    recommendedVehicle: isNightTrip
+      ? (isEnglish ? 'Chartered Tricycle (Special Trip)' : 'Special Trip Tricycle')
+      : (isEnglish ? 'Local Tricycle' : 'Tricycle'),
+    summary: isEnglish
+      ? `Take a local tricycle directly from ${locationInfo.barangay} to ${destName} (${distanceKm.toFixed(1)} km).`
+      : `Sumakay ng tricycle mula ${locationInfo.barangay} diretso sa ${destName} (${distanceKm.toFixed(1)} km).`,
+    vehicleType: isEnglish ? 'Local Tricycle' : 'Tricycle',
+    boardingPoint: `${locationInfo.barangay} / Roadside`,
+    dropoffPoint: destName,
+    transferPoint: isEnglish ? 'Direct trip (No transfer needed)' : 'Direktang biyahe (Walang transfer)',
+    driverPhrase: `Manong, sa ${destName} po.`,
+    driverPhraseEnglish: `Sir, please drop me off at ${destName}.`,
+    driverPhrasePronunciation: `Mah-NONG, sah ${destName} poh.`,
+    estimatedFare: isNightTrip ? '₱80 - ₱120 (Special Trip)' : '₱25 - ₱40 bawat pasahero',
+    regularFare: '₱25 - ₱40 bawat pasahero',
+    specialFare: '₱80 - ₱120 special trip',
+    fareNotes: isEnglish ? 'Standard Mansalay MTFRB tricycle tariff rates.' : 'Alinsunod sa opisyal na taripa ng MTFRB Mansalay.',
+    durationMinutes,
+    estimatedTime: isEnglish ? `${durationMinutes} mins` : `${durationMinutes} minuto`,
+    estimatedArrivalClockTime: arrivalClockTime,
+    departureTime: currentClockTime,
+    steps: [
+      {
+        stepNumber: 1,
+        title: isEnglish ? '1. Board Local Tricycle' : '1. Sumakay ng Tricycle',
+        location: locationInfo.barangay,
+        vehicle: isEnglish ? 'Local Tricycle' : 'Tricycle',
+        details: isEnglish
+          ? `Flag down a tricycle at the roadside or terminal. Tell the driver: "Manong, sa ${destName} po."`
+          : `Pumara ng tricycle sa tabing kalsada o terminal. Sabihin sa driver: "Manong, sa ${destName} po."`,
+        fare: isNightTrip ? '₱80 - ₱120' : '₱25 - ₱40',
+      },
+      {
+        stepNumber: 2,
+        title: isEnglish ? `2. Arrive at ${destName}` : `2. Pagdating sa ${destName}`,
+        location: destName,
+        vehicle: isEnglish ? 'Arrival' : 'Destinasyon',
+        details: isEnglish
+          ? `You have arrived at ${destName}. Pay the driver upon alighting.`
+          : `Nakarating na sa ${destName}. Magbayad sa driver pagkababa.`,
+      },
+    ],
+    tips: [
+      isEnglish ? 'You can flash this screen to the driver.' : 'Ipakita ang screen na ito sa driver.',
+      isEnglish ? 'Carry exact fare in coins or small bills.' : 'Magbayad ng barya o eksaktong halaga.',
+    ],
+  };
+}
+
+/**
  * Ask Google Gemini AI to analyze the live GPS position, detect the exact Barangay,
  * detect whether it's daytime or nighttime commute, assess distance, and automatically
  * recommend appropriate transport in either Tagalog or English for international tourists.
+ * Includes graceful local fallback if Gemini is offline or without API key.
  */
 export async function getAICommuteGuide(
   startLat: number,
@@ -231,11 +440,6 @@ export async function getAICommuteGuide(
   destLng?: number,
   lang: 'tl' | 'en' = 'tl'
 ): Promise<AICommuteResult | null> {
-  if (!GEMINI_API_KEY) {
-    console.warn('[Gemini AI] No VITE_GEMINI_API_KEY found.');
-    return null;
-  }
-
   // Current client clock time & time-of-day detection
   const now = new Date();
   const currentClockTime = formatClockTime(now);
@@ -271,6 +475,25 @@ export async function getAICommuteGuide(
   const isLongDistance = distanceKm > 10 || isDifferentTown;
 
   const isEnglish = lang === 'en';
+
+  // If no Gemini API key is configured, immediately return robust local transit fallback
+  if (!GEMINI_API_KEY) {
+    console.info('[Gemini AI] No VITE_GEMINI_API_KEY found; utilizing built-in local transit engine.');
+    return generateLocalFallbackCommutePlan(
+      startLat,
+      startLng,
+      destName,
+      destLocation,
+      locationInfo,
+      distanceKm,
+      isLongDistance,
+      isNightTrip,
+      timeOfDayStr,
+      timeOfDayCategory,
+      currentClockTime,
+      lang
+    );
+  }
 
   const prompt = `
 You are the official local AI Commute & Transit Navigator of Mansalay, Oriental Mindoro, Philippines.
@@ -419,5 +642,20 @@ Respond with ONLY a valid JSON object matching this structure:
     }
   }
 
-  return null;
+  // Gracefully fall back to local transit engine if Gemini API failed or was rate-limited
+  console.info('[Gemini AI] Gemini API call finished without response; using local transit plan.');
+  return generateLocalFallbackCommutePlan(
+    startLat,
+    startLng,
+    destName,
+    destLocation,
+    locationInfo,
+    distanceKm,
+    isLongDistance,
+    isNightTrip,
+    timeOfDayStr,
+    timeOfDayCategory,
+    currentClockTime,
+    lang
+  );
 }

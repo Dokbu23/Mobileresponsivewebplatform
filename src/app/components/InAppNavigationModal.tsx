@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   Car,
   Bike,
-  Footprints,
   Play,
   RotateCcw,
   AlertTriangle,
@@ -82,7 +81,7 @@ interface InAppNavigationModalProps {
   startCoords: [number, number];
   destination: MapMarker;
   distanceKm: number;
-  initialMode?: 'car' | 'bike' | 'walk' | 'transit';
+  initialMode?: 'car' | 'bike' | 'transit';
 }
 
 // Smart distance formatter: shows metres under 1 km, kilometres above
@@ -119,6 +118,96 @@ function distanceToSegmentMeters(
   return getDistanceMeters(px, py, projX, projY);
 }
 
+// Generate authentic vehicle icons based on active navigation travel mode
+function getVehicleIconHtml(mode: 'car' | 'bike' | 'transit', headingDeg?: number | null): string {
+  const rot = typeof headingDeg === 'number' ? headingDeg : 0;
+
+  if (mode === 'bike') {
+    // Authentic Shopee / GrabExpress Delivery Motorcycle Rider (Top-Down View)
+    return `
+      <div style="position:relative;width:52px;height:52px;display:flex;align-items:center;justify-content:center;">
+        <div style="position:absolute;inset:4px;background:#F43F5E;border-radius:50%;opacity:0.25;animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+        <svg width="44" height="44" viewBox="0 0 48 48" fill="none" style="filter:drop-shadow(0 4px 8px rgba(0,0,0,0.55));transform:rotate(${rot}deg);transition:transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);">
+          <!-- Headlight beam glow -->
+          <path d="M20 7L13 0H35L28 7Z" fill="#FEF08A" fill-opacity="0.45"/>
+          <!-- Front Wheel & Mudguard -->
+          <rect x="22" y="2" width="4" height="9" rx="2" fill="#1F2937" stroke="#0F172A" stroke-width="0.8"/>
+          <!-- Handlebars -->
+          <path d="M14 12C18 10.5 30 10.5 34 12" stroke="#374151" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="13" cy="12" r="1.8" fill="#111827"/>
+          <circle cx="35" cy="12" r="1.8" fill="#111827"/>
+          <!-- Front Headlight bulb -->
+          <ellipse cx="24" cy="8.5" rx="3.2" ry="1.8" fill="#FEF08A"/>
+          <!-- Motorcycle Body Frame (Shopee Brand Coral/Rose) -->
+          <rect x="21" y="11" width="6" height="26" rx="3" fill="#E11D48"/>
+          <!-- Rider Arms -->
+          <path d="M15 14L19 21" stroke="#BE123C" stroke-width="3.2" stroke-linecap="round"/>
+          <path d="M33 14L29 21" stroke="#BE123C" stroke-width="3.2" stroke-linecap="round"/>
+          <!-- Rider Shoulders / Jacket -->
+          <ellipse cx="24" cy="22" rx="7.8" ry="5.2" fill="#E11D48" stroke="#9F1239" stroke-width="1"/>
+          <!-- Rider Helmet (Shopee Express Orange-Rose) -->
+          <circle cx="24" cy="20" r="5.2" fill="#FB7185" stroke="#FFFFFF" stroke-width="1.6"/>
+          <!-- Tinted Visor facing forward -->
+          <path d="M21 17.5C22 16.5 26 16.5 27 17.5" stroke="#0F172A" stroke-width="2.2" stroke-linecap="round"/>
+          <!-- Shopee-style Insulated Delivery Box on back -->
+          <rect x="17.5" y="28" width="13" height="13" rx="3" fill="#E11D48" stroke="#FFFFFF" stroke-width="1.3"/>
+          <rect x="22" y="28" width="4" height="13" fill="#FFFFFF" fill-opacity="0.8"/>
+          <circle cx="24" cy="34.5" r="1.8" fill="#9F1239"/>
+          <!-- Rear Tail Light -->
+          <rect x="22" y="42" width="4" height="2" rx="1" fill="#EF4444"/>
+        </svg>
+      </div>
+    `;
+  }
+
+  if (mode === 'car') {
+    // Top-down sleek Car / Sedan with headlights and roof
+    return `
+      <div style="position:relative;width:52px;height:52px;display:flex;align-items:center;justify-content:center;">
+        <div style="position:absolute;inset:4px;background:#F43F5E;border-radius:50%;opacity:0.25;animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+        <svg width="44" height="44" viewBox="0 0 48 48" fill="none" style="filter:drop-shadow(0 4px 8px rgba(0,0,0,0.55));transform:rotate(${rot}deg);transition:transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);">
+          <!-- Headlight glow cones -->
+          <path d="M15 6L8 0H40L33 6Z" fill="#FEF08A" fill-opacity="0.4"/>
+          <!-- Wheels / Tires -->
+          <rect x="9" y="8" width="3.5" height="8" rx="1.5" fill="#111827"/>
+          <rect x="35.5" y="8" width="3.5" height="8" rx="1.5" fill="#111827"/>
+          <rect x="9" y="32" width="3.5" height="8" rx="1.5" fill="#111827"/>
+          <rect x="35.5" y="32" width="3.5" height="8" rx="1.5" fill="#111827"/>
+          <!-- Car Body Outer (Brand Rose Red) -->
+          <rect x="11" y="5" width="26" height="38" rx="6.5" fill="#E11D48" stroke="#FFFFFF" stroke-width="1.5"/>
+          <!-- Front Windshield (Tinted glass) -->
+          <path d="M14 16C14 13 34 13 34 16L32 21H16L14 16Z" fill="#1E293B" stroke="#0F172A" stroke-width="0.6"/>
+          <!-- Car Roof -->
+          <rect x="15" y="20" width="18" height="13" rx="2.5" fill="#BE123C"/>
+          <!-- Rear Windshield -->
+          <path d="M16 33H32L34 37C34 38 14 38 14 37L16 33Z" fill="#1E293B"/>
+          <!-- Side Mirrors -->
+          <rect x="7.5" y="16" width="3.5" height="2" rx="1" fill="#E11D48"/>
+          <rect x="37" y="16" width="3.5" height="2" rx="1" fill="#E11D48"/>
+          <!-- Headlights -->
+          <rect x="13" y="5.2" width="4" height="2.5" rx="1" fill="#FEF08A"/>
+          <rect x="31" y="5.2" width="4" height="2.5" rx="1" fill="#FEF08A"/>
+          <!-- Rear Tail Lights -->
+          <rect x="13" y="41.5" width="4" height="1.5" rx="0.5" fill="#EF4444"/>
+          <rect x="31" y="41.5" width="4" height="1.5" rx="0.5" fill="#EF4444"/>
+        </svg>
+      </div>
+    `;
+  }
+
+  // Default / transit: Authentic 3D Navigation Arrow with brand colors
+  return `
+    <div style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center;">
+      <div style="position:absolute;inset:0;background:#E11D48;border-radius:50%;opacity:0.25;animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none" style="filter:drop-shadow(0 3px 6px rgba(0,0,0,0.45));transform:rotate(${rot}deg);transition:transform 0.25s ease;">
+        <path d="M18 3L31 31L18 24L5 31L18 3Z" fill="#BE123C" stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round"/>
+        <path d="M18 7L27 27L18 22L9 27L18 7Z" fill="#E11D48"/>
+        <circle cx="18" cy="18" r="2.5" fill="#FFFFFF"/>
+      </svg>
+    </div>
+  `;
+}
+
 export function InAppNavigationModal({
   isOpen,
   onClose,
@@ -129,7 +218,8 @@ export function InAppNavigationModal({
 }: InAppNavigationModalProps) {
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [isVoiceMuted, setIsVoiceMuted] = useState(false);
-  const [travelMode, setTravelMode] = useState<'car' | 'bike' | 'walk' | 'transit'>(initialMode || 'car');
+  const [travelMode, setTravelMode] = useState<'car' | 'bike' | 'transit'>(initialMode || 'car');
+  const [userHeading, setUserHeading] = useState<number | null>(null);
   const [commuteLang, setCommuteLang] = useState<'tl' | 'en'>('tl');
   const [transitTab, setTransitTab] = useState<'itinerary' | 'card' | 'fares'>('itinerary');
   const [isCopiedDriverPhrase, setIsCopiedDriverPhrase] = useState(false);
@@ -147,6 +237,7 @@ export function InAppNavigationModal({
   const [totalDistanceKm, setTotalDistanceKm] = useState(distanceKm);
   const [userPos, setUserPos] = useState<[number, number]>(startCoords);
   const [isOffRoute, setIsOffRoute] = useState(false);
+  const [isFollowingUser, setIsFollowingUser] = useState(true);
 
   const handleSpeakPhrase = (text: string) => {
     if ('speechSynthesis' in window && text) {
@@ -228,9 +319,8 @@ export function InAppNavigationModal({
   }, [isOpen, travelMode, destination, userPos, commuteLang]);
 
   // Map travel mode UI → Google Maps / Mapbox / OSRM profile string
-  const getTravelModeStr = (mode: 'car' | 'bike' | 'walk' | 'transit'): 'DRIVING' | 'BICYCLING' | 'WALKING' => {
+  const getTravelModeStr = (mode: 'car' | 'bike' | 'transit'): 'DRIVING' | 'BICYCLING' => {
     if (mode === 'bike') return 'BICYCLING';
-    if (mode === 'walk') return 'WALKING';
     return 'DRIVING';
   };
 
@@ -241,7 +331,7 @@ export function InAppNavigationModal({
     source === 'osrm' ? Math.round(durationSecs * 1.35) : durationSecs;
 
   // Fetch accurate road route — Google Maps first, OSRM fallback
-  const fetchRoute = async (currentLat: number, currentLng: number, mode?: 'car' | 'bike' | 'walk' | 'transit') => {
+  const fetchRoute = async (currentLat: number, currentLng: number, mode?: 'car' | 'bike' | 'transit') => {
     if (isFetchingRouteRef.current) return;
     isFetchingRouteRef.current = true;
     setIsRecalculating(true);
@@ -316,14 +406,20 @@ export function InAppNavigationModal({
           const lng = pos.coords.longitude;
           setUserPos([lat, lng]);
 
+          // Update heading if device GPS provides valid speed and bearing
+          if (pos.coords.speed && pos.coords.speed > 0.4 && typeof pos.coords.heading === 'number' && !isNaN(pos.coords.heading)) {
+            setUserHeading(Math.round(pos.coords.heading));
+          }
+
           // Dynamically update currentStepIdx based on user's real GPS distance to step maneuvers
           if (steps && steps.length > 0) {
             for (let i = currentStepIdx; i < steps.length; i++) {
               const stp = steps[i];
               if (stp.location && stp.location[0] !== 0) {
                 const distToStep = getDistanceMeters(lat, lng, stp.location[0], stp.location[1]);
-                if (distToStep < 25 && i > currentStepIdx) {
+                if (distToStep < 35 && i > currentStepIdx) {
                   setCurrentStepIdx(i);
+                  speakInstruction(steps[i].instruction);
                   break;
                 }
               }
@@ -349,8 +445,13 @@ export function InAppNavigationModal({
             }
           }
         },
-        (err) => console.warn('Navigation GPS watch error:', err.message),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        (err) => {
+          // err.code === 3 is TIMEOUT - normal on laptops/indoors without dedicated GPS satellite hardware
+          if (err.code !== 3) {
+            console.warn('Navigation GPS watch error:', err.message);
+          }
+        },
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
       );
     }
 
@@ -378,7 +479,7 @@ export function InAppNavigationModal({
   const openGoogleMapsApp = () => {
     const origin = `${userPos[0]},${userPos[1]}`;
     const dest = `${destination.lat},${destination.lng}`;
-    const mode = travelMode === 'bike' ? 'two_wheeler' : travelMode === 'walk' ? 'walking' : 'driving';
+    const mode = travelMode === 'bike' ? 'two_wheeler' : 'driving';
     window.open(`https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${dest}&travelmode=${mode}`, '_blank');
   };
 
@@ -416,45 +517,85 @@ export function InAppNavigationModal({
 
       mapRef.current = map;
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      const GOOGLE_MAPS_KEY = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || '';
+
+      const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap',
         maxZoom: 19,
-      }).addTo(map);
+      });
 
-      // Destination Marker
+      const googleHybridUrl = GOOGLE_MAPS_KEY
+        ? `https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&key=${GOOGLE_MAPS_KEY}`
+        : 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
+      const googleHybridLayer = L.tileLayer(googleHybridUrl, {
+        attribution: '© Google Maps Satellite',
+        maxZoom: 20,
+      });
+
+      // Default to Google Satellite Hybrid for navigation realism
+      googleHybridLayer.addTo(map);
+
+      L.control.layers(
+        {
+          '🛰️ Satellite (Google)': googleHybridLayer,
+          '🗺️ Standard Map': osmLayer,
+        },
+        undefined,
+        { position: 'topright' }
+      ).addTo(map);
+
+      // Destination Marker — Authentic Google Maps Red Teardrop Pin
       const destIcon = L.divIcon({
         html: `
-          <div style="background:#EC4899;border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);width:36px;height:36px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,0.4);">
-            <span style="transform:rotate(45deg);font-size:16px;">🏁</span>
+          <div style="filter:drop-shadow(0 4px 10px rgba(0,0,0,0.5));cursor:pointer;">
+            <svg width="34" height="46" viewBox="0 0 34 46" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M17 0C7.61 0 0 7.61 0 17C0 29.75 17 46 17 46C17 46 34 29.75 34 17C34 7.61 26.39 0 17 0Z" fill="#EA4335"/>
+              <path d="M17 1C8.16 1 1 8.16 1 17C1 28.5 15.5 43.5 17 45C18.5 43.5 33 28.5 33 17C33 8.16 25.84 1 17 1Z" stroke="#B31412" stroke-width="1"/>
+              <circle cx="17" cy="17" r="7.5" fill="#FFFFFF"/>
+              <circle cx="17" cy="17" r="4.5" fill="#B31412"/>
+            </svg>
           </div>
         `,
         className: '',
-        iconSize: [36, 36],
-        iconAnchor: [18, 36],
+        iconSize: [34, 46],
+        iconAnchor: [17, 46],
       });
 
       L.marker([destination.lat, destination.lng], { icon: destIcon })
         .addTo(map)
         .bindPopup(`<b>${destination.name}</b><br/>${destination.location || 'Destination'}`);
 
-      // User Live Position Marker
+      // Dynamic heading calculation (from device GPS heading, or step target direction)
+      const initialHeading = userHeading !== null ? userHeading : (() => {
+        if (steps && steps[0] && steps[0].location && steps[0].location[0] !== 0) {
+          const target = steps[0].location;
+          const dLng = (target[1] - startCoords[1]) * (Math.PI / 180);
+          const lat1 = startCoords[0] * (Math.PI / 180);
+          const lat2 = target[0] * (Math.PI / 180);
+          const y = Math.sin(dLng) * Math.cos(lat2);
+          const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+          return Math.round((Math.atan2(y, x) * (180 / Math.PI) + 360) % 360);
+        }
+        return 0;
+      })();
+
+      // User Live Position Marker — Dynamic Vehicle Icon (Car or Shopee Motorcycle)
       const userIcon = L.divIcon({
-        html: `
-          <div style="position:relative;width:28px;height:28px;">
-            <div style="position:absolute;inset:0;background:#10B981;border-radius:50%;opacity:0.4;animation:ping 1.5s cubic-bezier(0,0,0.2,1) infinite;"></div>
-            <div style="position:absolute;inset:4px;background:#059669;border:3px solid white;border-radius:50%;box-shadow:0 3px 10px rgba(0,0,0,0.5);"></div>
-          </div>
-        `,
+        html: getVehicleIconHtml(travelMode, initialHeading),
         className: '',
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
+        iconSize: [52, 52],
+        iconAnchor: [26, 26],
       });
 
       userMarkerRef.current = L.marker(startCoords, { icon: userIcon }).addTo(map);
 
-      const endCoords: [number, number] = [destination.lat, destination.lng];
-      const bounds = L.latLngBounds([startCoords, endCoords]);
-      map.fitBounds(bounds, { padding: [40, 40] });
+      // Focus directly on the tourist's live position at street-level navigation view
+      map.setView(startCoords, 17, { animate: true });
+
+      // If user drags the map, temporarily disable auto-follow so they can inspect the route freely
+      map.on('dragstart', () => {
+        setIsFollowingUser(false);
+      });
     });
 
     return () => {
@@ -471,8 +612,34 @@ export function InAppNavigationModal({
     if (!map) return;
 
     import('leaflet').then((L) => {
+      // Dynamic heading calculation (from device GPS heading, or next step direction)
+      const currentHeading = userHeading !== null ? userHeading : (() => {
+        if (steps && steps[currentStepIdx] && steps[currentStepIdx].location && steps[currentStepIdx].location[0] !== 0) {
+          const target = steps[currentStepIdx].location;
+          const dLng = (target[1] - userPos[1]) * (Math.PI / 180);
+          const lat1 = userPos[0] * (Math.PI / 180);
+          const lat2 = target[0] * (Math.PI / 180);
+          const y = Math.sin(dLng) * Math.cos(lat2);
+          const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+          return Math.round((Math.atan2(y, x) * (180 / Math.PI) + 360) % 360);
+        }
+        return 0;
+      })();
+
       if (userMarkerRef.current) {
         userMarkerRef.current.setLatLng(userPos);
+        const userIcon = L.divIcon({
+          html: getVehicleIconHtml(travelMode, currentHeading),
+          className: '',
+          iconSize: [52, 52],
+          iconAnchor: [26, 26],
+        });
+        userMarkerRef.current.setIcon(userIcon);
+      }
+
+      // Smooth camera follow to keep tourist focused
+      if (isFollowingUser) {
+        map.panTo(userPos, { animate: true });
       }
 
       if (routeLineRef.current) {
@@ -482,7 +649,7 @@ export function InAppNavigationModal({
 
       if (routeGeometry.length > 0) {
         routeLineRef.current = L.polyline(routeGeometry, {
-          color: '#10B981',
+          color: '#F43F5E',
           weight: 6,
           opacity: 0.9,
           lineCap: 'round',
@@ -490,7 +657,7 @@ export function InAppNavigationModal({
         }).addTo(map);
       }
     });
-  }, [userPos, routeGeometry]);
+  }, [userPos, routeGeometry, isFollowingUser, travelMode, userHeading, currentStepIdx, steps]);
 
   // Calculate remaining road distance from remaining steps (decreases as user advances)
   const remainingSteps = steps.slice(currentStepIdx);
@@ -530,7 +697,7 @@ export function InAppNavigationModal({
       <div className="bg-gray-950 rounded-3xl overflow-hidden shadow-2xl border border-white/10 flex flex-col w-full max-w-5xl h-[92vh] relative">
         
         {/* Top Live Navigation HUD Banner */}
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-4 sm:p-5 flex items-center justify-between shadow-xl z-20">
+        <div className="bg-gradient-to-r from-pink-500 via-rose-500 to-pink-600 text-white p-4 sm:p-5 flex items-center justify-between shadow-xl z-20">
           <div className="flex items-center gap-3.5">
             {/* Maneuver Arrow Icon */}
             <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-white shadow-inner">
@@ -538,12 +705,12 @@ export function InAppNavigationModal({
               {currentStep.icon === 'left' && <CornerUpLeft className="h-7 w-7 stroke-[2.5]" />}
               {currentStep.icon === 'uturn' && <RotateCcw className="h-7 w-7 stroke-[2.5]" />}
               {currentStep.icon === 'straight' && <ArrowRight className="h-7 w-7 -rotate-90 stroke-[2.5]" />}
-              {currentStep.icon === 'destination' && <CheckCircle2 className="h-7 w-7 text-emerald-200" />}
+              {currentStep.icon === 'destination' && <CheckCircle2 className="h-7 w-7 text-pink-200" />}
             </div>
 
             <div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-200 uppercase tracking-wider">
-                <span className="w-2 h-2 rounded-full bg-emerald-300 animate-ping"></span>
+              <div className="flex items-center gap-2 text-xs font-semibold text-pink-100 uppercase tracking-wider">
+                <span className="w-2 h-2 rounded-full bg-pink-200 animate-ping"></span>
                 <span>Live GPS Navigation Mode</span>
                 {routeSource && (
                   <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${
@@ -551,7 +718,7 @@ export function InAppNavigationModal({
                       ? 'bg-blue-500/30 text-blue-200 border-blue-400/30'
                       : routeSource === 'mapbox'
                       ? 'bg-purple-500/30 text-purple-200 border-purple-400/30'
-                      : 'bg-white/10 text-emerald-200 border-white/20'
+                      : 'bg-white/10 text-pink-100 border-white/20'
                   }`}>
                     {routeSource === 'google' ? '🗺 Google Maps' : routeSource === 'mapbox' ? '🗺 Mapbox Navigation' : 'OSRM'}
                   </span>
@@ -560,9 +727,17 @@ export function InAppNavigationModal({
               <h2 className="text-base sm:text-lg font-extrabold text-white leading-tight line-clamp-1">
                 {currentStep.instruction}
               </h2>
-              <p className="text-xs text-emerald-100/90 font-medium">
-                In {formatDist(currentStep.distanceMeters)}
-              </p>
+              {/* Dynamic countdown to next turn maneuver */}
+              {(() => {
+                const liveMeters = (currentStep.location && currentStep.location[0] !== 0)
+                  ? Math.round(getDistanceMeters(userPos[0], userPos[1], currentStep.location[0], currentStep.location[1]))
+                  : currentStep.distanceMeters;
+                return (
+                  <p className="text-xs text-pink-100/90 font-medium">
+                    In {formatDist(liveMeters > 0 ? liveMeters : currentStep.distanceMeters)}
+                  </p>
+                );
+              })()}
             </div>
           </div>
 
@@ -573,7 +748,7 @@ export function InAppNavigationModal({
               className="w-10 h-10 bg-black/20 hover:bg-black/40 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-colors"
               title={isVoiceMuted ? 'Unmute Voice Guidance' : 'Mute Voice Guidance'}
             >
-              {isVoiceMuted ? <VolumeX className="h-5 w-5 text-red-300" /> : <Volume2 className="h-5 w-5 text-emerald-200" />}
+              {isVoiceMuted ? <VolumeX className="h-5 w-5 text-red-300" /> : <Volume2 className="h-5 w-5 text-pink-100" />}
             </button>
             <button
               onClick={onClose}
@@ -588,7 +763,7 @@ export function InAppNavigationModal({
         {/* Progress Bar */}
         <div className="w-full bg-gray-800 h-1.5 z-20">
           <div
-            className="bg-emerald-400 h-1.5 transition-all duration-500 ease-out"
+            className="bg-gradient-to-r from-pink-500 to-rose-500 h-1.5 transition-all duration-500 ease-out"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
@@ -614,8 +789,8 @@ export function InAppNavigationModal({
             <div className="absolute bottom-4 left-4 flex items-center gap-1.5 bg-black/75 backdrop-blur-md p-1.5 rounded-2xl border border-white/15 shadow-xl z-10 flex-wrap">
               <button
                 onClick={() => setTravelMode('car')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                  travelMode === 'car' ? 'bg-emerald-500 text-white shadow-md' : 'text-gray-400 hover:text-white'
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  travelMode === 'car' ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-md shadow-pink-500/25' : 'text-gray-400 hover:text-white'
                 }`}
               >
                 <Car className="h-3.5 w-3.5" />
@@ -623,25 +798,16 @@ export function InAppNavigationModal({
               </button>
               <button
                 onClick={() => setTravelMode('bike')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                  travelMode === 'bike' ? 'bg-emerald-500 text-white shadow-md' : 'text-gray-400 hover:text-white'
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  travelMode === 'bike' ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-md shadow-pink-500/25' : 'text-gray-400 hover:text-white'
                 }`}
               >
                 <Bike className="h-3.5 w-3.5" />
                 <span>Motorcycle</span>
               </button>
               <button
-                onClick={() => setTravelMode('walk')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                  travelMode === 'walk' ? 'bg-emerald-500 text-white shadow-md' : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                <Footprints className="h-3.5 w-3.5" />
-                <span>Walking</span>
-              </button>
-              <button
                 onClick={() => setTravelMode('transit')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                   travelMode === 'transit'
                     ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-md shadow-pink-500/25 ring-1 ring-white/30'
                     : 'text-pink-300 hover:text-white bg-pink-950/40 border border-pink-500/30'
@@ -649,6 +815,45 @@ export function InAppNavigationModal({
               >
                 <Sparkles className="h-3.5 w-3.5 text-pink-200 animate-pulse" />
                 <span>AI Commute</span>
+              </button>
+            </div>
+
+            {/* Floating GPS Camera Focus & Overview Controls */}
+            <div className="absolute top-4 right-14 z-10 flex items-center gap-1.5">
+              <button
+                onClick={() => {
+                  setIsFollowingUser(true);
+                  if (mapRef.current) {
+                    mapRef.current.setView(userPos, 17, { animate: true });
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-xl shadow-lg backdrop-blur-md border transition-all flex items-center gap-1.5 text-xs font-bold ${
+                  isFollowingUser
+                    ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white border-pink-400 shadow-pink-900/50 ring-2 ring-pink-300/40'
+                    : 'bg-black/80 text-gray-200 border-white/20 hover:bg-black'
+                }`}
+                title="Focus map on tourist's live position"
+              >
+                <Navigation className="h-3.5 w-3.5 text-white" />
+                <span>{isFollowingUser ? 'Following' : 'Focus Me'}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsFollowingUser(false);
+                  if (mapRef.current && routeGeometry.length > 0) {
+                    import('leaflet').then((L) => {
+                      if (mapRef.current) {
+                        mapRef.current.fitBounds(L.latLngBounds(routeGeometry), { padding: [40, 40] });
+                      }
+                    });
+                  }
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-black/80 hover:bg-black text-gray-200 border border-white/20 shadow-lg backdrop-blur-md transition-all flex items-center justify-center gap-1 text-xs font-semibold"
+                title="Show Entire Route Overview"
+              >
+                <Compass className="h-3.5 w-3.5 text-pink-400" />
+                <span>Overview</span>
               </button>
             </div>
           </div>
@@ -662,8 +867,8 @@ export function InAppNavigationModal({
                   <div className="flex items-center justify-between pb-2 border-b border-white/10">
                     <div className="flex items-center gap-2">
                       <div className="relative flex h-2.5 w-2.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-pink-500"></span>
                       </div>
                       <div>
                         <div className="flex items-center gap-1.5">
@@ -1141,11 +1346,11 @@ export function InAppNavigationModal({
                           {/* Oriental Mindoro Fare Matrix Card */}
                           <div className="p-3 bg-gray-900/90 border border-white/10 rounded-2xl space-y-2.5">
                             <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
-                              <span className="text-[10px] font-extrabold text-emerald-300 uppercase tracking-wider flex items-center gap-1">
+                              <span className="text-[10px] font-extrabold text-pink-300 uppercase tracking-wider flex items-center gap-1">
                                 <span>🪙</span>
                                 <span>{commuteLang === 'en' ? 'Official Mindoro Fare Standards' : 'Singilan Dine sa Oriental Mindoro'}</span>
                               </span>
-                              <span className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/30">
+                              <span className="text-[8px] px-1.5 py-0.5 rounded bg-pink-950 text-pink-300 border border-pink-500/30">
                                 LTFRB & MTFRB
                               </span>
                             </div>
@@ -1156,7 +1361,7 @@ export function InAppNavigationModal({
                                   <p className="text-[8px] text-gray-400 uppercase font-semibold">
                                     {commuteLang === 'en' ? 'Regular Passenger Fare' : 'Regular na Pasahe'}
                                   </p>
-                                  <p className="text-xs font-black text-emerald-400 mt-0.5">{aiCommutePlan.regularFare}</p>
+                                  <p className="text-xs font-black text-pink-400 mt-0.5">{aiCommutePlan.regularFare}</p>
                                 </div>
                               )}
                               {aiCommutePlan.specialFare && (
@@ -1171,7 +1376,7 @@ export function InAppNavigationModal({
 
                             {/* Statutory 20% Discount Notice */}
                             <div className="p-2 bg-white/[0.02] border border-white/5 rounded-xl text-[9px] text-gray-300 flex items-center gap-1.5">
-                              <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 flex-shrink-0" />
+                              <ShieldCheck className="h-3.5 w-3.5 text-pink-400 flex-shrink-0" />
                               <span>
                                 {commuteLang === 'en'
                                   ? '20% Statutory Discount applies to Senior Citizens, PWDs, and Students with valid IDs (RA 9994 / RA 10905).'
@@ -1197,8 +1402,8 @@ export function InAppNavigationModal({
                                 {aiCommutePlan.availableVehiclesInArea.map((v, i) => (
                                   <div key={i} className="p-2 bg-black/50 rounded-xl border border-white/5 flex flex-col gap-0.5">
                                     <div className="flex items-center justify-between">
-                                      <span className="text-xs font-bold text-emerald-400">• {v.vehicle}</span>
-                                      <span className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-500/30">
+                                      <span className="text-xs font-bold text-pink-400">• {v.vehicle}</span>
+                                      <span className="text-[8px] px-1.5 py-0.5 rounded bg-pink-950/80 text-pink-300 border border-pink-500/30">
                                         {v.status}
                                       </span>
                                     </div>
@@ -1263,10 +1468,10 @@ export function InAppNavigationModal({
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <Compass className="h-4 w-4 text-emerald-400" />
+                      <Compass className="h-4 w-4 text-pink-400" />
                       <span>Live Turn-by-Turn Steps</span>
                     </h4>
-                    <span className="text-xs font-semibold text-emerald-400">
+                    <span className="text-xs font-semibold text-pink-400">
                       {currentStepIdx + 1} / {steps.length}
                     </span>
                   </div>
@@ -1279,7 +1484,7 @@ export function InAppNavigationModal({
                         onClick={() => setCurrentStepIdx(idx)}
                         className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${
                           idx === currentStepIdx
-                            ? 'bg-emerald-950/60 border-emerald-500/60 text-white ring-1 ring-emerald-500/30'
+                            ? 'bg-pink-950/60 border-pink-500/60 text-white ring-1 ring-pink-500/30'
                             : idx < currentStepIdx
                             ? 'bg-gray-900/40 border-gray-800 text-gray-500'
                             : 'bg-gray-900 border-gray-800 text-gray-300 hover:bg-gray-850'
@@ -1288,7 +1493,7 @@ export function InAppNavigationModal({
                         <div
                           className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-bold ${
                             idx === currentStepIdx
-                              ? 'bg-emerald-500 text-white'
+                              ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-sm'
                               : idx < currentStepIdx
                               ? 'bg-gray-800 text-gray-500'
                               : 'bg-gray-800 text-gray-300'
@@ -1349,7 +1554,7 @@ export function InAppNavigationModal({
               <p className="text-[10px] text-gray-400 font-semibold uppercase">
                 {travelMode === 'transit' && aiCommutePlan ? (commuteLang === 'en' ? 'Transit Duration' : 'Tagal ng Byahe') : 'Est. Travel Time'}
               </p>
-              <p className="text-xl font-extrabold text-emerald-400">
+              <p className="text-xl font-extrabold text-pink-400">
                 {travelMode === 'transit' && aiCommutePlan
                   ? aiCommutePlan.estimatedTime
                   : `${remainingMins} min${remainingMins !== 1 ? 's' : ''}`}

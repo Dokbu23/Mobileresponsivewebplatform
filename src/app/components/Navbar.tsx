@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router';
-import { Menu, X, MapPin, User, LogOut, Shield, Hotel, Store, Moon, Sun, Search, Heart, ChevronDown, Plus, LayoutDashboard, Calendar, CreditCard, Settings, Package, ShoppingBag, Bed } from 'lucide-react';
+import { Menu, X, MapPin, User, LogOut, Shield, Hotel, Store, Moon, Sun, Search, ChevronDown, Plus, LayoutDashboard, Calendar, CreditCard, Settings, Package, ShoppingBag, Bed } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
@@ -58,7 +58,7 @@ export function Navbar() {
   const roleMenuItems: Record<RoleType, RoleMenuItem[]> = {
     tourist: [
       { to: '/profile', label: 'My Profile', icon: User },
-      { to: '/wishlist', label: 'My Wishlist', icon: Heart },
+      { to: '/wishlist', label: 'My Saved Places', icon: MapPin },
       { to: '/itinerary', label: 'My Itineraries', icon: Calendar },
       { to: '/settings', label: 'Settings', icon: Settings },
     ],
@@ -67,19 +67,19 @@ export function Navbar() {
       { to: '/admin/users', label: 'Account Management', icon: User },
       { to: '/admin/subscriptions', label: 'Manage Subscriptions', icon: CreditCard },
       { to: '/admin/publish', label: 'Publish Content', icon: Plus },
-      { to: '/wishlist', label: 'Most Saved & Analytics', icon: Heart },
+      { to: '/wishlist', label: 'Analytics & Save', icon: MapPin },
     ],
     resort: [
       { to: '/resort/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: `/business/resort/${currentUser?.id ?? ''}?manage=true`, label: 'My Shop Profile', icon: Hotel },
       { to: '/resort/profile', label: 'Manage Rooms', icon: Bed },
-      { to: '/wishlist', label: 'Wishlist Analytics & Trends', icon: Heart },
+      { to: '/wishlist', label: 'Analytics & Save', icon: MapPin },
     ],
     enterprise: [
       { to: '/enterprise/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: `/business/enterprise/${currentUser?.id ?? ''}?manage=true`, label: 'My Shop Profile', icon: Store },
       { to: '/enterprise/profile', label: 'Manage Products', icon: Package },
-      { to: '/wishlist', label: 'Wishlist Analytics & Trends', icon: Heart },
+      { to: '/wishlist', label: 'Analytics & Save', icon: MapPin },
     ],
   };
 
@@ -255,14 +255,14 @@ export function Navbar() {
               <Search className="h-5 w-5" />
             </button>
 
-            {/* Wishlist Button - Only shown when logged in */}
+            {/* Saved Places / Analytics & Save Button - Only shown when logged in */}
             {currentUser && (
               <button
                 onClick={() => navigate('/wishlist')}
                 className="p-2 text-gray-600 dark:text-slate-300 hover:text-pink-500 dark:hover:text-pink-400 hover:bg-pink-50 dark:hover:bg-slate-800 rounded-full transition-colors relative"
-                title={userType === 'admin' ? 'Most Saved & Analytics' : isBusinessUser ? 'Most Saved & Trends' : 'Wishlist'}
+                title={userType === 'tourist' ? 'My Saved Places' : 'Analytics & Save'}
               >
-                <Heart className="h-5 w-5" />
+                <MapPin className="h-5 w-5" />
               </button>
             )}
 

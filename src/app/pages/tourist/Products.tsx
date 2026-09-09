@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Store, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, MessageSquare, Facebook, Navigation, MapPin, ExternalLink, Lock, Filter, ChevronDown } from 'lucide-react';
+import { Store, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, MessageSquare, Facebook, Navigation, MapPin, ExternalLink, Lock, Filter, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
 import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
@@ -394,9 +394,9 @@ export function Products() {
                       <button
                         onClick={(e) => toggleSaveProduct(product, e)}
                         className="w-7 h-7 bg-white/80 hover:bg-white rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 shadow-xs cursor-pointer"
-                        title={isInWishlist(product.id, 'product') ? 'Remove from wishlist' : 'Save to wishlist'}
+                        title={isInWishlist(product.id, 'product') ? 'Remove from saved items' : 'Pin to saved items'}
                       >
-                        <Heart
+                        <MapPin
                           className={`h-3.5 w-3.5 transition-all ${
                             isInWishlist(product.id, 'product')
                               ? 'fill-pink-500 text-pink-500'
@@ -414,29 +414,29 @@ export function Products() {
                     </span>
                     {userType === 'admin' || userType === 'resort' || userType === 'enterprise' ? (
                       <div
-                        className="flex items-center gap-1 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-white text-[11px] font-bold"
-                        title="Total Tourist Wishlist Saves"
+                        className="flex items-center gap-1.5 px-2.5 py-1 bg-black/70 backdrop-blur-md rounded-full text-white text-[11px] font-bold border border-white/10 whitespace-nowrap shadow-xs"
+                        title="Total Tourist Saves"
                       >
-                        <Heart className="h-3.5 w-3.5 fill-pink-400 text-pink-400" />
-                        <span className="text-white font-extrabold">
-                          {getWishlistCount(product.id, 'product', product.likes)}
+                        <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
+                          <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
+                        </svg>
+                        <span className="text-white font-extrabold whitespace-nowrap">
+                          Save: {getWishlistCount(product.id, 'product', product.likes)}
                         </span>
                       </div>
                     ) : (
                       <button
                         onClick={(e) => toggleSaveProduct(product, e)}
-                        className="flex items-center gap-1 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95"
-                        title={isInWishlist(product.id, 'product') ? 'Saved in wishlist' : 'Click to save to wishlist'}
+                        className="flex items-center gap-1.5 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 whitespace-nowrap"
+                        title={isInWishlist(product.id, 'product') ? 'Saved in pins' : 'Click to pin product'}
                       >
-                        <Heart
-                          className={`h-3.5 w-3.5 transition-all ${
-                            isInWishlist(product.id, 'product')
-                              ? 'fill-pink-500 text-pink-500'
-                              : 'text-pink-400 fill-transparent stroke-2'
-                          }`}
-                        />
-                        <span className={isInWishlist(product.id, 'product') ? 'text-pink-400 font-extrabold' : 'text-white'}>
-                          {getWishlistCount(product.id, 'product', product.likes)}
+                        <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill={isInWishlist(product.id, 'product') ? '#F43F5E' : '#FDA4AF'} />
+                          <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
+                        </svg>
+                        <span className={isInWishlist(product.id, 'product') ? 'text-pink-400 font-extrabold whitespace-nowrap' : 'text-white whitespace-nowrap'}>
+                          Save: {getWishlistCount(product.id, 'product', product.likes)}
                         </span>
                       </button>
                     )}
@@ -557,9 +557,9 @@ export function Products() {
                           ? 'bg-pink-50 border-pink-300'
                           : 'border-gray-200 hover:bg-pink-50'
                       }`}
-                      title={isInWishlist(selectedProduct.id, 'product') ? 'Remove from wishlist' : 'Save to wishlist'}
+                      title={isInWishlist(selectedProduct.id, 'product') ? 'Remove from saved items' : 'Pin to saved items'}
                     >
-                      <Heart
+                      <MapPin
                         className={`h-4 w-4 transition-all ${
                           isInWishlist(selectedProduct.id, 'product')
                             ? 'fill-pink-500 text-pink-500'
@@ -675,13 +675,13 @@ export function Products() {
             </button>
 
             <div className="w-14 h-14 bg-pink-50 text-pink-500 rounded-full flex items-center justify-center mx-auto shadow-inner">
-              <Heart className="h-7 w-7 fill-pink-500/20 text-pink-500" />
+              <MapPin className="h-7 w-7 fill-pink-500/20 text-pink-500" />
             </div>
 
             <div>
               <h3 className="text-lg font-extrabold text-gray-900">Login Required</h3>
               <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                You are currently in guest mode. Please log in or register to save products to your wishlist.
+                You are currently in guest mode. Please log in or register to pin and save products to your account.
               </p>
             </div>
 

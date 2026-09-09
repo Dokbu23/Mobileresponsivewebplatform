@@ -42,29 +42,48 @@ export function LocationPicker({
 
       mapRef.current = map;
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      const GOOGLE_MAPS_KEY = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || '';
+
+      const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19,
-      }).addTo(map);
+      });
 
-      // Custom pink pin icon
+      const googleHybridUrl = GOOGLE_MAPS_KEY
+        ? `https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&key=${GOOGLE_MAPS_KEY}`
+        : 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
+      const googleHybridLayer = L.tileLayer(googleHybridUrl, {
+        attribution: '© Google Maps Satellite',
+        maxZoom: 20,
+      });
+
+      // Default to Google Satellite Hybrid for precise location picking
+      googleHybridLayer.addTo(map);
+
+      L.control.layers(
+        {
+          '🛰️ Google Satellite': googleHybridLayer,
+          '🗺️ Standard Map': osmLayer,
+        },
+        undefined,
+        { position: 'topright' }
+      ).addTo(map);
+
+      // Authentic Google Maps Red Teardrop Pin
       const pinIcon = L.divIcon({
         html: `
-          <div style="
-            background:#FF69B4;
-            border:3px solid white;
-            border-radius:50% 50% 50% 0;
-            transform:rotate(-45deg);
-            width:32px;height:32px;
-            display:flex;align-items:center;justify-content:center;
-            box-shadow:0 3px 10px rgba(0,0,0,0.3);
-          ">
-            <span style="transform:rotate(45deg);font-size:14px;">📍</span>
+          <div style="filter:drop-shadow(0 4px 10px rgba(0,0,0,0.5));cursor:pointer;">
+            <svg width="34" height="46" viewBox="0 0 34 46" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M17 0C7.61 0 0 7.61 0 17C0 29.75 17 46 17 46C17 46 34 29.75 34 17C34 7.61 26.39 0 17 0Z" fill="#EA4335"/>
+              <path d="M17 1C8.16 1 1 8.16 1 17C1 28.5 15.5 43.5 17 45C18.5 43.5 33 28.5 33 17C33 8.16 25.84 1 17 1Z" stroke="#B31412" stroke-width="1"/>
+              <circle cx="17" cy="17" r="7.5" fill="#FFFFFF"/>
+              <circle cx="17" cy="17" r="4.5" fill="#B31412"/>
+            </svg>
           </div>
         `,
         className: '',
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
+        iconSize: [34, 46],
+        iconAnchor: [17, 46],
       });
 
       // If initial location, place marker

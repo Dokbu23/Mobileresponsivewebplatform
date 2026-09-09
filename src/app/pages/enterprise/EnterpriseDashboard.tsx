@@ -733,15 +733,15 @@ export function EnterpriseDashboard() {
           </div>
         </div>
 
-        {/* Stat 2: Wishlist Saves */}
+        {/* Stat 2: Analytics & Save */}
         <div className="bg-white rounded-2xl p-5 border border-gray-100/80 shadow-[0_2px_10px_-3px_rgba(0,0,0,0.05)] hover:shadow-md transition-all">
           <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center text-pink-500 mb-3">
-            <Heart className="w-5 h-5" />
+            <MapPin className="w-5 h-5" />
           </div>
           <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
             {totalWishlistSaves.toLocaleString()}
           </div>
-          <div className="text-xs text-gray-500 mt-0.5">Wishlist Saves</div>
+          <div className="text-xs text-gray-500 mt-0.5">Analytics & Save</div>
           <div className="text-xs font-medium text-emerald-600 flex items-center gap-1 mt-2">
             <TrendingUp className="w-3.5 h-3.5" />
             {totalWishlistSaves > 0 ? `+${totalWishlistSaves}` : '+0'}
@@ -823,7 +823,7 @@ export function EnterpriseDashboard() {
                     )}
                   </div>
                   <div className="flex items-center gap-1 text-pink-500 font-extrabold text-xs">
-                    <Heart className="w-3.5 h-3.5 fill-pink-500" />
+                    <MapPin className="w-3.5 h-3.5 fill-pink-500" />
                     <span>{item.count} {item.count === 1 ? 'save' : 'saves'}</span>
                   </div>
                 </div>

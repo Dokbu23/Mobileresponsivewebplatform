@@ -2883,17 +2883,25 @@ function ProductCard({ product, onSelect }: any) {
             <span>📷 {product.images.length}</span>
           </div>
         )}
-        {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
+        {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' ? (
           <button
             onClick={toggleSave}
             className="absolute top-2 right-2 w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors shadow-xs"
-            title="Save to wishlist"
+            title={isSaved ? "Remove from saved items" : "Pin to saved items"}
           >
-            <Heart className={`h-3.5 w-3.5 ${isSaved ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
+            <MapPin className={`h-3.5 w-3.5 ${isSaved ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
           </button>
+        ) : (
+          <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full text-[9px] font-bold text-white flex items-center gap-1 whitespace-nowrap">
+            <svg className="h-3 w-3 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
+              <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
+            </svg>
+            <span>Save: {count}</span>
+          </div>
         )}
         <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-md text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
-          <Heart className="h-3 w-3 fill-pink-500 text-pink-500" />
+          <MapPin className="h-3 w-3 fill-pink-500 text-pink-500" />
           <span>{count}</span>
         </div>
 
@@ -2971,17 +2979,25 @@ function AccommodationCard({ accommodation, onSelect }: any) {
             {accommodation.type}
           </span>
         )}
-        {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
+        {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' ? (
           <button
             onClick={toggleSave}
             className="absolute top-2 right-2 w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors shadow-xs"
-            title="Save to wishlist"
+            title={isSaved ? "Remove from saved items" : "Pin to saved items"}
           >
-            <Heart className={`h-3.5 w-3.5 ${isSaved ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
+            <MapPin className={`h-3.5 w-3.5 ${isSaved ? 'fill-pink-500 text-pink-500' : 'text-gray-600'}`} />
           </button>
+        ) : (
+          <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full text-[9px] font-bold text-white flex items-center gap-1 whitespace-nowrap">
+            <svg className="h-3 w-3 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
+              <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
+            </svg>
+            <span>Save: {count}</span>
+          </div>
         )}
         <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-md text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
-          <Heart className="h-3 w-3 fill-pink-500 text-pink-500" />
+          <MapPin className="h-3 w-3 fill-pink-500 text-pink-500" />
           <span>{count}</span>
         </div>
 

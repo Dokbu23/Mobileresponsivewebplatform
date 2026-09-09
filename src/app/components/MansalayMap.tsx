@@ -92,10 +92,43 @@ export function MansalayMap({
 
       mapRef.current = map;
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors | Mansalay Tourism GPS',
+      const GOOGLE_MAPS_KEY = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || '';
+
+      // 1. OpenStreetMap (Standard Street Layer)
+      const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
         maxZoom: 19,
-      }).addTo(map);
+      });
+
+      // 2. Google Maps Satellite Hybrid (Real Aerial Photo + Road/Labels Overlay)
+      const googleHybridUrl = GOOGLE_MAPS_KEY
+        ? `https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&key=${GOOGLE_MAPS_KEY}`
+        : 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}';
+      const googleHybridLayer = L.tileLayer(googleHybridUrl, {
+        attribution: '© Google Maps Satellite | Mansalay Tourism GPS',
+        maxZoom: 20,
+      });
+
+      // 3. Google Maps Standard Roads
+      const googleRoadUrl = GOOGLE_MAPS_KEY
+        ? `https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&key=${GOOGLE_MAPS_KEY}`
+        : 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}';
+      const googleRoadLayer = L.tileLayer(googleRoadUrl, {
+        attribution: '© Google Maps Roads',
+        maxZoom: 20,
+      });
+
+      // Default to Google Hybrid if available, otherwise OSM
+      googleHybridLayer.addTo(map);
+
+      // Layer Control (Interactive Switcher)
+      const baseMaps: Record<string, any> = {
+        '🛰️ Google Satellite': googleHybridLayer,
+        '🗺️ Standard Map (OSM)': osmLayer,
+        '🚗 Google Roads': googleRoadLayer,
+      };
+
+      L.control.layers(baseMaps, undefined, { position: 'topright' }).addTo(map);
 
       // Handle map click
       map.on('click', (e: any) => {
@@ -212,21 +245,23 @@ export function MansalayMap({
           fillOpacity: 0.12,
         }).addTo(map);
 
-        // Render Navigation Arrow Marker
+        // Render Google Maps Style Navigation Arrow Marker
         const arrowRotationCss = headingDeg !== null ? `transform: rotate(${headingDeg}deg);` : '';
 
         const userIcon = L.divIcon({
           html: `
-            <div style="position:relative;width:34px;height:34px;transition:all 0.4s ease-out;">
-              <div style="position:absolute;inset:0;background:#2563EB;border-radius:50%;opacity:0.3;animation:ping 1.8s cubic-bezier(0,0,0.2,1) infinite;"></div>
-              <div style="position:absolute;inset:4px;background:#3B82F6;border:3px solid white;border-radius:50%;box-shadow:0 3px 10px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;transition:transform 0.3s ease-out;${arrowRotationCss}">
-                ${headingDeg !== null ? '▲' : '📍'}
-              </div>
+            <div style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center;">
+              <div style="position:absolute;inset:0;background:#4285F4;border-radius:50%;opacity:0.25;animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+              <svg width="36" height="36" viewBox="0 0 36 36" fill="none" style="${arrowRotationCss}filter:drop-shadow(0 3px 6px rgba(0,0,0,0.45));transition:transform 0.3s ease;">
+                <path d="M18 3L31 31L18 24L5 31L18 3Z" fill="#1A73E8" stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round"/>
+                <path d="M18 7L27 27L18 22L9 27L18 7Z" fill="#4285F4"/>
+                <circle cx="18" cy="18" r="2.5" fill="#FFFFFF"/>
+              </svg>
             </div>
           `,
           className: '',
-          iconSize: [34, 34],
-          iconAnchor: [17, 17],
+          iconSize: [44, 44],
+          iconAnchor: [22, 22],
         });
 
         userMarkerRef.current = L.marker(activeUserCoords, { icon: userIcon })
@@ -246,7 +281,7 @@ export function MansalayMap({
         }
       }
 
-      // 3. Render Real Road Route Polyline (from OSRM GeoJSON road geometry)
+      // 3. Render Real Road Route Polyline
       if (routeCoords && routeCoords.length > 0) {
         routeLineRef.current = L.polyline(routeCoords, {
           color: '#EC4899',
@@ -256,10 +291,16 @@ export function MansalayMap({
           lineJoin: 'round',
         }).addTo(map);
 
-        const bounds = L.latLngBounds(routeCoords);
-        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+        if (activeUserCoords) {
+          // Focus directly on the tourist's current location with close view
+          map.setView(activeUserCoords, 16, { animate: true });
+        } else {
+          const bounds = L.latLngBounds(routeCoords);
+          map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+        }
       } else if (selectedMarker && activeUserCoords) {
-        // Fallback straight-line preview when route is loading
+        // Focus on tourist location and draw preview line
+        map.setView(activeUserCoords, 16, { animate: true });
         const endCoords: [number, number] = [selectedMarker.lat, selectedMarker.lng];
         routeLineRef.current = L.polyline([activeUserCoords, endCoords], {
           color: '#EC4899',

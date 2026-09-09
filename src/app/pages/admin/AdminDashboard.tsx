@@ -6,7 +6,6 @@ import {
   Calendar,
   Store,
   TrendingUp,
-  Heart,
   Hotel,
   Package,
   Eye,
@@ -569,14 +568,14 @@ export function AdminDashboard() {
 
         {/* ── ROW 3: 3 HIGHLIGHTS / LEADERBOARDS COLUMNS ── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* Column 1: Most Wishlisted */}
+          {/* Column 1: Analytics & Save */}
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)]">
             <div className="flex items-center gap-2 mb-4">
-              <Heart className="h-4 w-4 text-pink-500 fill-pink-500" />
-              <h3 className="text-sm font-bold text-gray-900">Most Wishlisted</h3>
+              <MapPin className="h-4 w-4 text-pink-500 fill-pink-500" />
+              <h3 className="text-sm font-bold text-gray-900">Analytics & Save</h3>
             </div>
             {mostWishlistedList.length === 0 ? (
-              <p className="text-xs text-gray-400 py-6 text-center font-medium">No wishlisted destinations yet</p>
+              <p className="text-xs text-gray-400 py-6 text-center font-medium">No saved destinations yet</p>
             ) : (
               <div className="space-y-3">
                 {mostWishlistedList.map((item, idx) => (

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { MapPin, Navigation, X, Star, Heart, ChevronLeft, ChevronRight, Share2, Search, Tag, Camera, Phone, Facebook, Instagram, MessageCircle, ArrowRight, Video, Play, Filter, ChevronDown } from 'lucide-react';
+import { MapPin, Navigation, X, Star, ChevronLeft, ChevronRight, Share2, Search, Tag, Camera, Phone, Facebook, Instagram, MessageCircle, ArrowRight, Video, Play, Filter, ChevronDown } from 'lucide-react';
 import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
 import { ATTRACTION_CATEGORIES } from '../../lib/constants';
 import { VirtualTourModal } from '../../components/VirtualTourModal';
@@ -408,9 +408,9 @@ export function Attractions() {
                       <button
                         onClick={(e) => handleToggleLike(e, attraction)}
                         className="w-7 h-7 bg-white/90 backdrop-blur-sm hover:bg-white rounded-full flex items-center justify-center shadow-sm transition-all hover:scale-110 cursor-pointer"
-                        title={isInWishlist(attraction.id, 'attraction') ? 'Remove from wishlist' : 'Save to wishlist'}
+                        title={isInWishlist(attraction.id, 'attraction') ? 'Remove from saved places' : 'Pin to saved places'}
                       >
-                        <Heart 
+                        <MapPin 
                           className={`h-3.5 w-3.5 transition-all ${
                             isInWishlist(attraction.id, 'attraction')
                               ? 'fill-pink-500 text-pink-500'
@@ -461,22 +461,28 @@ export function Attractions() {
                     </div>
                     {userType === 'admin' || userType === 'resort' || userType === 'enterprise' ? (
                       <div
-                        className="flex items-center gap-1 bg-black/50 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[11px] font-medium"
-                        title="Total Tourist Wishlist Saves"
+                        className="flex items-center gap-1.5 bg-black/60 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[11px] font-semibold border border-white/10 whitespace-nowrap"
+                        title="Total Tourist Saves"
                       >
-                        <Heart className="h-3 w-3 text-pink-400 fill-pink-400" />
-                        <span className="text-white">
-                          {getWishlistCount(attraction.id, 'attraction', attraction.likes)}
+                        <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
+                          <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
+                        </svg>
+                        <span className="text-white whitespace-nowrap">
+                          Save: {getWishlistCount(attraction.id, 'attraction', attraction.likes)}
                         </span>
                       </div>
                     ) : (
                       <div
-                        className="flex items-center gap-1 bg-black/50 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[11px] font-medium"
-                        title="Wishlist Saves"
+                        className="flex items-center gap-1 bg-black/50 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[11px] font-medium whitespace-nowrap"
+                        title="Saved Pins"
                       >
-                        <Heart className="h-3 w-3 text-pink-400 fill-pink-400" />
-                        <span className="text-white">
-                          {getWishlistCount(attraction.id, 'attraction', attraction.likes)}
+                        <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
+                          <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
+                        </svg>
+                        <span className="text-white whitespace-nowrap">
+                          Save: {getWishlistCount(attraction.id, 'attraction', attraction.likes)}
                         </span>
                       </div>
                     )}

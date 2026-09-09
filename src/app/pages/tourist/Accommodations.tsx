@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Hotel, MapPin, Star, Share2, Heart, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink } from 'lucide-react';
+import { Hotel, MapPin, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink } from 'lucide-react';
 import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
 import { ACCOMMODATION_CATEGORIES } from '../../lib/constants';
 import { useApp } from '../../context/AppContext';
@@ -400,7 +400,7 @@ export function Accommodations() {
                       </span>
                     ) : null}
 
-                    {/* Top-Right Action Controls (Share + Heart Wishlist) */}
+                    {/* Top-Right Action Controls (Share + Pin / Save) */}
                     <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
                       <button
                         onClick={(e) => {
@@ -421,9 +421,9 @@ export function Accommodations() {
                         <button
                           onClick={(e) => toggleSaveAcc(acc, e)}
                           className="w-7 h-7 bg-white/80 hover:bg-white rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 shadow-xs cursor-pointer"
-                          title={isInWishlist(acc.id, 'accommodation') ? 'Remove from wishlist' : 'Save to wishlist'}
+                          title={isInWishlist(acc.id, 'accommodation') ? 'Remove from saved places' : 'Pin to saved places'}
                         >
-                          <Heart
+                          <MapPin
                             className={`h-3.5 w-3.5 transition-all ${
                               isInWishlist(acc.id, 'accommodation')
                                 ? 'fill-pink-500 text-pink-500'
@@ -437,29 +437,29 @@ export function Accommodations() {
                     {/* Dark Overlay Saves */}
                     {userType === 'admin' || userType === 'resort' || userType === 'enterprise' ? (
                       <div
-                        className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-white text-[11px] font-bold z-10"
-                        title="Total Tourist Wishlist Saves"
+                        className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/70 backdrop-blur-md rounded-full text-white text-[11px] font-bold z-10 border border-white/10 whitespace-nowrap shadow-xs"
+                        title="Total Tourist Saves"
                       >
-                        <Heart className="h-3 w-3 fill-pink-400 text-pink-400" />
-                        <span className="text-white font-extrabold">
-                          {getWishlistCount(acc.id, 'accommodation', acc.likes)} saves
+                        <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
+                          <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
+                        </svg>
+                        <span className="text-white font-extrabold whitespace-nowrap">
+                          Save: {getWishlistCount(acc.id, 'accommodation', acc.likes)}
                         </span>
                       </div>
                     ) : (
                       <button
                         onClick={(e) => toggleSaveAcc(acc, e)}
-                        className="absolute bottom-3 left-3 flex items-center gap-1 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 z-10"
-                        title={isInWishlist(acc.id, 'accommodation') ? 'Saved in wishlist' : 'Click to save to wishlist'}
+                        className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 z-10 whitespace-nowrap"
+                        title={isInWishlist(acc.id, 'accommodation') ? 'Saved in pins' : 'Click to pin stay'}
                       >
-                        <Heart
-                          className={`h-3 w-3 transition-all ${
-                            isInWishlist(acc.id, 'accommodation')
-                              ? 'fill-pink-500 text-pink-500'
-                              : 'text-pink-400 fill-transparent stroke-2'
-                          }`}
-                        />
-                        <span className={isInWishlist(acc.id, 'accommodation') ? 'text-pink-400 font-extrabold' : 'text-white'}>
-                          {getWishlistCount(acc.id, 'accommodation', acc.likes)} saves
+                        <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill={isInWishlist(acc.id, 'accommodation') ? '#F43F5E' : '#FDA4AF'} />
+                          <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
+                        </svg>
+                        <span className={isInWishlist(acc.id, 'accommodation') ? 'text-pink-400 font-extrabold whitespace-nowrap' : 'text-white whitespace-nowrap'}>
+                          Save: {getWishlistCount(acc.id, 'accommodation', acc.likes)}
                         </span>
                       </button>
                     )}
@@ -532,9 +532,9 @@ export function Accommodations() {
               <button
                 onClick={() => toggleSaveAcc(selectedAcc)}
                 className="absolute bottom-3 left-4 flex items-center gap-1.5 px-3 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-xs font-bold transition-all cursor-pointer z-10"
-                title={isInWishlist(selectedAcc.id, 'accommodation') ? 'Saved in wishlist' : 'Click to save to wishlist'}
+                title={isInWishlist(selectedAcc.id, 'accommodation') ? 'Saved in pins' : 'Click to pin'}
               >
-                <Heart
+                <MapPin
                   className={`h-3.5 w-3.5 transition-all ${
                     isInWishlist(selectedAcc.id, 'accommodation')
                       ? 'fill-pink-500 text-pink-500'
@@ -592,9 +592,9 @@ export function Accommodations() {
                         ? 'bg-pink-50 border-pink-300'
                         : 'border-gray-200 hover:bg-pink-50'
                     }`}
-                    title={isInWishlist(selectedAcc.id, 'accommodation') ? 'Remove from wishlist' : 'Save to wishlist'}
+                    title={isInWishlist(selectedAcc.id, 'accommodation') ? 'Remove from saved places' : 'Pin to saved places'}
                   >
-                    <Heart
+                    <MapPin
                       className={`h-4 w-4 transition-all ${
                         isInWishlist(selectedAcc.id, 'accommodation')
                           ? 'fill-pink-500 text-pink-500'
@@ -791,13 +791,13 @@ export function Accommodations() {
             </button>
 
             <div className="w-14 h-14 bg-pink-50 text-pink-500 rounded-full flex items-center justify-center mx-auto shadow-inner">
-              <Heart className="h-7 w-7 fill-pink-500/20 text-pink-500" />
+              <MapPin className="h-7 w-7 fill-pink-500/20 text-pink-500" />
             </div>
 
             <div>
               <h3 className="text-lg font-extrabold text-gray-900">Login Required</h3>
               <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                You are currently in guest mode. Please log in or register to save accommodations to your wishlist.
+                You are currently in guest mode. Please log in or register to pin and save accommodations to your account.
               </p>
             </div>
 

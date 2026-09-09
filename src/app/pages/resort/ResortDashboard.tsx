@@ -877,15 +877,15 @@ export function ResortDashboard() {
           </div>
         </div>
 
-        {/* Wishlist Saves */}
+        {/* Analytics & Save */}
         <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow transition-shadow">
           <div className="w-10 h-10 rounded-xl bg-pink-50 text-pink-500 flex items-center justify-center mb-3">
-            <Heart className="h-5 w-5" />
+            <MapPin className="h-5 w-5" />
           </div>
           <div className="text-2xl font-bold text-gray-900">
             {(dbStats?.wishlist_saves ?? totalSaves).toLocaleString()}
           </div>
-          <div className="text-xs text-gray-500 mt-1">Wishlist Saves</div>
+          <div className="text-xs text-gray-500 mt-1">Analytics & Save</div>
           <div className="text-[11px] font-semibold text-emerald-600 mt-1">
             ↗ {dbStats?.saves_growth || '0%'}
           </div>

@@ -159,18 +159,18 @@ function generateTourismAiReply(text: string, currentLang: 'filipino' | 'english
   }
 
   // 7. Wishlist & Saved Analytics / Features
-  if (/\b(wishlist|saved|save|bookmark|analytics|paborito|puso|heart)\b/.test(lower)) {
+  if (/\b(wishlist|saved|save|bookmark|analytics|paborito|pin|pins)\b/.test(lower)) {
     return lang === 'filipino'
-      ? `**❤️ Paano Gumagana ang Wishlist at Analytics:**\n\n` +
-        `• **Para sa mga Turista:** I-click ang Heart icon sa anumang Attraction, Stay, o Product upang i-save ito sa iyong personal na **Wishlist**. Naka-save ito exclusively sa iyong account!\n` +
-        `• **Para sa Resort at Enterprise Partners:** Sa inyong **Wishlist Analytics** page, makikita ninyo ang live data kung ilang turista ang nag-save ng inyong mga rooms at produkto, kasama ang platform-wide trends!\n` +
-        `• **Para sa Admin:** Comprehensive overview ng most wishlisted destinations at visitor interest sa buong Mansalay.\n\n` +
-        `*Buksan ang **Wishlist** sa navigation bar para makita ang iyong collection o analytics!*`
-      : `**❤️ How the Wishlist & Analytics System Works:**\n\n` +
-        `• **For Tourists:** Click the Heart icon on any Attraction, Resort, or Product to save it to your personal **Wishlist**. Your saved items are securely isolated to your account!\n` +
-        `• **For Resort & Enterprise Partners:** In your **Wishlist Analytics** dashboard, view real-time statistics on how many visitors have saved your rooms and products, alongside platform trends.\n` +
+      ? `**📍 Paano Gumagana ang Analytics & Save (Pins):**\n\n` +
+        `• **Para sa mga Turista:** I-click ang Pin icon sa anumang Attraction, Stay, o Product upang i-save ito sa iyong personal na **My Saved Places**. Naka-save ito exclusively sa iyong account!\n` +
+        `• **Para sa Resort at Enterprise Partners:** Sa inyong **Analytics & Save** page, makikita ninyo ang live data kung ilang turista ang nag-save ng inyong mga rooms at produkto, kasama ang platform-wide trends!\n` +
+        `• **Para sa Admin:** Comprehensive overview ng most saved destinations at visitor interest sa buong Mansalay.\n\n` +
+        `*I-click ang **Pin icon (Analytics & Save)** sa navigation bar para makita ang iyong collection o analytics!*`
+      : `**📍 How Analytics & Save (Pins) Works:**\n\n` +
+        `• **For Tourists:** Click the Pin icon on any Attraction, Resort, or Product to save it to your personal **My Saved Places**. Your saved items are securely isolated to your account!\n` +
+        `• **For Resort & Enterprise Partners:** In your **Analytics & Save** dashboard, view real-time statistics on how many visitors have saved and pinned your rooms and products, alongside platform trends.\n` +
         `• **For Administrators:** Comprehensive leaderboard of most saved places and community engagement.\n\n` +
-        `*Click the **Wishlist** icon in the navbar to view your collection or analytics!*`;
+        `*Click the **Pin (Analytics & Save)** icon in the navbar to view your collection or analytics!*`;
   }
 
   // 8. Events & Festivals
