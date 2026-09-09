@@ -93,9 +93,9 @@ const MAPBOX_ACCESS_TOKEN = (import.meta as any).env?.VITE_MAPBOX_ACCESS_TOKEN |
 
 // Primary models to try in sequence for high availability
 const GEMINI_MODELS = [
-  'gemini-3.7-flash',
-  'gemini-3.6-flash',
   'gemini-flash-latest',
+  'gemini-3.6-flash',
+  'gemini-3.7-flash',
   'gemini-3.5-flash',
   'gemini-pro-latest',
 ];
