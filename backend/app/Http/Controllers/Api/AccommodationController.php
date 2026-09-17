@@ -102,6 +102,7 @@ class AccommodationController extends Controller
                     'barangay' => $owner ? $owner->barangay : null,
                     'latitude' => $owner ? $owner->latitude : null,
                     'longitude' => $owner ? $owner->longitude : null,
+                    'virtual_tour_scenes' => $room->virtual_tour_scenes ?? ($owner ? ($owner->virtual_tour_scenes ?? []) : []),
                 ]);
             }
 
@@ -145,6 +146,7 @@ class AccommodationController extends Controller
                     'barangay' => $resortOwner->barangay,
                     'latitude' => $resortOwner->latitude,
                     'longitude' => $resortOwner->longitude,
+                    'virtual_tour_scenes' => $resortOwner->virtual_tour_scenes ?? [],
                 ]);
             }
 

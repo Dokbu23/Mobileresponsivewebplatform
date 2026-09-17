@@ -1,0 +1,82 @@
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #FF69B4;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #FF1493;
+}
+
+/* Barangay select dropdown styling */
+select[size="1"] {
+  /* This ensures the dropdown behavior is maintained */
+  appearance: menulist;
+}
+
+/* Custom styling for select elements */
+select {
+  /* Limit the visible options in dropdown */
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* For WebKit browsers - limit dropdown height */
+select::-webkit-scrollbar {
+  width: 8px;
+}
+
+select::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+select::-webkit-scrollbar-thumb {
+  background: #FF69B4;
+  border-radius: 4px;
+}
+
+/* Improve optgroup styling */
+select optgroup {
+  font-weight: bold;
+  color: #FF69B4;
+  background-color: #f8f9fa;
+  padding: 4px 8px;
+}
+
+select option {
+  padding: 8px 12px;
+  color: #333;
+}
+
+select optgroup option {
+  padding-left: 20px;
+  font-weight: normal;
+}
+
+/* Alternative approach using CSS custom properties */
+.barangay-dropdown {
+  position: relative;
+}
+
+.barangay-dropdown select {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid rgba(255, 105, 180, 0.2);
+  border-radius: 8px;
+  outline: none;
+  background-color: white;
+  font-size: 16px;
+}
+
+.barangay-dropdown select:focus {
+  border-color: #FF69B4;
+}

@@ -31,6 +31,7 @@ class EnterpriseProfileController extends Controller
             'instagram_link'    => $user->instagram_link,
             'latitude'          => $user->latitude,
             'longitude'         => $user->longitude,
+            'virtual_tour_scenes' => $user->virtual_tour_scenes ?? [],
         ]);
     }
 
@@ -110,6 +111,7 @@ class EnterpriseProfileController extends Controller
             'banner'            => 'nullable',
             'store_logo'        => 'nullable',
             'store_banner'      => 'nullable',
+            'virtual_tour_scenes' => 'nullable|array',
         ]);
 
         if ($request->hasFile('logo')) {
@@ -170,7 +172,7 @@ class EnterpriseProfileController extends Controller
             $updateData['video'] = null;
         }
 
-        foreach (['phone', 'address', 'barangay', 'facebook_link', 'instagram_link', 'latitude', 'longitude'] as $field) {
+        foreach (['phone', 'address', 'barangay', 'facebook_link', 'instagram_link', 'latitude', 'longitude', 'virtual_tour_scenes'] as $field) {
             if ($request->has($field)) {
                 $updateData[$field] = $request->input($field);
             }
@@ -188,14 +190,15 @@ class EnterpriseProfileController extends Controller
         $video = $fresh->video ?? $fresh->video_url;
 
         return response()->json([
-            'message'      => 'Store profile updated successfully.',
-            'user'         => $fresh,
-            'store_logo'   => $logo,
-            'store_banner' => $banner,
-            'logo'         => $logo,
-            'banner'       => $banner,
-            'video'        => $video,
-            'video_url'    => $video,
+            'message'             => 'Store profile updated successfully.',
+            'user'                => $fresh,
+            'store_logo'          => $logo,
+            'store_banner'        => $banner,
+            'logo'                => $logo,
+            'banner'              => $banner,
+            'video'               => $video,
+            'video_url'           => $video,
+            'virtual_tour_scenes' => $fresh->virtual_tour_scenes ?? [],
         ]);
     }
 

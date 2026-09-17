@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\EnterprisePostController;
 use App\Http\Controllers\Api\LandmarkController;
 use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\SiteSettingController;
+use App\Http\Controllers\Api\VirtualTourController;
 
 use App\Models\User;
 
@@ -514,6 +515,8 @@ Route::group(['middleware' => ['jwt.auth']], function () {
     Route::post('profile', [UserController::class, 'updateProfile']); // FormData support
     Route::post('profile/change-password', [UserController::class, 'changePassword']);
     Route::patch('profile/location', [UserController::class, 'updateLocation']);
+    Route::post('360-tour/upload-image', [VirtualTourController::class, 'upload360Image']);
+    Route::post('360-tour/scenes', [VirtualTourController::class, 'saveUserScenes']);
 
     // Subscription routes
     Route::group(['middleware' => ['role:enterprise,resort']], function () {

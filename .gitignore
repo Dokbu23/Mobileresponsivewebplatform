@@ -1,8 +1,8 @@
-node_modules
-dist
-.env
-.env.local
-.env.*.local
+frontend/node_modules
+frontend/dist
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
 backend/.env
 backend/.env.local
 backend/vendor

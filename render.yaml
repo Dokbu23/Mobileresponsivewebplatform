@@ -102,13 +102,13 @@ services:
       - key: HUGGINGFACE_MODEL
         value: gpt2
 
-  # Frontend (React/Vite)
+  # Frontend (React/Vite) — now lives in ./frontend
   - type: web
     name: disc-mansalay
     env: node
     region: singapore
     plan: free
-    rootDir: .
+    rootDir: ./frontend
     buildCommand: npm install && npm run build
     startCommand: npx serve dist -s -l $PORT
     envVars:

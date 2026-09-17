@@ -65,6 +65,7 @@ class ResortProfileController extends Controller
             'store_banner'           => $banner,
             'resort_logo'            => $logo,
             'resort_banner'          => $banner,
+            'virtual_tour_scenes'    => $user->virtual_tour_scenes ?? [],
         ]);
     }
 
@@ -105,6 +106,7 @@ class ResortProfileController extends Controller
             'images.*'               => 'nullable|file|mimes:jpg,jpeg,png,webp,avif|max:10240',
             'logo'                   => 'nullable|file|mimes:jpg,jpeg,png,webp,avif|max:10240',
             'banner'                 => 'nullable|file|mimes:jpg,jpeg,png,webp,avif|max:10240',
+            'virtual_tour_scenes'    => 'nullable|array',
         ]);
 
         $updateData = [];
@@ -113,7 +115,7 @@ class ResortProfileController extends Controller
             'resort_name', 'resort_description', 'resort_price_per_night',
             'resort_amenities', 'resort_facilities', 'resort_policies',
             'phone', 'address', 'barangay', 'facebook_link', 'instagram_link',
-            'latitude', 'longitude'
+            'latitude', 'longitude', 'virtual_tour_scenes'
         ] as $field) {
             if ($request->has($field) && $request->input($field) !== null) {
                 $updateData[$field] = $request->input($field);
@@ -169,6 +171,14 @@ class ResortProfileController extends Controller
 
         if (!empty($updateData)) {
             $user->update($updateData);
+
+            if (isset($updateData['virtual_tour_scenes'])) {
+                try {
+                    \App\Models\Accommodation::where('user_id', $user->id)->update([
+                        'virtual_tour_scenes' => $updateData['virtual_tour_scenes'],
+                    ]);
+                } catch (\Throwable $e) {}
+            }
         }
 
         $fresh = $user->fresh();
@@ -177,18 +187,20 @@ class ResortProfileController extends Controller
         $logo = $fresh->store_logo ?: ($fresh->avatar ?: $primary);
         $banner = $fresh->store_banner ?: $primary;
         $video = $fresh->video ?? $fresh->video_url;
+        $virtualTourScenes = $fresh->virtual_tour_scenes ?? [];
 
         return response()->json([
-            'message'      => 'Resort profile updated successfully',
-            'user'         => $fresh,
-            'logo'         => $logo,
-            'banner'       => $banner,
-            'store_logo'   => $logo,
-            'store_banner' => $banner,
-            'resort_logo'  => $logo,
-            'resort_banner'=> $banner,
-            'video'        => $video,
-            'video_url'    => $video,
+            'message'             => 'Resort profile updated successfully',
+            'user'                => $fresh,
+            'logo'                => $logo,
+            'banner'              => $banner,
+            'store_logo'          => $logo,
+            'store_banner'        => $banner,
+            'resort_logo'         => $logo,
+            'resort_banner'       => $banner,
+            'video'               => $video,
+            'video_url'           => $video,
+            'virtual_tour_scenes' => $virtualTourScenes,
             'profile' => [
                 'user_id'                => $fresh->id,
                 'resort_name'            => $fresh->resort_name ?: $fresh->name,
@@ -209,9 +221,10 @@ class ResortProfileController extends Controller
                 'store_logo'             => $logo,
                 'store_banner'           => $banner,
                 'resort_logo'            => $logo,
-                'resort_banner'=> $banner,
+                'resort_banner'          => $banner,
                 'video'                  => $video,
                 'video_url'              => $video,
+                'virtual_tour_scenes'    => $virtualTourScenes,
             ],
         ]);
     }
