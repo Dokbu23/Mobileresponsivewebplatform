@@ -1,0 +1,10 @@
+{
+  "name": "mobileresponsivewebplatform",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "postinstall": "npm --prefix frontend install",
+    "build": "npm --prefix frontend run build && node -e \"const fs=require('fs'); fs.cpSync('frontend/dist', 'dist', {recursive: true});\"",
+    "start": "npx serve dist -s -l $PORT"
+  }
+}

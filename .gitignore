@@ -1,5 +1,7 @@
 frontend/node_modules
 frontend/dist
+dist
+node_modules
 frontend/.env
 frontend/.env.local
 frontend/.env.*.local
@@ -8,3 +10,4 @@ backend/.env.local
 backend/vendor
 backend/node_modules
 *.log
+
