@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
+
 class AccommodationController extends Controller
 {
     /**
@@ -43,6 +46,16 @@ class AccommodationController extends Controller
             }
 
             $staticAccommodations = $query->get()->map(function ($item) {
+                // Add cached view count for static accommodations (view_count col may not exist)
+                $cachedViews = (int) Cache::get("view_count_accommodation_{$item->id}", 0);
+                $dbViews = 0;
+                try {
+                    if (Schema::hasColumn('accommodations', 'view_count')) {
+                        $dbViews = (int) ($item->view_count ?? 0);
+                    }
+                } catch (\Throwable $e) {}
+                $item->view_count = max($dbViews, $cachedViews);
+                $item->views = $item->view_count;
                 $item->type = 'static';
                 return $item;
             });
@@ -79,30 +92,53 @@ class AccommodationController extends Controller
                     }
                 }
 
+                // Read cached views: tries view_count_accommodation_room-{id} key first, then room-level key
+                $roomCacheKey = "view_count_accommodation_room-{$room->id}";
+                $roomCachedViews = (int) Cache::get($roomCacheKey, 0);
+                // Also check owner-level resort views as fallback
+                $ownerCachedViews = $owner ? (int) Cache::get("view_count_resort_{$owner->id}", 0) : 0;
+                // Count wishlist saves for this room (stored as item_id='room-{id}', item_type='accommodation')
+                $roomSaves = 0;
+                try {
+                    if (Schema::hasTable('wishlist_items')) {
+                        $roomSaves = (int) \App\Models\WishlistItem::where('item_id', 'room-' . $room->id)
+                            ->where('item_type', 'accommodation')
+                            ->count();
+                        if ($roomSaves === 0) {
+                            $roomSaves = (int) \App\Models\WishlistItem::where('item_id', (string)$room->id)
+                                ->where('item_type', 'accommodation')
+                                ->count();
+                        }
+                    }
+                } catch (\Throwable $e) {}
+
                 $handledResortIds[] = $room->user_id;
 
                 $individualRooms->push([
-                    'id' => 'room-' . $room->id,
-                    'room_id' => $room->id,
-                    'name' => $room->name,
-                    'resort_name' => $owner ? ($owner->resort_name ?? $owner->name) : 'Resort Stay',
-                    'description' => $room->description ?: ($owner ? ($owner->resort_description ?? '') : ''),
-                    'price_per_night' => (float) $room->price_per_night,
-                    'price' => (float) $room->price_per_night,
-                    'image' => $room->image ?: ($primaryOwnerImage ?: (is_array($roomImages) && count($roomImages) > 0 ? $roomImages[0] : '')),
-                    'images' => is_array($roomImages) && count($roomImages) > 0 ? $roomImages : ($room->image ? [$room->image] : $ownerImages),
+                    'id'               => 'room-' . $room->id,
+                    'room_id'          => $room->id,
+                    'name'             => $room->name,
+                    'resort_name'      => $owner ? ($owner->resort_name ?? $owner->name) : 'Resort Stay',
+                    'description'      => $room->description ?: ($owner ? ($owner->resort_description ?? '') : ''),
+                    'price_per_night'  => (float) $room->price_per_night,
+                    'price'            => (float) $room->price_per_night,
+                    'image'            => $room->image ?: ($primaryOwnerImage ?: (is_array($roomImages) && count($roomImages) > 0 ? $roomImages[0] : '')),
+                    'images'           => is_array($roomImages) && count($roomImages) > 0 ? $roomImages : ($room->image ? [$room->image] : $ownerImages),
                     'resort_amenities' => $owner ? ($owner->resort_amenities ?? []) : [],
-                    'user_id' => $room->user_id,
-                    'is_registered' => true,
-                    'type' => $room->type ?: 'Resort Room',
-                    'category' => $room->type ?: 'Rooms & Suites',
-                    'badge' => $owner ? ($owner->resort_name ?? 'Resort Stay') : 'Resort Stay',
-                    'capacity' => $room->capacity,
-                    'is_room' => true,
-                    'barangay' => $owner ? $owner->barangay : null,
-                    'latitude' => $owner ? $owner->latitude : null,
-                    'longitude' => $owner ? $owner->longitude : null,
+                    'user_id'          => $room->user_id,
+                    'is_registered'    => true,
+                    'type'             => $room->type ?: 'Resort Room',
+                    'category'         => $room->type ?: 'Rooms & Suites',
+                    'badge'            => $owner ? ($owner->resort_name ?? 'Resort Stay') : 'Resort Stay',
+                    'capacity'         => $room->capacity,
+                    'is_room'          => true,
+                    'barangay'         => $owner ? $owner->barangay : null,
+                    'latitude'         => $owner ? $owner->latitude : null,
+                    'longitude'        => $owner ? $owner->longitude : null,
                     'virtual_tour_scenes' => $room->virtual_tour_scenes ?? ($owner ? ($owner->virtual_tour_scenes ?? []) : []),
+                    'view_count'       => max($roomCachedViews, 0),
+                    'views'            => max($roomCachedViews, 0),
+                    'likes'            => $roomSaves,
                 ]);
             }
 
@@ -126,27 +162,44 @@ class AccommodationController extends Controller
             foreach ($resortsWithoutRooms as $resortOwner) {
                 $images = $resortOwner->resort_images ?? [];
                 $primaryImage = is_array($images) && count($images) > 0 ? $images[0] : '';
+                // Views: check cache keys for this resort owner
+                $resortCachedViews = (int) Cache::get("view_count_resort_{$resortOwner->id}", 0);
+                $resortAccViews = (int) Cache::get("view_count_accommodation_{$resortOwner->id}", 0);
+                $totalResortViews = max($resortCachedViews, $resortAccViews);
+                // Saves: count wishlist_items for this resort owner's user id
+                $resortSaves = 0;
+                try {
+                    if (Schema::hasTable('wishlist_items')) {
+                        $resortSaves = (int) \App\Models\WishlistItem::where('item_id', (string)$resortOwner->id)
+                            ->where('item_type', 'accommodation')
+                            ->count();
+                    }
+                } catch (\Throwable $e) {}
+
                 $individualRooms->push([
-                    'id' => $resortOwner->id,
-                    'name' => $resortOwner->resort_name ?? $resortOwner->name,
-                    'resort_name' => $resortOwner->resort_name ?? $resortOwner->name,
-                    'description' => $resortOwner->resort_description ?? $resortOwner->description,
-                    'price_per_night' => (float) ($resortOwner->resort_price_per_night ?: 0),
-                    'price' => (float) ($resortOwner->resort_price_per_night ?: 0),
-                    'image' => $primaryImage,
-                    'images' => $images,
+                    'id'               => $resortOwner->id,
+                    'name'             => $resortOwner->resort_name ?? $resortOwner->name,
+                    'resort_name'      => $resortOwner->resort_name ?? $resortOwner->name,
+                    'description'      => $resortOwner->resort_description ?? $resortOwner->description,
+                    'price_per_night'  => (float) ($resortOwner->resort_price_per_night ?: 0),
+                    'price'            => (float) ($resortOwner->resort_price_per_night ?: 0),
+                    'image'            => $primaryImage,
+                    'images'           => $images,
                     'resort_amenities' => $resortOwner->resort_amenities ?? [],
-                    'user_id' => $resortOwner->id,
-                    'is_registered' => true,
-                    'type' => 'Beach Resort',
-                    'category' => 'Beach Resort',
-                    'badge' => $resortOwner->resort_name ?? 'Resort Stay',
-                    'capacity' => 2,
-                    'is_room' => false,
-                    'barangay' => $resortOwner->barangay,
-                    'latitude' => $resortOwner->latitude,
-                    'longitude' => $resortOwner->longitude,
+                    'user_id'          => $resortOwner->id,
+                    'is_registered'    => true,
+                    'type'             => 'Beach Resort',
+                    'category'         => 'Beach Resort',
+                    'badge'            => $resortOwner->resort_name ?? 'Resort Stay',
+                    'capacity'         => 2,
+                    'is_room'          => false,
+                    'barangay'         => $resortOwner->barangay,
+                    'latitude'         => $resortOwner->latitude,
+                    'longitude'        => $resortOwner->longitude,
                     'virtual_tour_scenes' => $resortOwner->virtual_tour_scenes ?? [],
+                    'view_count'       => $totalResortViews,
+                    'views'            => $totalResortViews,
+                    'likes'            => $resortSaves,
                 ]);
             }
 

@@ -624,23 +624,48 @@ Route::group(['middleware' => ['jwt.auth']], function () {
                 ->count();
 
             $totalPostLikes = (int) \App\Models\EnterprisePost::where('user_id', $user->id)->sum('likes');
-            $totalPostSaves = (int) \App\Models\EnterprisePost::where('user_id', $user->id)->sum('saves');
 
+            // Get IDs for this resort's content
+            $accommodationIds = \App\Models\Accommodation::where('user_id', $user->id)->pluck('id');
+
+            // Analytics & Save: count actual WishlistItem records for this resort's accommodations
+            $wishlistSaves = 0;
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('wishlist_items') && $accommodationIds->isNotEmpty()) {
+                    $wishlistSaves = (int) \App\Models\WishlistItem::where('item_type', 'accommodation')
+                        ->whereIn('item_id', $accommodationIds->map(fn($id) => (string)$id))
+                        ->count();
+                }
+                // Add enterprise post saves as secondary signal
+                $postSavesDb = (int) \App\Models\EnterprisePost::where('user_id', $user->id)->sum('saves');
+                $wishlistSaves += $postSavesDb;
+            } catch (\Throwable $e) {
+                $wishlistSaves = (int) \App\Models\EnterprisePost::where('user_id', $user->id)->sum('saves');
+            }
+
+            // Active Rooms/Stays: from both resort_rooms and accommodations tables
             $roomsCount = \App\Models\ResortRoom::where('user_id', $user->id)->count();
-            $totalActiveRooms = $roomsCount;
+            $accommodationsCount = $accommodationIds->count();
+            $totalActiveRooms = $roomsCount + $accommodationsCount;
 
-            // Total Views: strictly from accommodations created by this resort
-            $totalViews = (int) \App\Models\Accommodation::where('user_id', $user->id)->sum('view_count');
+            // Total Views: read from Laravel Cache using the key format stored by views/increment endpoint
+            // Cache key format: view_count_accommodation_{id} and view_count_resort_{userId}
+            $totalViews = 0;
+            foreach ($accommodationIds as $accId) {
+                $totalViews += (int) \Illuminate\Support\Facades\Cache::get("view_count_accommodation_{$accId}", 0);
+            }
+            // Also count resort-level profile views
+            $totalViews += (int) \Illuminate\Support\Facades\Cache::get("view_count_resort_{$user->id}", 0);
 
             $viewsGrowth = $totalViews > 0 ? '+14%' : '0%';
-            $savesGrowth = $totalPostSaves > 0 ? '+22%' : '0%';
+            $savesGrowth = $wishlistSaves > 0 ? '+22%' : '0%';
 
             return response()->json([
                 'success' => true,
                 'stats' => [
                     'total_views' => $totalViews,
                     'views_growth' => $viewsGrowth,
-                    'wishlist_saves' => $totalPostSaves,
+                    'wishlist_saves' => $wishlistSaves,
                     'saves_growth' => $savesGrowth,
                     'active_rooms' => $totalActiveRooms,
                     'total_posts' => $totalPosts,

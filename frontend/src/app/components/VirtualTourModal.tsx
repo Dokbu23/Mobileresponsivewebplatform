@@ -679,12 +679,12 @@ export function VirtualTourModal({
         {/* Top Header Bar */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-slate-800/90 bg-slate-900/95">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 flex-shrink-0">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-pink-500 via-rose-500 to-pink-400 flex items-center justify-center text-white shadow-md shadow-pink-500/20 flex-shrink-0">
               <Compass className="h-5 w-5 text-white" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 font-bold text-[10px] uppercase rounded-full border border-emerald-500/30">
+                <span className="px-2 py-0.5 bg-pink-500/20 text-pink-400 font-bold text-[10px] uppercase rounded-full border border-pink-500/30">
                   {category}
                 </span>
                 <h3 className="font-extrabold text-white text-sm sm:text-base md:text-lg tracking-tight line-clamp-1">
@@ -692,7 +692,7 @@ export function VirtualTourModal({
                 </h3>
               </div>
               <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-                <MapPin className="h-3 w-3 text-emerald-400" />
+                <MapPin className="h-3 w-3 text-pink-400" />
                 <span>Mansalay, Oriental Mindoro</span>
               </p>
             </div>
@@ -723,7 +723,7 @@ export function VirtualTourModal({
               onClick={() => setActiveTab('360')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeTab === '360'
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/20'
+                  ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-md shadow-pink-500/20'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
               }`}
             >
@@ -762,9 +762,9 @@ export function VirtualTourModal({
 
           {/* Quick Help Tip */}
           {activeTab === '360' && (
-            <div className="hidden md:flex items-center gap-2 text-[11px] text-emerald-400/90 font-medium bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-              <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
-              <span>Pindutin ang kumikislap na arrow para maglakad sa ibang lokasyon</span>
+            <div className="hidden md:flex items-center gap-2 text-[11px] text-pink-400/90 font-medium bg-pink-500/10 px-3 py-1 rounded-full border border-pink-500/20">
+              <Sparkles className="h-3.5 w-3.5 text-pink-400" />
+              <span>Click on the blinking arrows to navigate to another location</span>
             </div>
           )}
         </div>
@@ -784,8 +784,8 @@ export function VirtualTourModal({
               {/* Loading State */}
               {isPannellumLoading && (
                 <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-30">
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center animate-spin">
-                    <Compass className="h-6 w-6 text-emerald-400" />
+                  <div className="w-12 h-12 rounded-2xl bg-pink-500/20 border border-pink-500/40 flex items-center justify-center animate-spin">
+                    <Compass className="h-6 w-6 text-pink-400" />
                   </div>
                   <p className="text-sm font-bold text-white tracking-wide">
                     Loading 360° Walkthrough...
@@ -814,9 +814,9 @@ export function VirtualTourModal({
               {/* Current Scene Badge & Directional Info (Top Left Overlay) */}
               <div className="absolute top-4 left-4 z-20 pointer-events-none">
                 <div className="bg-slate-950/85 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-slate-800/90 shadow-xl flex items-center gap-2.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-pink-400 animate-ping" />
                   <div>
-                    <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">
+                    <span className="text-[10px] text-pink-400 font-bold uppercase tracking-wider block">
                       Current Location
                     </span>
                     <span className="text-xs sm:text-sm font-extrabold text-white">
@@ -833,7 +833,7 @@ export function VirtualTourModal({
                   onClick={toggleAutoRotate}
                   className={`p-2.5 rounded-2xl border transition-all shadow-lg cursor-pointer ${
                     isAutoRotating
-                      ? 'bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/30'
+                      ? 'bg-pink-500 text-white border-pink-400 shadow-pink-500/30'
                       : 'bg-slate-950/80 backdrop-blur-md text-slate-300 border-slate-800/80 hover:text-white hover:bg-slate-900'
                   }`}
                   title={isAutoRotating ? 'Stop Auto-Rotate' : 'Auto-Rotate 360°'}
@@ -846,7 +846,7 @@ export function VirtualTourModal({
                   onClick={toggleGyroscope}
                   className={`p-2.5 rounded-2xl border transition-all shadow-lg cursor-pointer ${
                     isGyroActive
-                      ? 'bg-cyan-500 text-white border-cyan-400 shadow-cyan-500/30'
+                      ? 'bg-pink-400 text-white border-pink-300 shadow-pink-500/30'
                       : 'bg-slate-950/80 backdrop-blur-md text-slate-300 border-slate-800/80 hover:text-white hover:bg-slate-900'
                   }`}
                   title={isGyroActive ? 'Disable Phone Gyroscope' : 'Enable Phone Gyroscope (Move phone to look around)'}
@@ -884,7 +884,7 @@ export function VirtualTourModal({
                         onClick={() => handleSelectScene(scene.id)}
                         className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
                           isActive
-                            ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/20 ring-2 ring-emerald-400/40'
+                            ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-md shadow-pink-500/20 ring-2 ring-pink-400/40'
                             : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                         }`}
                       >
@@ -916,12 +916,12 @@ export function VirtualTourModal({
                   <div className="flex items-center gap-2">
                     <Info className="h-4 w-4 text-amber-400 flex-shrink-0" />
                     <p className="text-[11px] text-slate-300 leading-tight">
-                      <strong className="text-amber-400">Google Street View Notice:</strong> Nangangailangan ng Google Cloud Billing Account ang Street View API.
+                      <strong className="text-amber-400">Google Street View Notice:</strong> Street View API requires an active Google Cloud Billing Account.
                     </p>
                   </div>
                   <button
                     onClick={() => setActiveTab('360')}
-                    className="px-3 py-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-[11px] rounded-lg shadow-md shadow-emerald-500/20 whitespace-nowrap flex items-center gap-1 cursor-pointer"
+                    className="px-3 py-1 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white font-extrabold text-[11px] rounded-lg shadow-md shadow-pink-500/20 whitespace-nowrap flex items-center gap-1 cursor-pointer"
                   >
                     <Footprints className="h-3 w-3" />
                     <span>360° Walk</span>
@@ -949,16 +949,16 @@ export function VirtualTourModal({
                     Google Street View Not Available on this Spot
                   </h4>
                   <p className="text-xs text-slate-400 max-w-md mt-1.5 leading-relaxed">
-                    Ang <span className="text-emerald-400 font-semibold">{attractionName}</span> ay
-                    isang pribadong resort o secluded area na hindi nadaraanan ng Google Street View car.
+                    <span className="text-pink-400 font-semibold">{attractionName}</span> is
+                    a private resort or secluded area not accessible by Google Street View vehicles.
                   </p>
                   <div className="mt-4 flex items-center gap-2">
                     <button
                       onClick={() => setActiveTab('360')}
-                      className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-xs rounded-full shadow-lg shadow-emerald-500/25 transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-5 py-2.5 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white font-extrabold text-xs rounded-full shadow-lg shadow-pink-500/25 transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       <Footprints className="h-4 w-4" />
-                      <span>Lumipat sa 360° Walkthrough</span>
+                      <span>Switch to 360° Walkthrough</span>
                     </button>
                   </div>
                 </div>
@@ -1005,13 +1005,13 @@ export function VirtualTourModal({
         {/* Bottom Information & Contact Actions Footer */}
         <div className="px-4 sm:px-6 py-3.5 bg-slate-900/95 flex flex-wrap items-center justify-between gap-3 text-xs border-t border-slate-800/80">
           <div className="flex items-center gap-4 text-slate-300">
-            <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+            <span className="flex items-center gap-1.5 text-pink-400 font-semibold">
               <Eye className="h-3.5 w-3.5" />
               <span>Interactive 360° Virtual Tour</span>
             </span>
             <span className="hidden sm:inline text-slate-600">•</span>
             <span className="hidden sm:inline text-slate-400">
-              Pindutin ang arrow sa daan para maglakad
+              Click on the ground arrows to walk through
             </span>
           </div>
 
@@ -1019,7 +1019,7 @@ export function VirtualTourModal({
             {phone && (
               <a
                 href={`tel:${phone.replace(/[^0-9+]/g, '')}`}
-                className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20"
+                className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white rounded-full font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-pink-500/20"
               >
                 <Phone className="h-3 w-3 fill-white" />
                 <span>Call {phone}</span>
