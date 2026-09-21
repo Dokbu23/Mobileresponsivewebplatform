@@ -495,8 +495,12 @@ class AccommodationController extends Controller
     public function businessProfile(int $userId)
     {
         $owner = \App\Models\User::where('id', $userId)
-            ->where('role', 'resort')
-            ->firstOrFail();
+            ->whereIn('role', ['resort', 'admin'])
+            ->first();
+
+        if (!$owner) {
+            return response()->json(['message' => 'Resort profile not found'], 404);
+        }
 
         // Auto-sync any room posts created by this resort owner into ResortRoom
         try {
@@ -578,10 +582,13 @@ class AccommodationController extends Controller
             'store_banner'       => $banner,
             'resort_logo'        => $logo,
             'resort_banner'      => $banner,
+            'logo'               => $logo,
+            'banner'             => $banner,
             'resort_images'      => $images,
             'resort_amenities'   => $owner->resort_amenities ?? [],
             'resort_facilities'  => $owner->resort_facilities,
             'resort_policies'    => $owner->resort_policies,
+            'resort_is_setup'    => (bool) $owner->resort_is_setup,
             'facebook_link'      => $owner->facebook_link,
             'instagram_link'     => $owner->instagram_link,
             'latitude'           => $owner->latitude,

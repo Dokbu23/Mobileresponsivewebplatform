@@ -210,8 +210,12 @@ class EnterpriseProfileController extends Controller
     public function publicProfile(int $userId)
     {
         $owner = \App\Models\User::where('id', $userId)
-            ->where('role', 'enterprise')
-            ->firstOrFail();
+            ->whereIn('role', ['enterprise', 'admin'])
+            ->first();
+
+        if (!$owner) {
+            return response()->json(['message' => 'Store profile not found'], 404);
+        }
 
         $products = \App\Models\Product::where('user_id', $userId)
             ->get()

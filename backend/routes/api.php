@@ -69,6 +69,10 @@ Route::group(['prefix' => 'public'], function () {
     // Public blocked dates (for tourists when booking)
     Route::get('resort-availability/{userId}', [ResortAvailabilityController::class, 'publicIndex']);
 
+    // Public business profile routes (resort & enterprise)
+    Route::get('business/resort/{userId}', [AccommodationController::class, 'businessProfile']);
+    Route::get('business/enterprise/{userId}', [EnterpriseProfileController::class, 'publicProfile']);
+
     // Platform statistics
     Route::get('stats', [StatsController::class, 'getPlatformStats']);
 

@@ -367,4 +367,16 @@ class ResortProfileController extends Controller
             }
         }
     }
+
+    /**
+     * Public resort business profile — no auth required.
+     * Delegates to AccommodationController::businessProfile
+     *
+     * @param int $userId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function publicProfile(int $userId)
+    {
+        return app(\App\Http\Controllers\Api\AccommodationController::class)->businessProfile($userId);
+    }
 }
