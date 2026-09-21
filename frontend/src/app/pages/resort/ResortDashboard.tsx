@@ -43,7 +43,8 @@ import {
   Users,
   DollarSign,
   Check,
-  Info
+  Info,
+  Minus
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { getJSON, getPublicJSON, postJSON, putJSON, deleteJSON, getStorageUrl, API_BASE, getAuthToken } from '../../lib/api';
@@ -331,19 +332,26 @@ export function ResortDashboard() {
   const [showMoreDetails, setShowMoreDetails] = useState(false);
 
   // Context-specific form states
-  // Beach Views specific
-  const [beachViewType, setBeachViewType] = useState<string>('Full Ocean View');
+  // 1. Rooms & Stays specific
+  const [roomTypeName, setRoomTypeName] = useState('');
+  const [maxGuests, setMaxGuests] = useState<number>(4);
+  const [bedConfig, setBedConfig] = useState<string>('1 King Bed');
+
+  // 2. Amenities specific
+  const [amenityTypes, setAmenityTypes] = useState<string[]>(['Pool', 'Wi-Fi']);
+  const [amenityAvailability, setAmenityAvailability] = useState<'public' | 'overnight'>('public');
+  const [amenityHours, setAmenityHours] = useState('6:00 AM - 10:00 PM');
+
+  // 3. Activities specific
+  const [activityName, setActivityName] = useState('');
+  const [activityInclusions, setActivityInclusions] = useState('');
+  const [activityPricingType, setActivityPricingType] = useState<'free' | 'paid'>('free');
+
+  // 4. Beach Views specific
+  const [beachViewLocation, setBeachViewLocation] = useState('From the room balcony');
   const [beachTimeOfDay, setBeachTimeOfDay] = useState<string>('🌅 Sunrise');
 
-  // Activities specific
-  const [activityCostType, setActivityCostType] = useState<'free' | 'fee'>('free');
-  const [activityLocationType, setActivityLocationType] = useState<'onsite' | 'offsite'>('onsite');
-  const [activitySchedule, setActivitySchedule] = useState<string>('');
-
-  // Rooms specific
-  const [roomCapacity, setRoomCapacity] = useState<string>('Max 2-4 Guests');
-
-  // Tags state
+  // Common tags state
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
 
@@ -356,6 +364,15 @@ export function ResortDashboard() {
       setTags(tags.filter(t => t !== tagVal));
     } else {
       setTags([...tags, tagVal]);
+    }
+  };
+
+  // Helper to toggle amenity multi-select tag
+  const handleToggleAmenityType = (amenity: string) => {
+    if (amenityTypes.includes(amenity)) {
+      setAmenityTypes(amenityTypes.filter(a => a !== amenity));
+    } else {
+      setAmenityTypes([...amenityTypes, amenity]);
     }
   };
 
@@ -400,78 +417,78 @@ export function ResortDashboard() {
     rooms: {
       key: 'rooms',
       label: 'Rooms & Stays',
-      title: 'Rooms & Stays Showcase',
-      subtitle: 'Highlight your suites, casitas, bed setups, guest capacity, and overnight stay availability.',
-      photoTip: 'Upload crisp photos of your room interior, bed layout, private bath, and balcony views.',
+      title: 'Rooms & Stays',
+      subtitle: 'When this button is active, the goal is to get booking details.',
+      photoTip: 'Upload photos of room interior, bed setup, bathroom, and balcony views.',
       icon: Bed,
       themeBorder: 'border-purple-200',
       themeBg: 'bg-purple-50/70',
       themeText: 'text-purple-700',
-      placeholder: 'e.g., Relax in our Deluxe Oceanfront Casita with a plush king-sized bed, private balcony, hot shower, and complimentary breakfast for two...',
-      priceLabel: 'Room Rate (per night)',
-      pricePlaceholder: 'Room Rate (e.g. ₱3,500/night)',
+      placeholder: 'e.g., Relax in our Deluxe Oceanfront Suite featuring panoramic sea views, air conditioning, and complimentary breakfast...',
+      priceLabel: 'Rate per night (₱)',
+      pricePlaceholder: 'Rate per night (e.g. ₱3,500)',
       showPrice: true,
       showAvailability: true,
       showCheckInOut: true,
       showOperatingHours: false,
-      suggestedTags: ['Air-Conditioned', 'Private Bathroom', 'Hot & Cold Shower', 'Balcony / Terrace', 'Free Breakfast', 'Smart TV', 'Ocean View', 'Wi-Fi', 'King Bed'],
+      suggestedTags: ['Air-Conditioned', 'Private Bathroom', 'Hot & Cold Shower', 'Balcony / Terrace', 'Free Breakfast', 'Smart TV', 'Ocean View', 'Wi-Fi'],
     },
     amenities: {
       key: 'amenities',
       label: 'Amenities',
-      title: 'Amenities & Facilities',
-      subtitle: 'Show off the physical comforts, swimming pools, open-air restaurants, grill stations, and on-site perks.',
+      title: 'Amenities',
+      subtitle: 'When this button is active, focus on the facility details and rules.',
       photoTip: 'Upload photos of the swimming pool, restaurant, parking area, grill stations, or beach lounge chairs.',
       icon: Waves,
       themeBorder: 'border-cyan-200',
       themeBg: 'bg-cyan-50/70',
       themeText: 'text-cyan-700',
       placeholder: 'e.g., Cool off in our infinity pool or enjoy fresh seaside dining at our open-air restaurant. Free high-speed Wi-Fi is accessible property-wide...',
-      priceLabel: 'Facility / Day-Tour Access Fee (Optional)',
-      pricePlaceholder: 'e.g. Free for guests or ₱150 day pass',
+      priceLabel: 'Entrance Fee / Day Tour Fee (₱)',
+      pricePlaceholder: 'Leave blank if free, or e.g. ₱150',
       showPrice: true,
       showAvailability: false,
       showCheckInOut: false,
       showOperatingHours: true,
-      suggestedTags: ['Swimming Pool', 'Restaurant & Bar', 'Free High-Speed Wi-Fi', 'Free Parking', 'Pet-Friendly', 'Wheelchair Accessible', 'Grill & BBQ Area', 'Beach Lounge Chairs', 'Kiddie Pool'],
+      suggestedTags: ['Pool', 'Wi-Fi', 'Restaurant', 'Parking', 'Bar', 'Grill & BBQ Area', 'Beach Chairs', 'Pet-friendly', 'Wheelchair accessible'],
     },
     activities: {
       key: 'activities',
       label: 'Activities',
-      title: 'Activities & Experiences',
-      subtitle: 'Sell the vacation experience! Tell guests what thrilling or relaxing adventures they can enjoy during their trip.',
+      title: 'Activities',
+      subtitle: 'When this button is active, capture the details of the experience.',
       photoTip: 'Upload photos of people kayaking, snorkeling, island hopping, or enjoying a beach bonfire.',
       icon: Compass,
       themeBorder: 'border-emerald-200',
       themeBg: 'bg-emerald-50/70',
       themeText: 'text-emerald-700',
       placeholder: 'e.g., Explore the marine life of Mansalay! We offer guided snorkeling tours daily. Kayaks and paddleboards are free for overnight guests...',
-      priceLabel: 'Activity Fee / Cost',
-      pricePlaceholder: 'e.g. ₱500/person or ₱1,200/boat trip',
+      priceLabel: 'Activity Fee / Rental Rate (₱)',
+      pricePlaceholder: 'Activity Fee / Rental Rate (e.g. ₱500/person or ₱1,200/rental)',
       showPrice: true,
       showAvailability: false,
       showCheckInOut: false,
       showOperatingHours: false,
-      suggestedTags: ['Guided Snorkeling', 'Kayaking', 'Island Hopping', 'Beach Bonfire', 'Beach Volleyball', 'Banana Boat', 'Paddleboarding', 'Scuba Diving'],
+      suggestedTags: ['Guided Snorkeling Tour', 'Kayak Rental', 'Island Hopping', 'Beach Bonfire', 'Beach Volleyball', 'Paddleboarding'],
     },
     beach_views: {
       key: 'beach_views',
       label: 'Beach Views',
-      title: 'Beach Views & Scenery',
-      subtitle: 'Pure visual inspiration! Capitalize on your coastal geography, white sand shoreline, sunrise, and golden hour.',
-      photoTip: 'Upload high-resolution photos of the actual beach, sunrise/sunset, or views captured directly from a room window or balcony.',
+      title: 'Beach Views',
+      subtitle: 'Since this is purely visual for marketing and aesthetics, keep it simple so owners can post quickly.',
+      photoTip: 'Upload high-quality photos of the actual beach, sunrise/sunset shots, or views captured directly from a room window or balcony.',
       icon: Palmtree,
       themeBorder: 'border-rose-200',
       themeBg: 'bg-rose-50/70',
       themeText: 'text-rose-700',
-      placeholder: 'e.g., Wake up to this spectacular sunrise over Mansalay Bay. This is the actual serene view right outside our beachfront casitas...',
+      placeholder: 'e.g., Wake up to this spectacular sunrise over Mansalay bay. This is the actual view from our Beachfront Casitas...',
       priceLabel: '',
       pricePlaceholder: '',
       showPrice: false,
       showAvailability: false,
       showCheckInOut: false,
       showOperatingHours: false,
-      suggestedTags: ['Full Ocean View', 'Beachfront Shoreline', 'Sunrise Spot', 'Sunset / Golden Hour', 'White Sand', 'Palm Trees', 'Stargazing Night'],
+      suggestedTags: ['From the room balcony', 'Directly on the beach', 'From the restaurant', 'Cliffside viewpoint', 'Sunrise', 'Sunset', 'Daytime'],
     },
   };
 
@@ -683,8 +700,18 @@ export function ResortDashboard() {
       const token = getAuthToken();
       const formData = new FormData();
 
+      // Context-aware Content / Title
+      let finalContent = postContent.trim();
+      if (postType === 'rooms' && roomTypeName.trim()) {
+        finalContent = `${roomTypeName.trim()}${finalContent ? ` — ${finalContent}` : ''}`;
+      } else if (postType === 'activities' && activityName.trim()) {
+        finalContent = `${activityName.trim()}${finalContent ? ` — ${finalContent}` : ''}`;
+      } else if (!finalContent) {
+        finalContent = `${POST_CONTEXTS[postType]?.title || 'Resort'} updates and highlights!`;
+      }
+
       formData.append('type', postType);
-      formData.append('content', postContent.trim() || `${POST_CONTEXTS[postType]?.title || 'Resort'} updates and highlights!`);
+      formData.append('content', finalContent);
       formData.append('location', location.trim());
 
       const resortName = resortProfile?.resort_name || currentUser?.resort_name || currentUser?.name || 'Resort';
@@ -692,11 +719,15 @@ export function ResortDashboard() {
 
       // Context-aware Price
       if (postType === 'beach_views') {
-        // No price field for beach scenery
+        // No price field for beach scenery (hidden completely)
       } else if (postType === 'activities') {
-        if (activityCostType === 'free') {
+        if (activityPricingType === 'free') {
           formData.append('price', 'Free for guests');
         } else if (price.trim()) {
+          formData.append('price', price.trim());
+        }
+      } else if (postType === 'amenities') {
+        if (price.trim()) {
           formData.append('price', price.trim());
         }
       } else if (price.trim()) {
@@ -704,10 +735,15 @@ export function ResortDashboard() {
       }
 
       // Context-aware Hours / Schedule
-      if (postType === 'rooms' || postType === 'amenities') {
+      if (postType === 'rooms') {
         if (businessHours.trim()) formData.append('business_hours', businessHours.trim());
-      } else if (postType === 'activities' && activitySchedule.trim()) {
-        formData.append('business_hours', activitySchedule.trim());
+      } else if (postType === 'amenities') {
+        const hours = amenityHours.trim() || businessHours.trim();
+        if (hours) formData.append('business_hours', hours);
+      } else if (postType === 'activities') {
+        if (activityInclusions.trim()) {
+          formData.append('business_hours', `Inclusions: ${activityInclusions.trim()}`);
+        }
       }
 
       // Stock / Availability
@@ -719,17 +755,26 @@ export function ResortDashboard() {
       const allTags = [...tags];
 
       if (postType === 'beach_views') {
-        if (beachViewType && !allTags.includes(beachViewType)) allTags.push(beachViewType);
+        if (beachViewLocation && !allTags.includes(beachViewLocation)) allTags.push(beachViewLocation);
         if (beachTimeOfDay && !allTags.includes(beachTimeOfDay)) allTags.push(beachTimeOfDay);
       } else if (postType === 'activities') {
-        const costTag = activityCostType === 'free' ? 'Free for guests' : 'Additional fee';
-        const locTag = activityLocationType === 'onsite' ? 'On-site Activity' : 'Off-site / Nearby Tour';
+        if (activityName.trim() && !allTags.includes(activityName.trim())) allTags.push(activityName.trim());
+        const costTag = activityPricingType === 'free' ? 'Free for guests' : 'Paid Activity';
         if (!allTags.includes(costTag)) allTags.push(costTag);
-        if (!allTags.includes(locTag)) allTags.push(locTag);
-      } else if (postType === 'rooms') {
-        if (roomCapacity.trim() && !allTags.includes(roomCapacity.trim())) {
-          allTags.push(roomCapacity.trim());
+        if (activityInclusions.trim() && !allTags.includes(`Inclusions: ${activityInclusions.trim()}`)) {
+          allTags.push(`Inclusions: ${activityInclusions.trim()}`);
         }
+      } else if (postType === 'rooms') {
+        if (roomTypeName.trim() && !allTags.includes(roomTypeName.trim())) allTags.push(roomTypeName.trim());
+        const guestsTag = `${maxGuests} ${maxGuests === 1 ? 'Guest' : 'Guests'}`;
+        if (!allTags.includes(guestsTag)) allTags.push(guestsTag);
+        if (bedConfig && !allTags.includes(bedConfig)) allTags.push(bedConfig);
+      } else if (postType === 'amenities') {
+        amenityTypes.forEach(a => {
+          if (!allTags.includes(a)) allTags.push(a);
+        });
+        const availTag = amenityAvailability === 'public' ? 'Open to public / Day tour' : 'Exclusive for overnight guests';
+        if (!allTags.includes(availTag)) allTags.push(availTag);
       }
 
       if (promoNote.trim() && !allTags.includes(promoNote.trim())) {
@@ -770,7 +815,17 @@ export function ResortDashboard() {
       setCloseTime('');
       setStock('');
       setPromoNote('');
-      setActivitySchedule('');
+      setRoomTypeName('');
+      setMaxGuests(4);
+      setBedConfig('1 King Bed');
+      setAmenityTypes(['Pool', 'Wi-Fi']);
+      setAmenityAvailability('public');
+      setAmenityHours('6:00 AM - 10:00 PM');
+      setActivityName('');
+      setActivityInclusions('');
+      setActivityPricingType('free');
+      setBeachViewLocation('From the room balcony');
+      setBeachTimeOfDay('🌅 Sunrise');
       setTags([]);
       setTagInput('');
       handleRemoveImage();
@@ -1268,37 +1323,77 @@ export function ResortDashboard() {
           </div>
 
           {/* Permanent Anchor 2 & Dynamic Price Row */}
-          <div className={`grid grid-cols-1 ${POST_CONTEXTS[postType]?.showPrice ? 'sm:grid-cols-2' : ''} gap-3`}>
+          <div className={`grid grid-cols-1 ${postType !== 'beach_views' ? 'sm:grid-cols-2' : ''} gap-3`}>
             {/* Permanent Anchor 2: Location/Address */}
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                <MapPin className="h-4 w-4" />
-              </div>
-              <input
-                type="text"
-                value={location}
-                onChange={e => setLocation(e.target.value)}
-                placeholder="Specific location / address (e.g. Don Pedro, Mansalay) *"
-                className="w-full pl-9 pr-16 py-2.5 border border-gray-200 rounded-xl focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none text-xs"
-              />
-              <span className="absolute right-3 top-2.5 text-[10px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded">
-                Required
-              </span>
-            </div>
-
-            {/* Dynamic Price Field (Customized per form, Hidden for Beach Views) */}
-            {POST_CONTEXTS[postType]?.showPrice && (
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5 text-pink-500" />
+                  Location / Address
+                </span>
+                <span className="text-[10px] font-bold text-red-500 bg-red-50 px-1.5 py-0.2 rounded">
+                  Required
+                </span>
+              </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none font-bold text-xs text-gray-400 select-none">
-                  ₱
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                  <MapPin className="h-4 w-4" />
                 </div>
                 <input
                   type="text"
-                  value={price}
-                  onChange={e => setPrice(e.target.value)}
-                  placeholder={POST_CONTEXTS[postType]?.pricePlaceholder || 'Price (e.g. ₱3,500/night)'}
-                  className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none text-xs"
+                  value={location}
+                  onChange={e => setLocation(e.target.value)}
+                  placeholder="Specific location / address (e.g. Don Pedro, Mansalay)"
+                  className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none text-xs bg-white"
                 />
+              </div>
+            </div>
+
+            {/* Dynamic Price Field (Customized per form, Hidden completely for Beach Views) */}
+            {postType !== 'beach_views' && (
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <DollarSign className="h-3.5 w-3.5 text-pink-500" />
+                    {postType === 'rooms'
+                      ? 'Rate per night (₱)'
+                      : postType === 'amenities'
+                      ? 'Entrance Fee / Day Tour Fee (₱)'
+                      : 'Activity Fee / Rental Rate (₱)'}
+                  </span>
+                  {postType === 'amenities' && (
+                    <span className="text-[10px] text-gray-400 font-normal italic">Leave blank if free</span>
+                  )}
+                  {postType === 'activities' && activityPricingType === 'free' && (
+                    <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.2 rounded">Complimentary</span>
+                  )}
+                </label>
+
+                {postType === 'activities' && activityPricingType === 'free' ? (
+                  <div className="px-3.5 py-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-700 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    <span>Free for guests (No fee charged)</span>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none font-bold text-xs text-gray-400 select-none">
+                      ₱
+                    </div>
+                    <input
+                      type="text"
+                      value={price}
+                      onChange={e => setPrice(e.target.value)}
+                      placeholder={
+                        postType === 'rooms'
+                          ? 'Rate per night (e.g. ₱3,500)'
+                          : postType === 'amenities'
+                          ? 'Leave blank if free, or e.g. ₱150'
+                          : 'Activity Fee / Rental Rate (e.g. ₱500/person)'
+                      }
+                      className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none text-xs bg-white"
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1307,51 +1402,269 @@ export function ResortDashboard() {
               CONTEXT-SPECIFIC DYNAMIC CONTROLS (Direct in Form)
              ═══════════════════════════════════════════════════ */}
 
-          {/* CONTEXT A: BEACH VIEWS (View Type + Time of Day) */}
+          {/* 1. ROOMS & STAYS DYNAMIC FIELDS */}
+          {postType === 'rooms' && (
+            <div className="p-4 bg-purple-50/60 rounded-2xl border border-purple-200/80 space-y-3.5 animate-in fade-in duration-200">
+              {/* Room Type / Name (Text Input) */}
+              <div>
+                <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
+                  <Bed className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Room Type / Name (Text Input)</span>
+                </label>
+                <input
+                  type="text"
+                  value={roomTypeName}
+                  onChange={e => setRoomTypeName(e.target.value)}
+                  placeholder='e.g., "Deluxe Oceanfront Suite"'
+                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+
+              {/* Max Guests (Number Counter) & Bed Configuration (Dropdown) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Max Guests (Number Counter) */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Max Guests (Number Counter)</span>
+                  </label>
+                  <div className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-3 py-1.5 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setMaxGuests(prev => Math.max(1, prev - 1))}
+                      className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-purple-100 text-gray-700 hover:text-purple-700 flex items-center justify-center font-bold transition-colors cursor-pointer"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-xs font-bold text-gray-900">
+                      {maxGuests} {maxGuests === 1 ? 'Guest' : 'Guests'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setMaxGuests(prev => Math.min(30, prev + 1))}
+                      className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-purple-100 text-gray-700 hover:text-purple-700 flex items-center justify-center font-bold transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bed Configuration (Dropdown) */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
+                    <Bed className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Bed Configuration (Dropdown)</span>
+                  </label>
+                  <select
+                    value={bedConfig}
+                    onChange={e => setBedConfig(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 outline-none focus:border-purple-500 cursor-pointer shadow-2xs"
+                  >
+                    <option value="1 King Bed">1 King Bed</option>
+                    <option value="2 Queen Beds">2 Queen Beds</option>
+                    <option value="1 Queen Bed">1 Queen Bed</option>
+                    <option value="2 Single Beds">2 Single Beds</option>
+                    <option value="1 Double Bed">1 Double Bed</option>
+                    <option value="Bunk Beds">Bunk Beds</option>
+                    <option value="1 King Bed + 1 Single Bed">1 King Bed + 1 Single Bed</option>
+                    <option value="Family Suite (3+ Beds)">Family Suite (3+ Beds)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 2. AMENITIES DYNAMIC FIELDS */}
+          {postType === 'amenities' && (
+            <div className="p-4 bg-cyan-50/60 rounded-2xl border border-cyan-200/80 space-y-3.5 animate-in fade-in duration-200">
+              {/* Amenity Type (Multi-select tags) */}
+              <div>
+                <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
+                  <Waves className="w-3.5 h-3.5 text-cyan-600" />
+                  <span>Amenity Type (Multi-select tags)</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {['Pool', 'Wi-Fi', 'Restaurant', 'Parking', 'Bar', 'Grill Station', 'Beach Chairs', 'Kids Playground'].map((item) => {
+                    const isSelected = amenityTypes.includes(item);
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => handleToggleAmenityType(item)}
+                        className={`text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer font-medium flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-cyan-600 text-white border-cyan-600 shadow-2xs font-bold'
+                            : 'bg-white text-gray-700 border-gray-200 hover:border-cyan-300 hover:bg-cyan-50/50'
+                        }`}
+                      >
+                        {isSelected ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3 text-gray-400" />}
+                        <span>[{item}]</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Availability (Toggle switches) */}
+              <div>
+                <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-cyan-600" />
+                  <span>Availability (Toggle switches)</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-gray-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setAmenityAvailability('public')}
+                    className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      amenityAvailability === 'public'
+                        ? 'bg-white text-cyan-700 shadow-xs'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    🏖️ Open to public / Day tour
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAmenityAvailability('overnight')}
+                    className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      amenityAvailability === 'overnight'
+                        ? 'bg-white text-cyan-700 shadow-xs'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    🔒 Exclusive for overnight guests
+                  </button>
+                </div>
+              </div>
+
+              {/* Operating Hours (Text Input) */}
+              <div>
+                <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-cyan-600" />
+                  <span>Operating Hours (Text Input)</span>
+                </label>
+                <input
+                  type="text"
+                  value={amenityHours}
+                  onChange={e => setAmenityHours(e.target.value)}
+                  placeholder='e.g., "6:00 AM - 10:00 PM"'
+                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 outline-none focus:border-cyan-500 shadow-2xs"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 3. ACTIVITIES DYNAMIC FIELDS */}
+          {postType === 'activities' && (
+            <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-200/80 space-y-3.5 animate-in fade-in duration-200">
+              {/* Activity Name (Text Input) */}
+              <div>
+                <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
+                  <Compass className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Activity Name (Text Input)</span>
+                </label>
+                <input
+                  type="text"
+                  value={activityName}
+                  onChange={e => setActivityName(e.target.value)}
+                  placeholder='e.g., "Guided Snorkeling Tour" or "Kayak Rental"'
+                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 outline-none focus:border-emerald-500 shadow-2xs"
+                />
+              </div>
+
+              {/* Inclusions (Text Input) */}
+              <div>
+                <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Inclusions (Text Input)</span>
+                </label>
+                <input
+                  type="text"
+                  value={activityInclusions}
+                  onChange={e => setActivityInclusions(e.target.value)}
+                  placeholder='e.g., "Includes life vest, paddles, and tour guide"'
+                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 outline-none focus:border-emerald-500 shadow-2xs"
+                />
+              </div>
+
+              {/* Pricing Type (Toggle switch) */}
+              <div>
+                <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Pricing Type (Toggle switch)</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActivityPricingType('free');
+                      setPrice('');
+                    }}
+                    className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      activityPricingType === 'free'
+                        ? 'bg-white text-emerald-700 shadow-xs'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    ✨ Free for guests
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivityPricingType('paid')}
+                    className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      activityPricingType === 'paid'
+                        ? 'bg-white text-emerald-700 shadow-xs'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    💳 Paid Activity
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 4. BEACH VIEWS DYNAMIC FIELDS */}
           {postType === 'beach_views' && (
-            <div className="p-4 bg-gradient-to-r from-rose-50/70 via-pink-50/40 to-orange-50/40 rounded-2xl border border-rose-200/80 space-y-3.5 animate-in fade-in duration-200">
+            <div className="p-4 bg-rose-50/60 rounded-2xl border border-rose-200/80 space-y-3.5 animate-in fade-in duration-200">
+              {/* View Location (Dropdown or Tags) */}
               <div>
                 <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
                   <Palmtree className="w-3.5 h-3.5 text-rose-500" />
-                  <span>View Perspective / Coastal View Type</span>
+                  <span>View Location (Dropdown or Tags) — Where was the photo taken?</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {[
-                    'Full Ocean View',
-                    'Partial Ocean View',
-                    'Beachfront Shoreline',
-                    'Garden & Beach Mix',
-                    'Sunset / Sunrise Spot',
-                    'Panoramic Sea Horizon'
-                  ].map((vt) => (
+                    'From the room balcony',
+                    'Directly on the beach',
+                    'From the restaurant',
+                    'Cliffside viewpoint',
+                    'Ocean horizon',
+                  ].map((loc) => (
                     <button
-                      key={vt}
+                      key={loc}
                       type="button"
-                      onClick={() => setBeachViewType(vt)}
+                      onClick={() => setBeachViewLocation(loc)}
                       className={`text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer font-medium ${
-                        beachViewType === vt
+                        beachViewLocation === loc
                           ? 'bg-rose-500 text-white border-rose-500 shadow-xs font-bold scale-[1.02]'
                           : 'bg-white text-gray-700 border-gray-200 hover:border-rose-300 hover:bg-rose-50/50'
                       }`}
                     >
-                      {vt}
+                      [{loc}]
                     </button>
                   ))}
                 </div>
               </div>
 
+              {/* Time of Day (Tags) */}
               <div>
                 <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
                   <Sun className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Time of Day / Atmosphere</span>
+                  <span>Time of Day (Tags)</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5">
-                  {[
-                    '🌅 Sunrise',
-                    '☀️ Daytime & Clear Skies',
-                    '🌇 Sunset / Golden Hour',
-                    '🌌 Night & Stargazing'
-                  ].map((tod) => (
+                  {['🌅 Sunrise', '🌇 Sunset', '☀️ Daytime', '🌌 Night / Stargazing'].map((tod) => (
                     <button
                       key={tod}
                       type="button"
@@ -1367,91 +1680,11 @@ export function ResortDashboard() {
                   ))}
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* CONTEXT B: ACTIVITIES (Cost Type + Location Toggles) */}
-          {postType === 'activities' && (
-            <div className="p-4 bg-gradient-to-r from-emerald-50/70 via-teal-50/40 to-cyan-50/40 rounded-2xl border border-emerald-200/80 space-y-3.5 animate-in fade-in duration-200">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Cost Type Toggle */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
-                    <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Cost Type</span>
-                  </label>
-                  <div className="grid grid-cols-2 gap-1.5 bg-gray-100 p-1 rounded-xl">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActivityCostType('free');
-                        setPrice('');
-                      }}
-                      className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                        activityCostType === 'free'
-                          ? 'bg-white text-emerald-700 shadow-xs'
-                          : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                    >
-                      ✨ Free for guests
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActivityCostType('fee')}
-                      className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                        activityCostType === 'fee'
-                          ? 'bg-white text-emerald-700 shadow-xs'
-                          : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                    >
-                      💳 Additional fee
-                    </button>
-                  </div>
-                </div>
-
-                {/* Location Toggle */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Activity Location</span>
-                  </label>
-                  <div className="grid grid-cols-2 gap-1.5 bg-gray-100 p-1 rounded-xl">
-                    <button
-                      type="button"
-                      onClick={() => setActivityLocationType('onsite')}
-                      className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                        activityLocationType === 'onsite'
-                          ? 'bg-white text-emerald-700 shadow-xs'
-                          : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                    >
-                      🏖️ On-site Resort
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActivityLocationType('offsite')}
-                      className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                        activityLocationType === 'offsite'
-                          ? 'bg-white text-emerald-700 shadow-xs'
-                          : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                    >
-                      ⛵ Nearby Off-site
-                    </button>
-                  </div>
-                </div>
+              <div className="p-3 bg-white/80 rounded-xl border border-rose-100 text-xs text-rose-700 flex items-center gap-2">
+                <Info className="w-4 h-4 text-rose-500 flex-shrink-0" />
+                <span>Price field is hidden completely for Beach Views (purely visual for marketing and aesthetics).</span>
               </div>
-
-              {activityCostType === 'free' ? (
-                <div className="px-3.5 py-2.5 bg-white/90 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-medium flex items-center gap-2 shadow-2xs">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                  <span>Complimentary activity: Free of charge for checked-in resort guests!</span>
-                </div>
-              ) : (
-                <p className="text-[11px] text-emerald-700 font-semibold italic">
-                  💡 Enter the specific fee or rate in the Activity Fee box above (e.g. ₱500/person or ₱1,200/boat).
-                </p>
-              )}
             </div>
           )}
 
