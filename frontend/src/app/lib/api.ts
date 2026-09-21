@@ -1,12 +1,32 @@
-const envApiBase = ((import.meta as any).env?.VITE_API_BASE as string | undefined) 
-  || ((import.meta as any).env?.VITE_API_URL as string | undefined);
+function resolveApiBase(): string {
+  // 1. If running in browser, check current hostname:
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    // Local development (localhost, 127.0.0.1, or local WiFi/LAN IP)
+    if (
+      host === 'localhost' || 
+      host === '127.0.0.1' || 
+      host === '::1' || 
+      host.startsWith('192.168.') || 
+      host.startsWith('10.') || 
+      host.endsWith('.local')
+    ) {
+      return 'http://localhost:8000';
+    }
+  }
 
-const defaultApiBase = (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
-  ? 'https://discmansalay.onrender.com'
-  : 'http://localhost:8000';
+  // 2. If deployed (e.g. Render, production domain)
+  const envApiBase = ((import.meta as any).env?.VITE_API_BASE as string | undefined) 
+    || ((import.meta as any).env?.VITE_API_URL as string | undefined);
 
-const rawApiBase = envApiBase || defaultApiBase;
+  if (envApiBase && !envApiBase.includes('localhost') && !envApiBase.includes('127.0.0.1')) {
+    return envApiBase;
+  }
 
+  return 'https://discmansalay.onrender.com';
+}
+
+const rawApiBase = resolveApiBase();
 export const API_BASE = rawApiBase.replace(/\/api\/?$/, '').replace(/\/+$/, '');
 
 export function getStorageUrl(path: string | null | undefined): string {
