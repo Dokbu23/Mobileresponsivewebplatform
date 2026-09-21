@@ -37,7 +37,13 @@ import {
   Lock,
   Video,
   Film,
-  Play
+  Play,
+  Sun,
+  Sunset,
+  Users,
+  DollarSign,
+  Check,
+  Info
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { getJSON, getPublicJSON, postJSON, putJSON, deleteJSON, getStorageUrl, API_BASE, getAuthToken } from '../../lib/api';
@@ -324,12 +330,34 @@ export function ResortDashboard() {
   const [promoNote, setPromoNote] = useState('');
   const [showMoreDetails, setShowMoreDetails] = useState(false);
 
+  // Context-specific form states
+  // Beach Views specific
+  const [beachViewType, setBeachViewType] = useState<string>('Full Ocean View');
+  const [beachTimeOfDay, setBeachTimeOfDay] = useState<string>('🌅 Sunrise');
+
+  // Activities specific
+  const [activityCostType, setActivityCostType] = useState<'free' | 'fee'>('free');
+  const [activityLocationType, setActivityLocationType] = useState<'onsite' | 'offsite'>('onsite');
+  const [activitySchedule, setActivitySchedule] = useState<string>('');
+
+  // Rooms specific
+  const [roomCapacity, setRoomCapacity] = useState<string>('Max 2-4 Guests');
+
   // Tags state
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
 
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Helper to toggle a tag on/off
+  const handleToggleTag = (tagVal: string) => {
+    if (tags.includes(tagVal)) {
+      setTags(tags.filter(t => t !== tagVal));
+    } else {
+      setTags([...tags, tagVal]);
+    }
+  };
 
   // Social links form state
   const [socialForm, setSocialForm] = useState({
@@ -348,6 +376,104 @@ export function ResortDashboard() {
     { key: 'activities', label: 'Activities', icon: Compass, color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
     { key: 'beach_views', label: 'Beach Views', icon: Palmtree, color: 'bg-rose-50 text-rose-600 border-rose-200' },
   ];
+
+  // Contextual configurations per post form
+  const POST_CONTEXTS: Record<string, {
+    key: string;
+    label: string;
+    title: string;
+    subtitle: string;
+    photoTip: string;
+    icon: any;
+    themeBorder: string;
+    themeBg: string;
+    themeText: string;
+    placeholder: string;
+    priceLabel: string;
+    pricePlaceholder: string;
+    showPrice: boolean;
+    showAvailability: boolean;
+    showCheckInOut: boolean;
+    showOperatingHours: boolean;
+    suggestedTags: string[];
+  }> = {
+    rooms: {
+      key: 'rooms',
+      label: 'Rooms & Stays',
+      title: 'Rooms & Stays Showcase',
+      subtitle: 'Highlight your suites, casitas, bed setups, guest capacity, and overnight stay availability.',
+      photoTip: 'Upload crisp photos of your room interior, bed layout, private bath, and balcony views.',
+      icon: Bed,
+      themeBorder: 'border-purple-200',
+      themeBg: 'bg-purple-50/70',
+      themeText: 'text-purple-700',
+      placeholder: 'e.g., Relax in our Deluxe Oceanfront Casita with a plush king-sized bed, private balcony, hot shower, and complimentary breakfast for two...',
+      priceLabel: 'Room Rate (per night)',
+      pricePlaceholder: 'Room Rate (e.g. ₱3,500/night)',
+      showPrice: true,
+      showAvailability: true,
+      showCheckInOut: true,
+      showOperatingHours: false,
+      suggestedTags: ['Air-Conditioned', 'Private Bathroom', 'Hot & Cold Shower', 'Balcony / Terrace', 'Free Breakfast', 'Smart TV', 'Ocean View', 'Wi-Fi', 'King Bed'],
+    },
+    amenities: {
+      key: 'amenities',
+      label: 'Amenities',
+      title: 'Amenities & Facilities',
+      subtitle: 'Show off the physical comforts, swimming pools, open-air restaurants, grill stations, and on-site perks.',
+      photoTip: 'Upload photos of the swimming pool, restaurant, parking area, grill stations, or beach lounge chairs.',
+      icon: Waves,
+      themeBorder: 'border-cyan-200',
+      themeBg: 'bg-cyan-50/70',
+      themeText: 'text-cyan-700',
+      placeholder: 'e.g., Cool off in our infinity pool or enjoy fresh seaside dining at our open-air restaurant. Free high-speed Wi-Fi is accessible property-wide...',
+      priceLabel: 'Facility / Day-Tour Access Fee (Optional)',
+      pricePlaceholder: 'e.g. Free for guests or ₱150 day pass',
+      showPrice: true,
+      showAvailability: false,
+      showCheckInOut: false,
+      showOperatingHours: true,
+      suggestedTags: ['Swimming Pool', 'Restaurant & Bar', 'Free High-Speed Wi-Fi', 'Free Parking', 'Pet-Friendly', 'Wheelchair Accessible', 'Grill & BBQ Area', 'Beach Lounge Chairs', 'Kiddie Pool'],
+    },
+    activities: {
+      key: 'activities',
+      label: 'Activities',
+      title: 'Activities & Experiences',
+      subtitle: 'Sell the vacation experience! Tell guests what thrilling or relaxing adventures they can enjoy during their trip.',
+      photoTip: 'Upload photos of people kayaking, snorkeling, island hopping, or enjoying a beach bonfire.',
+      icon: Compass,
+      themeBorder: 'border-emerald-200',
+      themeBg: 'bg-emerald-50/70',
+      themeText: 'text-emerald-700',
+      placeholder: 'e.g., Explore the marine life of Mansalay! We offer guided snorkeling tours daily. Kayaks and paddleboards are free for overnight guests...',
+      priceLabel: 'Activity Fee / Cost',
+      pricePlaceholder: 'e.g. ₱500/person or ₱1,200/boat trip',
+      showPrice: true,
+      showAvailability: false,
+      showCheckInOut: false,
+      showOperatingHours: false,
+      suggestedTags: ['Guided Snorkeling', 'Kayaking', 'Island Hopping', 'Beach Bonfire', 'Beach Volleyball', 'Banana Boat', 'Paddleboarding', 'Scuba Diving'],
+    },
+    beach_views: {
+      key: 'beach_views',
+      label: 'Beach Views',
+      title: 'Beach Views & Scenery',
+      subtitle: 'Pure visual inspiration! Capitalize on your coastal geography, white sand shoreline, sunrise, and golden hour.',
+      photoTip: 'Upload high-resolution photos of the actual beach, sunrise/sunset, or views captured directly from a room window or balcony.',
+      icon: Palmtree,
+      themeBorder: 'border-rose-200',
+      themeBg: 'bg-rose-50/70',
+      themeText: 'text-rose-700',
+      placeholder: 'e.g., Wake up to this spectacular sunrise over Mansalay Bay. This is the actual serene view right outside our beachfront casitas...',
+      priceLabel: '',
+      pricePlaceholder: '',
+      showPrice: false,
+      showAvailability: false,
+      showCheckInOut: false,
+      showOperatingHours: false,
+      suggestedTags: ['Full Ocean View', 'Beachfront Shoreline', 'Sunrise Spot', 'Sunset / Golden Hour', 'White Sand', 'Palm Trees', 'Stargazing Night'],
+    },
+  };
 
   // Check for subscription verification
   useEffect(() => {
@@ -558,20 +684,58 @@ export function ResortDashboard() {
       const formData = new FormData();
 
       formData.append('type', postType);
-      formData.append('content', postContent.trim() || 'Resort updates and highlights!');
+      formData.append('content', postContent.trim() || `${POST_CONTEXTS[postType]?.title || 'Resort'} updates and highlights!`);
       formData.append('location', location.trim());
 
       const resortName = resortProfile?.resort_name || currentUser?.resort_name || currentUser?.name || 'Resort';
       formData.append('seller_name', resortName);
 
-      if (price.trim()) formData.append('price', price.trim());
-      if (businessHours.trim()) formData.append('business_hours', businessHours.trim());
-      if (stock.trim()) formData.append('stock', stock.trim());
-      
+      // Context-aware Price
+      if (postType === 'beach_views') {
+        // No price field for beach scenery
+      } else if (postType === 'activities') {
+        if (activityCostType === 'free') {
+          formData.append('price', 'Free for guests');
+        } else if (price.trim()) {
+          formData.append('price', price.trim());
+        }
+      } else if (price.trim()) {
+        formData.append('price', price.trim());
+      }
+
+      // Context-aware Hours / Schedule
+      if (postType === 'rooms' || postType === 'amenities') {
+        if (businessHours.trim()) formData.append('business_hours', businessHours.trim());
+      } else if (postType === 'activities' && activitySchedule.trim()) {
+        formData.append('business_hours', activitySchedule.trim());
+      }
+
+      // Stock / Availability
+      if (postType === 'rooms' && stock.trim()) {
+        formData.append('stock', stock.trim());
+      }
+
+      // Context-aware Tags
       const allTags = [...tags];
-      if (promoNote.trim()) {
+
+      if (postType === 'beach_views') {
+        if (beachViewType && !allTags.includes(beachViewType)) allTags.push(beachViewType);
+        if (beachTimeOfDay && !allTags.includes(beachTimeOfDay)) allTags.push(beachTimeOfDay);
+      } else if (postType === 'activities') {
+        const costTag = activityCostType === 'free' ? 'Free for guests' : 'Additional fee';
+        const locTag = activityLocationType === 'onsite' ? 'On-site Activity' : 'Off-site / Nearby Tour';
+        if (!allTags.includes(costTag)) allTags.push(costTag);
+        if (!allTags.includes(locTag)) allTags.push(locTag);
+      } else if (postType === 'rooms') {
+        if (roomCapacity.trim() && !allTags.includes(roomCapacity.trim())) {
+          allTags.push(roomCapacity.trim());
+        }
+      }
+
+      if (promoNote.trim() && !allTags.includes(promoNote.trim())) {
         allTags.push(promoNote.trim());
       }
+
       if (allTags.length > 0) {
         formData.append('tags', JSON.stringify(allTags));
       }
@@ -606,6 +770,7 @@ export function ResortDashboard() {
       setCloseTime('');
       setStock('');
       setPromoNote('');
+      setActivitySchedule('');
       setTags([]);
       setTagInput('');
       handleRemoveImage();
@@ -938,11 +1103,42 @@ export function ResortDashboard() {
             })}
           </div>
 
+          {/* Contextual Form Guidance Header (Auto-adapts to selected post type) */}
+          {(() => {
+            const currentCtx = POST_CONTEXTS[postType] || POST_CONTEXTS.rooms;
+            const ContextIcon = currentCtx.icon;
+            return (
+              <div className={`p-3.5 rounded-2xl border ${currentCtx.themeBorder} ${currentCtx.themeBg} transition-all flex items-start sm:items-center justify-between gap-3 shadow-2xs`}>
+                <div className="flex items-start sm:items-center gap-2.5">
+                  <div className={`w-8 h-8 rounded-xl bg-white flex items-center justify-center shadow-xs flex-shrink-0 ${currentCtx.themeText}`}>
+                    <ContextIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className={`text-xs font-bold ${currentCtx.themeText} flex items-center gap-1.5`}>
+                      <span>{currentCtx.title}</span>
+                      <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-white/90 shadow-2xs">
+                        Custom Form
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-gray-600 mt-0.5 leading-snug">
+                      {currentCtx.subtitle}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Photo Upload Area (Multiple Images Supported) */}
           <div>
-            <label className="block text-xs font-bold text-gray-800 mb-1.5">
-              Images / Photo Gallery <span className="text-pink-500 font-semibold">(Multiple images allowed)</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-gray-800">
+                Images / Photo Gallery <span className="text-pink-500 font-semibold">(Multiple images allowed)</span>
+              </label>
+              <span className="text-[11px] text-gray-500 italic hidden sm:inline">
+                {POST_CONTEXTS[postType]?.photoTip}
+              </span>
+            </div>
             <input
               ref={fileInputRef}
               type="file"
@@ -1021,6 +1217,9 @@ export function ResortDashboard() {
               >
                 <Upload className="h-8 w-8 text-gray-400 group-hover:text-pink-500 mx-auto mb-2 transition-colors" />
                 <p className="text-xs font-bold text-gray-700">Click to upload multiple images</p>
+                <p className="text-[11px] text-gray-500 mt-1 max-w-sm mx-auto">
+                  {POST_CONTEXTS[postType]?.photoTip}
+                </p>
               </div>
             )}
           </div>
@@ -1043,18 +1242,21 @@ export function ResortDashboard() {
             </Link>
           </div>
 
-          {/* Caption Textarea */}
+          {/* Caption Textarea (Contextual Placeholder) */}
           <div>
             <textarea
               rows={3}
               value={postContent}
               onChange={e => setPostContent(e.target.value)}
-              placeholder="Write a caption for your post..."
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none text-sm placeholder:text-gray-400 resize-none transition-all"
+              placeholder={POST_CONTEXTS[postType]?.placeholder || 'Write a caption for your post...'}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none text-xs sm:text-sm placeholder:text-gray-400 resize-none transition-all leading-relaxed"
             />
+            <p className="text-[10px] text-gray-400 mt-1 italic">
+              💡 {POST_CONTEXTS[postType]?.subtitle}
+            </p>
           </div>
 
-          {/* Auto-filled Resort Name Banner */}
+          {/* Permanent Anchor 1: Auto-filled Resort Name Banner */}
           <div className="flex items-center justify-between px-4 py-3 bg-emerald-50/60 border border-emerald-200 rounded-xl text-emerald-900 text-xs">
             <div className="flex items-center gap-2 font-medium">
               <Building2 className="h-4 w-4 text-emerald-600" />
@@ -1065,8 +1267,9 @@ export function ResortDashboard() {
             </span>
           </div>
 
-          {/* Inputs Row: Location & Price */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Permanent Anchor 2 & Dynamic Price Row */}
+          <div className={`grid grid-cols-1 ${POST_CONTEXTS[postType]?.showPrice ? 'sm:grid-cols-2' : ''} gap-3`}>
+            {/* Permanent Anchor 2: Location/Address */}
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
                 <MapPin className="h-4 w-4" />
@@ -1075,7 +1278,7 @@ export function ResortDashboard() {
                 type="text"
                 value={location}
                 onChange={e => setLocation(e.target.value)}
-                placeholder="Specific location / street *"
+                placeholder="Specific location / address (e.g. Don Pedro, Mansalay) *"
                 className="w-full pl-9 pr-16 py-2.5 border border-gray-200 rounded-xl focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none text-xs"
               />
               <span className="absolute right-3 top-2.5 text-[10px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded">
@@ -1083,26 +1286,220 @@ export function ResortDashboard() {
               </span>
             </div>
 
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none font-bold text-xs text-gray-400 select-none">
-                ₱
+            {/* Dynamic Price Field (Customized per form, Hidden for Beach Views) */}
+            {POST_CONTEXTS[postType]?.showPrice && (
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none font-bold text-xs text-gray-400 select-none">
+                  ₱
+                </div>
+                <input
+                  type="text"
+                  value={price}
+                  onChange={e => setPrice(e.target.value)}
+                  placeholder={POST_CONTEXTS[postType]?.pricePlaceholder || 'Price (e.g. ₱3,500/night)'}
+                  className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none text-xs"
+                />
               </div>
-              <input
-                type="text"
-                value={price}
-                onChange={e => setPrice(e.target.value)}
-                placeholder="Price (e.g. ₱3,500/night)"
-                className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl focus:border-pink-500 focus:ring-1 focus:ring-pink-500 outline-none text-xs"
-              />
+            )}
+          </div>
+
+          {/* ═══════════════════════════════════════════════════
+              CONTEXT-SPECIFIC DYNAMIC CONTROLS (Direct in Form)
+             ═══════════════════════════════════════════════════ */}
+
+          {/* CONTEXT A: BEACH VIEWS (View Type + Time of Day) */}
+          {postType === 'beach_views' && (
+            <div className="p-4 bg-gradient-to-r from-rose-50/70 via-pink-50/40 to-orange-50/40 rounded-2xl border border-rose-200/80 space-y-3.5 animate-in fade-in duration-200">
+              <div>
+                <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
+                  <Palmtree className="w-3.5 h-3.5 text-rose-500" />
+                  <span>View Perspective / Coastal View Type</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'Full Ocean View',
+                    'Partial Ocean View',
+                    'Beachfront Shoreline',
+                    'Garden & Beach Mix',
+                    'Sunset / Sunrise Spot',
+                    'Panoramic Sea Horizon'
+                  ].map((vt) => (
+                    <button
+                      key={vt}
+                      type="button"
+                      onClick={() => setBeachViewType(vt)}
+                      className={`text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer font-medium ${
+                        beachViewType === vt
+                          ? 'bg-rose-500 text-white border-rose-500 shadow-xs font-bold scale-[1.02]'
+                          : 'bg-white text-gray-700 border-gray-200 hover:border-rose-300 hover:bg-rose-50/50'
+                      }`}
+                    >
+                      {vt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
+                  <Sun className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Time of Day / Atmosphere</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    '🌅 Sunrise',
+                    '☀️ Daytime & Clear Skies',
+                    '🌇 Sunset / Golden Hour',
+                    '🌌 Night & Stargazing'
+                  ].map((tod) => (
+                    <button
+                      key={tod}
+                      type="button"
+                      onClick={() => setBeachTimeOfDay(tod)}
+                      className={`text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer font-medium ${
+                        beachTimeOfDay === tod
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-xs font-bold scale-[1.02]'
+                          : 'bg-white text-gray-700 border-gray-200 hover:border-amber-300 hover:bg-amber-50/50'
+                      }`}
+                    >
+                      {tod}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CONTEXT B: ACTIVITIES (Cost Type + Location Toggles) */}
+          {postType === 'activities' && (
+            <div className="p-4 bg-gradient-to-r from-emerald-50/70 via-teal-50/40 to-cyan-50/40 rounded-2xl border border-emerald-200/80 space-y-3.5 animate-in fade-in duration-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Cost Type Toggle */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
+                    <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Cost Type</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5 bg-gray-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActivityCostType('free');
+                        setPrice('');
+                      }}
+                      className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        activityCostType === 'free'
+                          ? 'bg-white text-emerald-700 shadow-xs'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      ✨ Free for guests
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActivityCostType('fee')}
+                      className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        activityCostType === 'fee'
+                          ? 'bg-white text-emerald-700 shadow-xs'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      💳 Additional fee
+                    </button>
+                  </div>
+                </div>
+
+                {/* Location Toggle */}
+                <div>
+                  <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Activity Location</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5 bg-gray-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setActivityLocationType('onsite')}
+                      className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        activityLocationType === 'onsite'
+                          ? 'bg-white text-emerald-700 shadow-xs'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      🏖️ On-site Resort
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActivityLocationType('offsite')}
+                      className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                        activityLocationType === 'offsite'
+                          ? 'bg-white text-emerald-700 shadow-xs'
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      ⛵ Nearby Off-site
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {activityCostType === 'free' ? (
+                <div className="px-3.5 py-2.5 bg-white/90 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-medium flex items-center gap-2 shadow-2xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <span>Complimentary activity: Free of charge for checked-in resort guests!</span>
+                </div>
+              ) : (
+                <p className="text-[11px] text-emerald-700 font-semibold italic">
+                  💡 Enter the specific fee or rate in the Activity Fee box above (e.g. ₱500/person or ₱1,200/boat).
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Quick Context-Specific Tag Pills */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-[11px] font-bold text-gray-700 flex items-center gap-1">
+                <Tag className="w-3 h-3 text-pink-500" />
+                <span>Quick {POST_CONTEXTS[postType]?.title} Tags <span className="font-normal text-gray-400">(Click to toggle)</span>:</span>
+              </label>
+              {tags.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTags([])}
+                  className="text-[10px] text-rose-500 hover:text-rose-700 font-semibold cursor-pointer"
+                >
+                  Clear tags ({tags.length})
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {POST_CONTEXTS[postType]?.suggestedTags.map((st) => {
+                const isSelected = tags.includes(st);
+                return (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => handleToggleTag(st)}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                      isSelected
+                        ? 'bg-pink-500 text-white border-pink-500 font-bold shadow-2xs'
+                        : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
+                    }`}
+                  >
+                    {isSelected ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3 text-gray-400" />}
+                    <span>{st}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Show More Details Accordion */}
+          {/* Show More Details Accordion (Tailored per form context) */}
           <div>
             <button
               type="button"
               onClick={() => setShowMoreDetails(!showMoreDetails)}
-              className="text-xs font-semibold text-pink-600 hover:text-pink-700 flex items-center gap-1 py-1"
+              className="text-xs font-semibold text-pink-600 hover:text-pink-700 flex items-center gap-1 py-1 cursor-pointer"
             >
               {showMoreDetails ? (
                 <>
@@ -1118,300 +1515,378 @@ export function ResortDashboard() {
             </button>
 
             {showMoreDetails && (
-              <div className="mt-3 p-4 bg-gray-50/80 rounded-xl border border-gray-100 space-y-3">
-                {/* Operating / Business Hours Section (Matching Admin format with Optional label) */}
-                <div className="space-y-2 pt-0.5">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold text-gray-800 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-pink-500" />
-                      <span>Operating Hours <span className="text-gray-400 font-normal">(Optional / AM to PM)</span></span>
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setTimeMode(timeMode === 'standard' ? 'preset' : 'standard')}
-                        className="text-[11px] font-semibold text-pink-600 hover:text-pink-700 transition-colors cursor-pointer"
-                      >
-                        {timeMode === 'standard' ? 'Switch to Check-In/Out Presets' : 'Switch to Standard AM-PM Hours'}
-                      </button>
-                      {businessHours && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setBusinessHours('');
-                            setOpenTime('');
-                            setCloseTime('');
-                          }}
-                          className="text-[11px] font-semibold text-rose-500 hover:text-rose-600 transition-colors cursor-pointer"
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {timeMode === 'standard' ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {/* Opening Time Custom Dropdown */}
-                      <div ref={openDropdownRef} className="relative">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setOpenDropdownActive((prev) => !prev);
-                            setCloseDropdownActive(false);
-                          }}
-                          className={`w-full pl-3.5 pr-3 py-2.5 bg-white border rounded-xl text-xs font-semibold text-gray-800 text-left flex items-center justify-between shadow-2xs transition-all cursor-pointer ${
-                            openDropdownActive ? 'border-pink-500 ring-2 ring-pink-500/20' : 'border-gray-200 hover:border-pink-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 truncate">
-                            <Clock className="h-4 w-4 text-pink-500 flex-shrink-0" />
-                            <span className={openTime ? 'text-gray-900 font-bold' : 'text-gray-400'}>
-                              {openTime || 'Opening Time (e.g. 8:00 AM)'}
-                            </span>
-                          </div>
-                          <ChevronDown
-                            className={`h-4 w-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${
-                              openDropdownActive ? 'rotate-180 text-pink-500' : ''
-                            }`}
-                          />
-                        </button>
-
-                        {/* Downward Popover Menu with Scroll */}
-                        {openDropdownActive && (
-                          <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white border border-gray-100 rounded-2xl shadow-xl p-1 max-h-56 overflow-y-auto divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                            <div className="p-1.5 text-[10px] uppercase font-extrabold text-gray-400 tracking-wider sticky top-0 bg-white/95 backdrop-blur-xs z-10 border-b border-gray-100">
-                              Select Opening Time
-                            </div>
-                            <div className="py-1 space-y-0.5">
-                              {OPEN_TIME_OPTIONS.map((t) => (
-                                <button
-                                  key={t}
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenTime(t);
-                                    if (t === 'Open 24 Hours') {
-                                      setBusinessHours('Open 24 Hours');
-                                    } else {
-                                      setBusinessHours(`${t} – ${closeTime || '5:00 PM'}`);
-                                    }
-                                    setOpenDropdownActive(false);
-                                  }}
-                                  className={`w-full px-3 py-2 text-left text-xs font-semibold rounded-xl flex items-center justify-between transition-colors cursor-pointer ${
-                                    openTime === t
-                                      ? 'bg-pink-50 text-pink-600 font-extrabold'
-                                      : 'text-gray-700 hover:bg-gray-50 hover:text-pink-600'
-                                  }`}
-                                >
-                                  <span>{t}</span>
-                                  {openTime === t && <CheckCircle2 className="h-3.5 w-3.5 text-pink-500" />}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+              <div className="mt-3 p-4 bg-gray-50/80 rounded-xl border border-gray-100 space-y-3.5">
+                
+                {/* 1. ROOMS & STAYS: Check-In/Out & Inventory */}
+                {postType === 'rooms' && (
+                  <>
+                    {/* Operating / Business Hours Section */}
+                    <div className="space-y-2 pt-0.5">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-pink-500" />
+                          <span>Check-In & Check-Out Schedule <span className="text-gray-400 font-normal">(Optional)</span></span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setTimeMode(timeMode === 'standard' ? 'preset' : 'standard')}
+                            className="text-[11px] font-semibold text-pink-600 hover:text-pink-700 transition-colors cursor-pointer"
+                          >
+                            {timeMode === 'standard' ? 'Switch to Check-In/Out Presets' : 'Switch to Standard AM-PM Hours'}
+                          </button>
+                          {businessHours && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBusinessHours('');
+                                setOpenTime('');
+                                setCloseTime('');
+                              }}
+                              className="text-[11px] font-semibold text-rose-500 hover:text-rose-600 transition-colors cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Closing Time Custom Dropdown */}
-                      <div ref={closeDropdownRef} className="relative">
-                        <button
-                          type="button"
-                          disabled={openTime === 'Open 24 Hours'}
-                          onClick={() => {
-                            setCloseDropdownActive((prev) => !prev);
-                            setOpenDropdownActive(false);
-                          }}
-                          className={`w-full pl-3.5 pr-3 py-2.5 bg-white border rounded-xl text-xs font-semibold text-gray-800 text-left flex items-center justify-between shadow-2xs transition-all cursor-pointer disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed ${
-                            closeDropdownActive ? 'border-rose-500 ring-2 ring-rose-500/20' : 'border-gray-200 hover:border-rose-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 truncate">
-                            <Clock className="h-4 w-4 text-rose-500 flex-shrink-0" />
-                            <span className={closeTime ? 'text-gray-900 font-bold' : 'text-gray-400'}>
-                              {openTime === 'Open 24 Hours' ? 'N/A (24 Hours)' : closeTime || 'Closing Time (e.g. 5:00 PM)'}
-                            </span>
-                          </div>
-                          <ChevronDown
-                            className={`h-4 w-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${
-                              closeDropdownActive ? 'rotate-180 text-rose-500' : ''
-                            }`}
-                          />
-                        </button>
+                      {timeMode === 'standard' ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {/* Opening Time Custom Dropdown */}
+                          <div ref={openDropdownRef} className="relative">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setOpenDropdownActive((prev) => !prev);
+                                setCloseDropdownActive(false);
+                              }}
+                              className={`w-full pl-3.5 pr-3 py-2.5 bg-white border rounded-xl text-xs font-semibold text-gray-800 text-left flex items-center justify-between shadow-2xs transition-all cursor-pointer ${
+                                openDropdownActive ? 'border-pink-500 ring-2 ring-pink-500/20' : 'border-gray-200 hover:border-pink-300'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <Clock className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                                <span className={openTime ? 'text-gray-900 font-bold' : 'text-gray-400'}>
+                                  {openTime || 'Check-in Time (e.g. 2:00 PM)'}
+                                </span>
+                              </div>
+                              <ChevronDown
+                                className={`h-4 w-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${
+                                  openDropdownActive ? 'rotate-180 text-pink-500' : ''
+                                }`}
+                              />
+                            </button>
 
-                        {/* Downward Popover Menu with Scroll */}
-                        {closeDropdownActive && openTime !== 'Open 24 Hours' && (
-                          <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white border border-gray-100 rounded-2xl shadow-xl p-1 max-h-56 overflow-y-auto divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                            <div className="p-1.5 text-[10px] uppercase font-extrabold text-gray-400 tracking-wider sticky top-0 bg-white/95 backdrop-blur-xs z-10 border-b border-gray-100">
-                              Select Closing Time
-                            </div>
-                            <div className="py-1 space-y-0.5">
-                              {CLOSE_TIME_OPTIONS.map((t) => (
-                                <button
-                                  key={t}
-                                  type="button"
-                                  onClick={() => {
-                                    setCloseTime(t);
-                                    if (openTime && openTime !== 'Open 24 Hours') {
-                                      setBusinessHours(`${openTime} – ${t}`);
-                                    }
-                                    setCloseDropdownActive(false);
-                                  }}
-                                  className={`w-full px-3 py-2 text-left text-xs font-semibold rounded-xl flex items-center justify-between transition-colors cursor-pointer ${
-                                    closeTime === t
-                                      ? 'bg-rose-50 text-rose-600 font-extrabold'
-                                      : 'text-gray-700 hover:bg-gray-50 hover:text-rose-600'
-                                  }`}
-                                >
-                                  <span>{t}</span>
-                                  {closeTime === t && <CheckCircle2 className="h-3.5 w-3.5 text-rose-500" />}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    /* Resort Check-in/out Presets Dropdown */
-                    <div className="relative" ref={timeDropdownRef}>
-                      <button
-                        type="button"
-                        onClick={() => setTimeDropdownOpen(!timeDropdownOpen)}
-                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:border-pink-500 flex items-center justify-between text-left transition-all hover:border-pink-300 cursor-pointer shadow-2xs"
-                      >
-                        <span className={businessHours ? 'text-gray-900 font-bold truncate' : 'text-gray-400'}>
-                          {businessHours || 'Select check-in / check-out preset...'}
-                        </span>
-                        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0 ml-1.5 ${timeDropdownOpen ? 'rotate-180 text-pink-500' : ''}`} />
-                      </button>
-
-                      {timeDropdownOpen && (
-                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-100 rounded-2xl shadow-xl z-50 overflow-hidden text-xs animate-in fade-in zoom-in-95 duration-100">
-                          <div className="max-h-60 overflow-y-auto p-1.5 space-y-2 scrollbar-thin">
-                            {RESORT_TIME_OPTIONS.map((group, gIdx) => (
-                              <div key={gIdx} className="space-y-0.5">
-                                <div className="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50/90 rounded-md">
-                                  {group.category}
+                            {openDropdownActive && (
+                              <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white border border-gray-100 rounded-2xl shadow-xl p-1 max-h-56 overflow-y-auto divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                                <div className="p-1.5 text-[10px] uppercase font-extrabold text-gray-400 tracking-wider sticky top-0 bg-white/95 backdrop-blur-xs z-10 border-b border-gray-100">
+                                  Select Check-in Time
                                 </div>
-                                {group.items.map((opt, oIdx) => {
-                                  const isSelected = businessHours === opt;
-                                  return (
+                                <div className="py-1 space-y-0.5">
+                                  {OPEN_TIME_OPTIONS.map((t) => (
                                     <button
-                                      key={oIdx}
+                                      key={t}
                                       type="button"
                                       onClick={() => {
-                                        setBusinessHours(opt);
-                                        setTimeDropdownOpen(false);
+                                        setOpenTime(t);
+                                        if (t === 'Open 24 Hours') {
+                                          setBusinessHours('Open 24 Hours');
+                                        } else {
+                                          setBusinessHours(`Check-in: ${t} — Check-out: ${closeTime || '12:00 PM'}`);
+                                        }
+                                        setOpenDropdownActive(false);
                                       }}
-                                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
-                                        isSelected
-                                          ? 'bg-pink-50 text-pink-700 font-semibold'
-                                          : 'hover:bg-gray-100 text-gray-700'
+                                      className={`w-full px-3 py-2 text-left text-xs font-semibold rounded-xl flex items-center justify-between transition-colors cursor-pointer ${
+                                        openTime === t
+                                          ? 'bg-pink-50 text-pink-600 font-extrabold'
+                                          : 'text-gray-700 hover:bg-gray-50 hover:text-pink-600'
                                       }`}
                                     >
-                                      <span>{opt}</span>
-                                      {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600 flex-shrink-0 ml-2" />}
+                                      <span>{t}</span>
+                                      {openTime === t && <CheckCircle2 className="h-3.5 w-3.5 text-pink-500" />}
                                     </button>
-                                  );
-                                })}
+                                  ))}
+                                </div>
                               </div>
-                            ))}
+                            )}
+                          </div>
+
+                          {/* Closing Time Custom Dropdown */}
+                          <div ref={closeDropdownRef} className="relative">
+                            <button
+                              type="button"
+                              disabled={openTime === 'Open 24 Hours'}
+                              onClick={() => {
+                                setCloseDropdownActive((prev) => !prev);
+                                setOpenDropdownActive(false);
+                              }}
+                              className={`w-full pl-3.5 pr-3 py-2.5 bg-white border rounded-xl text-xs font-semibold text-gray-800 text-left flex items-center justify-between shadow-2xs transition-all cursor-pointer disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed ${
+                                closeDropdownActive ? 'border-rose-500 ring-2 ring-rose-500/20' : 'border-gray-200 hover:border-rose-300'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <Clock className="h-4 w-4 text-rose-500 flex-shrink-0" />
+                                <span className={closeTime ? 'text-gray-900 font-bold' : 'text-gray-400'}>
+                                  {openTime === 'Open 24 Hours' ? 'N/A (24 Hours)' : closeTime || 'Check-out Time (e.g. 12:00 PM)'}
+                                </span>
+                              </div>
+                              <ChevronDown
+                                className={`h-4 w-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${
+                                  closeDropdownActive ? 'rotate-180 text-rose-500' : ''
+                                }`}
+                              />
+                            </button>
+
+                            {closeDropdownActive && openTime !== 'Open 24 Hours' && (
+                              <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white border border-gray-100 rounded-2xl shadow-xl p-1 max-h-56 overflow-y-auto divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                                <div className="p-1.5 text-[10px] uppercase font-extrabold text-gray-400 tracking-wider sticky top-0 bg-white/95 backdrop-blur-xs z-10 border-b border-gray-100">
+                                  Select Check-out Time
+                                </div>
+                                <div className="py-1 space-y-0.5">
+                                  {CLOSE_TIME_OPTIONS.map((t) => (
+                                    <button
+                                      key={t}
+                                      type="button"
+                                      onClick={() => {
+                                        setCloseTime(t);
+                                        if (openTime && openTime !== 'Open 24 Hours') {
+                                          setBusinessHours(`Check-in: ${openTime} — Check-out: ${t}`);
+                                        }
+                                        setCloseDropdownActive(false);
+                                      }}
+                                      className={`w-full px-3 py-2 text-left text-xs font-semibold rounded-xl flex items-center justify-between transition-colors cursor-pointer ${
+                                        closeTime === t
+                                          ? 'bg-rose-50 text-rose-600 font-extrabold'
+                                          : 'text-gray-700 hover:bg-gray-50 hover:text-rose-600'
+                                      }`}
+                                    >
+                                      <span>{t}</span>
+                                      {closeTime === t && <CheckCircle2 className="h-3.5 w-3.5 text-rose-500" />}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
+                      ) : (
+                        /* Resort Check-in/out Presets Dropdown */
+                        <div className="relative" ref={timeDropdownRef}>
+                          <button
+                            type="button"
+                            onClick={() => setTimeDropdownOpen(!timeDropdownOpen)}
+                            className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs outline-none focus:border-pink-500 flex items-center justify-between text-left transition-all hover:border-pink-300 cursor-pointer shadow-2xs"
+                          >
+                            <span className={businessHours ? 'text-gray-900 font-bold truncate' : 'text-gray-400'}>
+                              {businessHours || 'Select check-in / check-out preset...'}
+                            </span>
+                            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0 ml-1.5 ${timeDropdownOpen ? 'rotate-180 text-pink-500' : ''}`} />
+                          </button>
+
+                          {timeDropdownOpen && (
+                            <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-100 rounded-2xl shadow-xl z-50 overflow-hidden text-xs animate-in fade-in zoom-in-95 duration-100">
+                              <div className="max-h-60 overflow-y-auto p-1.5 space-y-2 scrollbar-thin">
+                                {RESORT_TIME_OPTIONS.map((group, gIdx) => (
+                                  <div key={gIdx} className="space-y-0.5">
+                                    <div className="px-2 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50/90 rounded-md">
+                                      {group.category}
+                                    </div>
+                                    {group.items.map((opt, oIdx) => {
+                                      const isSelected = businessHours === opt;
+                                      return (
+                                        <button
+                                          key={oIdx}
+                                          type="button"
+                                          onClick={() => {
+                                            setBusinessHours(opt);
+                                            setTimeDropdownOpen(false);
+                                          }}
+                                          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                                            isSelected
+                                              ? 'bg-pink-50 text-pink-700 font-semibold'
+                                              : 'hover:bg-gray-100 text-gray-700'
+                                          }`}
+                                        >
+                                          <span>{opt}</span>
+                                          {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600 flex-shrink-0 ml-2" />}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Quick Preset Buttons */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Presets:</span>
+                        {[
+                          'Check-in: 2:00 PM — Check-out: 12:00 PM (Next Day)',
+                          'Check-in: 1:00 PM — Check-out: 11:00 AM (Next Day)',
+                          'Overnight: 6:00 PM — 6:00 AM',
+                          'Open 24 Hours',
+                        ].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => {
+                              setBusinessHours(preset);
+                              if (preset === 'Open 24 Hours') {
+                                setOpenTime('Open 24 Hours');
+                                setCloseTime('');
+                              }
+                            }}
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
+                              businessHours === preset
+                                ? 'bg-pink-100/80 border-pink-300 text-pink-700 font-bold'
+                                : 'bg-white border-gray-200 text-gray-600 hover:bg-pink-50/50 hover:border-pink-200 hover:text-pink-600'
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+
+                      {businessHours && (
+                        <p className="text-[11px] text-pink-600 font-bold mt-1 flex items-center gap-1.5">
+                          <span>⏰ Selected Schedule:</span>
+                          <span className="bg-pink-50 px-2.5 py-0.5 rounded-md border border-pink-200 text-pink-700 font-semibold shadow-2xs">
+                            {businessHours}
+                          </span>
+                        </p>
                       )}
                     </div>
-                  )}
 
-                  {/* Quick Preset Buttons */}
-                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Presets:</span>
-                    {[
-                      'Open 24 Hours',
-                      '8:00 AM – 5:00 PM',
-                      '6:00 AM – 6:00 PM',
-                      'Check-in: 2:00 PM — Check-out: 12:00 PM (Next Day)',
-                      'Check-in: 1:00 PM — Check-out: 11:00 AM (Next Day)',
-                    ].map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => {
-                          setBusinessHours(preset);
-                          if (preset === 'Open 24 Hours') {
-                            setOpenTime('Open 24 Hours');
-                            setCloseTime('');
-                          } else if (preset.includes('–') || preset.includes('—')) {
-                            const sep = preset.includes('–') ? '–' : '—';
-                            const [op, cl] = preset.split(sep);
-                            setOpenTime(op.trim());
-                            setCloseTime(cl.trim());
-                          }
-                        }}
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
-                          businessHours === preset
-                            ? 'bg-pink-100/80 border-pink-300 text-pink-700 font-bold'
-                            : 'bg-white border-gray-200 text-gray-600 hover:bg-pink-50/50 hover:border-pink-200 hover:text-pink-600'
-                        }`}
-                      >
-                        {preset}
-                      </button>
-                    ))}
-                  </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                          Room Availability / Units
+                        </label>
+                        <input
+                          type="text"
+                          value={stock}
+                          onChange={e => setStock(e.target.value)}
+                          placeholder="e.g. 5 casitas available"
+                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-pink-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                          Guest Capacity
+                        </label>
+                        <input
+                          type="text"
+                          value={roomCapacity}
+                          onChange={e => setRoomCapacity(e.target.value)}
+                          placeholder="e.g. Max 2-4 Guests / 2 Queen Beds"
+                          className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-pink-500"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
 
-                  {/* Selected Hours preview badge */}
-                  {businessHours && (
-                    <p className="text-[11px] text-pink-600 font-bold mt-1 flex items-center gap-1.5">
-                      <span>⏰ Selected Hours:</span>
-                      <span className="bg-pink-50 px-2.5 py-0.5 rounded-md border border-pink-200 text-pink-700 font-semibold shadow-2xs">
-                        {businessHours}
-                      </span>
-                    </p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                      Room Availability / Units
+                {/* 2. AMENITIES: Facility Operating Hours */}
+                {postType === 'amenities' && (
+                  <div className="space-y-2 pt-0.5">
+                    <label className="block text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-cyan-600" />
+                      <span>Facility Operating Hours <span className="text-gray-400 font-normal">(e.g. Pool Open 6 AM – 10 PM)</span></span>
                     </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        'Open 24 Hours',
+                        '6:00 AM – 10:00 PM',
+                        '7:00 AM – 9:00 PM',
+                        '8:00 AM – 8:00 PM',
+                        'Open Daily: 6:00 AM – 8:00 PM',
+                      ].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setBusinessHours(preset)}
+                          className={`text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                            businessHours === preset
+                              ? 'bg-cyan-500 text-white border-cyan-500 font-bold shadow-2xs'
+                              : 'bg-white border-gray-200 text-gray-700 hover:border-cyan-300 hover:bg-cyan-50/40'
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
                     <input
                       type="text"
-                      value={stock}
-                      onChange={e => setStock(e.target.value)}
-                      placeholder="e.g. 5 rooms remaining"
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-pink-500"
+                      value={businessHours}
+                      onChange={e => setBusinessHours(e.target.value)}
+                      placeholder="Custom facility hours (e.g. Pool 6:00 AM – 10:00 PM, Restaurant 7:00 AM – 10:00 PM)"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-cyan-500"
                     />
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                      Promo Code or Discount Badge
+                )}
+
+                {/* 3. ACTIVITIES: Schedule / Best Times */}
+                {postType === 'activities' && (
+                  <div className="space-y-2 pt-0.5">
+                    <label className="block text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Activity Schedule / Recommended Times</span>
                     </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        'Daily 6:00 AM – 5:00 PM',
+                        'Best during High Tide',
+                        'Sunrise Guided Tour (5:30 AM)',
+                        'Sunset Tour (4:00 PM – 6:00 PM)',
+                        'Available upon Guest Request',
+                      ].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setActivitySchedule(preset)}
+                          className={`text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                            activitySchedule === preset
+                              ? 'bg-emerald-600 text-white border-emerald-600 font-bold shadow-2xs'
+                              : 'bg-white border-gray-200 text-gray-700 hover:border-emerald-300 hover:bg-emerald-50/40'
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
                     <input
                       type="text"
-                      value={promoNote}
-                      onChange={e => setPromoNote(e.target.value)}
-                      placeholder="e.g. 20% OFF — Use code SUMMER20"
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-pink-500"
+                      value={activitySchedule}
+                      onChange={e => setActivitySchedule(e.target.value)}
+                      placeholder="e.g. Daily: 6:00 AM – 5:00 PM (Reservation required 1 hr ahead)"
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-emerald-500"
                     />
                   </div>
-                </div>
+                )}
 
+                {/* Promo Code or Discount Badge (Clean single input) */}
                 <div>
-                  <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                    Promo Code or Discount Badge
+                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 flex items-center gap-1">
+                    <Tag className="w-3 h-3 text-pink-500" />
+                    <span>Promo Code, Discount Badge, or Special Perk <span className="font-normal text-gray-400">(Optional)</span></span>
                   </label>
                   <input
                     type="text"
                     value={promoNote}
                     onChange={e => setPromoNote(e.target.value)}
-                    placeholder="e.g. 20% OFF — Use code SUMMER20"
+                    placeholder="e.g. 20% OFF — Use code SUMMER20 or Free Welcome Drinks"
                     className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-pink-500"
                   />
                 </div>
 
+                {/* Custom Tags & Hashtags Input */}
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-600 mb-1">
-                    Tags & Hashtags
+                    Custom Tags & Hashtags
                   </label>
                   <div className="flex flex-wrap gap-1.5 mb-2">
                     {tags.map(tag => (
@@ -1423,7 +1898,7 @@ export function ResortDashboard() {
                         <button
                           type="button"
                           onClick={() => handleRemoveTag(tag)}
-                          className="hover:text-pink-900"
+                          className="hover:text-pink-900 cursor-pointer"
                         >
                           <X className="h-3 w-3" />
                         </button>
