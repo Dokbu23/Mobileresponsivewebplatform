@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { Hotel, MapPin, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink, Footprints } from 'lucide-react';
+import { Hotel, MapPin, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink, Footprints, Maximize2 } from 'lucide-react';
 import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
 import { ACCOMMODATION_CATEGORIES } from '../../lib/constants';
 import { useApp } from '../../context/AppContext';
@@ -16,9 +16,10 @@ interface AccommodationItem {
   name: string;
   resort_name?: string;
   description?: string;
+  full_description?: string;
   image: string;
   images?: string[];
-  pricePerNight: number;
+  pricePerNight?: number;
   location?: string;
   type?: string;
   rating?: number;
@@ -49,6 +50,536 @@ interface AccommodationItem {
   virtual_tour_scenes?: any[];
 }
 
+/**
+ * 🛡️ Robust Grouping & Normalization Logic
+ * Consolidates any flat image records or multiple entries sharing the same room/accommodation ID
+ * into ONE accommodation listing with an array of images.
+ * Rule: 1 ROOM / ACCOMMODATION = 1 CARD.
+ */
+function groupAndNormalizeAccommodations(rawItems: any[]): AccommodationItem[] {
+  const groups: Record<string, AccommodationItem> = {};
+
+  rawItems.forEach((d: any, idx: number) => {
+    const rawId = String(d.id || '');
+    const cleanName = decodeHtml(d.name || d.resort_name || 'Accommodation').trim();
+    const cleanResortName = decodeHtml(d.resort_name || d.name || '').trim();
+    const userId = d.user_id ? String(d.user_id) : '';
+
+    // Create a canonical group key for the room
+    let groupKey = '';
+    if (d.room_id) {
+      groupKey = `room_${d.room_id}`;
+    } else if (rawId.startsWith('room-')) {
+      groupKey = `room_${rawId.replace('room-', '')}`;
+    } else if (userId && cleanName && d.is_room) {
+      groupKey = `resort_room_${userId}_${cleanName.toLowerCase()}`;
+    } else if (cleanResortName && cleanName && cleanResortName.toLowerCase() !== cleanName.toLowerCase()) {
+      groupKey = `resort_named_${cleanResortName.toLowerCase()}_${cleanName.toLowerCase()}`;
+    } else {
+      groupKey = `acc_${rawId}`;
+    }
+
+    // Parse all images belonging to this record
+    let parsedImages: string[] = [];
+    if (Array.isArray(d.images)) {
+      parsedImages = d.images.map((img: any) => formatImageUrl(img)).filter(Boolean);
+    } else if (typeof d.images === 'string' && d.images.trim()) {
+      try {
+        const arr = JSON.parse(d.images);
+        if (Array.isArray(arr)) {
+          parsedImages = arr.map((img: any) => formatImageUrl(img)).filter(Boolean);
+        }
+      } catch { }
+    }
+    const mainImg = formatImageUrl(d.image);
+    if (mainImg && !parsedImages.includes(mainImg)) {
+      parsedImages.unshift(mainImg);
+    }
+
+    if (groups[groupKey]) {
+      // Merge images and missing fields into existing room group so 1 room = 1 card
+      const existing = groups[groupKey];
+      const existingImgs = existing.images || [];
+      parsedImages.forEach((img) => {
+        if (img && !existingImgs.includes(img)) {
+          existingImgs.push(img);
+        }
+      });
+      existing.images = existingImgs;
+      if (!existing.image && existingImgs.length > 0) {
+        existing.image = existingImgs[0];
+      }
+      if (!existing.description && (d.description || d.full_description)) {
+        existing.description = decodeHtml(d.description || d.full_description);
+      }
+      if (!existing.full_description && (d.full_description || d.description)) {
+        existing.full_description = decodeHtml(d.full_description || d.description);
+      }
+      if (!existing.capacity && d.capacity) existing.capacity = d.capacity;
+      if ((!existing.pricePerNight || existing.pricePerNight === 0) && (d.price_per_night || d.pricePerNight || d.price)) {
+        existing.pricePerNight = Number(d.price_per_night ?? d.pricePerNight ?? d.price ?? 0);
+      }
+      if (!existing.location && (d.location || d.barangay)) {
+        existing.location = d.location || `${d.barangay}, Mansalay, Oriental Mindoro`;
+      }
+      if (!existing.contact_number && (d.contact_number || d.phone)) {
+        existing.contact_number = d.contact_number || d.phone;
+      }
+      if (!existing.phone && (d.phone || d.contact_number)) {
+        existing.phone = d.phone || d.contact_number;
+      }
+      if (!existing.facebook && (d.facebook || d.facebook_link)) {
+        existing.facebook = d.facebook || d.facebook_link;
+      }
+      if (!existing.instagram && (d.instagram || d.instagram_link)) {
+        existing.instagram = d.instagram || d.instagram_link;
+      }
+      if (!existing.website && (d.website || d.owner?.website)) {
+        existing.website = d.website || d.owner?.website;
+      }
+      if (!existing.virtual_tour_video && (d.virtual_tour_video || d.video)) {
+        existing.virtual_tour_video = d.virtual_tour_video || d.video;
+      }
+      if ((!existing.virtual_tour_scenes || existing.virtual_tour_scenes.length === 0) && (d.virtual_tour_scenes || d.user?.virtual_tour_scenes)) {
+        existing.virtual_tour_scenes = d.virtual_tour_scenes || d.user?.virtual_tour_scenes;
+      }
+    } else {
+      const parsedRooms = Array.isArray(d.rooms) ? d.rooms.map((r: any) => ({
+        ...r,
+        image: formatImageUrl(r.image),
+      })) : [];
+
+      groups[groupKey] = {
+        id: String(d.id),
+        name: cleanName,
+        resort_name: cleanResortName,
+        description: decodeHtml(d.description || d.full_description || ''),
+        full_description: decodeHtml(d.full_description || d.description || ''),
+        pricePerNight: Number(d.price_per_night ?? d.pricePerNight ?? d.price ?? 0),
+        location: d.location || (d.barangay ? `${d.barangay}, Mansalay, Oriental Mindoro` : 'Mansalay, Oriental Mindoro'),
+        type: d.is_room ? (d.type || 'Rooms & Suites') : (d.type === 'resort_profile' || d.category === 'resort_profile') ? 'Beach Resort' : (d.category || d.type || 'Beach Resort'),
+        badge: d.badge || (d.rooms_count ? `${d.rooms_count} Rooms` : idx % 2 === 0 ? 'Top Rated' : 'Eco-Friendly'),
+        rating: Number(d.rating) || 4.8,
+        likes: Number(d.likes) || 0,
+        view_count: Number(d.view_count || d.views || 0),
+        image: mainImg || (parsedImages[0] ?? ''),
+        images: parsedImages.length > 0 ? parsedImages : (mainImg ? [mainImg] : []),
+        resort_amenities: Array.isArray(d.resort_amenities) ? d.resort_amenities : [],
+        rooms: parsedRooms,
+        rooms_count: d.rooms_count || parsedRooms.length || 0,
+        capacity: d.capacity ? Number(d.capacity) : undefined,
+        is_room: Boolean(d.is_room),
+        user_id: d.user_id,
+        is_registered: d.is_registered,
+        contact_number: d.contact_number || d.phone || d.owner?.phone,
+        phone: d.phone || d.contact_number || d.owner?.phone,
+        facebook: d.facebook || d.facebook_link || d.owner?.facebook_link,
+        instagram: d.instagram || d.instagram_link || d.owner?.instagram_link,
+        website: d.website || d.owner?.website,
+        virtual_tour_video: d.virtual_tour_video || d.video || d.owner?.virtual_tour_video,
+        latitude: d.latitude || d.lat || d.owner?.latitude,
+        longitude: d.longitude || d.lng || d.owner?.longitude,
+        virtual_tour_scenes: d.virtual_tour_scenes || d.user?.virtual_tour_scenes || d.owner?.virtual_tour_scenes,
+      };
+    }
+  });
+
+  return Object.values(groups);
+}
+
+interface AccommodationCardProps {
+  acc: AccommodationItem;
+  onCardClick: () => void;
+  onOpenLightbox: (images: string[], index: number, title: string) => void;
+  onShare: (e: React.MouseEvent) => void;
+  onSave: (e: React.MouseEvent) => void;
+  isInWishlist: boolean;
+  wishlistCount: number;
+  userType: string | null;
+  onResortClick: (resortName: string, userId?: number | string, e?: React.MouseEvent) => void;
+}
+
+function AccommodationCardItem({
+  acc,
+  onCardClick,
+  onOpenLightbox,
+  onShare,
+  onSave,
+  isInWishlist,
+  wishlistCount,
+  userType,
+  onResortClick,
+}: AccommodationCardProps) {
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
+
+  const images = useMemo(() => {
+    const list = Array.isArray(acc.images) && acc.images.length > 0 ? acc.images : (acc.image ? [acc.image] : []);
+    return list.map(img => formatImageUrl(img)).filter(Boolean);
+  }, [acc.images, acc.image]);
+
+  const displayImages = images.length > 0 ? images : ['/assets/mansalay_hero_bg.jpg'];
+  const hasMultiple = displayImages.length > 1;
+  const currentImage = displayImages[currentIdx] || displayImages[0];
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIdx((prev) => (prev === 0 ? displayImages.length - 1 : prev - 1));
+  };
+
+  const handleNext = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIdx((prev) => (prev === displayImages.length - 1 ? 0 : prev + 1));
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX.current === null || touchEndX.current === null) return;
+    const distance = touchStartX.current - touchEndX.current;
+    if (distance > 35 && hasMultiple) {
+      setCurrentIdx((prev) => (prev === displayImages.length - 1 ? 0 : prev + 1));
+    } else if (distance < -35 && hasMultiple) {
+      setCurrentIdx((prev) => (prev === 0 ? displayImages.length - 1 : prev - 1));
+    }
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
+
+  const handleImageClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onOpenLightbox(displayImages, currentIdx, `${acc.name} — ${acc.resort_name || ''}`);
+  };
+
+  return (
+    <div
+      onClick={onCardClick}
+      className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col group cursor-pointer hover:border-pink-200 justify-between"
+    >
+      {/* ── IMAGE CAROUSEL CONTAINER ── */}
+      <div
+        className="relative aspect-4/3 overflow-hidden bg-gray-100 select-none"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <img
+          src={currentImage}
+          alt={`${acc.name} - Photo ${currentIdx + 1}`}
+          onClick={handleImageClick}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 cursor-zoom-in"
+          onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+          loading="lazy"
+        />
+
+        {/* Accommodation Badge */}
+        {acc.badge && (
+          <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 bg-pink-500 text-white text-[10px] font-bold rounded-full shadow-xs z-10 pointer-events-none">
+            {acc.badge}
+          </span>
+        )}
+
+        {/* Multi-Image Counter Pill */}
+        {hasMultiple && (
+          <button
+            type="button"
+            onClick={handleImageClick}
+            className="absolute top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 bg-black/65 hover:bg-black/85 backdrop-blur-md text-white text-[10px] font-extrabold rounded-full shadow-xs z-10 border border-white/20 transition-all flex items-center gap-1 cursor-pointer"
+            title="Click to view full screen gallery"
+          >
+            <Maximize2 className="h-2.5 w-2.5 opacity-80" />
+            <span>{currentIdx + 1} / {displayImages.length}</span>
+          </button>
+        )}
+
+        {/* Desktop Carousel Controls (Hover Arrows) */}
+        {hasMultiple && (
+          <>
+            <button
+              type="button"
+              onClick={handlePrev}
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/55 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer shadow-md border border-white/20"
+              aria-label="Previous image"
+              title="Previous image"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNext}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/55 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer shadow-md border border-white/20"
+              aria-label="Next image"
+              title="Next image"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </>
+        )}
+
+        {/* Top-Right Action Controls (Share + Pin / Save) */}
+        <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
+          <button
+            type="button"
+            onClick={onShare}
+            className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors hover:scale-110 cursor-pointer shadow-xs"
+            title="Share this stay"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+          </button>
+          {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
+            <button
+              type="button"
+              onClick={onSave}
+              className={`w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer ${
+                isInWishlist
+                  ? 'bg-rose-50 border border-rose-200'
+                  : 'bg-white/80 hover:bg-white'
+              }`}
+              title={isInWishlist ? 'Remove from saved places' : 'Pin to saved places'}
+            >
+              <PushPinIcon
+                isPinned={isInWishlist}
+                size={16}
+                idPrefix={`acc-tr-${acc.id}`}
+              />
+            </button>
+          )}
+        </div>
+
+        {/* Dark Overlay Saves Counter */}
+        {userType === 'admin' || userType === 'resort' || userType === 'enterprise' ? (
+          <div
+            className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/70 backdrop-blur-md rounded-full text-white text-[11px] font-bold z-10 border border-white/10 whitespace-nowrap shadow-xs pointer-events-none"
+            title="Total Tourist Saves"
+          >
+            <PushPinIcon alwaysTilted size={14} idPrefix={`acc-admin-${acc.id}`} />
+            <span className="text-white font-extrabold whitespace-nowrap">
+              Save: {wishlistCount}
+            </span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onSave}
+            className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 z-10 whitespace-nowrap"
+            title={isInWishlist ? 'Saved in pins' : 'Click to pin stay'}
+          >
+            <PushPinIcon isPinned={isInWishlist} size={14} idPrefix={`acc-bl-${acc.id}`} />
+            <span className={isInWishlist ? 'text-pink-400 font-extrabold whitespace-nowrap' : 'text-white whitespace-nowrap'}>
+              Save: {wishlistCount}
+            </span>
+          </button>
+        )}
+      </div>
+
+      {/* ── ROOM INFORMATION (NO PRICE AS REQUESTED) ── */}
+      <div className="p-4 flex-1 flex flex-col justify-between">
+        <div>
+          <div className="flex items-center justify-between gap-1">
+            <p className="text-[10px] uppercase font-bold text-gray-400">{acc.type || 'Resort'}</p>
+            {acc.capacity ? (
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                <Users className="h-3 w-3" /> Max {acc.capacity}
+              </span>
+            ) : null}
+          </div>
+
+          <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-0.5">{acc.name}</h3>
+
+          <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 min-h-[32px] text-justify" style={{ textAlign: 'justify' }}>
+            {acc.description || `${acc.name} at ${acc.resort_name || 'Mansalay'}. Experience a comfortable and scenic stay.`}
+          </p>
+
+          {acc.pricePerNight && acc.pricePerNight > 0 ? (
+            <div className="mt-2 text-pink-600 font-extrabold text-sm flex items-baseline gap-0.5">
+              <span>₱{Number(acc.pricePerNight).toLocaleString()}</span>
+              <span className="text-[10px] font-normal text-gray-400"> / night</span>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Clickable Resort Host Link */}
+        <div
+          onClick={(e) => onResortClick(acc.resort_name || acc.name, acc.user_id, e)}
+          className="flex items-center gap-1.5 text-[11px] text-emerald-700 hover:text-emerald-800 font-semibold mt-4 pt-3 border-t border-gray-100 group/resort cursor-pointer transition-colors"
+          title={`Click to view resort profile of ${acc.resort_name || 'this resort'}`}
+        >
+          <Hotel className="h-3.5 w-3.5 text-emerald-600 group-hover/resort:scale-110 transition-transform flex-shrink-0" />
+          <span className="truncate group-hover/resort:underline">{acc.resort_name || 'Mansalay Beach Resort'}</span>
+          <ExternalLink className="h-2.5 w-2.5 opacity-60 ml-auto flex-shrink-0 group-hover/resort:opacity-100 text-emerald-600" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface FullscreenGalleryProps {
+  isOpen: boolean;
+  images: string[];
+  initialIndex: number;
+  title: string;
+  onClose: () => void;
+}
+
+function FullscreenGalleryModal({
+  isOpen,
+  images,
+  initialIndex,
+  title,
+  onClose,
+}: FullscreenGalleryProps) {
+  const [index, setIndex] = useState(initialIndex);
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
+
+  useEffect(() => {
+    setIndex(initialIndex);
+  }, [initialIndex, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft') setIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+      else if (e.key === 'ArrowRight') setIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, images.length, onClose]);
+
+  if (!isOpen || images.length === 0) return null;
+
+  const currentSrc = images[index] || images[0];
+
+  const handlePrev = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+  };
+
+  const handleNext = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX.current === null || touchEndX.current === null) return;
+    const diff = touchStartX.current - touchEndX.current;
+    if (diff > 40 && images.length > 1) {
+      handleNext();
+    } else if (diff < -40 && images.length > 1) {
+      handlePrev();
+    }
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col justify-between p-4 sm:p-6 select-none animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      {/* Header bar */}
+      <div className="flex items-center justify-between z-20" onClick={(e) => e.stopPropagation()}>
+        <div className="text-white">
+          <h3 className="text-sm sm:text-base font-bold truncate max-w-xs sm:max-w-md">{title}</h3>
+          {images.length > 1 && (
+            <span className="text-xs text-gray-400 font-semibold">{index + 1} of {images.length} photos</span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer"
+          title="Close gallery (Esc)"
+          aria-label="Close gallery"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Main Image Container */}
+      <div
+        className="relative flex-1 flex items-center justify-center overflow-hidden my-4"
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <img
+          src={currentSrc}
+          alt={`${title} - Photo ${index + 1}`}
+          className="max-h-[75vh] max-w-full object-contain rounded-xl shadow-2xl transition-all duration-300"
+          onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+        />
+
+        {images.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={handlePrev}
+              className="absolute left-2 sm:left-6 top-1/2 -translate-y-1/2 w-10 sm:w-12 h-10 sm:h-12 rounded-full bg-black/60 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-md transition-all z-20 cursor-pointer shadow-lg border border-white/20"
+              aria-label="Previous photo"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNext}
+              className="absolute right-2 sm:right-6 top-1/2 -translate-y-1/2 w-10 sm:w-12 h-10 sm:h-12 rounded-full bg-black/60 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-md transition-all z-20 cursor-pointer shadow-lg border border-white/20"
+              aria-label="Next photo"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Bottom Thumbnail Strip */}
+      {images.length > 1 && (
+        <div
+          className="flex items-center justify-center gap-2 overflow-x-auto py-2 z-20"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {images.map((img, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setIndex(i)}
+              className={`h-12 w-16 sm:h-14 sm:w-20 rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 cursor-pointer ${
+                i === index ? 'border-pink-500 scale-105 shadow-md' : 'border-white/20 opacity-60 hover:opacity-100'
+              }`}
+            >
+              <img src={img} alt="" className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Accommodations() {
   const navigate = useNavigate();
   const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist, getWishlistCount } = useApp();
@@ -64,6 +595,19 @@ export function Accommodations() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [isVirtualTourOpen, setIsVirtualTourOpen] = useState(false);
   const [shareData, setShareData] = useState<{ title: string; description?: string; image?: string; category?: string } | null>(null);
+
+  // Full-screen Image Gallery Lightbox Modal state
+  const [lightboxData, setLightboxData] = useState<{
+    isOpen: boolean;
+    images: string[];
+    initialIndex: number;
+    title: string;
+  }>({
+    isOpen: false,
+    images: [],
+    initialIndex: 0,
+    title: '',
+  });
 
   const loadAccommodations = async () => {
     setLoading(true);
@@ -116,52 +660,9 @@ export function Accommodations() {
         }
       });
 
-      const mapped = allRaw.map((d: any, idx: number) => {
-        let parsedImages: string[] = [];
-        if (Array.isArray(d.images)) {
-          parsedImages = d.images.map((img: any) => formatImageUrl(img)).filter(Boolean);
-        } else if (typeof d.images === 'string' && d.images.trim()) {
-          try {
-            const arr = JSON.parse(d.images);
-            if (Array.isArray(arr)) {
-              parsedImages = arr.map((img: any) => formatImageUrl(img)).filter(Boolean);
-            }
-          } catch { }
-        }
-        const mainImg = formatImageUrl(d.image);
-        if (parsedImages.length === 0 && mainImg) {
-          parsedImages = [mainImg];
-        }
-
-        const parsedRooms = Array.isArray(d.rooms) ? d.rooms.map((r: any) => ({
-          ...r,
-          image: formatImageUrl(r.image),
-        })) : [];
-
-        return {
-          id: String(d.id),
-          name: decodeHtml(d.name || d.resort_name || 'Accommodation'),
-          resort_name: decodeHtml(d.resort_name || d.name || ''),
-          description: decodeHtml(d.description || ''),
-          pricePerNight: Number(d.price_per_night ?? d.pricePerNight ?? d.price ?? 0),
-          location: d.location || (d.barangay ? `${d.barangay}, Mansalay, Oriental Mindoro` : 'Mansalay, Oriental Mindoro'),
-          type: d.is_room ? (d.type || 'Rooms & Suites') : (d.type === 'resort_profile' || d.category === 'resort_profile') ? 'Beach Resort' : (d.category || d.type || 'Beach Resort'),
-          badge: d.badge || (d.rooms_count ? `${d.rooms_count} Rooms` : idx % 2 === 0 ? 'Top Rated' : 'Eco-Friendly'),
-          rating: d.rating || 4.8,
-          likes: d.likes || 0,
-          image: mainImg,
-          images: parsedImages,
-          resort_amenities: Array.isArray(d.resort_amenities) ? d.resort_amenities : [],
-          rooms: parsedRooms,
-          rooms_count: d.rooms_count || parsedRooms.length || 0,
-          capacity: d.capacity,
-          is_room: Boolean(d.is_room),
-          user_id: d.user_id,
-          is_registered: d.is_registered,
-          virtual_tour_scenes: d.virtual_tour_scenes || d.user?.virtual_tour_scenes,
-        };
-      });
-      setItems(mapped);
+      // Apply grouping and normalization: 1 Room = 1 Card
+      const normalizedList = groupAndNormalizeAccommodations(allRaw);
+      setItems(normalizedList);
     } catch (err) {
       console.error('Error fetching real accommodations:', err);
       let customResorts: any[] = [];
@@ -179,25 +680,8 @@ export function Accommodations() {
           );
         }
       } catch { }
-      const mapped = [...customResorts, ...customAttractions].map((d: any, idx: number) => {
-        const mainImg = d.image ? (String(d.image).startsWith('http') ? d.image : `${API_BASE}${d.image}`) : '';
-        const list = Array.isArray(d.images) && d.images.length > 0 ? d.images.map((img: any) => String(img).startsWith('http') ? img : `${API_BASE}${img}`) : (mainImg ? [mainImg] : []);
-        return {
-          id: String(d.id),
-          name: d.name || 'Accommodation',
-          description: d.description || '',
-          pricePerNight: Number(d.price_per_night ?? d.price ?? 0),
-          location: d.location || 'Mansalay, Oriental Mindoro',
-          type: d.category || d.type || 'Accommodation',
-          badge: 'Top Rated',
-          rating: 4.8,
-          likes: 0,
-          image: mainImg,
-          images: list,
-          resort_amenities: []
-        };
-      });
-      setItems(mapped);
+      const fallbackList = groupAndNormalizeAccommodations([...customResorts, ...customAttractions]);
+      setItems(fallbackList);
     } finally {
       setLoading(false);
     }
@@ -380,132 +864,35 @@ export function Accommodations() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredAccommodations.map((acc, index) => {
-              const imgList = (acc.images && acc.images.length > 0) ? acc.images : [acc.image];
-              const activeDisplayImage = imgList[0] || acc.image;
-
-              return (
-                <div
-                  key={acc.id}
-                  onClick={() => handleAccCardClick(acc)}
-                  className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col group cursor-pointer hover:border-pink-200 justify-between"
-                >
-                  {/* Image Container */}
-                  <div className="relative aspect-4/3 overflow-hidden bg-gray-100">
-                    <img
-                      src={formatImageUrl(activeDisplayImage) || '/assets/mansalay_hero_bg.jpg'}
-                      alt={acc.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
-                    />
-
-                    {/* Accommodation Badge */}
-                    {acc.badge && (
-                      <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 bg-pink-500 text-white text-[10px] font-bold rounded-full shadow-xs z-10">
-                        {acc.badge}
-                      </span>
-                    )}
-
-                    {/* Top-Right Action Controls (Share + Pin / Save) */}
-                    <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShareData({
-                            title: acc.name,
-                            description: acc.description,
-                            image: acc.image,
-                            category: acc.type || 'Resort',
-                          });
-                        }}
-                        className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors hover:scale-110"
-                        title="Share this stay"
-                      >
-                        <Share2 className="h-3.5 w-3.5" />
-                      </button>
-                      {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
-                        <button
-                          onClick={(e) => toggleSaveAcc(acc, e)}
-                          className={`w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer ${
-                            isInWishlist(acc.id, 'accommodation')
-                              ? 'bg-rose-50 border border-rose-200'
-                              : 'bg-white/80 hover:bg-white'
-                          }`}
-                          title={isInWishlist(acc.id, 'accommodation') ? 'Remove from saved places' : 'Pin to saved places'}
-                        >
-                          <PushPinIcon
-                            isPinned={isInWishlist(acc.id, 'accommodation')}
-                            size={16}
-                            idPrefix={`acc-tr-${acc.id}`}
-                          />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Dark Overlay Saves */}
-                    {userType === 'admin' || userType === 'resort' || userType === 'enterprise' ? (
-                      <div
-                        className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/70 backdrop-blur-md rounded-full text-white text-[11px] font-bold z-10 border border-white/10 whitespace-nowrap shadow-xs"
-                        title="Total Tourist Saves"
-                      >
-                        <PushPinIcon
-                          alwaysTilted
-                          size={14}
-                          idPrefix={`acc-admin-${acc.id}`}
-                        />
-                        <span className="text-white font-extrabold whitespace-nowrap">
-                          Save: {getWishlistCount(acc.id, 'accommodation', acc.likes)}
-                        </span>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={(e) => toggleSaveAcc(acc, e)}
-                        className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 z-10 whitespace-nowrap"
-                        title={isInWishlist(acc.id, 'accommodation') ? 'Saved in pins' : 'Click to pin stay'}
-                      >
-                        <PushPinIcon
-                          isPinned={isInWishlist(acc.id, 'accommodation')}
-                          size={14}
-                          idPrefix={`acc-bl-${acc.id}`}
-                        />
-                        <span className={isInWishlist(acc.id, 'accommodation') ? 'text-pink-400 font-extrabold whitespace-nowrap' : 'text-white whitespace-nowrap'}>
-                          Save: {getWishlistCount(acc.id, 'accommodation', acc.likes)}
-                        </span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Content */}
-                  <div className="p-4 flex-1 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between gap-1">
-                        <p className="text-[10px] uppercase font-bold text-gray-400">{acc.type || 'Resort'}</p>
-                        {acc.capacity ? (
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                            <Users className="h-3 w-3" /> Max {acc.capacity}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-0.5">{acc.name}</h3>
-
-                      <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 min-h-[32px] text-justify" style={{ textAlign: 'justify' }}>{acc.description}</p>
-                    </div>
-
-                    {/* Clickable Resort Host Link */}
-                    <div
-                      onClick={(e) => handleResortClick(acc.resort_name || acc.name, acc.user_id, e)}
-                      className="flex items-center gap-1.5 text-[11px] text-emerald-700 hover:text-emerald-800 font-semibold mt-4 pt-3 border-t border-gray-100 group/resort cursor-pointer transition-colors"
-                      title={`Click to view resort profile of ${acc.resort_name || 'this resort'}`}
-                    >
-                      <Hotel className="h-3.5 w-3.5 text-emerald-600 group-hover/resort:scale-110 transition-transform flex-shrink-0" />
-                      <span className="truncate group-hover/resort:underline">{acc.resort_name || 'Mansalay Beach Resort'}</span>
-                      <ExternalLink className="h-2.5 w-2.5 opacity-60 ml-auto flex-shrink-0 group-hover/resort:opacity-100 text-emerald-600" />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {filteredAccommodations.map((acc) => (
+              <AccommodationCardItem
+                key={acc.id}
+                acc={acc}
+                onCardClick={() => handleAccCardClick(acc)}
+                onOpenLightbox={(images, index, title) => {
+                  setLightboxData({
+                    isOpen: true,
+                    images,
+                    initialIndex: index,
+                    title,
+                  });
+                }}
+                onShare={(e) => {
+                  e.stopPropagation();
+                  setShareData({
+                    title: acc.name,
+                    description: acc.description,
+                    image: acc.image,
+                    category: acc.type || 'Resort',
+                  });
+                }}
+                onSave={(e) => toggleSaveAcc(acc, e)}
+                isInWishlist={isInWishlist(acc.id, 'accommodation')}
+                wishlistCount={getWishlistCount(acc.id, 'accommodation', acc.likes)}
+                userType={userType}
+                onResortClick={handleResortClick}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -570,12 +957,12 @@ export function Accommodations() {
                     )}
                   </div>
                   <h2 className="text-xl font-extrabold text-gray-900 mt-2">{selectedAcc.name}</h2>
-                  {selectedAcc.pricePerNight > 0 && (
-                    <p className="text-pink-600 font-extrabold text-base mt-1">
-                      ₱{Number(selectedAcc.pricePerNight).toLocaleString()}
-                      <span className="text-xs font-normal text-gray-500"> / night</span>
-                    </p>
-                  )}
+                  {selectedAcc.pricePerNight && selectedAcc.pricePerNight > 0 ? (
+                    <div className="text-pink-600 font-extrabold text-base mt-1 flex items-baseline gap-1">
+                      <span>₱{Number(selectedAcc.pricePerNight).toLocaleString()}</span>
+                      <span className="text-xs font-normal text-gray-400">/ night</span>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -692,12 +1079,12 @@ export function Accommodations() {
                           </div>
                         </div>
 
-                        <div className="flex items-center sm:items-end justify-between sm:justify-center gap-1.5 flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-200/60">
-                          <div className="text-sm font-extrabold text-pink-600">
+                        {room.price_per_night && Number(room.price_per_night) > 0 ? (
+                          <div className="text-pink-600 font-extrabold text-xs whitespace-nowrap self-start sm:self-center">
                             ₱{Number(room.price_per_night).toLocaleString()}
                             <span className="text-[10px] font-normal text-gray-400"> / night</span>
                           </div>
-                        </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -731,8 +1118,8 @@ export function Accommodations() {
 
               {/* Description */}
               <div className="text-xs text-gray-600 leading-relaxed font-normal text-justify space-y-3" style={{ textAlign: 'justify' }}>
-                {selectedAcc.description ? (
-                  selectedAcc.description
+                {(selectedAcc.full_description || selectedAcc.description) ? (
+                  (selectedAcc.full_description || selectedAcc.description)!
                     .replace(/<br\s*[\/]?>/gi, '\n')
                     .split(/\r?\n+/)
                     .map((p) => p.trim())
@@ -744,14 +1131,17 @@ export function Accommodations() {
                     ))
                 ) : (
                   <p className="text-justify leading-relaxed" style={{ textAlign: 'justify' }}>
-                    No description available for this accommodation.
+                    Enjoy a relaxing and comfortable stay in {selectedAcc.name} at {selectedAcc.resort_name || 'Mansalay'}. Clean, peaceful, and close to nature in Oriental Mindoro.
                   </p>
                 )}
               </div>
 
               {/* Tags */}
               <div className="flex flex-wrap gap-2">
-                {(selectedAcc.resort_amenities || ['Farm', 'Agri-tourism', 'Nature', 'Family-friendly']).map((amenity, i) => (
+                {(selectedAcc.resort_amenities && selectedAcc.resort_amenities.length > 0
+                  ? selectedAcc.resort_amenities
+                  : ['Beachfront', 'Scenic View', 'Peaceful', 'Family-friendly']
+                ).map((amenity, i) => (
                   <span key={i} className="px-3 py-1 bg-pink-50 text-pink-600 rounded-full text-[11px] font-semibold border border-pink-100">
                     ♡ {amenity}
                   </span>
@@ -762,15 +1152,38 @@ export function Accommodations() {
               <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl space-y-2.5">
                 <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Contact & Connect</h4>
                 <div className="flex flex-wrap items-center gap-2">
-                  <a href={`tel:${selectedAcc.contact_number || '09123456789'}`} className="px-3.5 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5">
-                    <Phone className="h-3.5 w-3.5" /> Call
-                  </a>
-                  <a href="https://facebook.com" target="_blank" rel="noreferrer" className="px-3.5 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5">
-                    <Facebook className="h-3.5 w-3.5" /> Facebook
-                  </a>
-                  <a href="https://instagram.com" target="_blank" rel="noreferrer" className="px-3.5 py-2 bg-pink-50 text-pink-700 hover:bg-pink-100 border border-pink-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5">
-                    <Instagram className="h-3.5 w-3.5" /> Instagram
-                  </a>
+                  {(selectedAcc.contact_number || selectedAcc.phone) ? (
+                    <a
+                      href={`tel:${selectedAcc.contact_number || selectedAcc.phone}`}
+                      className="px-3.5 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5"
+                    >
+                      <Phone className="h-3.5 w-3.5" /> Call ({selectedAcc.contact_number || selectedAcc.phone})
+                    </a>
+                  ) : (
+                    <span className="px-3.5 py-2 bg-gray-100 text-gray-500 rounded-full text-xs font-medium flex items-center gap-1.5">
+                      <Phone className="h-3.5 w-3.5 text-gray-400" /> Inquire via Resort
+                    </span>
+                  )}
+                  {selectedAcc.facebook ? (
+                    <a
+                      href={selectedAcc.facebook.startsWith('http') ? selectedAcc.facebook : `https://${selectedAcc.facebook}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3.5 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5"
+                    >
+                      <Facebook className="h-3.5 w-3.5" /> Facebook Page
+                    </a>
+                  ) : null}
+                  {selectedAcc.instagram ? (
+                    <a
+                      href={selectedAcc.instagram.startsWith('http') ? selectedAcc.instagram : `https://${selectedAcc.instagram}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3.5 py-2 bg-pink-50 text-pink-700 hover:bg-pink-100 border border-pink-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5"
+                    >
+                      <Instagram className="h-3.5 w-3.5" /> Instagram
+                    </a>
+                  ) : null}
                 </div>
 
                 {/* 360° Walkthrough & Virtual Tour Button */}
@@ -847,6 +1260,15 @@ export function Accommodations() {
           category={shareData.category}
         />
       )}
+
+      {/* ── FULLSCREEN GALLERY LIGHTBOX MODAL ── */}
+      <FullscreenGalleryModal
+        isOpen={lightboxData.isOpen}
+        images={lightboxData.images}
+        initialIndex={lightboxData.initialIndex}
+        title={lightboxData.title}
+        onClose={() => setLightboxData(prev => ({ ...prev, isOpen: false }))}
+      />
 
       {/* ── 360° VIRTUAL WALKTHROUGH MODAL ── */}
       {selectedAcc && (

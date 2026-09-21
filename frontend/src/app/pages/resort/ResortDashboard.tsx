@@ -585,6 +585,9 @@ export function ResortDashboard() {
       formData.append('type', postType);
       formData.append('content', finalContent);
       formData.append('location', location.trim());
+      if (postType === 'rooms' && roomTypeName.trim()) {
+        formData.append('product_name', roomTypeName.trim());
+      }
 
       const resortName = resortProfile?.resort_name || currentUser?.resort_name || currentUser?.name || 'Resort';
       formData.append('seller_name', resortName);

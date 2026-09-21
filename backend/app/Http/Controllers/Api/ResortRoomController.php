@@ -45,13 +45,15 @@ class ResortRoomController extends Controller
         $data = $request->validate([
             'name'           => 'required|string|max:255',
             'type'           => 'nullable|string|max:100',
-            'price_per_night'=> 'required|numeric|min:1',
+            'price_per_night'=> 'nullable|numeric',
             'capacity'       => 'nullable|integer|min:1',
             'description'    => 'nullable|string',
             'image'          => 'nullable',
             'images'         => 'nullable',
             'is_available'   => 'nullable|boolean',
         ]);
+
+        $data['price_per_night'] = !empty($data['price_per_night']) ? floatval($data['price_per_night']) : 0;
 
         $imagePaths = [];
 
@@ -101,13 +103,15 @@ class ResortRoomController extends Controller
         $data = $request->validate([
             'name'           => 'required|string|max:255',
             'type'           => 'nullable|string|max:100',
-            'price_per_night'=> 'required|numeric|min:1',
+            'price_per_night'=> 'nullable|numeric',
             'capacity'       => 'nullable|integer|min:1',
             'description'    => 'nullable|string',
             'image'          => 'nullable',
             'images'         => 'nullable',
             'is_available'   => 'nullable|boolean',
         ]);
+
+        $data['price_per_night'] = !empty($data['price_per_night']) ? floatval($data['price_per_night']) : 0;
 
         $imagePaths = [];
         $hasNewFileUpload = false;
@@ -190,10 +194,16 @@ class ResortRoomController extends Controller
         $user = $request->user();
         $room = ResortRoom::where('id', $id)->where('user_id', $user->id)->firstOrFail();
 
-        if ($room->image) {
-            $path = str_replace('/storage/', '', $room->image);
-            if (Storage::disk('public')->exists($path)) {
-                Storage::disk('public')->delete($path);
+        $allImages = is_array($room->images) ? $room->images : [];
+        if ($room->image && !in_array($room->image, $allImages)) {
+            $allImages[] = $room->image;
+        }
+        foreach ($allImages as $img) {
+            if (is_string($img)) {
+                $path = str_replace('/storage/', '', $img);
+                if (Storage::disk('public')->exists($path)) {
+                    Storage::disk('public')->delete($path);
+                }
             }
         }
 

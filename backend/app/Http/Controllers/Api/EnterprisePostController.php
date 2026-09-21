@@ -210,13 +210,34 @@ class EnterprisePostController extends Controller
             ? $post->images
             : (!empty($post->image) ? [$post->image] : []);
 
+        $description = $post->content ?: $roomName;
+        if (!empty($post->content) && $roomName && str_starts_with($post->content, $roomName)) {
+            $stripped = trim(preg_replace('/^' . preg_quote($roomName, '/') . '\s*[—\-:]*\s*/u', '', $post->content));
+            if (!empty($stripped)) {
+                $description = $stripped;
+            }
+        }
+
+        $roomType = 'Room';
+        if (!empty($post->tags)) {
+            $tagsArr = is_array($post->tags) ? $post->tags : json_decode($post->tags, true);
+            if (is_array($tagsArr)) {
+                foreach ($tagsArr as $tag) {
+                    if (is_string($tag) && in_array(strtolower(trim($tag)), ['deluxe', 'suite', 'standard', 'cottage', 'villa', 'family room', 'dormitory', 'beachfront'])) {
+                        $roomType = trim($tag);
+                        break;
+                    }
+                }
+            }
+        }
+
         $roomData = [
             'user_id'         => $user->id,
             'name'            => $roomName,
-            'type'            => 'Room',
+            'type'            => $roomType,
             'price_per_night' => $numericPrice,
             'capacity'        => $capacity,
-            'description'     => $post->content ?: $roomName,
+            'description'     => $description,
             'image'           => $post->image ?: (count($images) > 0 ? $images[0] : null),
             'images'          => $images,
             'is_available'    => true,
@@ -227,12 +248,17 @@ class EnterprisePostController extends Controller
             ->first();
 
         if ($existing) {
+            $existingImgs = is_array($existing->images) ? $existing->images : (!empty($existing->image) ? [$existing->image] : []);
+            $mergedImages = array_values(array_unique(array_filter(array_merge($existingImgs, $images))));
+            $primaryImage = $existing->image ?: (count($mergedImages) > 0 ? $mergedImages[0] : null);
+
             $existing->update([
+                'type'            => $roomType !== 'Room' ? $roomType : ($existing->type ?: 'Room'),
                 'price_per_night' => $numericPrice,
                 'capacity'        => $capacity,
-                'description'     => $post->content ?: $roomName,
-                'image'           => $existing->image ?: ($post->image ?: (count($images) > 0 ? $images[0] : null)),
-                'images'          => !empty($existing->images) ? $existing->images : $images,
+                'description'     => $description,
+                'image'           => $primaryImage,
+                'images'          => $mergedImages,
                 'is_available'    => true,
             ]);
             return $existing;

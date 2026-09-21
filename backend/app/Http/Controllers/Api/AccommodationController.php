@@ -73,8 +73,8 @@ class AccommodationController extends Controller
             }
 
             $allRooms = $roomsQuery->orderBy('created_at', 'desc')->get();
-            $individualRooms = collect();
             $handledResortIds = [];
+            $roomGroups = [];
 
             foreach ($allRooms as $room) {
                 $owner = $room->owner;
@@ -90,6 +90,27 @@ class AccommodationController extends Controller
                     } catch (\Throwable $e) {
                         $roomImages = [$roomImages];
                     }
+                }
+                if (!is_array($roomImages)) {
+                    $roomImages = [];
+                }
+                if ($room->image && !in_array($room->image, $roomImages)) {
+                    array_unshift($roomImages, $room->image);
+                }
+
+                $cleanRoomImages = array_values(array_unique(array_filter($roomImages)));
+                $groupKey = $room->user_id . '_' . strtolower(trim($room->name));
+
+                if (isset($roomGroups[$groupKey])) {
+                    // Merge images into existing room group to prevent duplicate cards
+                    $existing = $roomGroups[$groupKey];
+                    $mergedImages = array_values(array_unique(array_filter(array_merge($existing['images'], $cleanRoomImages))));
+                    $existing['images'] = $mergedImages;
+                    if (empty($existing['image']) && count($mergedImages) > 0) {
+                        $existing['image'] = $mergedImages[0];
+                    }
+                    $roomGroups[$groupKey] = $existing;
+                    continue;
                 }
 
                 // Read cached views: tries view_count_accommodation_room-{id} key first, then room-level key
@@ -114,16 +135,17 @@ class AccommodationController extends Controller
 
                 $handledResortIds[] = $room->user_id;
 
-                $individualRooms->push([
+                $roomItem = [
                     'id'               => 'room-' . $room->id,
                     'room_id'          => $room->id,
                     'name'             => $room->name,
                     'resort_name'      => $owner ? ($owner->resort_name ?? $owner->name) : 'Resort Stay',
                     'description'      => $room->description ?: ($owner ? ($owner->resort_description ?? '') : ''),
+                    'full_description' => $room->description ?: ($owner ? ($owner->resort_description ?? '') : ''),
                     'price_per_night'  => (float) $room->price_per_night,
                     'price'            => (float) $room->price_per_night,
-                    'image'            => $room->image ?: ($primaryOwnerImage ?: (is_array($roomImages) && count($roomImages) > 0 ? $roomImages[0] : '')),
-                    'images'           => is_array($roomImages) && count($roomImages) > 0 ? $roomImages : ($room->image ? [$room->image] : $ownerImages),
+                    'image'            => $room->image ?: ($primaryOwnerImage ?: (count($cleanRoomImages) > 0 ? $cleanRoomImages[0] : '')),
+                    'images'           => count($cleanRoomImages) > 0 ? $cleanRoomImages : ($room->image ? [$room->image] : $ownerImages),
                     'resort_amenities' => $owner ? ($owner->resort_amenities ?? []) : [],
                     'user_id'          => $room->user_id,
                     'is_registered'    => true,
@@ -132,15 +154,26 @@ class AccommodationController extends Controller
                     'badge'            => $owner ? ($owner->resort_name ?? 'Resort Stay') : 'Resort Stay',
                     'capacity'         => $room->capacity,
                     'is_room'          => true,
+                    'location'         => $owner ? ($owner->barangay ? "{$owner->barangay}, Mansalay, Oriental Mindoro" : ($owner->address ?: 'Mansalay, Oriental Mindoro')) : 'Mansalay, Oriental Mindoro',
                     'barangay'         => $owner ? $owner->barangay : null,
                     'latitude'         => $owner ? $owner->latitude : null,
                     'longitude'        => $owner ? $owner->longitude : null,
+                    'phone'            => $owner ? ($owner->phone ?? null) : null,
+                    'contact_number'   => $owner ? ($owner->phone ?? null) : null,
+                    'facebook'         => $owner ? ($owner->facebook_link ?? null) : null,
+                    'instagram'        => $owner ? ($owner->instagram_link ?? null) : null,
+                    'website'          => $owner ? ($owner->website ?? null) : null,
+                    'virtual_tour_video' => $owner ? ($owner->virtual_tour_video ?? ($owner->video ?? null)) : null,
                     'virtual_tour_scenes' => $room->virtual_tour_scenes ?? ($owner ? ($owner->virtual_tour_scenes ?? []) : []),
                     'view_count'       => max($roomCachedViews, 0),
                     'views'            => max($roomCachedViews, 0),
                     'likes'            => $roomSaves,
-                ]);
+                ];
+
+                $roomGroups[$groupKey] = $roomItem;
             }
+
+            $individualRooms = collect(array_values($roomGroups));
 
             // Also check for registered resorts that haven't added individual rooms yet
             $resortQuery = \App\Models\User::where('role', 'resort')
@@ -181,6 +214,7 @@ class AccommodationController extends Controller
                     'name'             => $resortOwner->resort_name ?? $resortOwner->name,
                     'resort_name'      => $resortOwner->resort_name ?? $resortOwner->name,
                     'description'      => $resortOwner->resort_description ?? $resortOwner->description,
+                    'full_description' => $resortOwner->resort_description ?? $resortOwner->description,
                     'price_per_night'  => (float) ($resortOwner->resort_price_per_night ?: 0),
                     'price'            => (float) ($resortOwner->resort_price_per_night ?: 0),
                     'image'            => $primaryImage,
@@ -193,9 +227,16 @@ class AccommodationController extends Controller
                     'badge'            => $resortOwner->resort_name ?? 'Resort Stay',
                     'capacity'         => 2,
                     'is_room'          => false,
+                    'location'         => $resortOwner->barangay ? "{$resortOwner->barangay}, Mansalay, Oriental Mindoro" : ($resortOwner->address ?: 'Mansalay, Oriental Mindoro'),
                     'barangay'         => $resortOwner->barangay,
                     'latitude'         => $resortOwner->latitude,
                     'longitude'        => $resortOwner->longitude,
+                    'phone'            => $resortOwner->phone,
+                    'contact_number'   => $resortOwner->phone,
+                    'facebook'         => $resortOwner->facebook_link,
+                    'instagram'        => $resortOwner->instagram_link,
+                    'website'          => $resortOwner->website ?? null,
+                    'virtual_tour_video' => $resortOwner->virtual_tour_video ?? ($resortOwner->video ?? null),
                     'virtual_tour_scenes' => $resortOwner->virtual_tour_scenes ?? [],
                     'view_count'       => $totalResortViews,
                     'views'            => $totalResortViews,

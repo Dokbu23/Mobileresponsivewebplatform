@@ -10,7 +10,7 @@ import {
   Bookmark, Share2, ThumbsUp, Send, Bed, Waves,
   Compass, Palmtree, Megaphone, Calendar, FileText, Clock, Video,
   ChevronDown, ChevronUp, Users, Film, CheckCircle2, Trash2,
-  Navigation, Facebook
+  Navigation, Facebook, ChevronLeft, ChevronRight, Maximize2
 } from 'lucide-react';
 import { getPublicJSON, getAuthToken, API_BASE, recordView, formatImageUrl } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
@@ -507,7 +507,7 @@ export function BusinessProfile() {
   const products = data?.products || [];
   const accommodations = data?.accommodations || [];
 
-  // Merge database accommodations with room-type posts to ensure any room added via posts or resort-rooms immediately appears and increments the room count!
+  // Merge database accommodations with room-type posts to ensure any room added via posts or resort-rooms immediately appears, consolidates images, and preserves 1 room = 1 card
   const allAccommodations = useMemo(() => {
     if (!isResort) return [];
     const list = [...accommodations];
@@ -521,11 +521,40 @@ export function BusinessProfile() {
           const firstLine = rawName.split(/\r?\n/)[0].slice(0, 50).trim();
           const roomName = firstLine || 'Resort Room & Stay';
           const rKey = roomName.toLowerCase();
-          if (roomName && !existingNames.has(rKey)) {
+
+          const postImages = Array.isArray(post.images) && post.images.length > 0
+            ? post.images
+            : (post.image ? [post.image] : []);
+
+          let cleanDesc = post.content || roomName;
+          if (post.content && roomName && post.content.startsWith(roomName)) {
+            const stripped = post.content.replace(new RegExp('^' + roomName + '\\s*[—\\-:]*\\s*', 'i'), '').trim();
+            if (stripped) cleanDesc = stripped;
+          }
+
+          if (existingNames.has(rKey)) {
+            // Merge photos into existing room record so 1 room = 1 card
+            const targetRoom = list.find((a: any) => String(a.name || '').toLowerCase().trim() === rKey);
+            if (targetRoom) {
+              const currentImgs = Array.isArray(targetRoom.images) ? [...targetRoom.images] : (targetRoom.image ? [targetRoom.image] : []);
+              postImages.forEach((img: string) => {
+                if (img && !currentImgs.includes(img)) currentImgs.push(img);
+              });
+              targetRoom.images = currentImgs;
+              if (!targetRoom.description && cleanDesc) targetRoom.description = cleanDesc;
+              const numPrice = post.price
+                ? (typeof post.price === 'string' ? parseFloat(post.price.replace(/[^0-9.]/g, '')) || 0 : post.price)
+                : 0;
+              if ((!targetRoom.price_per_night || targetRoom.price_per_night == 0) && numPrice > 0) {
+                targetRoom.price_per_night = numPrice;
+                targetRoom.price = numPrice;
+              }
+            }
+          } else {
             existingNames.add(rKey);
             const numPrice = post.price
-              ? (typeof post.price === 'string' ? parseFloat(post.price.replace(/[^0-9.]/g, '')) || 2000 : post.price)
-              : 2000;
+              ? (typeof post.price === 'string' ? parseFloat(post.price.replace(/[^0-9.]/g, '')) || 0 : post.price)
+              : 0;
             const numCapacity = post.stock
               ? (typeof post.stock === 'string' ? parseInt(post.stock.replace(/[^0-9]/g, '')) || 2 : post.stock)
               : 2;
@@ -534,12 +563,12 @@ export function BusinessProfile() {
               id: `post_room_${post.id}`,
               name: roomName,
               type: 'Room',
-              description: post.content || roomName,
+              description: cleanDesc,
               price_per_night: numPrice,
               price: numPrice,
               capacity: numCapacity,
-              image: post.image || (post.images && post.images[0]) || '',
-              images: post.images && post.images.length > 0 ? post.images : (post.image ? [post.image] : []),
+              image: post.image || (postImages[0] ?? ''),
+              images: postImages,
               is_available: true,
               user_id: post.user_id || owner?.id,
             });
@@ -2202,8 +2231,7 @@ export function BusinessProfile() {
                             </span>
                           )}
                         </div>
-
-                        {Number(viewingRoom.price_per_night || viewingRoom.price) > 0 && (
+                        {Number(viewingRoom.price_per_night || viewingRoom.price || 0) > 0 && (
                           <div className="px-3.5 py-1 bg-pink-600/95 backdrop-blur-md rounded-xl text-xs sm:text-sm font-extrabold shadow-md">
                             ₱{Number(viewingRoom.price_per_night || viewingRoom.price).toLocaleString()}
                             <span className="text-[10px] font-normal opacity-80"> / night</span>
@@ -2236,15 +2264,8 @@ export function BusinessProfile() {
                 );
               })()}
 
-              {/* Rate & Capacity Highlight Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div className="p-3.5 bg-pink-50/60 rounded-2xl border border-pink-100">
-                  <span className="text-[10px] font-bold text-pink-600 uppercase tracking-wider block mb-0.5">Rate / Night</span>
-                  <div className="text-lg font-black text-pink-600">
-                    ₱{Number(viewingRoom.price_per_night || viewingRoom.price || 0).toLocaleString()}
-                  </div>
-                </div>
-
+              {/* Capacity, Type & Rate Highlight Cards */}
+              <div className={`grid grid-cols-1 ${Number(viewingRoom.price_per_night || viewingRoom.price || 0) > 0 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
                 <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-100">
                   <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block mb-0.5">Max Occupancy</span>
                   <div className="text-sm font-bold text-gray-900 flex items-center gap-1.5 mt-0.5">
@@ -2253,13 +2274,23 @@ export function BusinessProfile() {
                   </div>
                 </div>
 
-                <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-100 col-span-2 sm:col-span-1">
+                <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-100">
                   <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block mb-0.5">Accommodation Type</span>
                   <div className="text-sm font-bold text-gray-900 flex items-center gap-1.5 mt-0.5">
                     <Bed className="h-4 w-4 text-emerald-500" />
                     <span>{viewingRoom.type || 'Standard Room'}</span>
                   </div>
                 </div>
+
+                {Number(viewingRoom.price_per_night || viewingRoom.price || 0) > 0 && (
+                  <div className="p-3.5 bg-pink-50/60 rounded-2xl border border-pink-100">
+                    <span className="text-[10px] font-bold text-pink-600 uppercase tracking-wider block mb-0.5">Rate / Night</span>
+                    <div className="text-sm font-bold text-pink-600 flex items-baseline gap-1 mt-0.5">
+                      <span className="text-base font-extrabold">₱{Number(viewingRoom.price_per_night || viewingRoom.price).toLocaleString()}</span>
+                      <span className="text-[11px] font-normal text-gray-500">/ night</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Room Description */}
@@ -2995,15 +3026,66 @@ function ProductCard({ product, onSelect }: any) {
   );
 }
 
-// Clean Accommodation Card with click-to-view and robust fallback
+// Clean Accommodation Card with multi-image carousel, touch swipe, and click-to-view
 function AccommodationCard({ accommodation, onSelect }: any) {
   const { isInWishlist, addToWishlist, removeFromWishlist, getWishlistCount, userType } = useApp();
-  const rawImage = accommodation.image || (Array.isArray(accommodation.images) && accommodation.images[0]);
-  const imageUrl = rawImage
-    ? (rawImage.startsWith('http') ? rawImage : `${API_BASE}${rawImage}`)
-    : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80';
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
 
-  const price = Number(accommodation.price_per_night || accommodation.price || 0);
+  const images: string[] = useMemo(() => {
+    let list: any[] = [];
+    if (Array.isArray(accommodation.images) && accommodation.images.length > 0) {
+      list = accommodation.images;
+    } else if (typeof accommodation.images === 'string' && accommodation.images.trim()) {
+      try {
+        const parsed = JSON.parse(accommodation.images);
+        if (Array.isArray(parsed)) list = parsed;
+      } catch {}
+    }
+    const formatted = list.map((img: any) => formatImageUrl(img) || img).filter(Boolean);
+    const mainImg = formatImageUrl(accommodation.image) || accommodation.image;
+    if (mainImg && !formatted.includes(mainImg)) {
+      formatted.unshift(mainImg);
+    }
+    return formatted.length > 0
+      ? formatted
+      : ['https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80'];
+  }, [accommodation.images, accommodation.image]);
+
+  const hasMultiple = images.length > 1;
+  const currentImage = images[currentIdx] || images[0];
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIdx((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+  };
+
+  const handleNext = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIdx((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (touchStartX.current === null || touchEndX.current === null) return;
+    const diff = touchStartX.current - touchEndX.current;
+    if (diff > 35 && hasMultiple) {
+      setCurrentIdx((prev) => (prev === images.length - 1 ? 0 : prev + 1));
+    } else if (diff < -35 && hasMultiple) {
+      setCurrentIdx((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+    }
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
+
   const isSaved = isInWishlist(accommodation.id, 'accommodation');
   const count = getWishlistCount(accommodation.id, 'accommodation', accommodation.likes || 0);
 
@@ -3019,8 +3101,8 @@ function AccommodationCard({ accommodation, onSelect }: any) {
         id: accommodation.id,
         type: 'accommodation',
         title: accommodation.name,
-        image: rawImage,
-        price: price,
+        image: currentImage,
+        price: Number(accommodation.price_per_night || accommodation.price || 0),
         likes: accommodation.likes,
       } as any);
     }
@@ -3031,22 +3113,58 @@ function AccommodationCard({ accommodation, onSelect }: any) {
       onClick={onSelect}
       className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-xl hover:border-pink-300 transition-all duration-300 group cursor-pointer flex flex-col justify-between"
     >
-      <div className="aspect-square bg-gray-100 overflow-hidden relative">
+      <div
+        className="aspect-square bg-gray-100 overflow-hidden relative select-none"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         <img
-          src={imageUrl}
-          alt={accommodation.name}
+          src={currentImage}
+          alt={`${accommodation.name} - Photo ${currentIdx + 1}`}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80'; }}
         />
         {accommodation.type && (
-          <span className="absolute top-2 left-2 px-2.5 py-0.5 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold rounded-lg shadow-xs">
+          <span className="absolute top-2 left-2 px-2.5 py-0.5 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold rounded-lg shadow-xs z-10 pointer-events-none">
             {accommodation.type}
           </span>
         )}
+
+        {/* Counter Badge if multiple images */}
+        {hasMultiple && (
+          <span className="absolute top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-black/65 backdrop-blur-md text-white text-[9px] font-extrabold rounded-full z-10 pointer-events-none border border-white/20">
+            {currentIdx + 1} / {images.length}
+          </span>
+        )}
+
+        {/* Desktop Carousel Arrows */}
+        {hasMultiple && (
+          <>
+            <button
+              type="button"
+              onClick={handlePrev}
+              className="absolute left-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black/55 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer shadow-md"
+              title="Previous photo"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNext}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black/55 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer shadow-md"
+              title="Next photo"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </>
+        )}
+
         {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' ? (
           <button
+            type="button"
             onClick={toggleSave}
-            className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer ${
+            className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer z-10 ${
               isSaved
                 ? 'bg-rose-50 border border-rose-200'
                 : 'bg-white/80 hover:bg-white text-gray-700'
@@ -3056,40 +3174,38 @@ function AccommodationCard({ accommodation, onSelect }: any) {
             <PushPinIcon isPinned={isSaved} size={15} idPrefix={`bp-acc-${accommodation.id}`} />
           </button>
         ) : (
-          <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full text-[9px] font-bold text-white flex items-center gap-1 whitespace-nowrap">
+          <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full text-[9px] font-bold text-white flex items-center gap-1 whitespace-nowrap z-10">
             <PushPinIcon alwaysTilted size={12} idPrefix={`bp-acc-adm-${accommodation.id}`} />
             <span>Save: {count}</span>
           </div>
         )}
-        <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-md text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
+
+        <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-md text-white px-2 py-0.5 rounded-full text-[10px] font-bold z-10">
           <PushPinIcon alwaysTilted size={12} idPrefix={`bp-acc-cnt-${accommodation.id}`} />
           <span>{count}</span>
         </div>
-
-        {/* View overlay */}
-        <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-          <span className="px-3.5 py-1.5 bg-white/95 backdrop-blur-xs text-gray-900 text-xs font-bold rounded-full shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform flex items-center gap-1">
-            <span>View Room</span>
-            <span>→</span>
-          </span>
-        </div>
       </div>
+
       <div className="p-3 flex-1 flex flex-col justify-between">
         <div>
           <h3 className="text-sm text-gray-900 line-clamp-2 min-h-[36px] leading-snug mb-1 font-bold group-hover:text-pink-600 transition-colors">
             {accommodation.name}
           </h3>
           {accommodation.capacity ? (
-            <div className="text-[11px] text-gray-500 mb-2 flex items-center gap-1">
+            <div className="text-[11px] text-gray-500 mb-1 flex items-center gap-1">
               <Users className="h-3 w-3 text-gray-400" />
               <span>Max {accommodation.capacity} Guests</span>
             </div>
           ) : null}
         </div>
-        {price > 0 && (
-          <div className="text-pink-600 font-extrabold text-sm flex items-baseline gap-0.5">
-            <span>₱{price.toLocaleString()}</span>
-            <span className="text-[10px] font-normal text-gray-400"> / night</span>
+
+        {Number(accommodation.price_per_night || accommodation.price || 0) > 0 && (
+          <div className="mt-2 pt-2 border-t border-gray-100 flex items-baseline justify-between">
+            <span className="text-[10px] text-gray-400 font-medium">Per night</span>
+            <div className="text-pink-600 font-extrabold text-sm flex items-baseline gap-0.5">
+              <span>₱{Number(accommodation.price_per_night || accommodation.price).toLocaleString()}</span>
+              <span className="text-[10px] font-normal text-gray-400"> / night</span>
+            </div>
           </div>
         )}
       </div>

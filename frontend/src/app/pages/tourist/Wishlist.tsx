@@ -961,9 +961,12 @@ export function Wishlist() {
                           {decodeHtml(item.category)}
                         </span>
                       )}
-                      {item.price !== undefined && item.price > 0 && (
-                        <div className="text-pink-600 font-extrabold text-sm mt-2">
-                          ₱{Number(item.price).toLocaleString()}
+                      {(item.type === 'product' || item.type === 'accommodation') && item.price !== undefined && Number(item.price) > 0 && (
+                        <div className="text-pink-600 font-extrabold text-sm mt-2 flex items-baseline gap-0.5">
+                          <span>₱{Number(item.price).toLocaleString()}</span>
+                          {item.type === 'accommodation' && (
+                            <span className="text-[10px] font-normal text-gray-400"> / night</span>
+                          )}
                         </div>
                       )}
                     </div>
