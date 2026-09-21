@@ -18,6 +18,8 @@ import { toast } from 'sonner';
 import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
 
 import { ResortVirtualTourManager } from '../../components/ResortVirtualTourManager';
+import { VirtualTourModal, Tour360Scene } from '../../components/VirtualTourModal';
+import { InlineVirtualTourViewer } from '../../components/InlineVirtualTourViewer';
 import { PushPinIcon } from '../../components/PushPinIcon';
 import { MANSALAY_BARANGAYS } from '../../lib/constants';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
@@ -413,6 +415,9 @@ export function BusinessProfile() {
   const [isCoverMuted, setIsCoverMuted] = useState(true);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [productShareData, setProductShareData] = useState<{ title: string; description?: string; image?: string; category?: string } | null>(null);
+  const [isEditingTour, setIsEditingTour] = useState(false);
+  const [isVirtualTourModalOpen, setIsVirtualTourModalOpen] = useState(false);
+  const [activeTourSceneId, setActiveTourSceneId] = useState<string | undefined>(undefined);
 
   const handleCopyPromo = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -623,6 +628,111 @@ export function BusinessProfile() {
     }
   }, [videoTourUrl]);
 
+  const isManageMode = searchParams.get('manage') === 'true';
+  const isActualOwner = Boolean(
+    currentUser && (
+      userType === 'admin' || currentUser.role === 'admin' ||
+      ((userType === 'enterprise' || currentUser.role === 'enterprise') && type === 'enterprise' && (!userId || String(currentUser.id) === String(userId) || String(currentUser.id) === String(owner?.id) || !userId.match(/^\d+$/))) ||
+      ((userType === 'resort' || currentUser.role === 'resort') && type === 'resort' && (!userId || String(currentUser.id) === String(userId) || String(currentUser.id) === String(owner?.id) || !userId.match(/^\d+$/))) ||
+      (currentUser.role === type && (String(currentUser.id) === String(userId) || String(currentUser.id) === String(owner?.id)))
+    )
+  );
+  const isOwner = Boolean(isManageMode && isActualOwner);
+
+  const shopDisplayName = isResort
+    ? (owner?.resort_name || owner?.name || 'Resort')
+    : ((owner?.store_name && owner?.store_name !== 'default') ? owner?.store_name : (owner?.name || 'Store'));
+
+  // Parse and build 360 virtual tour scenes for this business (unconditionally called before early returns)
+  const tourScenes: Tour360Scene[] = useMemo(() => {
+    let rawScenes: any[] = [];
+    if (Array.isArray(owner?.virtual_tour_scenes) && owner.virtual_tour_scenes.length > 0) {
+      rawScenes = owner.virtual_tour_scenes;
+    } else if (typeof owner?.virtual_tour_scenes === 'string' && owner.virtual_tour_scenes.trim()) {
+      try {
+        const parsed = JSON.parse(owner.virtual_tour_scenes);
+        if (Array.isArray(parsed)) rawScenes = parsed;
+      } catch {}
+    }
+
+    if (rawScenes.length === 0 && owner?.id) {
+      try {
+        const storageKey = `discover-mansalay:${isResort ? 'resort' : 'enterprise'}_360_scenes_${owner.id}`;
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) rawScenes = parsed;
+        }
+      } catch {}
+    }
+
+    if (rawScenes.length === 0) {
+      rawScenes = isResort
+        ? [
+            { id: 'entrance', title: '🚪 Entrance / Gate', subtitle: 'Main Entrance & Scenic Approach', imageUrl: 'https://pannellum.org/images/alma.jpg' },
+            { id: 'lobby', title: '🏨 Lobby / Dining', subtitle: 'Guest Reception & Dining Area', imageUrl: 'https://pannellum.org/images/bma-0.jpg' },
+            { id: 'pool', title: '🏊 Pool / Amenities', subtitle: 'Freshwater Pool & Tropical Sun Loungers', imageUrl: 'https://pannellum.org/images/jfk.jpg' },
+            { id: 'beach', title: '🏖️ Beach Front / Cottages', subtitle: 'Pristine Shoreline & Seafront Cottages', imageUrl: 'https://pannellum.org/images/cerro-toco-0.jpg' },
+          ]
+        : [
+            { id: 'entrance', title: '🚪 Store Entrance / Front', subtitle: 'Street Entrance & Welcome Facade', imageUrl: 'https://pannellum.org/images/alma.jpg' },
+            { id: 'showroom', title: '🛍️ Main Showroom & Aisles', subtitle: 'Featured Products & Customer Aisles', imageUrl: 'https://pannellum.org/images/bma-0.jpg' },
+            { id: 'display', title: '🍯 Products & Souvenir Shelf', subtitle: 'Handicrafts, Delicacies & Souvenirs', imageUrl: 'https://pannellum.org/images/jfk.jpg' },
+          ];
+    }
+
+    return rawScenes.map((slot: any, index: number) => {
+      const rawImg = slot.previewUrl || slot.imageUrl || slot.panoramaUrl || '';
+      let panoUrl = 'https://pannellum.org/images/alma.jpg';
+      if (rawImg) {
+        panoUrl = (rawImg.startsWith('blob:') || rawImg.startsWith('data:') || rawImg.startsWith('http'))
+          ? rawImg
+          : `${API_BASE}${rawImg}`;
+      }
+
+      const hotSpots: any[] = [];
+      if (index < rawScenes.length - 1) {
+        const nextSlot = rawScenes[index + 1];
+        hotSpots.push({
+          pitch: -4,
+          yaw: 20,
+          text: `Walk to ${nextSlot.title || 'Next Spot'} ➡️`,
+          type: 'scene',
+          targetSceneId: nextSlot.id || `scene_${index + 1}`,
+          targetPitch: 0,
+          targetYaw: 0,
+        });
+      }
+      if (index > 0) {
+        const prevSlot = rawScenes[index - 1];
+        hotSpots.push({
+          pitch: -5,
+          yaw: -160,
+          text: `⬅️ Return to ${prevSlot.title || 'Previous Spot'}`,
+          type: 'scene',
+          targetSceneId: prevSlot.id || `scene_${index - 1}`,
+          targetPitch: 0,
+          targetYaw: 0,
+        });
+      }
+      hotSpots.push({
+        pitch: 5,
+        yaw: 45,
+        text: `${slot.title || `Spot #${index + 1}`} - ${shopDisplayName}`,
+        type: 'info',
+      });
+
+      return {
+        id: slot.id || `scene_${index}`,
+        title: slot.title || `Spot #${index + 1}`,
+        subtitle: slot.subtitle || '',
+        panoramaUrl: panoUrl,
+        thumbnail: panoUrl,
+        hotSpots,
+      };
+    });
+  }, [owner?.virtual_tour_scenes, owner?.id, isResort, shopDisplayName]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -745,15 +855,7 @@ export function BusinessProfile() {
            (accommodation.description || '').toLowerCase().includes(searchQuery.toLowerCase());
   });
 
-  const isManageMode = searchParams.get('manage') === 'true';
-  const isOwner = Boolean(
-    isManageMode &&
-    currentUser && (
-      (userType === 'enterprise' && type === 'enterprise' && (!userId || String(currentUser.id) === String(userId) || String(currentUser.id) === String(owner?.id) || !userId.match(/^\d+$/))) ||
-      (userType === 'resort' && type === 'resort' && (!userId || String(currentUser.id) === String(userId) || String(currentUser.id) === String(owner?.id) || !userId.match(/^\d+$/))) ||
-      (currentUser.role === type && (String(currentUser.id) === String(userId) || String(currentUser.id) === String(owner?.id)))
-    )
-  );
+
 
   const handleOpenEditModal = () => {
     setEditForm({
@@ -1664,8 +1766,8 @@ export function BusinessProfile() {
         {activeProfileTab === 'posts' && (
           <div className="space-y-4">
             {/* Category Filter Chips */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            <div className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-3.5">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none flex-wrap sm:flex-nowrap">
                 {(type === 'resort'
                   ? [
                       { key: 'all', label: 'All Posts' },
@@ -1709,12 +1811,12 @@ export function BusinessProfile() {
             </div>
 
             {posts.length === 0 ? (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
+              <div className="w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-12 sm:p-16 text-center">
                 <div className="w-16 h-16 bg-pink-50 text-pink-500 rounded-full flex items-center justify-center mx-auto mb-4">
                   <FileText className="h-8 w-8" />
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 mb-1">No Posts Yet</h3>
-                <p className="text-xs text-gray-500 max-w-md mx-auto mb-5">
+                <p className="text-xs text-gray-500 max-w-lg mx-auto mb-5">
                   {isOwner 
                     ? 'You have not created any posts or updates yet. Create announcements, room highlights, or promotions from your dashboard.' 
                     : 'This host has not published any posts or promotional updates yet.'}
@@ -1738,7 +1840,7 @@ export function BusinessProfile() {
 
                 if (filteredPosts.length === 0) {
                   return (
-                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-10 text-center">
+                    <div className="w-full bg-white rounded-3xl shadow-sm border border-gray-100 p-12 text-center">
                       <p className="text-xs text-gray-500 font-medium">No posts in this category.</p>
                       <button
                         onClick={() => setSelectedPostCategory('all')}
@@ -1760,7 +1862,8 @@ export function BusinessProfile() {
                 };
 
                 return (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  /* ── FULL-WIDTH FEED: 1 POST PER LINE, SCROLLED ONE BY ONE ── */
+                  <div className="w-full space-y-6">
                     {filteredPosts.map((post) => {
                       const postTypeLabel = postTypeLabelMap[post.type] || '📢 Announcement';
 
@@ -1775,83 +1878,48 @@ export function BusinessProfile() {
                       return (
                         <div
                           key={post.id}
-                          onClick={() => setViewingPost(post)}
-                          className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-lg hover:border-pink-200 transition-all flex flex-col justify-between cursor-pointer group"
+                          className="bg-white rounded-3xl border border-gray-200/90 shadow-sm overflow-hidden hover:shadow-md transition-all flex flex-col"
                         >
-                          {/* Post Header */}
-                          <div className="p-4 border-b border-gray-50 flex items-center justify-between">
+                          {/* Facebook-style Post Header */}
+                          <div className="p-4 sm:p-5 flex items-center justify-between border-b border-gray-100">
                             <div className="flex items-center gap-3">
                               <img
                                 src={getImageUrl(shopLogo || '')}
                                 alt={shopName}
-                                className="w-10 h-10 rounded-full object-cover border border-gray-100"
+                                className="w-11 h-11 rounded-full object-cover border-2 border-pink-100 shadow-2xs flex-shrink-0"
                                 onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
                               />
                               <div>
                                 <div className="flex items-center gap-1.5">
-                                  <h4 className="text-xs font-bold text-gray-900 leading-tight group-hover:text-pink-600 transition-colors">{shopName}</h4>
-                                  <CheckCircle className="h-3 w-3 text-emerald-500 flex-shrink-0" />
+                                  <h4 className="text-sm font-extrabold text-gray-900 leading-tight hover:text-pink-600 transition-colors">
+                                    {shopName}
+                                  </h4>
+                                  <CheckCircle className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
                                 </div>
-                                <div className="flex items-center gap-2 text-[10px] text-gray-400 font-medium mt-0.5">
+                                <div className="flex items-center gap-2 text-xs text-gray-400 font-medium mt-0.5">
                                   <Clock className="h-3 w-3 text-gray-400" />
                                   <span>{formattedDate}</span>
                                 </div>
                               </div>
                             </div>
 
-                            <span className="px-2.5 py-1 bg-pink-50 text-pink-600 text-[10px] font-extrabold rounded-full">
+                            <span className="px-3 py-1 bg-pink-50 text-pink-700 text-xs font-bold rounded-full border border-pink-100/60">
                               {postTypeLabel}
                             </span>
                           </div>
 
-                          {/* Post Content */}
-                          <div className="p-4 space-y-3 flex-1">
-                            <p className="text-xs sm:text-sm text-gray-800 whitespace-pre-line leading-relaxed line-clamp-4">
+                          {/* Post Text Description */}
+                          <div className="p-4 sm:p-5 space-y-3">
+                            <p className="text-sm text-gray-900 whitespace-pre-line leading-relaxed text-justify" style={{ textAlign: 'justify' }}>
                               {post.content}
                             </p>
 
                             {/* Optional Product / Price Badge */}
                             {post.price && (
-                              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold border border-emerald-100">
+                              <div className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-extrabold border border-emerald-200/60 shadow-2xs">
                                 <span>Price: {post.price}</span>
                               </div>
                             )}
-
-                            {/* Post Video or Image */}
-                            {post.video ? (
-                              <div className="rounded-xl overflow-hidden bg-black border border-gray-100 aspect-video max-h-72 relative">
-                                {getYouTubeEmbedUrl(post.video) ? (
-                                  <iframe
-                                    src={getYouTubeEmbedUrl(post.video)!}
-                                    title="Virtual Tour Video"
-                                    className="w-full h-full object-cover"
-                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                    allowFullScreen
-                                  />
-                                ) : (
-                                  <video
-                                    src={getImageUrl(post.video)}
-                                    controls
-                                    playsInline
-                                    className="w-full h-full object-cover"
-                                  />
-                                )}
-                              </div>
-                            ) : post.image ? (
-                              <div className="rounded-xl overflow-hidden bg-gray-100 border border-gray-100 max-h-72 relative">
-                                <img
-                                  src={getImageUrl(post.image)}
-                                  alt="Post"
-                                  className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
-                                  onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
-                                />
-                                {Array.isArray(post.images) && post.images.length > 1 && (
-                                  <span className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold rounded-full flex items-center gap-1">
-                                    📸 +{post.images.length - 1} photos
-                                  </span>
-                                )}
-                              </div>
-                            ) : null}
 
                             {/* Tags */}
                             {(() => {
@@ -1862,7 +1930,7 @@ export function BusinessProfile() {
                                   {cleaned.map((tag: string, tidx: number) => (
                                     <span
                                       key={tidx}
-                                      className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-semibold rounded-md"
+                                      className="px-2.5 py-0.5 bg-gray-100 text-pink-600 text-xs font-semibold rounded-lg"
                                     >
                                       #{tag}
                                     </span>
@@ -1872,23 +1940,61 @@ export function BusinessProfile() {
                             })()}
                           </div>
 
-                          {/* Post Footer Actions */}
-                          <div
-                            className="px-4 py-3 bg-gray-50/60 border-t border-gray-100 flex items-center justify-between text-xs text-gray-600"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <div className="flex items-center gap-3">
+                          {/* Facebook Full-Width Media Container (Photo / Video) */}
+                          {post.video ? (
+                            <div className="w-full bg-black aspect-video max-h-[500px] overflow-hidden relative">
+                              {getYouTubeEmbedUrl(post.video) ? (
+                                <iframe
+                                  src={getYouTubeEmbedUrl(post.video)!}
+                                  title="Virtual Tour Video"
+                                  className="w-full h-full object-cover"
+                                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                  allowFullScreen
+                                />
+                              ) : (
+                                <video
+                                  src={getImageUrl(post.video)}
+                                  controls
+                                  playsInline
+                                  className="w-full h-full object-cover"
+                                />
+                              )}
+                            </div>
+                          ) : post.image ? (
+                            <div
+                              onClick={() => setViewingPost(post)}
+                              className="w-full bg-gray-950 max-h-[540px] overflow-hidden relative cursor-pointer group/img"
+                            >
+                              <img
+                                src={getImageUrl(post.image)}
+                                alt="Post media"
+                                className="w-full h-full object-cover group-hover/img:scale-[1.01] transition-transform duration-300 max-h-[540px]"
+                                onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                              />
+                              {Array.isArray(post.images) && post.images.length > 1 && (
+                                <span className="absolute bottom-3 right-3 px-3 py-1 bg-black/70 backdrop-blur-md text-white text-xs font-extrabold rounded-full flex items-center gap-1.5 border border-white/20 shadow-md">
+                                  📸 +{post.images.length - 1} more photos
+                                </span>
+                              )}
+                            </div>
+                          ) : null}
+
+                          {/* Facebook-style Action Bar */}
+                          <div className="px-4 sm:px-6 py-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-gray-600 bg-gray-50/50">
+                            <div className="flex items-center gap-4 sm:gap-6">
                               <button
+                                type="button"
                                 onClick={() => handleLikePost(post.id)}
-                                className="flex items-center gap-1 hover:text-pink-600 active:scale-95 transition-all font-semibold cursor-pointer"
+                                className="flex items-center gap-1.5 hover:text-pink-600 active:scale-95 transition-all cursor-pointer py-1"
                               >
                                 <PushPinIcon alwaysTilted size={16} idPrefix={`post-like-${post.id}`} />
                                 <span>{post.likes || 0} Pins</span>
                               </button>
 
                               <button
+                                type="button"
                                 onClick={() => handleSavePost(post.id)}
-                                className="flex items-center gap-1 hover:text-purple-600 active:scale-95 transition-all font-semibold cursor-pointer"
+                                className="flex items-center gap-1.5 hover:text-purple-600 active:scale-95 transition-all cursor-pointer py-1"
                               >
                                 <Bookmark className="h-4 w-4 text-purple-500 fill-purple-50" />
                                 <span>{post.saves || 0} Saves</span>
@@ -1896,10 +2002,11 @@ export function BusinessProfile() {
                             </div>
 
                             <button
+                              type="button"
                               onClick={() => setViewingPost(post)}
-                              className="text-[11px] text-pink-500 font-bold hover:underline cursor-pointer flex items-center gap-0.5"
+                              className="px-3.5 py-1.5 bg-white hover:bg-pink-50 border border-gray-200 hover:border-pink-200 text-pink-600 rounded-xl font-bold text-xs transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
                             >
-                              <span>View Full Post</span>
+                              <span>View Details</span>
                               <span>→</span>
                             </button>
                           </div>
@@ -1916,15 +2023,82 @@ export function BusinessProfile() {
         {/* ── TAB 3: 360° VIRTUAL WALKTHROUGH ── */}
         {activeProfileTab === 'tour' && (
           <div className="space-y-6 animate-in fade-in duration-150 mb-6">
-            <ResortVirtualTourManager
-              resortId={owner?.id}
-              businessType={isResort ? 'resort' : 'enterprise'}
-              resortName={shopName}
-              initialScenes={owner?.virtual_tour_scenes}
-              onSaveSuccess={(scenes) => {
-                setData((prev: any) => prev ? { ...prev, owner: { ...prev.owner, virtual_tour_scenes: scenes } } : prev);
-              }}
-            />
+            {/* If the current user is the actual resort/enterprise owner (or admin) AND is in edit mode */}
+            {isActualOwner && (isManageMode || isEditingTour) ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-3.5 bg-pink-50 border border-pink-200 rounded-2xl">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-pink-500 animate-ping" />
+                    <span className="text-xs font-bold text-pink-700">
+                      🛠️ Owner Mode: You are editing your 360° Walkthrough scenes
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingTour(false)}
+                    className="px-3.5 py-1.5 bg-white hover:bg-gray-50 border border-pink-200 text-pink-700 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>Switch to Visitor View</span>
+                    <span>👁️</span>
+                  </button>
+                </div>
+
+                <ResortVirtualTourManager
+                  resortId={owner?.id}
+                  businessType={isResort ? 'resort' : 'enterprise'}
+                  resortName={shopName}
+                  initialScenes={owner?.virtual_tour_scenes}
+                  onSaveSuccess={(scenes) => {
+                    setData((prev: any) => prev ? { ...prev, owner: { ...prev.owner, virtual_tour_scenes: scenes } } : prev);
+                    setIsEditingTour(false);
+                  }}
+                />
+              </div>
+            ) : (
+              /* ── TOURIST / VISITOR VIEW: DIRECT LIVE 360° EMBEDDED PANORAMA VIEWER ── */
+              <div className="space-y-4">
+                {/* Header Showcase Card */}
+                <div className="bg-white rounded-3xl p-5 sm:p-6 border border-gray-100 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="inline-flex items-center gap-2 px-3 py-0.5 bg-gradient-to-r from-pink-50 to-rose-50 border border-pink-200 rounded-full text-[10px] sm:text-[11px] font-extrabold text-pink-700">
+                      <Compass className="h-3.5 w-3.5 text-pink-600 animate-spin-slow" />
+                      <span>LIVE INTERACTIVE 360° EXPERIENCE</span>
+                    </div>
+                    <h2 className="text-lg sm:text-xl font-extrabold text-gray-900">
+                      360° Virtual Walkthrough of {shopName}
+                    </h2>
+                    <p className="text-xs text-gray-500">
+                      Click and drag to pan 360°. Click green arrows or area pills to walk through each spot of the resort.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Only show Manage 360 Scenes button to the verified owner */}
+                    {isActualOwner && (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingTour(true)}
+                        className="px-4 py-2.5 bg-gray-50 hover:bg-pink-50 text-gray-700 hover:text-pink-600 border border-gray-200 hover:border-pink-200 rounded-2xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        <span>Manage 360 Scenes</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 🧭 LIVE EMBEDDED 360° PANORAMA VIEWER */}
+                <InlineVirtualTourViewer
+                  scenes={tourScenes}
+                  businessName={shopName}
+                  businessType={isResort ? 'resort' : 'enterprise'}
+                  onOpenFullscreen={() => {
+                    setActiveTourSceneId(tourScenes[0]?.id);
+                    setIsVirtualTourModalOpen(true);
+                  }}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -2923,6 +3097,23 @@ export function BusinessProfile() {
             </form>
           </div>
         </div>
+      )}
+      {/* 🧭 Interactive 360° Virtual Tour Lightbox Modal */}
+      {isVirtualTourModalOpen && (
+        <VirtualTourModal
+          isOpen={isVirtualTourModalOpen}
+          onClose={() => setIsVirtualTourModalOpen(false)}
+          attractionName={`${shopName} (360° Virtual Walkthrough)`}
+          category={isResort ? 'Resort 360° Tour' : 'Store 360° Tour'}
+          mainImage={shopBanner ? getImageUrl(shopBanner) : undefined}
+          phone={owner.phone}
+          facebook={owner.facebook_link || owner.facebook}
+          instagram={owner.instagram_link || owner.instagram}
+          lat={owner.latitude ? Number(owner.latitude) : undefined}
+          lng={owner.longitude ? Number(owner.longitude) : undefined}
+          customScenes={tourScenes}
+          initialSceneId={activeTourSceneId}
+        />
       )}
     </div>
   );

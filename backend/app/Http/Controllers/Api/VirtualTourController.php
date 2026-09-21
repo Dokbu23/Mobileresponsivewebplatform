@@ -24,6 +24,13 @@ class VirtualTourController extends Controller
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
+        if (!in_array($user->role, ['resort', 'enterprise', 'admin'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized: Only resort and enterprise owners or administrators can upload 360 tour images.'
+            ], 403);
+        }
+
         $request->validate([
             'image' => 'required|image|mimes:jpeg,png,jpg,webp,avif|max:20480', // Allow up to 20MB for high-res panoramas
             'slot_id' => 'nullable|string|max:100',
@@ -75,6 +82,13 @@ class VirtualTourController extends Controller
         $user = $request->user();
         if (!$user) {
             return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        if (!in_array($user->role, ['resort', 'enterprise', 'admin'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized: Only resort and enterprise owners or administrators can save 360 tour scenes.'
+            ], 403);
         }
 
         $request->validate([

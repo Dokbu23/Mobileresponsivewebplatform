@@ -85,6 +85,7 @@ interface VirtualTourModalProps {
   lng?: number;
   coords?: [number, number];
   customScenes?: Tour360Scene[];
+  initialSceneId?: string;
 }
 
 // Curated 360 Equirectangular Panoramas of Mansalay vibe (Beach, Coastal Resort, Pavilion, Poolside)
@@ -217,6 +218,7 @@ export function VirtualTourModal({
   lng,
   coords,
   customScenes,
+  initialSceneId,
 }: VirtualTourModalProps) {
   // Determine effective coordinates
   const effectiveLat = lat ?? coords?.[0] ?? 12.5311;
@@ -225,7 +227,17 @@ export function VirtualTourModal({
 
   // UI state
   const [activeTab, setActiveTab] = useState<ModalTab>('360');
-  const [activeSceneId, setActiveSceneId] = useState<string>('entrance');
+  const [activeSceneId, setActiveSceneId] = useState<string>(
+    initialSceneId || (customScenes && customScenes.length > 0 ? customScenes[0].id : 'entrance')
+  );
+
+  useEffect(() => {
+    if (initialSceneId) {
+      setActiveSceneId(initialSceneId);
+    } else if (customScenes && customScenes.length > 0 && !customScenes.some(s => s.id === activeSceneId)) {
+      setActiveSceneId(customScenes[0].id);
+    }
+  }, [initialSceneId, customScenes]);
   const [isPannellumLoaded, setIsPannellumLoaded] = useState<boolean>(false);
   const [isPannellumLoading, setIsPannellumLoading] = useState<boolean>(true);
   const [pannellumError, setPannellumError] = useState<string | null>(null);
