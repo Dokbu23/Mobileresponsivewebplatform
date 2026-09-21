@@ -268,7 +268,34 @@ class AuthController extends Controller
 
     public function refresh(Request $request)
     {
-        return response()->json(['token' => 'refresh']);
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $issuedAt = time();
+        $ttl = (int) config('jwt.ttl', 86400 * 7);
+        $payload = [
+            'iss' => config('app.url'),
+            'sub' => $user->id,
+            'iat' => $issuedAt,
+            'exp' => $issuedAt + $ttl,
+        ];
+        $token = JWT::encode($payload, config('jwt.secret'), config('jwt.algo', 'HS256'));
+
+        return response()->json([
+            'token' => $token,
+            'expires_in' => $ttl,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role,
+                'avatar' => $user->avatar,
+                'listing_status' => $user->listing_status,
+                'subscription_status' => $user->subscription_status,
+            ],
+        ]);
     }
 
     public function register(Request $request)

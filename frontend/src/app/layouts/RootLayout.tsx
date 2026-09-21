@@ -5,7 +5,6 @@ import { Toaster } from "sonner";
 import { useApp } from "../context/AppContext";
 import { ProfileSetupModal } from "../components/ProfileSetupModal";
 import ChatWidgetEnhanced from "../components/ChatWidgetEnhanced";
-import { ChristmasHolidayTheme } from "../components/ChristmasHolidayTheme";
 
 export function RootLayout() {
   const { currentUser, userType } = useApp();
@@ -15,7 +14,6 @@ export function RootLayout() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <ChristmasHolidayTheme />
       <Navbar />
       <main className="flex-1">
         <Outlet />

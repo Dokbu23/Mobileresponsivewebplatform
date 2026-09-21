@@ -589,6 +589,7 @@ class AccommodationController extends Controller
             'video'              => $owner->video ?? $owner->video_url,
             'video_url'          => $owner->video_url ?? $owner->video,
             'video_tour'         => $owner->video ?? $owner->video_url,
+            'virtual_tour_scenes'=> $owner->virtual_tour_scenes ?? [],
             'last_active_at'     => $owner->updated_at,
             'created_at'         => $owner->created_at,
             'payment_details'    => $owner->payment_details,

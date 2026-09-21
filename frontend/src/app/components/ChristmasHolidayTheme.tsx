@@ -6,12 +6,7 @@ import { Sparkles, X } from 'lucide-react';
  * (September 1 to January 6 - Feast of the Three Kings)
  */
 export function isBerMonths(): boolean {
-  const now = new Date();
-  const month = now.getMonth(); // 0 = Jan, 8 = Sep, 9 = Oct, 10 = Nov, 11 = Dec
-  const day = now.getDate();
-
-  // September to December OR first 6 days of January
-  return (month >= 8 && month <= 11) || (month === 0 && day <= 6);
+  return false;
 }
 
 // 4 Gentle, Non-Dizzying Snowflake Designs (Soft rounded crystals & fluffy snow)

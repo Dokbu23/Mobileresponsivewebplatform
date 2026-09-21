@@ -19,10 +19,11 @@ class ValidateApiRequest
     {
         // Validate Content-Type for POST/PUT/PATCH requests
         if (in_array($request->method(), ['POST', 'PUT', 'PATCH'])) {
-            $contentType = $request->header('Content-Type');
+            $contentType = (string) ($request->header('Content-Type') ?? '');
             
-            // Allow JSON and multipart/form-data
-            if (!str_contains($contentType, 'application/json') && 
+            // Allow JSON and multipart/form-data (only enforce if Content-Type or body is provided)
+            if ($contentType !== '' &&
+                !str_contains($contentType, 'application/json') && 
                 !str_contains($contentType, 'multipart/form-data') &&
                 !str_contains($contentType, 'application/x-www-form-urlencoded')) {
                 
@@ -33,12 +34,12 @@ class ValidateApiRequest
             }
         }
 
-        // Validate request size (max 10MB)
-        $maxSize = 10 * 1024 * 1024; // 10MB in bytes
+        // Validate request size (max 25MB to accommodate 360 virtual tour equirectangular panoramas)
+        $maxSize = 25 * 1024 * 1024; // 25MB in bytes
         if ($request->server('CONTENT_LENGTH') > $maxSize) {
             return response()->json([
                 'error' => 'Request too large',
-                'message' => 'Request size exceeds 10MB limit'
+                'message' => 'Request size exceeds 25MB limit'
             ], 413);
         }
 

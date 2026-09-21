@@ -7,7 +7,6 @@ import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
 import { VirtualTourModal } from '../../components/VirtualTourModal';
-import { isBerMonths } from '../../components/ChristmasHolidayTheme';
 import { toast } from 'sonner';
 import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
 import { PushPinIcon } from '../../components/PushPinIcon';
@@ -54,7 +53,6 @@ export function Accommodations() {
   const navigate = useNavigate();
   const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist, getWishlistCount } = useApp();
   const isLoggedIn = Boolean(userType && currentUser);
-  const isHoliday = isBerMonths();
 
   const [items, setItems] = useState<AccommodationItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -401,16 +399,12 @@ export function Accommodations() {
                       onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
                     />
 
-                    {/* Christmas Holiday Stay Badge */}
-                    {isHoliday ? (
-                      <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 bg-gradient-to-r from-red-600 to-rose-600 text-white text-[10px] font-extrabold rounded-full shadow-md z-10 flex items-center gap-1 border border-red-300/40">
-                        <span>🎄</span> Holiday Stay
-                      </span>
-                    ) : acc.badge ? (
+                    {/* Accommodation Badge */}
+                    {acc.badge && (
                       <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 bg-pink-500 text-white text-[10px] font-bold rounded-full shadow-xs z-10">
                         {acc.badge}
                       </span>
-                    ) : null}
+                    )}
 
                     {/* Top-Right Action Controls (Share + Pin / Save) */}
                     <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
