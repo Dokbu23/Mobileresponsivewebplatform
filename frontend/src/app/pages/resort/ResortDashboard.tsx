@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { 
   Hotel, 
   Eye, 
-  Heart, 
   Bookmark,
   Star,
   Building2,
@@ -351,6 +350,10 @@ export function ResortDashboard() {
   const [beachViewLocation, setBeachViewLocation] = useState('From the room balcony');
   const [beachTimeOfDay, setBeachTimeOfDay] = useState<string>('🌅 Sunrise');
 
+  // Optional additional fields in show more details
+  const [roomCapacity, setRoomCapacity] = useState('');
+  const [activitySchedule, setActivitySchedule] = useState('');
+
   // Common tags state
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
@@ -366,6 +369,7 @@ export function ResortDashboard() {
       setTags([...tags, tagVal]);
     }
   };
+
 
   // Helper to toggle amenity multi-select tag
   const handleToggleAmenityType = (amenity: string) => {
@@ -1279,23 +1283,6 @@ export function ResortDashboard() {
             )}
           </div>
 
-          {/* Tip to configure Cover Video in My Shop Profile */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 p-3.5 bg-gradient-to-r from-pink-50/70 to-rose-50/50 border border-pink-100 rounded-2xl text-xs text-gray-700">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-pink-500/10 text-pink-600 flex items-center justify-center flex-shrink-0">
-                <Video className="w-3.5 h-3.5" />
-              </div>
-              <span className="text-xs text-gray-600">
-                Gusto mo bang maglagay ng Cover Video para sa iyong resort? I-upload ito sa <strong className="text-gray-900">My Shop Profile</strong>.
-              </span>
-            </div>
-            <Link
-              to={`/business/resort/${currentUser?.id ?? ''}?manage=true`}
-              className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white rounded-full font-bold text-[11px] shadow-xs hover:shadow transition-all whitespace-nowrap"
-            >
-              Open My Shop Profile
-            </Link>
-          </div>
 
           {/* Caption Textarea (Contextual Placeholder) */}
           <div>
@@ -1398,18 +1385,14 @@ export function ResortDashboard() {
             )}
           </div>
 
-          {/* ═══════════════════════════════════════════════════
-              CONTEXT-SPECIFIC DYNAMIC CONTROLS (Direct in Form)
-             ═══════════════════════════════════════════════════ */}
-
           {/* 1. ROOMS & STAYS DYNAMIC FIELDS */}
           {postType === 'rooms' && (
             <div className="p-4 bg-purple-50/60 rounded-2xl border border-purple-200/80 space-y-3.5 animate-in fade-in duration-200">
-              {/* Room Type / Name (Text Input) */}
+              {/* Room Type / Name */}
               <div>
                 <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
                   <Bed className="w-3.5 h-3.5 text-purple-600" />
-                  <span>Room Type / Name (Text Input)</span>
+                  <span>Room Type / Name</span>
                 </label>
                 <input
                   type="text"
@@ -1420,13 +1403,13 @@ export function ResortDashboard() {
                 />
               </div>
 
-              {/* Max Guests (Number Counter) & Bed Configuration (Dropdown) */}
+              {/* Max Guests & Bed Configuration */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Max Guests (Number Counter) */}
+                {/* Max Guests */}
                 <div>
                   <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-purple-600" />
-                    <span>Max Guests (Number Counter)</span>
+                    <span>Max Guests</span>
                   </label>
                   <div className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-3 py-1.5 shadow-2xs">
                     <button
@@ -1449,11 +1432,11 @@ export function ResortDashboard() {
                   </div>
                 </div>
 
-                {/* Bed Configuration (Dropdown) */}
+                {/* Bed Configuration */}
                 <div>
                   <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
                     <Bed className="w-3.5 h-3.5 text-purple-600" />
-                    <span>Bed Configuration (Dropdown)</span>
+                    <span>Bed Configuration</span>
                   </label>
                   <select
                     value={bedConfig}
@@ -1477,11 +1460,11 @@ export function ResortDashboard() {
           {/* 2. AMENITIES DYNAMIC FIELDS */}
           {postType === 'amenities' && (
             <div className="p-4 bg-cyan-50/60 rounded-2xl border border-cyan-200/80 space-y-3.5 animate-in fade-in duration-200">
-              {/* Amenity Type (Multi-select tags) */}
+              {/* Amenity Type */}
               <div>
                 <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
                   <Waves className="w-3.5 h-3.5 text-cyan-600" />
-                  <span>Amenity Type (Multi-select tags)</span>
+                  <span>Amenity Type</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {['Pool', 'Wi-Fi', 'Restaurant', 'Parking', 'Bar', 'Grill Station', 'Beach Chairs', 'Kids Playground'].map((item) => {
@@ -1498,18 +1481,18 @@ export function ResortDashboard() {
                         }`}
                       >
                         {isSelected ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3 text-gray-400" />}
-                        <span>[{item}]</span>
+                        <span>{item}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Availability (Toggle switches) */}
+              {/* Availability */}
               <div>
                 <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-cyan-600" />
-                  <span>Availability (Toggle switches)</span>
+                  <span>Availability</span>
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-gray-100 p-1 rounded-xl">
                   <button
@@ -1537,11 +1520,11 @@ export function ResortDashboard() {
                 </div>
               </div>
 
-              {/* Operating Hours (Text Input) */}
+              {/* Operating Hours */}
               <div>
                 <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-cyan-600" />
-                  <span>Operating Hours (Text Input)</span>
+                  <span>Operating Hours</span>
                 </label>
                 <input
                   type="text"
@@ -1557,11 +1540,11 @@ export function ResortDashboard() {
           {/* 3. ACTIVITIES DYNAMIC FIELDS */}
           {postType === 'activities' && (
             <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-200/80 space-y-3.5 animate-in fade-in duration-200">
-              {/* Activity Name (Text Input) */}
+              {/* Activity Name */}
               <div>
                 <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
                   <Compass className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Activity Name (Text Input)</span>
+                  <span>Activity Name</span>
                 </label>
                 <input
                   type="text"
@@ -1572,11 +1555,11 @@ export function ResortDashboard() {
                 />
               </div>
 
-              {/* Inclusions (Text Input) */}
+              {/* Inclusions */}
               <div>
                 <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
                   <Info className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Inclusions (Text Input)</span>
+                  <span>Inclusions</span>
                 </label>
                 <input
                   type="text"
@@ -1587,11 +1570,11 @@ export function ResortDashboard() {
                 />
               </div>
 
-              {/* Pricing Type (Toggle switch) */}
+              {/* Pricing Type */}
               <div>
-                <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
+                <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
                   <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Pricing Type (Toggle switch)</span>
+                  <span>Pricing Type</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1 rounded-xl">
                   <button
@@ -1627,11 +1610,11 @@ export function ResortDashboard() {
           {/* 4. BEACH VIEWS DYNAMIC FIELDS */}
           {postType === 'beach_views' && (
             <div className="p-4 bg-rose-50/60 rounded-2xl border border-rose-200/80 space-y-3.5 animate-in fade-in duration-200">
-              {/* View Location (Dropdown or Tags) */}
+              {/* View Location */}
               <div>
                 <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
                   <Palmtree className="w-3.5 h-3.5 text-rose-500" />
-                  <span>View Location (Dropdown or Tags) — Where was the photo taken?</span>
+                  <span>Where was the photo taken?</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {[
@@ -1651,17 +1634,17 @@ export function ResortDashboard() {
                           : 'bg-white text-gray-700 border-gray-200 hover:border-rose-300 hover:bg-rose-50/50'
                       }`}
                     >
-                      [{loc}]
+                      {loc}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Time of Day (Tags) */}
+              {/* Time of Day */}
               <div>
                 <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
                   <Sun className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Time of Day (Tags)</span>
+                  <span>Time of Day</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {['🌅 Sunrise', '🌇 Sunset', '☀️ Daytime', '🌌 Night / Stargazing'].map((tod) => (
@@ -2333,14 +2316,6 @@ export function ResortDashboard() {
                     {/* Footer / Interaction Bar */}
                     <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-xs text-gray-500">
                       <div className="flex items-center gap-4">
-                        <button
-                          type="button"
-                          onClick={() => handleLikePost(post.id)}
-                          className="flex items-center gap-1.5 text-gray-600 hover:text-pink-600 transition-colors font-medium cursor-pointer"
-                        >
-                          <Heart className="h-4 w-4 text-pink-500 hover:scale-110 transition-transform" />
-                          <span>{post.likes || 0}</span>
-                        </button>
                         <button
                           type="button"
                           onClick={() => handleSavePost(post.id)}
