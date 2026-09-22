@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams, Link } from 'react-router';
 import {
   Hotel, Store, MapPin, Phone, Mail, Star,
   ArrowLeft, Package, Search, CreditCard,
-  MessageCircle, Heart,
+  MessageCircle,
   CheckCircle, ShoppingBag, ExternalLink,
   Pencil, Upload, X, Image as ImageIcon, Loader2,
   Tag, Check, Plus, MessageSquare,
@@ -1700,14 +1700,20 @@ export function BusinessProfile() {
                     ]
                   : [
                       { key: 'all', label: 'All Posts' },
-                      { key: 'promotion', label: '🏷️ Promotion' },
                       { key: 'products', label: '📦 Products' },
                       { key: 'announcement', label: '📢 Announcement' },
                     ]
                 ).map((cat) => {
                   const count = cat.key === 'all'
                     ? posts.length
-                    : posts.filter(p => p.type === cat.key).length;
+                    : posts.filter(p => {
+                        const normalized = (p.type === 'product' || p.type === 'products')
+                          ? 'products'
+                          : (p.type === 'update' || p.type === 'announcement' || p.type === 'promotion')
+                            ? 'announcement'
+                            : p.type;
+                        return normalized === cat.key;
+                      }).length;
                   const isSelected = selectedPostCategory === cat.key;
 
                   return (
@@ -1740,8 +1746,8 @@ export function BusinessProfile() {
                 <h3 className="text-lg font-bold text-gray-900 mb-1">No Posts Yet</h3>
                 <p className="text-xs text-gray-500 max-w-lg mx-auto mb-5">
                   {isOwner 
-                    ? 'You have not created any posts or updates yet. Create announcements, room highlights, or promotions from your dashboard.' 
-                    : 'This host has not published any posts or promotional updates yet.'}
+                    ? 'You have not created any posts or updates yet. Create announcements, room highlights, or product updates from your dashboard.' 
+                    : 'This host has not published any posts or updates yet.'}
                 </p>
                 {isOwner && (
                   <Link
@@ -1757,7 +1763,12 @@ export function BusinessProfile() {
               (() => {
                 const filteredPosts = posts.filter(post => {
                   if (selectedPostCategory === 'all') return true;
-                  return post.type === selectedPostCategory;
+                  const normalized = (post.type === 'product' || post.type === 'products')
+                    ? 'products'
+                    : (post.type === 'update' || post.type === 'announcement' || post.type === 'promotion')
+                      ? 'announcement'
+                      : post.type;
+                  return normalized === selectedPostCategory;
                 });
 
                 if (filteredPosts.length === 0) {
@@ -1775,12 +1786,14 @@ export function BusinessProfile() {
                 }
 
                 const postTypeLabelMap: Record<string, string> = {
-                  promotion: '🏷️ Promotion',
+                  products: '📦 Products',
+                  product: '📦 Products',
                   rooms: '🛏️ Rooms',
                   amenities: '🌊 Amenities',
                   activities: '🧭 Activities',
                   beach_views: '🌴 Beach Views',
                   announcement: '📢 Announcement',
+                  update: '📢 Announcement',
                 };
 
                 return (
@@ -2063,12 +2076,14 @@ export function BusinessProfile() {
               <div className="flex items-center gap-2">
                 <span className="px-3 py-1 bg-pink-50 text-pink-600 text-xs font-bold rounded-full">
                   {{
-                    promotion: '🏷️ Promotion',
+                    products: '📦 Products',
+                    product: '📦 Products',
                     rooms: '🛏️ Rooms',
                     amenities: '🌊 Amenities',
                     activities: '🧭 Activities',
                     beach_views: '🌴 Beach Views',
                     announcement: '📢 Announcement',
+                    update: '📢 Announcement',
                   }[viewingPost.type as string] || '📢 Announcement'}
                 </span>
                 <button

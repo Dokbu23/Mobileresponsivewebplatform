@@ -4,7 +4,6 @@ import {
   Package, 
   TrendingUp, 
   Eye, 
-  Heart, 
   FileText, 
   BarChart2, 
   Plus, 
@@ -918,7 +917,7 @@ export function EnterpriseDashboard() {
               rows={3}
               value={postContent}
               onChange={(e) => setPostContent(e.target.value)}
-              placeholder="Write about your product, promotion, or update..."
+              placeholder="Write about your product or update..."
               className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-[#ec4899] transition-all resize-none"
             />
           </div>
@@ -1151,24 +1150,6 @@ export function EnterpriseDashboard() {
               </div>
             </div>
           )}
-
-          {/* Tip to configure Cover Video in My Shop Profile */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 p-3.5 bg-gradient-to-r from-pink-50/70 to-rose-50/50 border border-pink-100 rounded-2xl text-xs text-gray-700">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-pink-500/10 text-pink-600 flex items-center justify-center flex-shrink-0">
-                <Video className="w-3.5 h-3.5" />
-              </div>
-              <span className="text-xs text-gray-600">
-                Gusto mo bang maglagay ng Cover Video para sa iyong shop? I-upload ito sa <strong className="text-gray-900">My Shop Profile</strong>.
-              </span>
-            </div>
-            <Link
-              to={`/business/enterprise/${currentUser?.id ?? ''}?manage=true`}
-              className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white rounded-full font-bold text-[11px] shadow-xs hover:shadow transition-all whitespace-nowrap"
-            >
-              Open My Shop Profile
-            </Link>
-          </div>
 
           {/* Added Tags Chips (if any) */}
           {tags.length > 0 && (
@@ -1409,18 +1390,9 @@ export function EnterpriseDashboard() {
                       </div>
                     )}
 
-                    {/* Footer Bar: Likes, Saves, Timestamp */}
+                    {/* Footer Bar: Saves, Timestamp */}
                     <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs text-gray-400">
                       <div className="flex items-center gap-4">
-                        <button
-                          type="button"
-                          onClick={() => handleLikePost(post.id)}
-                          className="flex items-center gap-1.5 text-gray-600 hover:text-pink-600 transition-colors cursor-pointer"
-                        >
-                          <Heart className="w-4 h-4 text-pink-500 fill-pink-500" />
-                          <span className="font-semibold text-gray-700">{post.likes || 0}</span>
-                        </button>
-
                         <button
                           type="button"
                           onClick={() => handleSavePost(post.id)}

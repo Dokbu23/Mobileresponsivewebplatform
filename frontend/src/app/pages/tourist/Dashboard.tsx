@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
   MapPin, Calendar, Hotel, ArrowRight,
   Star, Package, Sparkles, Compass, Utensils,
   Clock, TrendingUp, User, Play, ChevronLeft, ChevronRight,
-  Users, Waves, Trees, Info, Share2, Eye, Camera, CheckCircle, X
+  Users, Waves, Trees, Info, Share2, Eye, Camera, CheckCircle, X,
+  Store
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken, decodeHtml, cleanItineraryTitle } from '../../lib/api';
@@ -248,15 +249,80 @@ export function Dashboard() {
   const pagedPast = pastEvents.slice(pastPage * EVENTS_PER_PAGE, (pastPage + 1) * EVENTS_PER_PAGE);
 
 
-  // 6. Trending Now
-  const trendingNowItems = [...attractions, ...accommodations, ...products]
-    .sort((a, b) => Number(b.view_count || b.likes || 0) - Number(a.view_count || a.likes || 0))
-    .slice(0, 3);
+  // 6. Popular Highlights (Popular Attraction, Popular Resorts, Popular Product)
+  const [localWishlistCounts, setLocalWishlistCounts] = useState<Record<string, number>>({});
+  const [localViewCounts, setLocalViewCounts] = useState<Record<string, number>>({});
 
-  // 7. Most Wishlisted
-  const mostWishlistedItems = [...attractions, ...accommodations, ...products]
-    .sort((a, b) => Number(b.likes || b.rating || 0) - Number(a.likes || a.rating || 0))
-    .slice(0, 3);
+  useEffect(() => {
+    const updateCounts = () => {
+      try {
+        const cStr = localStorage.getItem('discover-mansalay:wishlist_counts');
+        if (cStr) setLocalWishlistCounts(JSON.parse(cStr));
+        const vStr = localStorage.getItem('discover-mansalay:view_counts');
+        if (vStr) setLocalViewCounts(JSON.parse(vStr));
+      } catch {}
+    };
+    updateCounts();
+    window.addEventListener('storage', updateCounts);
+    window.addEventListener('contentUpdated', updateCounts);
+    return () => {
+      window.removeEventListener('storage', updateCounts);
+      window.removeEventListener('contentUpdated', updateCounts);
+    };
+  }, []);
+
+  const popularAttractionsList = useMemo(() => {
+    return attractions
+      .map((item: any) => {
+        const key = `attraction_${item.id}`;
+        const saves = localWishlistCounts[key] != null ? Number(localWishlistCounts[key]) : (Number(item.likes) || Number(item.saves) || 0);
+        return {
+          ...item,
+          name: cleanItineraryTitle(item.name || item.title || 'Attraction'),
+          category: decodeHtml(item.category || 'Cultural'),
+          saves,
+        };
+      })
+      .sort((a, b) => b.saves - a.saves)
+      .slice(0, 4);
+  }, [attractions, localWishlistCounts]);
+
+  const popularResortsList = useMemo(() => {
+    return accommodations
+      .map((r: any) => {
+        const key1 = `view_count_resort_${r.id}`;
+        const key2 = `view_count_accommodation_${r.id}`;
+        const localV = Math.max(Number(localViewCounts[key1]) || 0, Number(localViewCounts[key2]) || 0);
+        const rawV = Number(r.views) || Number(r.view_count) || 0;
+        const realV = Math.max(rawV, localV);
+        return {
+          ...r,
+          name: cleanItineraryTitle(r.name || r.resort_name || 'Resort'),
+          views: realV,
+        };
+      })
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 4);
+  }, [accommodations, localViewCounts]);
+
+  const popularProductsList = useMemo(() => {
+    return products
+      .map((p: any) => {
+        const key1 = `view_count_enterprise_${p.id}`;
+        const key2 = `view_count_product_${p.id}`;
+        const localV = Math.max(Number(localViewCounts[key1]) || 0, Number(localViewCounts[key2]) || 0);
+        const rawV = Number(p.views) || Number(p.view_count) || 0;
+        const realV = Math.max(rawV, localV);
+        return {
+          ...p,
+          name: cleanItineraryTitle(p.name || p.store_name || 'Product'),
+          category: decodeHtml(p.category || 'Handicraft'),
+          views: realV,
+        };
+      })
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 4);
+  }, [products, localViewCounts]);
 
   // 8. Dynamic Gallery Images
   const galleryImages = (() => {
@@ -936,77 +1002,112 @@ export function Dashboard() {
         </div>
       </section>
 
-      {/* ── 10. TRENDING NOW & MOST WISHLISTED ── */}
+      {/* ── 10. POPULAR HIGHLIGHTS (POPULAR ATTRACTION, POPULAR RESORTS, POPULAR PRODUCT) ── */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Trending Now */}
-          <div className="bg-pink-50/40 border border-pink-100 p-6 rounded-3xl">
-            <div className="flex items-center gap-2 text-gray-900 font-extrabold text-lg mb-4">
-              <TrendingUp className="h-5 w-5 text-amber-500" />
-              <span>Trending Now</span>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* Column 1: Popular Attraction */}
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)]">
+            <div className="flex items-center gap-2 mb-4">
+              <MapPin className="h-4 w-4 text-pink-500 fill-pink-500" />
+              <h3 className="text-sm font-bold text-gray-900">Popular Attraction</h3>
             </div>
-            <div className="space-y-3">
-              {trendingNowItems.length > 0 ? (
-                trendingNowItems.map((item, idx) => (
+            {popularAttractionsList.length === 0 ? (
+              <p className="text-xs text-gray-400 py-6 text-center font-medium">No popular attractions yet</p>
+            ) : (
+              <div className="space-y-3">
+                {popularAttractionsList.map((item, idx) => (
                   <div
-                    key={item.id}
-                    onClick={() => {
-                      if (item.price_per_night || item.pricePerNight) openAccommodationModal(item);
-                      else openAttractionModal(item);
-                    }}
-                    className="bg-white p-3 rounded-2xl border border-gray-100 flex items-center justify-between shadow-2xs hover:shadow-md cursor-pointer transition-all"
+                    key={idx}
+                    onClick={() => openAttractionModal(item)}
+                    className="flex items-center justify-between p-1 hover:bg-pink-50/40 rounded-xl transition-colors cursor-pointer group"
                   >
-                    <div className="flex items-center gap-3">
-                      <img src={getImageUrl(item.image)} alt={item.name || item.resort_name} className="w-12 h-12 rounded-xl object-cover" />
-                      <div>
-                        <h4 className="text-xs font-bold text-gray-900 line-clamp-1">{item.name || item.resort_name}</h4>
-                        <p className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5">
-                          <Eye className="h-3 w-3 text-gray-400" /> {item.view_count || Math.floor(Math.random() * 500) + 120} views
-                        </p>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <img
+                        src={getImageUrl(item.image)}
+                        alt={item.name}
+                        className="w-9 h-9 rounded-xl object-cover border border-gray-100 flex-shrink-0 group-hover:scale-105 transition-transform"
+                        onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                      />
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-gray-900 truncate group-hover:text-pink-600 transition-colors">{item.name}</h4>
+                        <p className="text-[10px] text-gray-400 font-medium">{item.category}</p>
                       </div>
                     </div>
-                    <span className="text-xs font-bold text-pink-500 bg-pink-50 px-2.5 py-1 rounded-full">#{idx + 1}</span>
+                    <span className="px-2.5 py-1 bg-pink-50 text-pink-600 text-[10px] font-bold rounded-full whitespace-nowrap flex-shrink-0 ml-2">
+                      {item.saves} saves
+                    </span>
                   </div>
-                ))
-              ) : (
-                <p className="text-xs text-gray-500 text-center py-4">No trending items currently available</p>
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Most Wishlisted / Analytics & Save */}
-          <div className="bg-pink-50/40 border border-pink-100 p-6 rounded-3xl">
-            <div className="flex items-center gap-2 text-gray-900 font-extrabold text-lg mb-4">
-              <MapPin className="h-5 w-5 text-pink-500 fill-pink-500" />
-              <span>{userType === 'admin' || userType === 'resort' || userType === 'enterprise' ? 'Analytics & Save' : 'Top Saved Places'}</span>
+          {/* Column 2: Popular Resorts */}
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)]">
+            <div className="flex items-center gap-2 mb-4">
+              <Hotel className="h-4 w-4 text-purple-600" />
+              <h3 className="text-sm font-bold text-gray-900">Popular Resorts</h3>
             </div>
-            <div className="space-y-3">
-              {mostWishlistedItems.length > 0 ? (
-                mostWishlistedItems.map((item, idx) => (
+            {popularResortsList.length === 0 ? (
+              <p className="text-xs text-gray-400 py-6 text-center font-medium">No resort listings yet</p>
+            ) : (
+              <div className="space-y-3.5">
+                {popularResortsList.map((resort, idx) => (
                   <div
-                    key={item.id}
-                    onClick={() => {
-                      if (item.price_per_night || item.pricePerNight) openAccommodationModal(item);
-                      else openAttractionModal(item);
-                    }}
-                    className="bg-white p-3 rounded-2xl border border-gray-100 flex items-center justify-between shadow-2xs hover:shadow-md cursor-pointer transition-all"
+                    key={idx}
+                    onClick={() => openAccommodationModal(resort)}
+                    className="flex items-center justify-between p-1 hover:bg-purple-50/40 rounded-xl transition-colors cursor-pointer group"
                   >
-                    <div className="flex items-center gap-3">
-                      <img src={getImageUrl(item.image)} alt={item.name || item.resort_name} className="w-12 h-12 rounded-xl object-cover" />
-                      <div>
-                        <h4 className="text-xs font-bold text-gray-900 line-clamp-1">{item.name || item.resort_name}</h4>
-                        <p className="text-[11px] text-gray-500 flex items-center gap-1 mt-0.5">
-                          <MapPin className="h-3 w-3 text-pink-500 fill-pink-500" /> {item.likes || Math.floor(Math.random() * 200) + 45} saves
-                        </p>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-pink-500 text-white text-xs font-black flex items-center justify-center flex-shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                        {idx + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-gray-900 truncate group-hover:text-purple-600 transition-colors">{resort.name}</h4>
+                        <p className="text-[10px] text-gray-400 font-medium">Resort & Accommodation</p>
                       </div>
                     </div>
-                    <span className="text-xs font-bold text-pink-500 bg-pink-50 px-2.5 py-1 rounded-full">#{idx + 1}</span>
+                    <span className="text-[11px] font-semibold text-gray-400 whitespace-nowrap flex-shrink-0 ml-2">
+                      {resort.views} views
+                    </span>
                   </div>
-                ))
-              ) : (
-                <p className="text-xs text-gray-500 text-center py-4">No saved items currently available</p>
-              )}
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Column 3: Popular Product */}
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)]">
+            <div className="flex items-center gap-2 mb-4">
+              <Store className="h-4 w-4 text-emerald-600" />
+              <h3 className="text-sm font-bold text-gray-900">Popular Product</h3>
             </div>
+            {popularProductsList.length === 0 ? (
+              <p className="text-xs text-gray-400 py-6 text-center font-medium">No popular products yet</p>
+            ) : (
+              <div className="space-y-3.5">
+                {popularProductsList.map((prod, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => navigate('/products')}
+                    className="flex items-center justify-between p-1 hover:bg-emerald-50/40 rounded-xl transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500 text-white text-xs font-black flex items-center justify-center flex-shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                        {idx + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-gray-900 truncate group-hover:text-emerald-600 transition-colors">{prod.name}</h4>
+                        <p className="text-[10px] text-gray-400 font-medium">{prod.category}</p>
+                      </div>
+                    </div>
+                    <span className="text-[11px] font-semibold text-gray-400 whitespace-nowrap flex-shrink-0 ml-2">
+                      {prod.views} views
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </section>

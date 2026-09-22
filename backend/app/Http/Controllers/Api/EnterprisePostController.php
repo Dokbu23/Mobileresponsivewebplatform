@@ -26,7 +26,10 @@ class EnterprisePostController extends Controller
                 })->delete();
         }
 
-        $query = EnterprisePost::query()->with('user:id,name,store_name,store_logo,resort_name,resort_images');
+        $query = EnterprisePost::query()
+            ->where('type', '!=', 'promotion')
+            ->where('content', 'not like', '%JULY SALE%')
+            ->with('user:id,name,store_name,store_logo,resort_name,resort_images');
 
         if ($request->has('user_id')) {
             $query->where('user_id', $request->input('user_id'));
