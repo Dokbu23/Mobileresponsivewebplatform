@@ -568,14 +568,14 @@ export function AdminDashboard() {
 
         {/* ── ROW 3: 3 HIGHLIGHTS / LEADERBOARDS COLUMNS ── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* Column 1: Analytics & Save */}
+          {/* Column 1: Popular Attraction */}
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)]">
             <div className="flex items-center gap-2 mb-4">
               <MapPin className="h-4 w-4 text-pink-500 fill-pink-500" />
-              <h3 className="text-sm font-bold text-gray-900">Analytics & Save</h3>
+              <h3 className="text-sm font-bold text-gray-900">Popular Attraction</h3>
             </div>
             {mostWishlistedList.length === 0 ? (
-              <p className="text-xs text-gray-400 py-6 text-center font-medium">No saved destinations yet</p>
+              <p className="text-xs text-gray-400 py-6 text-center font-medium">No popular attractions yet</p>
             ) : (
               <div className="space-y-3">
                 {mostWishlistedList.map((item, idx) => (
@@ -639,14 +639,14 @@ export function AdminDashboard() {
             )}
           </div>
 
-          {/* Column 3: Popular Enterprises */}
+          {/* Column 3: Popular Product */}
           <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-[0_2px_10px_-3px_rgba(6,81,237,0.05)]">
             <div className="flex items-center gap-2 mb-4">
               <Store className="h-4 w-4 text-emerald-600" />
-              <h3 className="text-sm font-bold text-gray-900">Popular Enterprises</h3>
+              <h3 className="text-sm font-bold text-gray-900">Popular Product</h3>
             </div>
             {popularEnterprisesList.length === 0 ? (
-              <p className="text-xs text-gray-400 py-6 text-center font-medium">No enterprise listings yet</p>
+              <p className="text-xs text-gray-400 py-6 text-center font-medium">No popular products yet</p>
             ) : (
               <div className="space-y-3.5">
                 {popularEnterprisesList.map((ent, idx) => (

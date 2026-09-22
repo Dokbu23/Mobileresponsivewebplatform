@@ -100,15 +100,6 @@ export function EnterpriseProfile() {
   const [receipts, setReceipts] = useState<any[]>([]);
   const [showReceiptsModal, setShowReceiptsModal] = useState(false);
 
-  // Promo code state
-  const [promoCodes, setPromoCodes] = useState<any[]>([]);
-  const [showPromoForm, setShowPromoForm] = useState(false);
-  const [editingPromoId, setEditingPromoId] = useState<number | null>(null);
-  const [promoForm, setPromoForm] = useState({
-    code: '', description: '', type: 'percent', value: '', min_amount: '', max_uses: '', expires_at: '', is_active: true,
-  });
-  const [promoSubmitting, setPromoSubmitting] = useState(false);
-
   const orderStatusFlow: Record<string, string | null> = {
     pending: 'confirmed',
     confirmed: 'shipped',
@@ -120,7 +111,6 @@ export function EnterpriseProfile() {
     fetchData();
     fetchSubscriptionStatus();
     loadStoreProfile();
-    fetchPromoCodes();
   }, []);
 
   const loadStoreProfile = async () => {
@@ -227,72 +217,6 @@ export function EnterpriseProfile() {
     } catch (error) {
       console.error('Failed to check subscription status:', error);
     }
-  };
-
-  const fetchPromoCodes = async () => {
-    try {
-      const res = await getJSON('/promo-codes');
-      setPromoCodes(Array.isArray(res) ? res : []);
-    } catch { setPromoCodes([]); }
-  };
-
-  const resetPromoForm = () => {
-    setPromoForm({ code: '', description: '', type: 'percent', value: '', min_amount: '', max_uses: '', expires_at: '', is_active: true });
-    setEditingPromoId(null);
-    setShowPromoForm(false);
-  };
-
-  const handleSavePromo = async () => {
-    if (!promoForm.code.trim() || !promoForm.value) {
-      toast.error('Code and discount value are required');
-      return;
-    }
-    setPromoSubmitting(true);
-    try {
-      const payload: any = {
-        code: promoForm.code.trim().toUpperCase(),
-        description: promoForm.description || undefined,
-        type: promoForm.type,
-        value: Number(promoForm.value),
-        min_amount: promoForm.min_amount ? Number(promoForm.min_amount) : 0,
-        max_uses: promoForm.max_uses ? Number(promoForm.max_uses) : undefined,
-        expires_at: promoForm.expires_at || undefined,
-        is_active: promoForm.is_active,
-      };
-      if (editingPromoId) {
-        await patchJSON(`/promo-codes/${editingPromoId}`, payload);
-        toast.success('Promo code updated');
-      } else {
-        await postJSON('/promo-codes', payload);
-        toast.success('Promo code created');
-      }
-      resetPromoForm();
-      await fetchPromoCodes();
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to save promo code');
-    } finally {
-      setPromoSubmitting(false);
-    }
-  };
-
-  const handleEditPromo = (p: any) => {
-    setEditingPromoId(p.id);
-    setPromoForm({
-      code: p.code, description: p.description || '', type: p.type,
-      value: String(p.value), min_amount: String(p.min_amount || ''),
-      max_uses: p.max_uses ? String(p.max_uses) : '',
-      expires_at: p.expires_at ? p.expires_at.slice(0, 10) : '',
-      is_active: p.is_active,
-    });
-    setShowPromoForm(true);
-  };
-
-  const handleDeletePromo = async (id: number) => {
-    try {
-      await deleteJSON(`/promo-codes/${id}`);
-      toast.success('Promo code deleted');
-      await fetchPromoCodes();
-    } catch { toast.error('Failed to delete'); }
   };
 
   const fetchData = async () => {
@@ -704,166 +628,6 @@ export function EnterpriseProfile() {
             </div>
           );
         })}
-      </div>
-
-      {/* Promo Codes Management */}
-      <div className="bg-white border-2 border-primary/20 rounded-2xl overflow-hidden mb-8">
-        <div className="bg-gradient-to-r from-primary/10 to-primary/5 px-6 py-4 flex items-center justify-between border-b border-primary/10">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-primary/20 rounded-xl flex items-center justify-center text-lg">🏷️</div>
-            <div>
-              <h2 className="text-base font-bold">Promo Codes</h2>
-              <p className="text-xs text-muted-foreground">Create discount codes for your customers</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full font-medium">{promoCodes.length} codes</span>
-            <button
-              onClick={() => { resetPromoForm(); setShowPromoForm(true); }}
-              className="px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors text-sm font-medium"
-            >
-              + Add Code
-            </button>
-          </div>
-        </div>
-
-        <div className="p-6">
-          {showPromoForm && (
-            <div className="bg-primary/5 border-2 border-primary/20 rounded-xl p-5 mb-6">
-              <h3 className="font-bold mb-4">{editingPromoId ? 'Edit Promo Code' : 'New Promo Code'}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Code *</label>
-                  <input
-                    type="text"
-                    value={promoForm.code}
-                    onChange={e => setPromoForm(p => ({ ...p, code: e.target.value.toUpperCase() }))}
-                    className="w-full px-4 py-2.5 border-2 border-white rounded-xl focus:border-primary outline-none bg-white text-sm font-mono"
-                    placeholder="e.g. SUMMER20"
-                    disabled={!!editingPromoId}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Discount Type *</label>
-                  <select
-                    value={promoForm.type}
-                    onChange={e => setPromoForm(p => ({ ...p, type: e.target.value }))}
-                    className="w-full px-4 py-2.5 border-2 border-white rounded-xl focus:border-primary outline-none bg-white text-sm"
-                  >
-                    <option value="percent">Percentage (%)</option>
-                    <option value="fixed">Fixed Amount (₱)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
-                    Discount Value * {promoForm.type === 'percent' ? '(%)' : '(₱)'}
-                  </label>
-                  <input
-                    type="number"
-                    min="0.01"
-                    max={promoForm.type === 'percent' ? 100 : undefined}
-                    value={promoForm.value}
-                    onChange={e => setPromoForm(p => ({ ...p, value: e.target.value }))}
-                    className="w-full px-4 py-2.5 border-2 border-white rounded-xl focus:border-primary outline-none bg-white text-sm"
-                    placeholder={promoForm.type === 'percent' ? 'e.g. 20' : 'e.g. 100'}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Min. Order Amount (₱)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={promoForm.min_amount}
-                    onChange={e => setPromoForm(p => ({ ...p, min_amount: e.target.value }))}
-                    className="w-full px-4 py-2.5 border-2 border-white rounded-xl focus:border-primary outline-none bg-white text-sm"
-                    placeholder="0 = no minimum"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Max Uses</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={promoForm.max_uses}
-                    onChange={e => setPromoForm(p => ({ ...p, max_uses: e.target.value }))}
-                    className="w-full px-4 py-2.5 border-2 border-white rounded-xl focus:border-primary outline-none bg-white text-sm"
-                    placeholder="Leave blank = unlimited"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Expiry Date</label>
-                  <input
-                    type="date"
-                    value={promoForm.expires_at}
-                    onChange={e => setPromoForm(p => ({ ...p, expires_at: e.target.value }))}
-                    className="w-full px-4 py-2.5 border-2 border-white rounded-xl focus:border-primary outline-none bg-white text-sm"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Description</label>
-                  <input
-                    type="text"
-                    value={promoForm.description}
-                    onChange={e => setPromoForm(p => ({ ...p, description: e.target.value }))}
-                    className="w-full px-4 py-2.5 border-2 border-white rounded-xl focus:border-primary outline-none bg-white text-sm"
-                    placeholder="e.g. Summer sale discount"
-                  />
-                </div>
-                <div className="md:col-span-2 flex items-center gap-3">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <div className={`w-11 h-6 rounded-full transition-colors relative ${promoForm.is_active ? 'bg-primary' : 'bg-gray-300'}`}>
-                      <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${promoForm.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                      <input type="checkbox" checked={promoForm.is_active} onChange={e => setPromoForm(p => ({ ...p, is_active: e.target.checked }))} className="sr-only" />
-                    </div>
-                    <span className="text-sm font-medium">Code is active</span>
-                  </label>
-                </div>
-              </div>
-              <div className="flex gap-3 mt-4 pt-4 border-t border-primary/10">
-                <button onClick={handleSavePromo} disabled={promoSubmitting} className="px-6 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors text-sm font-medium disabled:opacity-70">
-                  {promoSubmitting ? 'Saving...' : editingPromoId ? 'Update Code' : 'Create Code'}
-                </button>
-                <button onClick={resetPromoForm} className="px-6 py-2.5 bg-white border-2 border-primary/20 text-muted-foreground rounded-xl hover:border-primary hover:text-primary transition-colors text-sm font-medium">
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-
-          {promoCodes.length === 0 && !showPromoForm ? (
-            <div className="text-center py-10">
-              <div className="text-4xl mb-3">🏷️</div>
-              <p className="font-semibold text-muted-foreground mb-1">No promo codes yet</p>
-              <p className="text-sm text-muted-foreground">Create discount codes to attract more customers</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {promoCodes.map(p => (
-                <div key={p.id} className={`flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border-2 ${p.is_active ? 'border-primary/20 bg-primary/5' : 'border-gray-200 bg-gray-50 opacity-60'}`}>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-mono font-bold text-primary text-lg">{p.code}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.type === 'percent' ? 'bg-pink-100 text-pink-700' : 'bg-green-100 text-green-700'}`}>
-                        {p.type === 'percent' ? `${p.value}% OFF` : `₱${p.value} OFF`}
-                      </span>
-                      {!p.is_active && <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">Inactive</span>}
-                    </div>
-                    {p.description && <p className="text-xs text-muted-foreground">{p.description}</p>}
-                    <div className="flex flex-wrap gap-3 mt-1 text-xs text-muted-foreground">
-                      {p.min_amount > 0 && <span>Min: ₱{p.min_amount}</span>}
-                      <span>Used: {p.used_count}{p.max_uses ? `/${p.max_uses}` : ''}</span>
-                      {p.expires_at && <span>Expires: {new Date(p.expires_at).toLocaleDateString()}</span>}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => handleEditPromo(p)} className="px-3 py-1.5 bg-primary/10 text-primary rounded-lg hover:bg-primary hover:text-white transition-colors text-xs font-semibold">Edit</button>
-                    <button onClick={() => handleDeletePromo(p.id)} className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-500 hover:text-white transition-colors text-xs font-semibold">Delete</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Pending Payment Receipts — shown prominently when there are pending receipts */}

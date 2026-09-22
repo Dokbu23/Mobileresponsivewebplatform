@@ -8,6 +8,10 @@ use App\Models\Product;
 use App\Models\Attraction;
 use App\Models\Accommodation;
 use App\Models\Event;
+use App\Models\ResortRoom;
+use App\Models\EnterprisePost;
+use App\Models\User;
+use App\Models\Notification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Artisan;
@@ -37,6 +41,12 @@ class WishlistController extends Controller
             if ($needsMigration) {
                 Artisan::call('migrate', ['--force' => true]);
             }
+
+            if (Schema::hasTable('resort_rooms') && !Schema::hasColumn('resort_rooms', 'likes')) {
+                Schema::table('resort_rooms', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->unsignedInteger('likes')->default(0);
+                });
+            }
         } catch (\Throwable $e) {
             Log::warning('Wishlist schema auto-migration failed or skipped: ' . $e->getMessage());
         }
@@ -55,7 +65,7 @@ class WishlistController extends Controller
             'action'    => 'nullable|string|in:save,unsave,toggle',
         ]);
 
-        $itemId   = (string)$request->input('item_id');
+        $rawId    = (string)$request->input('item_id');
         $itemType = strtolower((string)$request->input('item_type'));
         $action   = $request->input('action', 'save');
         $user     = null;
@@ -69,35 +79,91 @@ class WishlistController extends Controller
             $user = null;
         }
 
+        // Clean ID and detect special item categories (e.g. room-12, post_room_5)
+        $cleanId = $rawId;
+        $isRoomId = false;
+
+        if (\Illuminate\Support\Str::startsWith($rawId, 'room-')) {
+            $cleanId = substr($rawId, 5);
+            $isRoomId = true;
+        } elseif (\Illuminate\Support\Str::startsWith($rawId, 'post_room_')) {
+            $cleanId = substr($rawId, 10);
+            $isRoomId = true;
+        } elseif (\Illuminate\Support\Str::startsWith($rawId, 'acc-')) {
+            $cleanId = substr($rawId, 4);
+        }
+
+        $detectedType = $isRoomId ? 'room' : $itemType;
+
         // Determine Model
         $model = null;
         try {
-            switch ($itemType) {
-                case 'product':
-                    $model = Product::find($itemId);
-                    if (!$model) {
-                        $model = \App\Models\EnterprisePost::find($itemId);
+            if ($isRoomId) {
+                $model = ResortRoom::find($cleanId);
+                if (!$model) {
+                    $model = EnterprisePost::find($cleanId);
+                }
+                if (!$model) {
+                    $model = Accommodation::find($cleanId);
+                }
+                $detectedType = 'room';
+            } elseif ($itemType === 'product') {
+                $model = Product::find($cleanId);
+                if (!$model) {
+                    $model = EnterprisePost::find($cleanId);
+                }
+                $detectedType = 'product';
+            } elseif ($itemType === 'attraction') {
+                $model = Attraction::find($cleanId);
+                if (!$model) {
+                    $model = EnterprisePost::find($cleanId);
+                }
+                $detectedType = 'attraction';
+            } elseif ($itemType === 'event') {
+                $model = Event::find($cleanId);
+                if (!$model) {
+                    $model = EnterprisePost::find($cleanId);
+                }
+                $detectedType = 'event';
+            } elseif ($itemType === 'room') {
+                $model = ResortRoom::find($cleanId);
+                if (!$model) {
+                    $model = Accommodation::find($cleanId);
+                }
+                if (!$model) {
+                    $model = EnterprisePost::find($cleanId);
+                }
+                $detectedType = 'room';
+            } elseif ($itemType === 'accommodation' || $itemType === 'resort') {
+                $model = Accommodation::find($cleanId);
+                if ($model) {
+                    $detectedType = 'accommodation';
+                }
+                if (!$model) {
+                    $model = ResortRoom::find($cleanId);
+                    if ($model) {
+                        $detectedType = 'room';
                     }
-                    break;
-                case 'attraction':
-                    $model = Attraction::find($itemId);
-                    break;
-                case 'accommodation':
-                case 'resort':
-                    $model = Accommodation::find($itemId);
-                    if (!$model) {
-                        $model = \App\Models\EnterprisePost::find($itemId);
+                }
+                if (!$model) {
+                    $resortUser = User::where('role', 'resort')->find($cleanId);
+                    if ($resortUser) {
+                        $model = $resortUser;
+                        $detectedType = 'resort';
                     }
-                    break;
-                case 'event':
-                    $model = Event::find($itemId);
-                    break;
-                case 'post':
-                    $model = \App\Models\EnterprisePost::find($itemId);
-                    break;
+                }
+                if (!$model) {
+                    $model = EnterprisePost::find($cleanId);
+                    if ($model) {
+                        $detectedType = ($model->type === 'rooms' || $model->type === 'room') ? 'room' : 'accommodation';
+                    }
+                }
+            } elseif ($itemType === 'post') {
+                $model = EnterprisePost::find($cleanId);
+                $detectedType = 'post';
             }
         } catch (\Throwable $e) {
-            Log::warning("Could not find model for wishlist {$itemType} {$itemId}: " . $e->getMessage());
+            Log::warning("Could not find model for wishlist {$itemType} {$rawId}: " . $e->getMessage());
         }
 
         $hasWishlistTable = false;
@@ -112,8 +178,12 @@ class WishlistController extends Controller
             if ($user && $hasWishlistTable) {
                 try {
                     $exists = WishlistItem::where('user_id', $user->id)
-                        ->where('item_id', $itemId)
-                        ->where('item_type', $itemType)
+                        ->where(function($q) use ($rawId, $cleanId) {
+                            $q->where('item_id', $rawId)->orWhere('item_id', $cleanId);
+                        })
+                        ->where(function($q) use ($itemType, $detectedType) {
+                            $q->where('item_type', $itemType)->orWhere('item_type', $detectedType);
+                        })
                         ->exists();
                     $action = $exists ? 'unsave' : 'save';
                 } catch (\Throwable $e) {
@@ -131,7 +201,7 @@ class WishlistController extends Controller
                 try {
                     WishlistItem::firstOrCreate([
                         'user_id'   => $user->id,
-                        'item_id'   => $itemId,
+                        'item_id'   => $rawId,
                         'item_type' => $itemType,
                     ]);
                 } catch (\Throwable $e) {
@@ -139,7 +209,7 @@ class WishlistController extends Controller
                 }
             }
 
-            if ($model) {
+            if ($model && method_exists($model, 'getTable')) {
                 try {
                     $tableName = $model->getTable();
                     if (Schema::hasColumn($tableName, 'likes')) {
@@ -153,7 +223,11 @@ class WishlistController extends Controller
 
             if ($finalCount === 0 && $hasWishlistTable) {
                 try {
-                    $finalCount = max(1, WishlistItem::where('item_id', $itemId)->where('item_type', $itemType)->count());
+                    $finalCount = max(1, WishlistItem::where('item_id', $rawId)->where('item_type', $itemType)->count());
+                    if ($finalCount <= 1 && $cleanId !== $rawId) {
+                        $countClean = WishlistItem::where('item_id', $cleanId)->where('item_type', $itemType)->count();
+                        $finalCount = max($finalCount, $countClean);
+                    }
                 } catch (\Throwable $e) {}
             }
 
@@ -168,55 +242,98 @@ class WishlistController extends Controller
                 $link = null;
 
                 if ($model) {
-                    $ownerId = $model->user_id ?? null;
-                    $itemName = $model->name ?? ($model->title ?? 'item');
+                    $ownerId = $model->user_id ?? ($model->id ?? null);
+                    if ($model instanceof User) {
+                        $ownerId = $model->id;
+                        $itemName = $model->resort_name ?: ($model->name ?: 'Resort');
+                    } else {
+                        $itemName = $model->name ?? ($model->product_name ?? ($model->title ?? 'item'));
+                    }
                 }
 
-                if ($itemType === 'product') {
-                    if (!$ownerId && $model && !empty($model->name)) {
-                        $ownerId = \App\Models\EnterprisePost::where('title', $model->name)->value('user_id');
-                    }
-                    $link = '/enterprise/profile';
-                } elseif ($itemType === 'accommodation' || $itemType === 'resort') {
-                    if (!$ownerId && $model && !empty($model->name)) {
-                        $ownerId = \App\Models\User::where('role', 'resort')
-                            ->where(function($q) use ($model) {
-                                $q->where('resort_name', $model->name)
-                                  ->orWhere('name', $model->name);
+                // Resolve owner if null
+                if (!$ownerId && $model && !empty($itemName)) {
+                    if ($detectedType === 'product') {
+                        $ownerId = EnterprisePost::where('title', $itemName)
+                            ->orWhere('product_name', $itemName)
+                            ->value('user_id');
+                        if (!$ownerId) {
+                            $ownerId = User::where('role', 'enterprise')->value('id');
+                        }
+                    } elseif (in_array($detectedType, ['room', 'accommodation', 'resort', 'attraction'])) {
+                        $ownerId = User::where('role', 'resort')
+                            ->where(function($q) use ($itemName) {
+                                $q->where('resort_name', $itemName)
+                                  ->orWhere('name', $itemName)
+                                  ->orWhere('resort_name', 'LIKE', "%{$itemName}%");
                             })->value('id');
                     }
+                }
+
+                // Determine owner details and role
+                $ownerUser = $ownerId ? User::find($ownerId) : null;
+                $ownerRole = $ownerUser ? $ownerUser->role : null;
+
+                // Format tourist name
+                $touristLabel = $user ? ($user->name ?: 'A tourist') : 'A tourist';
+
+                // Determine message, title, and link based on detected item category
+                $title = 'New Wishlist Save!';
+                if ($detectedType === 'product') {
+                    $message = "{$touristLabel} saved your product \"{$itemName}\" to their wishlist! (Total: {$finalCount} saves)";
+                    $link = ($ownerRole === 'enterprise') ? '/enterprise/dashboard' : '/enterprise/profile';
+                } elseif ($detectedType === 'room') {
+                    $message = "{$touristLabel} saved your room \"{$itemName}\" to their wishlist! (Total: {$finalCount} saves)";
+                    $link = '/resort/dashboard';
+                } elseif ($detectedType === 'attraction') {
+                    $message = "{$touristLabel} saved your attraction \"{$itemName}\" to their wishlist! (Total: {$finalCount} saves)";
+                    $link = ($ownerRole === 'resort') ? '/resort/dashboard' : '/attractions';
+                } elseif ($detectedType === 'event') {
+                    $message = "{$touristLabel} saved your event \"{$itemName}\" to their wishlist! (Total: {$finalCount} saves)";
+                    $link = ($ownerRole === 'enterprise') ? '/enterprise/dashboard' : (($ownerRole === 'resort') ? '/resort/dashboard' : '/events');
+                } elseif ($detectedType === 'resort') {
+                    $message = "{$touristLabel} saved your resort \"{$itemName}\" to their wishlist! (Total: {$finalCount} saves)";
                     $link = '/resort/dashboard';
                 } else {
+                    $message = "{$touristLabel} saved your resort stay \"{$itemName}\" to their wishlist! (Total: {$finalCount} saves)";
                     $link = '/resort/dashboard';
                 }
 
+                // Dispatch notification to the specific owner (resort or enterprise)
                 if (!empty($ownerId) && (!$user || (int)$ownerId !== (int)$user->id)) {
-                    $title = 'New Wishlist Save!';
-                    if ($itemType === 'product') {
-                        $message = "Your product \"{$itemName}\" was saved to a tourist's wishlist! (Total: {$finalCount} saves)";
-                    } elseif ($itemType === 'accommodation' || $itemType === 'resort') {
-                        $message = "Your resort stay \"{$itemName}\" was saved to a tourist's wishlist! (Total: {$finalCount} saves)";
-                    } else {
-                        $message = "\"{$itemName}\" was saved to a tourist's wishlist! (Total: {$finalCount} saves)";
-                    }
-
-                    $cacheKey = "notif_wishlist_{$ownerId}_{$itemType}_{$itemId}_" . ($user ? $user->id : 'guest');
+                    $cacheKey = "notif_wishlist_{$ownerId}_{$detectedType}_{$cleanId}_" . ($user ? $user->id : 'guest');
                     if (!Cache::has($cacheKey)) {
-                        Cache::put($cacheKey, true, now()->addMinutes(2));
-                        \App\Models\Notification::notify(
+                        Cache::put($cacheKey, true, now()->addSeconds(10));
+                        Notification::notify(
                             $ownerId,
                             'wishlist_saved',
                             $title,
                             $message,
                             [
-                                'item_id'    => $itemId,
-                                'item_type'  => $itemType,
+                                'item_id'    => $rawId,
+                                'item_type'  => $detectedType,
                                 'item_name'  => $itemName,
                                 'saves'      => $finalCount,
+                                'tourist_id' => $user ? $user->id : null,
+                                'tourist'    => $touristLabel,
                             ],
                             $link
                         );
                     }
+                } elseif (empty($ownerId)) {
+                    // Fallback to notify admin if tourism asset has no direct resort/enterprise owner
+                    Notification::notifyAdmins(
+                        'wishlist_saved',
+                        $title,
+                        "{$touristLabel} saved \"{$itemName}\" ({$detectedType}) to their wishlist! (Total: {$finalCount} saves)",
+                        [
+                            'item_id'   => $rawId,
+                            'item_type' => $detectedType,
+                            'item_name' => $itemName,
+                            'saves'     => $finalCount,
+                        ],
+                        '/admin/dashboard'
+                    );
                 }
             } catch (\Throwable $e) {
                 Log::warning('Failed to dispatch wishlist notification: ' . $e->getMessage());
@@ -226,15 +343,19 @@ class WishlistController extends Controller
             if ($user && $hasWishlistTable) {
                 try {
                     WishlistItem::where('user_id', $user->id)
-                        ->where('item_id', $itemId)
-                        ->where('item_type', $itemType)
+                        ->where(function($q) use ($rawId, $cleanId) {
+                            $q->where('item_id', $rawId)->orWhere('item_id', $cleanId);
+                        })
+                        ->where(function($q) use ($itemType, $detectedType) {
+                            $q->where('item_type', $itemType)->orWhere('item_type', $detectedType);
+                        })
                         ->delete();
                 } catch (\Throwable $e) {
                     Log::warning('WishlistItem delete error: ' . $e->getMessage());
                 }
             }
 
-            if ($model) {
+            if ($model && method_exists($model, 'getTable')) {
                 try {
                     $tableName = $model->getTable();
                     if (Schema::hasColumn($tableName, 'likes') && $model->likes > 0) {
@@ -248,18 +369,27 @@ class WishlistController extends Controller
 
             if ($finalCount === 0 && $hasWishlistTable) {
                 try {
-                    $finalCount = WishlistItem::where('item_id', $itemId)->where('item_type', $itemType)->count();
+                    $finalCount = WishlistItem::where(function($q) use ($rawId, $cleanId) {
+                            $q->where('item_id', $rawId)->orWhere('item_id', $cleanId);
+                        })
+                        ->where(function($q) use ($itemType, $detectedType) {
+                            $q->where('item_type', $itemType)->orWhere('item_type', $detectedType);
+                        })
+                        ->count();
                 } catch (\Throwable $e) {}
             }
         }
 
         try {
-            Cache::forever("wishlist_saves_{$itemType}_{$itemId}", $finalCount);
+            Cache::forever("wishlist_saves_{$itemType}_{$rawId}", $finalCount);
+            if ($cleanId !== $rawId) {
+                Cache::forever("wishlist_saves_{$itemType}_{$cleanId}", $finalCount);
+            }
         } catch (\Throwable $e) {}
 
         return response()->json([
             'success'     => true,
-            'item_id'     => $itemId,
+            'item_id'     => $rawId,
             'item_type'   => $itemType,
             'action'      => $action,
             'likes'       => $finalCount,
@@ -290,6 +420,25 @@ class WishlistController extends Controller
             }
         } catch (\Throwable $e) {
             Log::warning('Wishlist counts products error: ' . $e->getMessage());
+        }
+
+        // Resort Rooms
+        try {
+            if (Schema::hasTable('resort_rooms')) {
+                $hasLikes = Schema::hasColumn('resort_rooms', 'likes');
+                $rooms = $hasLikes
+                    ? ResortRoom::select('id', 'likes')->get()
+                    : ResortRoom::select('id')->get();
+
+                foreach ($rooms as $r) {
+                    $l = (int)($r->likes ?? 0);
+                    $counts["accommodation_room-{$r->id}"] = $l;
+                    $counts["accommodation_{$r->id}"] = $l;
+                    $counts["room_{$r->id}"] = $l;
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Wishlist counts resort_rooms error: ' . $e->getMessage());
         }
 
         // Attractions
@@ -350,6 +499,13 @@ class WishlistController extends Controller
                 foreach ($wishlistGrouped as $w) {
                     $key = "{$w->item_type}_{$w->item_id}";
                     $counts[$key] = max((int)($counts[$key] ?? 0), (int)$w->total);
+
+                    // Cross-map room prefixes
+                    if (\Illuminate\Support\Str::startsWith($w->item_id, 'room-')) {
+                        $plain = substr($w->item_id, 5);
+                        $counts["accommodation_{$plain}"] = max((int)($counts["accommodation_{$plain}"] ?? 0), (int)$w->total);
+                        $counts["room_{$plain}"] = max((int)($counts["room_{$plain}"] ?? 0), (int)$w->total);
+                    }
                 }
             }
         } catch (\Throwable $e) {

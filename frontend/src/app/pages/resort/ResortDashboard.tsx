@@ -488,6 +488,20 @@ export function ResortDashboard() {
       await Promise.all([fetchPosts(), fetchStats()]);
       setLoading(false);
     })();
+
+    const handleUpdate = () => {
+      fetchStats();
+      fetchPosts();
+    };
+    window.addEventListener('wishlistUpdated', handleUpdate);
+    window.addEventListener('contentUpdated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+
+    return () => {
+      window.removeEventListener('wishlistUpdated', handleUpdate);
+      window.removeEventListener('contentUpdated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, []);
 
   const handlePaymentSubmitted = async () => {

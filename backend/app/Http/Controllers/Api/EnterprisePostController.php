@@ -480,12 +480,12 @@ class EnterprisePostController extends Controller
             if (!empty($post->user_id) && (!$user || (int)$post->user_id !== (int)$user->id)) {
                 $cacheKey = "notif_post_save_{$post->user_id}_{$post->id}_" . ($user ? $user->id : 'guest');
                 if (!\Illuminate\Support\Facades\Cache::has($cacheKey)) {
-                    \Illuminate\Support\Facades\Cache::put($cacheKey, true, now()->addMinutes(2));
+                    \Illuminate\Support\Facades\Cache::put($cacheKey, true, now()->addSeconds(10));
                     \App\Models\Notification::notify(
                         $post->user_id,
                         'wishlist_saved',
                         'New Wishlist Save!',
-                        "Your {$postTitle} was saved to a tourist's wishlist! (Total: {$post->saves} saves)",
+                        "{$touristName} saved your {$postTitle} to their wishlist! (Total: {$post->saves} saves)",
                         [
                             'post_id' => $post->id,
                             'saves'   => $post->saves,

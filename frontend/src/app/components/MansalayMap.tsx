@@ -6,7 +6,9 @@ export interface MapMarker {
   lat: number;
   lng: number;
   name: string;
-  type: 'attraction' | 'resort' | 'enterprise';
+  type: 'attraction' | 'resort' | 'enterprise' | 'landmark';
+  isLandmark?: boolean;
+  category?: string;
   description?: string;
   image?: string;
   location?: string;
@@ -44,6 +46,7 @@ const TYPE_COLORS: Record<string, string> = {
   attraction: '#EC4899', // Pink
   resort: '#10B981',     // Emerald
   enterprise: '#3B82F6', // Blue
+  landmark: '#F59E0B',   // Amber
 };
 
 export function MansalayMap({
@@ -62,6 +65,7 @@ export function MansalayMap({
   const mapRef = useRef<LeafletMap | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const markersLayerRef = useRef<any>(null);
+  const markerRefsMap = useRef<Map<string, any>>(new Map());
   const routeLineRef = useRef<LeafletPolyline | null>(null);
   const userMarkerRef = useRef<any>(null);
   const userAccuracyCircleRef = useRef<any>(null);
@@ -163,9 +167,17 @@ export function MansalayMap({
 
       const layerGroup = L.featureGroup();
 
+      markerRefsMap.current.clear();
+
       markers.forEach((marker) => {
-        const color = TYPE_COLORS[marker.type] || '#EC4899';
-        const emoji = marker.type === 'resort' ? '🏨' : marker.type === 'enterprise' ? '🛍️' : '📍';
+        const isLandmark = Boolean(
+          marker.isLandmark ||
+          String(marker.id).startsWith('db-landmark-') ||
+          marker.type === 'landmark' ||
+          marker.category === 'Landmark'
+        );
+        const color = isLandmark ? '#F59E0B' : (TYPE_COLORS[marker.type] || '#EC4899');
+        const emoji = isLandmark ? '📍' : marker.type === 'resort' ? '🏨' : marker.type === 'enterprise' ? '🛍️' : '🌊';
         const icon = L.divIcon({
           html: `
             <div style="filter:drop-shadow(0 4px 10px rgba(0,0,0,0.45));cursor:pointer;position:relative;width:34px;height:46px;">
@@ -185,9 +197,17 @@ export function MansalayMap({
           popupAnchor: [0, -44],
         });
 
+        const badgeText = isLandmark
+          ? '📍 Registered Landmark'
+          : marker.type === 'enterprise'
+          ? 'Enterprise Shop'
+          : marker.type === 'resort'
+          ? 'Resort / Stay'
+          : 'Attraction';
+
         const popupContent = `
           <div style="padding:6px;font-family:sans-serif;">
-            <div style="font-size:10px;font-weight:800;color:${color};text-transform:uppercase;margin-bottom:2px;letter-spacing:0.5px;">${marker.type === 'enterprise' ? 'Enterprise Shop' : marker.type === 'resort' ? 'Resort / Stay' : 'Attraction'}</div>
+            <div style="font-size:10px;font-weight:800;color:${color};text-transform:uppercase;margin-bottom:2px;letter-spacing:0.5px;">${badgeText}</div>
             <div style="font-size:14px;font-weight:800;color:#111827;margin-bottom:4px;line-height:1.2;">${marker.name}</div>
             ${marker.location ? `<div style="font-size:11px;color:#6B7280;margin-bottom:6px;">📍 ${marker.location}</div>` : ''}
             ${marker.description ? `<div style="font-size:11px;color:#4B5563;line-height:1.4;margin-bottom:10px;max-height:60px;overflow:hidden;">${marker.description}</div>` : ''}
@@ -205,6 +225,10 @@ export function MansalayMap({
         const leafletMarker = L.marker([marker.lat, marker.lng], { icon })
           .bindPopup(popupContent, { maxWidth: 270 });
 
+        leafletMarker.on('click', () => {
+          if (onSelectMarker) onSelectMarker(marker);
+        });
+
         leafletMarker.on('popupopen', () => {
           const btnTour = document.getElementById(`btn-tour-${marker.id}`);
           if (btnTour) {
@@ -220,6 +244,7 @@ export function MansalayMap({
           }
         });
 
+        markerRefsMap.current.set(String(marker.id), leafletMarker);
         layerGroup.addLayer(leafletMarker);
       });
 
@@ -321,16 +346,30 @@ export function MansalayMap({
           const bounds = L.latLngBounds(routeCoords);
           map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
         }
-      } else if (selectedMarker && activeUserCoords) {
-        // Focus on tourist location and draw preview line
-        map.setView(activeUserCoords, 16, { animate: true });
-        const endCoords: [number, number] = [selectedMarker.lat, selectedMarker.lng];
-        routeLineRef.current = L.polyline([activeUserCoords, endCoords], {
-          color: '#EC4899',
-          weight: 4,
-          opacity: 0.5,
-          dashArray: '6, 10',
-        }).addTo(map);
+      } else if (selectedMarker) {
+        const destCoords: [number, number] = [selectedMarker.lat, selectedMarker.lng];
+        if (activeUserCoords) {
+          const bounds = L.latLngBounds([activeUserCoords, destCoords]);
+          map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
+          routeLineRef.current = L.polyline([activeUserCoords, destCoords], {
+            color: '#EC4899',
+            weight: 4,
+            opacity: 0.6,
+            dashArray: '6, 10',
+          }).addTo(map);
+        } else {
+          map.setView(destCoords, 16, { animate: true });
+        }
+      }
+
+      // Automatically open the popup for selected marker
+      if (selectedMarker) {
+        setTimeout(() => {
+          const lm = markerRefsMap.current.get(String(selectedMarker.id));
+          if (lm) {
+            lm.openPopup();
+          }
+        }, 120);
       }
     });
   }, [userLocation, userGps, routeCoords, selectedMarker]);

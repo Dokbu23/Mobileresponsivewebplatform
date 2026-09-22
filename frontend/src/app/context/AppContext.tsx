@@ -424,18 +424,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addToWishlist = (item: WishlistItem) => {
-    // Only tourist accounts are allowed to save wishlist items
-    if (
-      userType === 'admin' ||
-      userType === 'resort' ||
-      userType === 'enterprise' ||
-      currentUser?.role === 'admin' ||
-      currentUser?.role === 'resort' ||
-      currentUser?.role === 'enterprise'
-    ) {
-      return;
-    }
-
     setWishlist(prev => {
       if (prev.some(w => String(w.id) === String(item.id) && (w.type || 'attraction') === (item.type || 'attraction'))) {
         return prev;
@@ -495,17 +483,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const removeFromWishlist = (id: string | number, type: string, title?: string) => {
-    // Only tourist accounts are allowed to unsave wishlist items
-    if (
-      userType === 'admin' ||
-      userType === 'resort' ||
-      userType === 'enterprise' ||
-      currentUser?.role === 'admin' ||
-      currentUser?.role === 'resort' ||
-      currentUser?.role === 'enterprise'
-    ) {
-      return;
-    }
 
     const existingItem = wishlist.find(w => String(w.id) === String(id) && (w.type || 'attraction') === (type || 'attraction'));
     const itemTitle = title || existingItem?.title;

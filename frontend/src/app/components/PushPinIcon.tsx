@@ -63,7 +63,7 @@ export function PushPinIcon({
       {/* 1. Sharp Metallic Needle / Patusok na Karayom */}
       <path
         d="M11.1 15.5L12 23.5L12.9 15.5Z"
-        fill={active ? `url(#${needleGradId})` : '#94A3B8'}
+        fill={active ? `url(#${needleGradId})` : '#CBD5E1'}
         stroke={active ? '#64748B' : '#94A3B8'}
         strokeWidth="0.4"
         strokeLinejoin="round"
@@ -94,9 +94,9 @@ export function PushPinIcon({
            C5.4 13.4 8.5 12.2 9.7 10.5
            C10.2 9.6 10.2 8.5 9.7 7.6
            C8.6 5.6 7.5 3.6 7.5 2.5 Z"
-        fill={active ? `url(#${gradientId})` : 'transparent'}
-        stroke={active ? '#B91C1C' : '#9CA3AF'}
-        strokeWidth={active ? '0.75' : '1.75'}
+        fill={active ? `url(#${gradientId})` : '#E2E8F0'}
+        stroke={active ? '#B91C1C' : '#64748B'}
+        strokeWidth={active ? '0.75' : '1.3'}
         strokeLinejoin="round"
       />
 

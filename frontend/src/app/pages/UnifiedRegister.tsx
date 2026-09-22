@@ -39,12 +39,22 @@ export function UnifiedRegister() {
       return;
     }
 
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
+      toast.error('Please enter a valid 10-digit Philippine phone number (e.g. 917 123 4567).');
+      return;
+    }
+    if (!cleanPhone.startsWith('9')) {
+      toast.error('Philippine mobile numbers must start with 9 (e.g. 917 123 4567).');
+      return;
+    }
+
     setLoading(true);
     try {
       const payload = {
         name,
         email,
-        phone: phone || null,
+        phone: `0${cleanPhone}`,
         password,
       };
 
@@ -190,18 +200,46 @@ export function UnifiedRegister() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wide mb-1.5">Phone Number</label>
-                <div className="relative">
-                  <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wide">
+                    Phone Number
+                  </label>
+                  <span className="text-[10px] font-bold text-gray-400">
+                    PH (+63) 10-digit
+                  </span>
+                </div>
+                <div className="relative flex items-center">
+                  <div className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 border border-gray-200 rounded-lg pointer-events-none select-none z-10 shadow-2xs">
+                    <span className="text-xs leading-none">🇵🇭</span>
+                    <span className="text-xs font-black text-gray-700">+63</span>
+                  </div>
                   <input
-                    type="text"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    name="phone"
                     required
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="09171234567"
-                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-pink-400 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all"
+                    onChange={(e) => {
+                      let val = e.target.value.replace(/\D/g, '');
+                      if (val.startsWith('63') && val.length > 2) {
+                        val = val.slice(2);
+                      }
+                      if (val.startsWith('0')) {
+                        val = val.slice(1);
+                      }
+                      setPhone(val.slice(0, 10));
+                    }}
+                    placeholder="917 123 4567"
+                    maxLength={10}
+                    className="w-full pl-[76px] pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 placeholder:text-gray-400 focus:bg-white focus:border-pink-400 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all tracking-wider"
                   />
                 </div>
+                {phone && phone.length > 0 && phone.length < 10 && (
+                  <p className="text-[10px] text-amber-500 font-semibold mt-1">
+                    Please enter 10 digits (e.g. 917 123 4567)
+                  </p>
+                )}
               </div>
             </div>
 

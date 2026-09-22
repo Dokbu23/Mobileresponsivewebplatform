@@ -10,6 +10,7 @@ import {
   UserPlus,
   BadgeCheck,
   MapPin,
+  Heart,
   X,
   Check,
   Trash2,
@@ -21,7 +22,7 @@ import { getAuthToken, type ApiNotification } from '../lib/api';
 function getIcon(type: string) {
   switch (type) {
     case 'wishlist_saved':
-      return <MapPin className="h-4 w-4 text-pink-500 fill-pink-500" />;
+      return <Heart className="h-4 w-4 text-rose-500 fill-rose-500" />;
     case 'order_new':
     case 'order_status':
       return <Package className="h-4 w-4 text-pink-500" />;
@@ -66,8 +67,8 @@ function formatRelativeTime(timestamp: string) {
 function formatNotificationMessage(notification: ApiNotification): string {
   if (notification.type === 'wishlist_saved') {
     const msg = notification.message || '';
-    if (msg.includes('added your') || msg.includes('saved your')) {
-      return msg.replace(/^.*? (added your|saved your) /i, 'A tourist $1 ');
+    if (msg.startsWith('You added') || msg.startsWith('You saved')) {
+      return msg.replace(/^You (added|saved) your/i, 'A tourist $1 your');
     }
   }
   return notification.message;

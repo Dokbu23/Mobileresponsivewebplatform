@@ -289,3 +289,28 @@ export const showUnsaveConfirmDialog = async (itemName?: string): Promise<boolea
   });
   return result.isConfirmed;
 };
+
+// Delete confirmation dialog
+export const showDeleteConfirmDialog = async (
+  title: string = 'Are you sure you want to delete?',
+  text: string = 'This action cannot be undone.',
+  confirmText: string = 'Yes, Delete',
+  cancelText: string = 'Cancel'
+): Promise<boolean> => {
+  const result = await Swal.fire({
+    icon: 'warning',
+    title,
+    text,
+    showCancelButton: true,
+    confirmButtonColor: '#ef4444',
+    cancelButtonColor: '#6b7280',
+    confirmButtonText: confirmText,
+    cancelButtonText: cancelText,
+    reverseButtons: true,
+    customClass: {
+      confirmButton: 'rounded-xl font-bold px-5 py-2.5',
+      cancelButton: 'rounded-xl font-bold px-5 py-2.5'
+    }
+  });
+  return result.isConfirmed;
+};

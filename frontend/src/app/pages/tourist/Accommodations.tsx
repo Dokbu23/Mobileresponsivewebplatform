@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { Hotel, MapPin, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink, Footprints, Maximize2 } from 'lucide-react';
+import { Hotel, MapPin, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink, Footprints, Maximize2, FileText } from 'lucide-react';
 import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
 import { ACCOMMODATION_CATEGORIES } from '../../lib/constants';
 import { useApp } from '../../context/AppContext';
@@ -11,10 +11,27 @@ import { toast } from 'sonner';
 import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
 import { PushPinIcon } from '../../components/PushPinIcon';
 
-interface AccommodationItem {
+export interface RoomItem {
+  id: string;
+  room_id?: number | string;
+  name: string;
+  type?: string;
+  description?: string;
+  full_description?: string;
+  price_per_night?: number;
+  price?: number;
+  capacity?: number;
+  image: string;
+  images?: string[];
+  amenities?: string[];
+  features?: string[];
+  virtual_tour_scenes?: any[];
+}
+
+export interface AccommodationItem {
   id: string;
   name: string;
-  resort_name?: string;
+  resort_name: string;
   description?: string;
   full_description?: string;
   image: string;
@@ -36,7 +53,7 @@ interface AccommodationItem {
   resort_amenities?: string[];
   contact_number?: string;
   website?: string;
-  rooms?: any[];
+  rooms: RoomItem[];
   rooms_count?: number;
   capacity?: number;
   is_room?: boolean;
@@ -51,35 +68,45 @@ interface AccommodationItem {
 }
 
 /**
- * 🛡️ Robust Grouping & Normalization Logic
- * Consolidates any flat image records or multiple entries sharing the same room/accommodation ID
- * into ONE accommodation listing with an array of images.
- * Rule: 1 ROOM / ACCOMMODATION = 1 CARD.
+ * 🛡️ Resort-First Grouping & Normalization Logic
+ * Rule: 1 RESORT = 1 CARD.
+ * Multiple rooms of the same resort become CAROUSEL SLIDES of that single resort card.
  */
 function groupAndNormalizeAccommodations(rawItems: any[]): AccommodationItem[] {
-  const groups: Record<string, AccommodationItem> = {};
+  const resortGroups: Record<string, AccommodationItem> = {};
+  const userKeyMap: Record<string, string> = {};
+  const nameKeyMap: Record<string, string> = {};
+
+  const norm = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
 
   rawItems.forEach((d: any, idx: number) => {
     const rawId = String(d.id || '');
-    const cleanName = decodeHtml(d.name || d.resort_name || 'Accommodation').trim();
-    const cleanResortName = decodeHtml(d.resort_name || d.name || '').trim();
+    const cleanName = decodeHtml(d.name || '').trim();
+    const cleanResortName = decodeHtml(d.resort_name || (!d.is_room ? d.name : '') || '').trim();
     const userId = d.user_id ? String(d.user_id) : '';
 
-    // Create a canonical group key for the room
+    const effectiveResortName = cleanResortName || (!d.is_room ? cleanName : 'Resort Stay');
+    const normalizedResortName = norm(effectiveResortName);
+
+    // Resolve canonical group key for the resort
     let groupKey = '';
-    if (d.room_id) {
-      groupKey = `room_${d.room_id}`;
-    } else if (rawId.startsWith('room-')) {
-      groupKey = `room_${rawId.replace('room-', '')}`;
-    } else if (userId && cleanName && d.is_room) {
-      groupKey = `resort_room_${userId}_${cleanName.toLowerCase()}`;
-    } else if (cleanResortName && cleanName && cleanResortName.toLowerCase() !== cleanName.toLowerCase()) {
-      groupKey = `resort_named_${cleanResortName.toLowerCase()}_${cleanName.toLowerCase()}`;
+    if (userId && userKeyMap[userId]) {
+      groupKey = userKeyMap[userId];
+    } else if (normalizedResortName && nameKeyMap[normalizedResortName]) {
+      groupKey = nameKeyMap[normalizedResortName];
+    } else if (userId) {
+      groupKey = `resort_user_${userId}`;
+    } else if (normalizedResortName) {
+      groupKey = `resort_name_${normalizedResortName}`;
     } else {
-      groupKey = `acc_${rawId}`;
+      groupKey = `resort_item_${rawId || idx}`;
     }
 
-    // Parse all images belonging to this record
+    if (userId) userKeyMap[userId] = groupKey;
+    if (normalizedResortName) nameKeyMap[normalizedResortName] = groupKey;
+    if (cleanName && !d.is_room) nameKeyMap[norm(cleanName)] = groupKey;
+
+    // Parse images for this record
     let parsedImages: string[] = [];
     if (Array.isArray(d.images)) {
       parsedImages = d.images.map((img: any) => formatImageUrl(img)).filter(Boolean);
@@ -96,79 +123,30 @@ function groupAndNormalizeAccommodations(rawItems: any[]): AccommodationItem[] {
       parsedImages.unshift(mainImg);
     }
 
-    if (groups[groupKey]) {
-      // Merge images and missing fields into existing room group so 1 room = 1 card
-      const existing = groups[groupKey];
-      const existingImgs = existing.images || [];
-      parsedImages.forEach((img) => {
-        if (img && !existingImgs.includes(img)) {
-          existingImgs.push(img);
-        }
-      });
-      existing.images = existingImgs;
-      if (!existing.image && existingImgs.length > 0) {
-        existing.image = existingImgs[0];
-      }
-      if (!existing.description && (d.description || d.full_description)) {
-        existing.description = decodeHtml(d.description || d.full_description);
-      }
-      if (!existing.full_description && (d.full_description || d.description)) {
-        existing.full_description = decodeHtml(d.full_description || d.description);
-      }
-      if (!existing.capacity && d.capacity) existing.capacity = d.capacity;
-      if ((!existing.pricePerNight || existing.pricePerNight === 0) && (d.price_per_night || d.pricePerNight || d.price)) {
-        existing.pricePerNight = Number(d.price_per_night ?? d.pricePerNight ?? d.price ?? 0);
-      }
-      if (!existing.location && (d.location || d.barangay)) {
-        existing.location = d.location || `${d.barangay}, Mansalay, Oriental Mindoro`;
-      }
-      if (!existing.contact_number && (d.contact_number || d.phone)) {
-        existing.contact_number = d.contact_number || d.phone;
-      }
-      if (!existing.phone && (d.phone || d.contact_number)) {
-        existing.phone = d.phone || d.contact_number;
-      }
-      if (!existing.facebook && (d.facebook || d.facebook_link)) {
-        existing.facebook = d.facebook || d.facebook_link;
-      }
-      if (!existing.instagram && (d.instagram || d.instagram_link)) {
-        existing.instagram = d.instagram || d.instagram_link;
-      }
-      if (!existing.website && (d.website || d.owner?.website)) {
-        existing.website = d.website || d.owner?.website;
-      }
-      if (!existing.virtual_tour_video && (d.virtual_tour_video || d.video)) {
-        existing.virtual_tour_video = d.virtual_tour_video || d.video;
-      }
-      if ((!existing.virtual_tour_scenes || existing.virtual_tour_scenes.length === 0) && (d.virtual_tour_scenes || d.user?.virtual_tour_scenes)) {
-        existing.virtual_tour_scenes = d.virtual_tour_scenes || d.user?.virtual_tour_scenes;
-      }
-    } else {
-      const parsedRooms = Array.isArray(d.rooms) ? d.rooms.map((r: any) => ({
-        ...r,
-        image: formatImageUrl(r.image),
-      })) : [];
-
-      groups[groupKey] = {
-        id: String(d.id),
-        name: cleanName,
-        resort_name: cleanResortName,
-        description: decodeHtml(d.description || d.full_description || ''),
-        full_description: decodeHtml(d.full_description || d.description || ''),
+    // Initialize group if new
+    if (!resortGroups[groupKey]) {
+      resortGroups[groupKey] = {
+        id: userId ? `resort-${userId}` : (!d.is_room ? rawId : `resort-${norm(effectiveResortName)}`),
+        name: effectiveResortName,
+        resort_name: effectiveResortName,
+        description: !d.is_room ? decodeHtml(d.description || d.full_description || '') : '',
+        full_description: !d.is_room ? decodeHtml(d.full_description || d.description || '') : '',
         pricePerNight: Number(d.price_per_night ?? d.pricePerNight ?? d.price ?? 0),
         location: d.location || (d.barangay ? `${d.barangay}, Mansalay, Oriental Mindoro` : 'Mansalay, Oriental Mindoro'),
-        type: d.is_room ? (d.type || 'Rooms & Suites') : (d.type === 'resort_profile' || d.category === 'resort_profile') ? 'Beach Resort' : (d.category || d.type || 'Beach Resort'),
-        badge: d.badge || (d.rooms_count ? `${d.rooms_count} Rooms` : idx % 2 === 0 ? 'Top Rated' : 'Eco-Friendly'),
+        type: (d.type === 'resort_profile' || d.category === 'resort_profile' || !d.type || d.type === 'static')
+          ? 'Beach Resort'
+          : (d.is_room ? 'Beach Resort' : (d.category || d.type || 'Beach Resort')),
+        badge: effectiveResortName,
         rating: Number(d.rating) || 4.8,
         likes: Number(d.likes) || 0,
         view_count: Number(d.view_count || d.views || 0),
-        image: mainImg || (parsedImages[0] ?? ''),
-        images: parsedImages.length > 0 ? parsedImages : (mainImg ? [mainImg] : []),
+        image: mainImg || parsedImages[0] || '',
+        images: parsedImages,
         resort_amenities: Array.isArray(d.resort_amenities) ? d.resort_amenities : [],
-        rooms: parsedRooms,
-        rooms_count: d.rooms_count || parsedRooms.length || 0,
+        rooms: [],
+        rooms_count: 0,
         capacity: d.capacity ? Number(d.capacity) : undefined,
-        is_room: Boolean(d.is_room),
+        is_room: false,
         user_id: d.user_id,
         is_registered: d.is_registered,
         contact_number: d.contact_number || d.phone || d.owner?.phone,
@@ -179,19 +157,143 @@ function groupAndNormalizeAccommodations(rawItems: any[]): AccommodationItem[] {
         virtual_tour_video: d.virtual_tour_video || d.video || d.owner?.virtual_tour_video,
         latitude: d.latitude || d.lat || d.owner?.latitude,
         longitude: d.longitude || d.lng || d.owner?.longitude,
-        virtual_tour_scenes: d.virtual_tour_scenes || d.user?.virtual_tour_scenes || d.owner?.virtual_tour_scenes,
+        virtual_tour_scenes: d.virtual_tour_scenes || d.user?.virtual_tour_scenes || d.owner?.virtual_tour_scenes || [],
       };
+    }
+
+    const currentResort = resortGroups[groupKey];
+
+    // Merge resort-level details
+    if (!currentResort.user_id && d.user_id) currentResort.user_id = d.user_id;
+    if (d.resort_name && !currentResort.resort_name) currentResort.resort_name = decodeHtml(d.resort_name);
+    if (!d.is_room) {
+      if (!currentResort.description && (d.description || d.full_description)) {
+        currentResort.description = decodeHtml(d.description || d.full_description);
+      }
+      if (!currentResort.full_description && (d.full_description || d.description)) {
+        currentResort.full_description = decodeHtml(d.full_description || d.description);
+      }
+      if (!currentResort.image && mainImg) currentResort.image = mainImg;
+      if (d.type && d.type !== 'static' && d.type !== 'resort_profile') currentResort.type = d.type;
+    }
+    if (Array.isArray(d.resort_amenities) && d.resort_amenities.length > 0) {
+      currentResort.resort_amenities = Array.from(new Set([...(currentResort.resort_amenities || []), ...d.resort_amenities]));
+    }
+    if (!currentResort.phone && (d.phone || d.contact_number)) currentResort.phone = d.phone || d.contact_number;
+    if (!currentResort.facebook && (d.facebook || d.facebook_link)) currentResort.facebook = d.facebook || d.facebook_link;
+    if (!currentResort.instagram && (d.instagram || d.instagram_link)) currentResort.instagram = d.instagram || d.instagram_link;
+    if (!currentResort.website && (d.website || d.owner?.website)) currentResort.website = d.website || d.owner?.website;
+    if (!currentResort.virtual_tour_video && (d.virtual_tour_video || d.video)) currentResort.virtual_tour_video = d.virtual_tour_video || d.video;
+    if ((!currentResort.virtual_tour_scenes || currentResort.virtual_tour_scenes.length === 0) && d.virtual_tour_scenes) {
+      currentResort.virtual_tour_scenes = d.virtual_tour_scenes;
+    }
+    if (d.likes) currentResort.likes = (currentResort.likes || 0) + Number(d.likes);
+    if (d.view_count) currentResort.view_count = Math.max(currentResort.view_count || 0, Number(d.view_count));
+
+    // Add room if this record is an individual room
+    const isExplicitRoom = Boolean(d.is_room || d.room_id || rawId.startsWith('room-'));
+    if (isExplicitRoom) {
+      const roomId = String(d.room_id || d.id || `room-${currentResort.rooms.length + 1}`);
+      const rName = cleanName || 'Standard Room';
+      const existingIdx = currentResort.rooms.findIndex(
+        r => r.id === roomId || (r.name && r.name.toLowerCase() === rName.toLowerCase())
+      );
+
+      if (existingIdx >= 0) {
+        const existing = currentResort.rooms[existingIdx];
+        const mergedImgs = Array.from(new Set([...(existing.images || []), ...parsedImages]));
+        existing.images = mergedImgs;
+        if (!existing.image && mergedImgs.length > 0) existing.image = mergedImgs[0];
+      } else {
+        currentResort.rooms.push({
+          id: roomId,
+          room_id: d.room_id || d.id,
+          name: rName,
+          type: d.type || 'Room',
+          description: decodeHtml(d.description || d.full_description || ''),
+          full_description: decodeHtml(d.full_description || d.description || ''),
+          price_per_night: Number(d.price_per_night ?? d.pricePerNight ?? d.price ?? 0),
+          price: Number(d.price_per_night ?? d.pricePerNight ?? d.price ?? 0),
+          capacity: d.capacity ? Number(d.capacity) : 2,
+          image: mainImg || parsedImages[0] || '',
+          images: parsedImages,
+          amenities: Array.isArray(d.amenities) && d.amenities.length > 0
+            ? d.amenities
+            : (Array.isArray(d.resort_amenities) ? d.resort_amenities : []),
+          features: Array.isArray(d.features) ? d.features : [],
+          virtual_tour_scenes: d.virtual_tour_scenes || [],
+        });
+      }
+    }
+
+    // If record contains nested rooms array (d.rooms)
+    if (Array.isArray(d.rooms) && d.rooms.length > 0) {
+      d.rooms.forEach((rm: any) => {
+        const rmId = String(rm.id || `room-${currentResort.rooms.length + 1}`);
+        const rmName = decodeHtml(rm.name || 'Room').trim();
+        const existingIdx = currentResort.rooms.findIndex(
+          r => r.id === rmId || (r.name && r.name.toLowerCase() === rmName.toLowerCase())
+        );
+        const rmImages = Array.isArray(rm.images) ? rm.images.map(formatImageUrl).filter(Boolean) : [];
+        const rmMainImg = formatImageUrl(rm.image) || rmImages[0] || '';
+        if (rmMainImg && !rmImages.includes(rmMainImg)) rmImages.unshift(rmMainImg);
+
+        if (existingIdx < 0) {
+          currentResort.rooms.push({
+            id: rmId,
+            room_id: rm.id,
+            name: rmName,
+            type: rm.type || 'Room',
+            description: decodeHtml(rm.description || ''),
+            full_description: decodeHtml(rm.description || ''),
+            price_per_night: Number(rm.price_per_night ?? rm.price ?? 0),
+            price: Number(rm.price_per_night ?? rm.price ?? 0),
+            capacity: rm.capacity ? Number(rm.capacity) : 2,
+            image: rmMainImg,
+            images: rmImages,
+            amenities: Array.isArray(rm.amenities) ? rm.amenities : (currentResort.resort_amenities || []),
+          });
+        }
+      });
     }
   });
 
-  return Object.values(groups);
+  // Ensure each resort card has at least 1 room slide
+  Object.values(resortGroups).forEach(resort => {
+    if (resort.rooms.length === 0) {
+      resort.rooms.push({
+        id: resort.id,
+        name: resort.name,
+        type: resort.type || 'Beach Resort',
+        description: resort.description || `${resort.name} in Mansalay. Experience a comfortable and scenic stay.`,
+        full_description: resort.full_description || resort.description || '',
+        price_per_night: resort.pricePerNight || 0,
+        price: resort.pricePerNight || 0,
+        capacity: resort.capacity || 2,
+        image: resort.image,
+        images: resort.images || (resort.image ? [resort.image] : []),
+        amenities: resort.resort_amenities || [],
+      });
+    }
+
+    resort.rooms_count = resort.rooms.length;
+    if (!resort.image && resort.rooms[0]?.image) {
+      resort.image = resort.rooms[0].image;
+    }
+    if (!resort.pricePerNight && resort.rooms[0]?.price_per_night) {
+      resort.pricePerNight = resort.rooms[0].price_per_night;
+    }
+  });
+
+  return Object.values(resortGroups);
 }
 
 interface AccommodationCardProps {
   acc: AccommodationItem;
-  onCardClick: () => void;
+  typeFilter?: string;
+  onCardClick: (activeRoom?: RoomItem) => void;
   onOpenLightbox: (images: string[], index: number, title: string) => void;
-  onShare: (e: React.MouseEvent) => void;
+  onShare: (e: React.MouseEvent, activeRoom?: RoomItem) => void;
   onSave: (e: React.MouseEvent) => void;
   isInWishlist: boolean;
   wishlistCount: number;
@@ -201,6 +303,7 @@ interface AccommodationCardProps {
 
 function AccommodationCardItem({
   acc,
+  typeFilter,
   onCardClick,
   onOpenLightbox,
   onShare,
@@ -214,23 +317,48 @@ function AccommodationCardItem({
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
 
-  const images = useMemo(() => {
-    const list = Array.isArray(acc.images) && acc.images.length > 0 ? acc.images : (acc.image ? [acc.image] : []);
-    return list.map(img => formatImageUrl(img)).filter(Boolean);
-  }, [acc.images, acc.image]);
+  // Filter or list all rooms for this resort
+  const rooms = useMemo(() => {
+    const allRooms = Array.isArray(acc.rooms) && acc.rooms.length > 0 ? acc.rooms : [{
+      id: acc.id,
+      name: acc.name,
+      type: acc.type || 'Beach Resort',
+      description: acc.description,
+      full_description: acc.full_description,
+      price_per_night: acc.pricePerNight || 0,
+      price: acc.pricePerNight || 0,
+      capacity: acc.capacity || 2,
+      image: acc.image,
+      images: acc.images || (acc.image ? [acc.image] : []),
+      amenities: acc.resort_amenities || [],
+    }];
 
-  const displayImages = images.length > 0 ? images : ['/assets/mansalay_hero_bg.jpg'];
-  const hasMultiple = displayImages.length > 1;
-  const currentImage = displayImages[currentIdx] || displayImages[0];
+    if (typeFilter && typeFilter !== 'All' && typeFilter !== 'All Stays') {
+      const matched = allRooms.filter(r => r.type?.toLowerCase() === typeFilter.toLowerCase());
+      if (matched.length > 0) return matched;
+    }
+    return allRooms;
+  }, [acc, typeFilter]);
+
+  const hasMultipleRooms = rooms.length > 1;
+  const currentRoomIdx = currentIdx < rooms.length ? currentIdx : 0;
+  const currentRoom = rooms[currentRoomIdx] || rooms[0];
+
+  // Each carousel slide represents ONE room with that room's photo
+  const currentRoomImage = formatImageUrl(
+    currentRoom.image || (currentRoom.images && currentRoom.images[0]) || acc.image
+  ) || '/assets/mansalay_hero_bg.jpg';
 
   const handlePrev = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCurrentIdx((prev) => (prev === 0 ? displayImages.length - 1 : prev - 1));
+    if (!hasMultipleRooms) return;
+    setCurrentIdx((prev) => (prev === 0 ? rooms.length - 1 : prev - 1));
   };
 
   const handleNext = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setCurrentIdx((prev) => (prev === displayImages.length - 1 ? 0 : prev + 1));
+    if (!hasMultipleRooms) return;
+    setCurrentIdx((prev) => (prev === rooms.length - 1 ? 0 : prev + 1));
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -244,10 +372,10 @@ function AccommodationCardItem({
   const handleTouchEnd = () => {
     if (touchStartX.current === null || touchEndX.current === null) return;
     const distance = touchStartX.current - touchEndX.current;
-    if (distance > 35 && hasMultiple) {
-      setCurrentIdx((prev) => (prev === displayImages.length - 1 ? 0 : prev + 1));
-    } else if (distance < -35 && hasMultiple) {
-      setCurrentIdx((prev) => (prev === 0 ? displayImages.length - 1 : prev - 1));
+    if (distance > 35 && hasMultipleRooms) {
+      setCurrentIdx((prev) => (prev === rooms.length - 1 ? 0 : prev + 1));
+    } else if (distance < -35 && hasMultipleRooms) {
+      setCurrentIdx((prev) => (prev === 0 ? rooms.length - 1 : prev - 1));
     }
     touchStartX.current = null;
     touchEndX.current = null;
@@ -255,15 +383,20 @@ function AccommodationCardItem({
 
   const handleImageClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onOpenLightbox(displayImages, currentIdx, `${acc.name} — ${acc.resort_name || ''}`);
+    const roomPhotos = rooms.map(r => formatImageUrl(r.image || r.images?.[0] || acc.image)).filter(Boolean);
+    onOpenLightbox(
+      roomPhotos.length > 0 ? roomPhotos : [currentRoomImage],
+      currentRoomIdx,
+      `${acc.resort_name || acc.name} — ${currentRoom.name}`
+    );
   };
 
   return (
     <div
-      onClick={onCardClick}
+      onClick={() => onCardClick(currentRoom)}
       className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col group cursor-pointer hover:border-pink-200 justify-between"
     >
-      {/* ── IMAGE CAROUSEL CONTAINER ── */}
+      {/* ── ROOM CAROUSEL IMAGE CONTAINER ── */}
       <div
         className="relative aspect-4/3 overflow-hidden bg-gray-100 select-none"
         onTouchStart={handleTouchStart}
@@ -271,23 +404,21 @@ function AccommodationCardItem({
         onTouchEnd={handleTouchEnd}
       >
         <img
-          src={currentImage}
-          alt={`${acc.name} - Photo ${currentIdx + 1}`}
+          src={currentRoomImage}
+          alt={`${currentRoom.name} - ${acc.resort_name || acc.name}`}
           onClick={handleImageClick}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 cursor-zoom-in"
           onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
           loading="lazy"
         />
 
-        {/* Accommodation Badge */}
-        {acc.badge && (
-          <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 bg-pink-500 text-white text-[10px] font-bold rounded-full shadow-xs z-10 pointer-events-none">
-            {acc.badge}
-          </span>
-        )}
+        {/* Top-Left Resort Name Badge */}
+        <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 bg-pink-500 text-white text-[10px] font-bold rounded-full shadow-xs z-10 pointer-events-none max-w-[150px] truncate">
+          {acc.resort_name || acc.name}
+        </span>
 
-        {/* Multi-Image Counter Pill */}
-        {hasMultiple && (
+        {/* Room Carousel Counter Pill (Shows "Room X / Y") */}
+        {hasMultipleRooms && (
           <button
             type="button"
             onClick={handleImageClick}
@@ -295,31 +426,49 @@ function AccommodationCardItem({
             title="Click to view full screen gallery"
           >
             <Maximize2 className="h-2.5 w-2.5 opacity-80" />
-            <span>{currentIdx + 1} / {displayImages.length}</span>
+            <span>Room {currentRoomIdx + 1} / {rooms.length}</span>
           </button>
         )}
 
-        {/* Desktop Carousel Controls (Hover Arrows) */}
-        {hasMultiple && (
+        {/* Carousel Arrow Controls (Switch Between Rooms) */}
+        {hasMultipleRooms && (
           <>
             <button
               type="button"
               onClick={handlePrev}
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/55 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer shadow-md border border-white/20"
-              aria-label="Previous image"
-              title="Previous image"
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/55 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-xs opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-all z-20 cursor-pointer shadow-md border border-white/20"
+              aria-label="Previous room"
+              title="Previous room"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={handleNext}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/55 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer shadow-md border border-white/20"
-              aria-label="Next image"
-              title="Next image"
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/55 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-xs opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-all z-20 cursor-pointer shadow-md border border-white/20"
+              aria-label="Next room"
+              title="Next room"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
+
+            {/* Room Indicator Dots */}
+            <div className="absolute bottom-2.5 right-3 flex items-center gap-1 z-10">
+              {rooms.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrentIdx(i);
+                  }}
+                  className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                    i === currentRoomIdx ? 'w-4 bg-pink-500 shadow-xs' : 'w-1.5 bg-white/70 hover:bg-white'
+                  }`}
+                  aria-label={`Go to room ${i + 1}`}
+                />
+              ))}
+            </div>
           </>
         )}
 
@@ -327,92 +476,116 @@ function AccommodationCardItem({
         <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
           <button
             type="button"
-            onClick={onShare}
+            onClick={(e) => onShare(e, currentRoom)}
             className="w-7 h-7 bg-white/80 hover:bg-white text-gray-700 rounded-full flex items-center justify-center backdrop-blur-md transition-colors hover:scale-110 cursor-pointer shadow-xs"
             title="Share this stay"
           >
             <Share2 className="h-3.5 w-3.5" />
           </button>
-          {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
-            <button
-              type="button"
-              onClick={onSave}
-              className={`w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer ${
-                isInWishlist
-                  ? 'bg-rose-50 border border-rose-200'
-                  : 'bg-white/80 hover:bg-white'
-              }`}
-              title={isInWishlist ? 'Remove from saved places' : 'Pin to saved places'}
-            >
-              <PushPinIcon
-                isPinned={isInWishlist}
-                size={16}
-                idPrefix={`acc-tr-${acc.id}`}
-              />
-            </button>
-          )}
-        </div>
-
-        {/* Dark Overlay Saves Counter */}
-        {userType === 'admin' || userType === 'resort' || userType === 'enterprise' ? (
-          <div
-            className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/70 backdrop-blur-md rounded-full text-white text-[11px] font-bold z-10 border border-white/10 whitespace-nowrap shadow-xs pointer-events-none"
-            title="Total Tourist Saves"
-          >
-            <PushPinIcon alwaysTilted size={14} idPrefix={`acc-admin-${acc.id}`} />
-            <span className="text-white font-extrabold whitespace-nowrap">
-              Save: {wishlistCount}
-            </span>
-          </div>
-        ) : (
           <button
             type="button"
             onClick={onSave}
-            className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 z-10 whitespace-nowrap"
-            title={isInWishlist ? 'Saved in pins' : 'Click to pin stay'}
+            className={`w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer ${
+              isInWishlist
+                ? 'bg-rose-50 border border-rose-300 ring-2 ring-rose-100'
+                : 'bg-white/90 hover:bg-white border border-gray-200'
+            }`}
+            title={isInWishlist ? 'Remove from saved places' : 'Pin to saved places'}
           >
-            <PushPinIcon isPinned={isInWishlist} size={14} idPrefix={`acc-bl-${acc.id}`} />
-            <span className={isInWishlist ? 'text-pink-400 font-extrabold whitespace-nowrap' : 'text-white whitespace-nowrap'}>
-              Save: {wishlistCount}
-            </span>
+            <PushPinIcon
+              isPinned={isInWishlist}
+              size={16}
+              idPrefix={`acc-tr-${acc.id}`}
+            />
           </button>
-        )}
+        </div>
+
+        {/* Dark Overlay Saves Counter & Interactive Pin Button */}
+        <button
+          type="button"
+          onClick={onSave}
+          className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 z-10 whitespace-nowrap"
+          title={isInWishlist ? 'Saved in pins' : 'Click to pin stay'}
+        >
+          <PushPinIcon isPinned={isInWishlist} size={14} idPrefix={`acc-bl-${acc.id}`} />
+          <span className={isInWishlist ? 'text-red-400 font-extrabold whitespace-nowrap' : 'text-gray-200 whitespace-nowrap'}>
+            Save: {wishlistCount}
+          </span>
+        </button>
       </div>
 
-      {/* ── ROOM INFORMATION (NO PRICE AS REQUESTED) ── */}
+      {/* ── DYNAMIC ROOM INFORMATION (UPDATES PER ROOM SLIDE) ── */}
       <div className="p-4 flex-1 flex flex-col justify-between">
         <div>
+          {/* Room Type & Capacity */}
           <div className="flex items-center justify-between gap-1">
-            <p className="text-[10px] uppercase font-bold text-gray-400">{acc.type || 'Resort'}</p>
-            {acc.capacity ? (
+            <p className="text-[10px] uppercase font-bold text-gray-400">
+              {currentRoom.type || acc.type || 'Room'}
+            </p>
+            {currentRoom.capacity ? (
               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                <Users className="h-3 w-3" /> Max {acc.capacity}
+                <Users className="h-3 w-3" /> Max {currentRoom.capacity}
               </span>
             ) : null}
           </div>
 
-          <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-0.5">{acc.name}</h3>
+          {/* Room Name */}
+          <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-0.5">
+            {currentRoom.name}
+          </h3>
 
+          {/* Room Description */}
           <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 min-h-[32px] text-justify" style={{ textAlign: 'justify' }}>
-            {acc.description || `${acc.name} at ${acc.resort_name || 'Mansalay'}. Experience a comfortable and scenic stay.`}
+            {currentRoom.description || currentRoom.full_description || `${currentRoom.name} at ${acc.resort_name || acc.name}. Experience a comfortable and scenic stay.`}
           </p>
 
-          {acc.pricePerNight && acc.pricePerNight > 0 ? (
+          {/* Room Price */}
+          {currentRoom.price_per_night && Number(currentRoom.price_per_night) > 0 ? (
             <div className="mt-2 text-pink-600 font-extrabold text-sm flex items-baseline gap-0.5">
-              <span>₱{Number(acc.pricePerNight).toLocaleString()}</span>
+              <span>₱{Number(currentRoom.price_per_night).toLocaleString()}</span>
               <span className="text-[10px] font-normal text-gray-400"> / night</span>
             </div>
           ) : null}
+
+          {/* Room Amenities */}
+          {(() => {
+            const rawAmenities = (currentRoom.amenities && currentRoom.amenities.length > 0)
+              ? currentRoom.amenities
+              : (currentRoom.features && currentRoom.features.length > 0)
+              ? currentRoom.features
+              : (acc.resort_amenities && acc.resort_amenities.length > 0)
+              ? acc.resort_amenities
+              : [];
+            if (!rawAmenities || rawAmenities.length === 0) return null;
+            return (
+              <div className="flex flex-wrap items-center gap-1 mt-2.5">
+                {rawAmenities.slice(0, 3).map((amenity: string, idx: number) => (
+                  <span
+                    key={idx}
+                    className="px-2 py-0.5 bg-pink-50/70 border border-pink-100 text-pink-700 rounded-md text-[10px] font-semibold flex items-center gap-1"
+                  >
+                    <span>✓</span>
+                    <span className="truncate max-w-[120px]">{amenity}</span>
+                  </span>
+                ))}
+                {rawAmenities.length > 3 && (
+                  <span className="text-gray-400 text-[10px] font-medium pl-0.5">
+                    +{rawAmenities.length - 3}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Clickable Resort Host Link */}
         <div
           onClick={(e) => onResortClick(acc.resort_name || acc.name, acc.user_id, e)}
           className="flex items-center gap-1.5 text-[11px] text-emerald-700 hover:text-emerald-800 font-semibold mt-4 pt-3 border-t border-gray-100 group/resort cursor-pointer transition-colors"
-          title={`Click to view resort profile of ${acc.resort_name || 'this resort'}`}
+          title={`Click to view resort profile of ${acc.resort_name || acc.name || 'this resort'}`}
         >
           <Hotel className="h-3.5 w-3.5 text-emerald-600 group-hover/resort:scale-110 transition-transform flex-shrink-0" />
-          <span className="truncate group-hover/resort:underline">{acc.resort_name || 'Mansalay Beach Resort'}</span>
+          <span className="truncate group-hover/resort:underline">{acc.resort_name || acc.name || 'Mansalay Beach Resort'}</span>
           <ExternalLink className="h-2.5 w-2.5 opacity-60 ml-auto flex-shrink-0 group-hover/resort:opacity-100 text-emerald-600" />
         </div>
       </div>
@@ -596,7 +769,10 @@ export function Accommodations() {
   const [isVirtualTourOpen, setIsVirtualTourOpen] = useState(false);
   const [shareData, setShareData] = useState<{ title: string; description?: string; image?: string; category?: string } | null>(null);
 
-  // Full-screen Image Gallery Lightbox Modal state
+  const [modalRoomIdx, setModalRoomIdx] = useState(0);
+  const modalTouchStartX = useRef<number | null>(null);
+  const modalTouchEndX = useRef<number | null>(null);
+
   const [lightboxData, setLightboxData] = useState<{
     isOpen: boolean;
     images: string[];
@@ -697,7 +873,7 @@ export function Accommodations() {
     };
   }, []);
 
-  const handleAccCardClick = (acc: AccommodationItem) => {
+  const handleAccCardClick = (acc: AccommodationItem, activeRoom?: RoomItem) => {
     if (!currentUser && !getAuthToken()) {
       toast.info('Please log in or register to view stay details');
       navigate('/tourist/login');
@@ -705,6 +881,14 @@ export function Accommodations() {
     }
     recordView(acc.id, 'accommodation');
     if (acc.user_id) recordView(acc.user_id, 'resort');
+
+    const rooms = Array.isArray(acc.rooms) && acc.rooms.length > 0 ? acc.rooms : [];
+    let initialIdx = 0;
+    if (activeRoom && rooms.length > 0) {
+      const foundIdx = rooms.findIndex(r => r.id === activeRoom.id || r.name.toLowerCase() === activeRoom.name.toLowerCase());
+      if (foundIdx >= 0) initialIdx = foundIdx;
+    }
+    setModalRoomIdx(initialIdx);
     setSelectedAcc(acc);
   };
 
@@ -750,21 +934,33 @@ export function Accommodations() {
   };
 
   const typeCategories = useMemo(() => {
-    const types = Array.from(new Set([...predefinedStaysCategories, ...items.map(acc => acc.type).filter(Boolean)]));
-    return types.filter(t => t && t.toLowerCase() !== 'static' && t.toLowerCase() !== 'resort_profile' && t.trim() !== '');
+    const roomTypes = items.flatMap(acc => acc.rooms.map(r => r.type).filter(Boolean) as string[]);
+    const resortTypes = items.map(acc => acc.type).filter(Boolean) as string[];
+    const allTypes = Array.from(new Set([...predefinedStaysCategories, ...resortTypes, ...roomTypes]));
+    return allTypes.filter(t => t && t.toLowerCase() !== 'static' && t.toLowerCase() !== 'resort_profile' && t.trim() !== '');
   }, [items]);
 
   const filteredAccommodations = items.filter(acc => {
-    const matchesSearch = !searchQuery ||
-      acc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (acc.type && acc.type.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (acc.location && acc.location.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (acc.description && acc.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (acc.resort_name && acc.resort_name.toLowerCase().includes(searchQuery.toLowerCase()));
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch = !q ||
+      acc.name.toLowerCase().includes(q) ||
+      (acc.resort_name && acc.resort_name.toLowerCase().includes(q)) ||
+      (acc.type && acc.type.toLowerCase().includes(q)) ||
+      (acc.location && acc.location.toLowerCase().includes(q)) ||
+      (acc.description && acc.description.toLowerCase().includes(q)) ||
+      (Array.isArray(acc.rooms) && acc.rooms.some(r =>
+        (r.name && r.name.toLowerCase().includes(q)) ||
+        (r.description && r.description.toLowerCase().includes(q)) ||
+        (r.type && r.type.toLowerCase().includes(q))
+      ));
 
-    const matchesType = typeFilter === 'All' || typeFilter === 'All Stays' || acc.type === typeFilter;
+    const matchesType = typeFilter === 'All' || typeFilter === 'All Stays' ||
+      (acc.type && acc.type.toLowerCase() === typeFilter.toLowerCase()) ||
+      (Array.isArray(acc.rooms) && acc.rooms.some(r => r.type && r.type.toLowerCase() === typeFilter.toLowerCase()));
+
     const matchesResort = !selectedResortFilter ||
-      (acc.resort_name && acc.resort_name.toLowerCase() === selectedResortFilter.toLowerCase());
+      (acc.resort_name && acc.resort_name.toLowerCase() === selectedResortFilter.toLowerCase()) ||
+      (acc.name && acc.name.toLowerCase() === selectedResortFilter.toLowerCase());
 
     return matchesSearch && matchesType && matchesResort;
   });
@@ -839,7 +1035,7 @@ export function Accommodations() {
 
         {/* ── COUNT SUBHEADER ── */}
         <p className="text-xs font-semibold text-gray-400 mb-4">
-          Showing <span className="text-gray-900 font-bold">{filteredAccommodations.length}</span> stays & rooms
+          Showing <span className="text-gray-900 font-bold">{filteredAccommodations.length}</span> {filteredAccommodations.length === 1 ? 'stay & resort' : 'stays & resorts'}
         </p>
 
         {/* ── MAIN LISTINGS GRID (4 COLUMNS) ── */}
@@ -868,7 +1064,8 @@ export function Accommodations() {
               <AccommodationCardItem
                 key={acc.id}
                 acc={acc}
-                onCardClick={() => handleAccCardClick(acc)}
+                typeFilter={typeFilter}
+                onCardClick={(activeRoom) => handleAccCardClick(acc, activeRoom)}
                 onOpenLightbox={(images, index, title) => {
                   setLightboxData({
                     isOpen: true,
@@ -877,17 +1074,18 @@ export function Accommodations() {
                     title,
                   });
                 }}
-                onShare={(e) => {
+                onShare={(e, activeRoom) => {
                   e.stopPropagation();
+                  const targetRoom = activeRoom || acc.rooms?.[0];
                   setShareData({
-                    title: acc.name,
-                    description: acc.description,
-                    image: acc.image,
-                    category: acc.type || 'Resort',
+                    title: `${acc.resort_name || acc.name}${targetRoom?.name ? ` — ${targetRoom.name}` : ''}`,
+                    description: targetRoom?.description || acc.description,
+                    image: targetRoom?.image || acc.image,
+                    category: targetRoom?.type || acc.type || 'Resort',
                   });
                 }}
                 onSave={(e) => toggleSaveAcc(acc, e)}
-                isInWishlist={isInWishlist(acc.id, 'accommodation')}
+                isInWishlist={isInWishlist(acc.id, 'accommodation') || (Array.isArray(acc.rooms) && acc.rooms.some(r => isInWishlist(r.id, 'accommodation')))}
                 wishlistCount={getWishlistCount(acc.id, 'accommodation', acc.likes)}
                 userType={userType}
                 onResortClick={handleResortClick}
@@ -898,307 +1096,378 @@ export function Accommodations() {
       </div>
 
       {/* ── ACCOMMODATION / ROOM DETAIL MODAL ── */}
-      {selectedAcc && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
-          onClick={() => setSelectedAcc(null)}
-        >
+      {selectedAcc && (() => {
+        const modalRooms = (Array.isArray(selectedAcc.rooms) && selectedAcc.rooms.length > 0)
+          ? selectedAcc.rooms
+          : [{
+              id: selectedAcc.id,
+              name: selectedAcc.name,
+              type: selectedAcc.type || 'Room',
+              description: selectedAcc.description,
+              full_description: selectedAcc.full_description,
+              price_per_night: selectedAcc.pricePerNight,
+              price: selectedAcc.pricePerNight,
+              capacity: selectedAcc.capacity,
+              image: selectedAcc.image,
+              images: selectedAcc.images || (selectedAcc.image ? [selectedAcc.image] : []),
+              amenities: selectedAcc.resort_amenities || [],
+            }];
+        const currentModalRoomIdx = modalRoomIdx < modalRooms.length ? modalRoomIdx : 0;
+        const currentRoom = modalRooms[currentModalRoomIdx] || modalRooms[0];
+        const hasMultipleModalRooms = modalRooms.length > 1;
+
+        const currentRoomImg = formatImageUrl(
+          currentRoom.image || (currentRoom.images && currentRoom.images[0]) || selectedAcc.image
+        ) || '/assets/mansalay_hero_bg.jpg';
+
+        const handleModalPrevRoom = (e: React.MouseEvent) => {
+          e.stopPropagation();
+          if (!hasMultipleModalRooms) return;
+          setModalRoomIdx((prev) => (prev === 0 ? modalRooms.length - 1 : prev - 1));
+        };
+
+        const handleModalNextRoom = (e: React.MouseEvent) => {
+          e.stopPropagation();
+          if (!hasMultipleModalRooms) return;
+          setModalRoomIdx((prev) => (prev === modalRooms.length - 1 ? 0 : prev + 1));
+        };
+
+        const handleModalTouchStart = (e: React.TouchEvent) => {
+          modalTouchStartX.current = e.targetTouches[0].clientX;
+        };
+
+        const handleModalTouchMove = (e: React.TouchEvent) => {
+          modalTouchEndX.current = e.targetTouches[0].clientX;
+        };
+
+        const handleModalTouchEnd = () => {
+          if (modalTouchStartX.current === null || modalTouchEndX.current === null) return;
+          const distance = modalTouchStartX.current - modalTouchEndX.current;
+          if (distance > 35 && hasMultipleModalRooms) {
+            setModalRoomIdx((prev) => (prev === modalRooms.length - 1 ? 0 : prev + 1));
+          } else if (distance < -35 && hasMultipleModalRooms) {
+            setModalRoomIdx((prev) => (prev === 0 ? modalRooms.length - 1 : prev - 1));
+          }
+          modalTouchStartX.current = null;
+          modalTouchEndX.current = null;
+        };
+
+        const roomAmenities = (currentRoom.amenities && currentRoom.amenities.length > 0)
+          ? currentRoom.amenities
+          : (currentRoom.features && currentRoom.features.length > 0)
+          ? currentRoom.features
+          : (selectedAcc.resort_amenities && selectedAcc.resort_amenities.length > 0)
+          ? selectedAcc.resort_amenities
+          : ['Beachfront', 'Scenic View', 'Air Conditioning', 'Free Wi-Fi'];
+
+        return (
           <div
-            className="bg-white rounded-3xl overflow-hidden max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200"
-            onClick={e => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={() => setSelectedAcc(null)}
           >
-            {/* Image Slider Header */}
-            <div className="relative h-64 bg-gray-900 flex-shrink-0">
-              <AutoSwipeCarousel
-                images={selectedAcc.images && selectedAcc.images.length > 0 ? selectedAcc.images : [selectedAcc.image]}
-                alt={selectedAcc.name}
-                className="w-full h-full"
-                intervalMs={3000}
-                showDots={true}
-                showArrows={true}
-              />
-
-              <button
-                onClick={() => setSelectedAcc(null)}
-                className="absolute top-4 right-4 w-8 h-8 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all z-20"
+            <div
+              className="bg-white rounded-3xl overflow-hidden max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Image Header with Room Switching Arrows */}
+              <div
+                className="relative h-64 bg-gray-950 flex-shrink-0 select-none overflow-hidden"
+                onTouchStart={handleModalTouchStart}
+                onTouchMove={handleModalTouchMove}
+                onTouchEnd={handleModalTouchEnd}
               >
-                <X className="h-4 w-4" />
-              </button>
-
-              {/* Saves Pill on Bottom Left */}
-              <button
-                onClick={() => toggleSaveAcc(selectedAcc)}
-                className="absolute bottom-3 left-4 flex items-center gap-1.5 px-3 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-xs font-bold transition-all cursor-pointer z-10"
-                title={isInWishlist(selectedAcc.id, 'accommodation') ? 'Saved in pins' : 'Click to pin'}
-              >
-                <PushPinIcon
-                  isPinned={isInWishlist(selectedAcc.id, 'accommodation')}
-                  size={15}
-                  idPrefix={`modal-acc-bl-${selectedAcc.id}`}
+                <img
+                  src={currentRoomImg}
+                  alt={`${currentRoom.name} - ${selectedAcc.resort_name || selectedAcc.name}`}
+                  className="w-full h-full object-cover transition-all duration-300 cursor-zoom-in"
+                  onClick={() => {
+                    const roomPhotos = modalRooms.map(r => formatImageUrl(r.image || r.images?.[0] || selectedAcc.image)).filter(Boolean);
+                    setLightboxData({
+                      isOpen: true,
+                      images: roomPhotos.length > 0 ? roomPhotos : [selectedAcc.image],
+                      initialIndex: currentModalRoomIdx,
+                      title: `${selectedAcc.resort_name || selectedAcc.name} — ${currentRoom.name}`,
+                    });
+                  }}
+                  onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
                 />
-                <span className={isInWishlist(selectedAcc.id, 'accommodation') ? 'text-pink-400 font-extrabold' : 'text-white'}>
-                  {getWishlistCount(selectedAcc.id, 'accommodation', selectedAcc.likes)} saves
-                </span>
-              </button>
-            </div>
 
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 bg-pink-100 text-pink-600 text-[11px] font-bold rounded-full uppercase">
-                      {selectedAcc.type === 'resort_profile' ? 'Beach Resort' : (selectedAcc.type || 'Room')}
-                    </span>
-                    {selectedAcc.capacity && (
-                      <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-full flex items-center gap-1">
-                        <Users className="h-3 w-3" /> Max {selectedAcc.capacity} Guests
+                {/* Close Button Top-Right */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedAcc(null)}
+                  className="absolute top-4 right-4 w-8 h-8 bg-black/60 hover:bg-black/80 active:scale-95 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all z-30 cursor-pointer shadow-md border border-white/20"
+                  title="Close modal"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+
+                {/* Top-Left Room Counter Badge */}
+                {hasMultipleModalRooms ? (
+                  <div className="absolute top-4 left-4 px-3 py-1 bg-black/65 backdrop-blur-md text-white text-xs font-extrabold rounded-full shadow-md border border-white/20 z-20 flex items-center gap-1.5">
+                    <Bed className="h-3.5 w-3.5 text-pink-400" />
+                    <span>Room {currentModalRoomIdx + 1} of {modalRooms.length}</span>
+                  </div>
+                ) : (
+                  <span className="absolute top-4 left-4 px-3 py-1 bg-pink-500 text-white text-xs font-bold rounded-full shadow-md z-20">
+                    {selectedAcc.resort_name || selectedAcc.name}
+                  </span>
+                )}
+
+                {/* Left & Right Room Switching Arrow Buttons */}
+                {hasMultipleModalRooms && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleModalPrevRoom}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/65 hover:bg-pink-600 active:scale-90 text-white flex items-center justify-center backdrop-blur-md transition-all z-20 cursor-pointer shadow-xl border border-white/30 hover:scale-105"
+                      aria-label="Previous room"
+                      title="Previous room"
+                    >
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleModalNextRoom}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/65 hover:bg-pink-600 active:scale-90 text-white flex items-center justify-center backdrop-blur-md transition-all z-20 cursor-pointer shadow-xl border border-white/30 hover:scale-105"
+                      aria-label="Next room"
+                      title="Next room"
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+
+                    {/* Room Dots Indicator */}
+                    <div className="absolute bottom-3 right-4 flex items-center gap-1.5 z-20">
+                      {modalRooms.map((_, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setModalRoomIdx(i);
+                          }}
+                          className={`h-2 rounded-full transition-all cursor-pointer ${
+                            i === currentModalRoomIdx ? 'w-5 bg-pink-500 shadow-md' : 'w-2 bg-white/70 hover:bg-white'
+                          }`}
+                          aria-label={`Go to room ${i + 1}`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+
+              </div>
+
+              {/* Modal Body with Dynamic Room Information */}
+              <div className="p-6 overflow-y-auto space-y-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-1 bg-pink-100 text-pink-600 text-[11px] font-bold rounded-full uppercase">
+                        {currentRoom.type || selectedAcc.type || 'Room'}
                       </span>
+                      {currentRoom.capacity ? (
+                        <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-full flex items-center gap-1">
+                          <Users className="h-3 w-3" /> Max {currentRoom.capacity} Guests
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {/* Room Name Heading */}
+                    <h2 className="text-xl font-extrabold text-gray-900 mt-2">{currentRoom.name}</h2>
+
+                    {/* Room Price */}
+                    {currentRoom.price_per_night && Number(currentRoom.price_per_night) > 0 ? (
+                      <div className="text-pink-600 font-extrabold text-base mt-1 flex items-baseline gap-1">
+                        <span>₱{Number(currentRoom.price_per_night).toLocaleString()}</span>
+                        <span className="text-xs font-normal text-gray-400">/ night</span>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShareData({
+                          title: `${selectedAcc.resort_name || selectedAcc.name} — ${currentRoom.name}`,
+                          description: currentRoom.description || selectedAcc.description,
+                          image: currentRoom.image || selectedAcc.image,
+                          category: currentRoom.type || selectedAcc.type || 'Resort',
+                        });
+                      }}
+                      className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-pink-50 hover:text-pink-600 transition-colors cursor-pointer"
+                      title="Share this stay"
+                    >
+                      <Share2 className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleSaveAcc(selectedAcc)}
+                      className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ${
+                        isInWishlist(selectedAcc.id, 'accommodation')
+                          ? 'bg-rose-50 border border-rose-300 shadow-sm'
+                          : 'border-gray-200 bg-white hover:bg-gray-50'
+                      }`}
+                      title={isInWishlist(selectedAcc.id, 'accommodation') ? 'Remove from saved places' : 'Pin to saved places'}
+                    >
+                      <PushPinIcon
+                        isPinned={isInWishlist(selectedAcc.id, 'accommodation')}
+                        size={18}
+                        idPrefix={`modal-acc-tr-${selectedAcc.id}`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 🏨 Resort Host Card with "View Resort Profile" Button */}
+                <div className="flex items-center justify-between p-3.5 bg-emerald-50/80 rounded-2xl border border-emerald-200">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-xs flex-shrink-0">
+                      <Hotel className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">Resort Host</p>
+                      <h4 className="text-sm font-extrabold text-gray-900 truncate">{selectedAcc.resort_name || selectedAcc.name}</h4>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const hostId = selectedAcc.user_id;
+                      if (!hostId) {
+                        toast.info(`Resort profile for "${selectedAcc.resort_name || selectedAcc.name}" is not yet available or registered.`);
+                        return;
+                      }
+                      if (!currentUser && !getAuthToken()) {
+                        toast.info('Please log in or register to view resort profile');
+                        navigate('/login');
+                        return;
+                      }
+                      setSelectedAcc(null);
+                      navigate(`/business/resort/${hostId}`);
+                    }}
+                    className="px-3.5 py-1.5 bg-white hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-full text-xs font-bold transition-all flex items-center gap-1 shadow-2xs flex-shrink-0 cursor-pointer"
+                  >
+                    <span>View Resort</span>
+                    <ExternalLink className="h-3 w-3" />
+                  </button>
+                </div>
+
+                {/* Location & Directions Button */}
+                <div className="flex items-center justify-between bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                  <div>
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-gray-800">
+                      <MapPin className="h-4 w-4 text-pink-500" />
+                      <span>{selectedAcc.location || 'Mansalay, Oriental Mindoro'}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-gray-500 font-medium mt-1">
+                      <Clock className="h-3.5 w-3.5 text-gray-400" />
+                      <span>8:00 AM – 8:00 PM</span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const query = encodeURIComponent(`${selectedAcc.resort_name || selectedAcc.name} ${selectedAcc.location || 'Mansalay Oriental Mindoro'}`);
+                      window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+                    }}
+                    className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <Navigation className="h-3 w-3" />
+                    <span>Directions</span>
+                  </button>
+                </div>
+
+                {/* Room Description Box */}
+                <div className="bg-gray-50/80 border border-gray-100 p-4 rounded-2xl space-y-2">
+                  <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider flex items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5 text-pink-500" />
+                    <span>Description</span>
+                  </h4>
+                  <div className="text-xs text-gray-600 leading-relaxed font-normal text-justify space-y-2.5" style={{ textAlign: 'justify' }}>
+                    {(currentRoom.full_description || currentRoom.description || selectedAcc.full_description || selectedAcc.description) ? (
+                      (currentRoom.full_description || currentRoom.description || selectedAcc.full_description || selectedAcc.description)!
+                        .replace(/<br\s*[\/]?>/gi, '\n')
+                        .split(/\r?\n+/)
+                        .map((p: string) => p.trim())
+                        .filter((p: string) => p.length > 0)
+                        .map((para: string, idx: number) => (
+                          <p key={idx} className="text-justify leading-relaxed" style={{ textAlign: 'justify' }}>
+                            {para}
+                          </p>
+                        ))
+                    ) : (
+                      <p className="text-justify leading-relaxed" style={{ textAlign: 'justify' }}>
+                        Enjoy a relaxing and comfortable stay in {currentRoom.name} at {selectedAcc.resort_name || selectedAcc.name}. Clean, peaceful, and close to nature in Oriental Mindoro.
+                      </p>
                     )}
                   </div>
-                  <h2 className="text-xl font-extrabold text-gray-900 mt-2">{selectedAcc.name}</h2>
-                  {selectedAcc.pricePerNight && selectedAcc.pricePerNight > 0 ? (
-                    <div className="text-pink-600 font-extrabold text-base mt-1 flex items-baseline gap-1">
-                      <span>₱{Number(selectedAcc.pricePerNight).toLocaleString()}</span>
-                      <span className="text-xs font-normal text-gray-400">/ night</span>
-                    </div>
-                  ) : null}
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      setShareData({
-                        title: selectedAcc.name,
-                        description: selectedAcc.description,
-                        image: selectedAcc.image,
-                        category: selectedAcc.type || 'Resort',
-                      });
-                    }}
-                    className="w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center text-gray-600 hover:bg-pink-50 hover:text-pink-600 transition-colors"
-                    title="Share this stay"
-                  >
-                    <Share2 className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => toggleSaveAcc(selectedAcc)}
-                    className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ${
-                      isInWishlist(selectedAcc.id, 'accommodation')
-                        ? 'bg-rose-50 border-rose-300 shadow-sm'
-                        : 'border-gray-200 hover:bg-pink-50'
-                    }`}
-                    title={isInWishlist(selectedAcc.id, 'accommodation') ? 'Remove from saved places' : 'Pin to saved places'}
-                  >
-                    <PushPinIcon
-                      isPinned={isInWishlist(selectedAcc.id, 'accommodation')}
-                      size={18}
-                      idPrefix={`modal-acc-tr-${selectedAcc.id}`}
-                    />
-                  </button>
-                </div>
-              </div>
-
-              {/* 🏨 Resort Host Card with "View Resort Profile" Button */}
-              <div className="flex items-center justify-between p-3.5 bg-emerald-50/80 rounded-2xl border border-emerald-200">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-xs flex-shrink-0">
-                    <Hotel className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">Resort Host</p>
-                    <h4 className="text-sm font-extrabold text-gray-900 truncate">{selectedAcc.resort_name || selectedAcc.name}</h4>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    const hostId = selectedAcc.user_id;
-                    if (!hostId) {
-                      toast.info(`Resort profile for "${selectedAcc.resort_name || selectedAcc.name}" is not yet available or registered.`);
-                      return;
-                    }
-                    if (!currentUser && !getAuthToken()) {
-                      toast.info('Please log in or register to view resort profile');
-                      navigate('/login');
-                      return;
-                    }
-                    setSelectedAcc(null);
-                    navigate(`/business/resort/${hostId}`);
-                  }}
-                  className="px-3.5 py-1.5 bg-white hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-full text-xs font-bold transition-all flex items-center gap-1 shadow-2xs flex-shrink-0"
-                >
-                  <span>View Resort</span>
-                  <ExternalLink className="h-3 w-3" />
-                </button>
-              </div>
-
-              {/* 🏨 AVAILABLE ROOMS & COTTAGES (Uploaded by Resort Owner) */}
-              {selectedAcc.rooms && selectedAcc.rooms.length > 0 && (
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      Available Rooms & Cottages ({selectedAcc.rooms.length})
-                    </h4>
-                  </div>
-
-                  <div className="space-y-2.5">
-                    {selectedAcc.rooms.map((room: any) => (
-                      <div
-                        key={room.id}
-                        className="bg-gray-50/90 hover:bg-pink-50/40 p-3 rounded-2xl border border-gray-100 hover:border-pink-200 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                      >
-                        <div className="flex items-center gap-3">
-                          {room.image ? (
-                            <img
-                              src={room.image}
-                              alt={room.name}
-                              className="w-16 h-16 rounded-xl object-cover border border-gray-200 flex-shrink-0"
-                            />
-                          ) : (
-                            <div className="w-16 h-16 rounded-xl bg-emerald-100/60 text-emerald-700 flex items-center justify-center text-xl flex-shrink-0">
-                              🏨
-                            </div>
-                          )}
-                          <div>
-                            <h5 className="text-sm font-extrabold text-gray-900 leading-tight">{room.name}</h5>
-                            <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5 flex-wrap">
-                              {room.type && (
-                                <span className="px-2 py-0.5 bg-white rounded-md text-[10px] font-bold text-gray-600 border border-gray-200">
-                                  {room.type}
-                                </span>
-                              )}
-                              {room.capacity && (
-                                <span className="flex items-center gap-1 font-medium text-gray-600">
-                                  <Users className="h-3 w-3 text-gray-400" /> Max {room.capacity} Guests
-                                </span>
-                              )}
-                            </div>
-                            {room.description && (
-                              <p className="text-[11px] text-gray-500 line-clamp-1 mt-1 max-w-xs">{room.description}</p>
-                            )}
-                          </div>
-                        </div>
-
-                        {room.price_per_night && Number(room.price_per_night) > 0 ? (
-                          <div className="text-pink-600 font-extrabold text-xs whitespace-nowrap self-start sm:self-center">
-                            ₱{Number(room.price_per_night).toLocaleString()}
-                            <span className="text-[10px] font-normal text-gray-400"> / night</span>
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Location & Directions Button */}
-              <div className="flex items-center justify-between bg-gray-50 p-3 rounded-2xl border border-gray-100">
-                <div>
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-gray-800">
-                    <MapPin className="h-4 w-4 text-pink-500" />
-                    <span>{selectedAcc.location || 'Mansalay, Oriental Mindoro'}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-gray-500 font-medium mt-1">
-                    <Clock className="h-3.5 w-3.5 text-gray-400" />
-                    <span>8:00 AM – 8:00 PM</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => {
-                    const query = encodeURIComponent(`${selectedAcc.name} ${selectedAcc.location || 'Mansalay Oriental Mindoro'}`);
-                    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
-                  }}
-                  className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1"
-                >
-                  <Navigation className="h-3 w-3" />
-                  <span>Directions</span>
-                </button>
-              </div>
-
-              {/* Description */}
-              <div className="text-xs text-gray-600 leading-relaxed font-normal text-justify space-y-3" style={{ textAlign: 'justify' }}>
-                {(selectedAcc.full_description || selectedAcc.description) ? (
-                  (selectedAcc.full_description || selectedAcc.description)!
-                    .replace(/<br\s*[\/]?>/gi, '\n')
-                    .split(/\r?\n+/)
-                    .map((p) => p.trim())
-                    .filter((p) => p.length > 0)
-                    .map((para, idx) => (
-                      <p key={idx} className="text-justify leading-relaxed" style={{ textAlign: 'justify' }}>
-                        {para}
-                      </p>
-                    ))
-                ) : (
-                  <p className="text-justify leading-relaxed" style={{ textAlign: 'justify' }}>
-                    Enjoy a relaxing and comfortable stay in {selectedAcc.name} at {selectedAcc.resort_name || 'Mansalay'}. Clean, peaceful, and close to nature in Oriental Mindoro.
-                  </p>
-                )}
-              </div>
-
-              {/* Tags */}
-              <div className="flex flex-wrap gap-2">
-                {(selectedAcc.resort_amenities && selectedAcc.resort_amenities.length > 0
-                  ? selectedAcc.resort_amenities
-                  : ['Beachfront', 'Scenic View', 'Peaceful', 'Family-friendly']
-                ).map((amenity, i) => (
-                  <span key={i} className="px-3 py-1 bg-pink-50 text-pink-600 rounded-full text-[11px] font-semibold border border-pink-100">
-                    ♡ {amenity}
-                  </span>
-                ))}
-              </div>
-
-              {/* Contact & Connect Box */}
-              <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl space-y-2.5">
-                <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Contact & Connect</h4>
-                <div className="flex flex-wrap items-center gap-2">
-                  {(selectedAcc.contact_number || selectedAcc.phone) ? (
-                    <a
-                      href={`tel:${selectedAcc.contact_number || selectedAcc.phone}`}
-                      className="px-3.5 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5"
-                    >
-                      <Phone className="h-3.5 w-3.5" /> Call ({selectedAcc.contact_number || selectedAcc.phone})
-                    </a>
-                  ) : (
-                    <span className="px-3.5 py-2 bg-gray-100 text-gray-500 rounded-full text-xs font-medium flex items-center gap-1.5">
-                      <Phone className="h-3.5 w-3.5 text-gray-400" /> Inquire via Resort
+                {/* Room Amenities / Tags */}
+                <div className="flex flex-wrap gap-2">
+                  {roomAmenities.map((amenity: string, i: number) => (
+                    <span key={i} className="px-3 py-1 bg-pink-50 text-pink-600 rounded-full text-[11px] font-semibold border border-pink-100">
+                      ♡ {amenity}
                     </span>
-                  )}
-                  {selectedAcc.facebook ? (
-                    <a
-                      href={selectedAcc.facebook.startsWith('http') ? selectedAcc.facebook : `https://${selectedAcc.facebook}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-3.5 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5"
-                    >
-                      <Facebook className="h-3.5 w-3.5" /> Facebook Page
-                    </a>
-                  ) : null}
-                  {selectedAcc.instagram ? (
-                    <a
-                      href={selectedAcc.instagram.startsWith('http') ? selectedAcc.instagram : `https://${selectedAcc.instagram}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-3.5 py-2 bg-pink-50 text-pink-700 hover:bg-pink-100 border border-pink-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5"
-                    >
-                      <Instagram className="h-3.5 w-3.5" /> Instagram
-                    </a>
-                  ) : null}
+                  ))}
                 </div>
 
-                {/* 360° Walkthrough & Virtual Tour Button */}
-                <button
-                  onClick={() => setIsVirtualTourOpen(true)}
-                  className="w-full mt-2 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-md shadow-emerald-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
-                >
-                  <Footprints className="h-4 w-4 text-emerald-100" />
-                  <span>360° Walkthrough & Virtual Tour</span>
-                </button>
+                {/* Contact & Connect Box */}
+                <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl space-y-2.5">
+                  <h4 className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Contact & Connect</h4>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(selectedAcc.contact_number || selectedAcc.phone) ? (
+                      <a
+                        href={`tel:${selectedAcc.contact_number || selectedAcc.phone}`}
+                        className="px-3.5 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5"
+                      >
+                        <Phone className="h-3.5 w-3.5" /> Call ({selectedAcc.contact_number || selectedAcc.phone})
+                      </a>
+                    ) : (
+                      <span className="px-3.5 py-2 bg-gray-100 text-gray-500 rounded-full text-xs font-medium flex items-center gap-1.5">
+                        <Phone className="h-3.5 w-3.5 text-gray-400" /> Inquire via Resort
+                      </span>
+                    )}
+                    {selectedAcc.facebook ? (
+                      <a
+                        href={selectedAcc.facebook.startsWith('http') ? selectedAcc.facebook : `https://${selectedAcc.facebook}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3.5 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5"
+                      >
+                        <Facebook className="h-3.5 w-3.5" /> Facebook Page
+                      </a>
+                    ) : null}
+                    {selectedAcc.instagram ? (
+                      <a
+                        href={selectedAcc.instagram.startsWith('http') ? selectedAcc.instagram : `https://${selectedAcc.instagram}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3.5 py-2 bg-pink-50 text-pink-700 hover:bg-pink-100 border border-pink-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5"
+                      >
+                        <Instagram className="h-3.5 w-3.5" /> Instagram
+                      </a>
+                    ) : null}
+                  </div>
+
+                  {/* 360° Walkthrough & Virtual Tour Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsVirtualTourOpen(true)}
+                    className="w-full mt-2 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-md shadow-emerald-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
+                  >
+                    <Footprints className="h-4 w-4 text-emerald-100" />
+                    <span>360° Walkthrough & Virtual Tour</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── GUEST LOGIN REQUIRED MODAL ── */}
       {showLoginModal && (

@@ -231,25 +231,6 @@ class EnterpriseProfileController extends Controller
                 ];
             });
 
-        $promoCodes = \App\Models\PromoCode::where('user_id', $userId)
-            ->where('is_active', true)
-            ->where(function ($q) {
-                $q->whereNull('expires_at')
-                  ->orWhere('expires_at', '>', now());
-            })
-            ->get()
-            ->map(function ($c) {
-                return [
-                    'id'          => $c->id,
-                    'code'        => $c->code,
-                    'description' => $c->description,
-                    'type'        => $c->type,
-                    'value'       => (float) $c->value,
-                    'min_amount'  => (float) $c->min_amount,
-                    'expires_at'  => $c->expires_at,
-                ];
-            });
-
         return response()->json([
             'owner' => [
                 'id'               => $owner->id,
@@ -276,7 +257,6 @@ class EnterpriseProfileController extends Controller
                 'created_at'       => $owner->created_at,
             ],
             'products'      => $products,
-            'promo_codes'   => $promoCodes,
             'is_registered' => true,
         ]);
     }

@@ -207,19 +207,8 @@ export function Products() {
 
   const toggleSaveProduct = async (product: ProductItem, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (
-      userType === 'admin' ||
-      userType === 'resort' ||
-      userType === 'enterprise' ||
-      currentUser?.role === 'admin' ||
-      currentUser?.role === 'resort' ||
-      currentUser?.role === 'enterprise'
-    ) {
-      toast.info('Wishlist saving is available for tourist accounts only.');
-      return;
-    }
     if (!currentUser && !getAuthToken()) {
-      toast.info('Please log in or register as a tourist to save to wishlist');
+      toast.info('Please log in or register to save to wishlist');
       navigate('/tourist/login');
       return;
     }
@@ -256,11 +245,15 @@ export function Products() {
     const matchesStore = !selectedStoreFilter || 
       (p.sellerName && p.sellerName.toLowerCase().includes(selectedStoreFilter.toLowerCase()));
 
-    const matchesSearch = !searchQuery || 
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.category && p.category.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (p.sellerName && p.sellerName.toLowerCase().includes(searchQuery.toLowerCase()));
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch = !q || 
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.description && p.description.toLowerCase().includes(q)) ||
+      (p.category && p.category.toLowerCase().includes(q)) ||
+      (p.sellerName && p.sellerName.toLowerCase().includes(q)) ||
+      (p.shopName && p.shopName.toLowerCase().includes(q)) ||
+      (p.productOwner && p.productOwner.toLowerCase().includes(q)) ||
+      (p.badge && p.badge.toLowerCase().includes(q));
 
     const matchesCategory = categoryFilter === 'All' || categoryFilter === 'All Categories' || categoryFilter === 'All Products' ||
       (p.category && p.category.toLowerCase().trim() === categoryFilter.toLowerCase().trim());
@@ -293,8 +286,18 @@ export function Products() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search products, sellers, or tags..."
-                className="w-full pl-10 pr-4 py-2.5 bg-white border border-pink-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-full text-xs font-medium placeholder:text-gray-400 shadow-2xs outline-none transition-all"
+                className="w-full pl-10 pr-10 py-2.5 bg-white border border-pink-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-full text-xs font-medium placeholder:text-gray-400 shadow-2xs outline-none transition-all"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                  title="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
 
             <div className="relative w-full sm:w-48">
@@ -338,7 +341,12 @@ export function Products() {
 
         {/* ── COUNT SUBHEADER ── */}
         <div className="flex items-center justify-between text-xs text-gray-500 font-medium mb-4">
-          <p>Showing <span className="text-gray-900 font-bold">{filteredProducts.length}</span> products</p>
+          <p>
+            Showing <span className="text-gray-900 font-bold">{filteredProducts.length}</span> products
+            {searchQuery && (
+              <span> for "<span className="text-gray-900 font-bold">{searchQuery}</span>"</span>
+            )}
+          </p>
           <p className="hidden sm:block text-gray-400">Click any product for details & seller contact</p>
         </div>
 
@@ -385,23 +393,21 @@ export function Products() {
                     >
                       <Share2 className="h-3.5 w-3.5" />
                     </button>
-                    {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
-                      <button
-                        onClick={(e) => toggleSaveProduct(product, e)}
-                        className={`w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer ${
-                          isInWishlist(product.id, 'product')
-                            ? 'bg-rose-50 border border-rose-200'
-                            : 'bg-white/80 hover:bg-white'
-                        }`}
-                        title={isInWishlist(product.id, 'product') ? 'Remove from saved items' : 'Pin to saved items'}
-                      >
-                        <PushPinIcon
-                          isPinned={isInWishlist(product.id, 'product')}
-                          size={16}
-                          idPrefix={`prod-tr-${product.id}`}
-                        />
-                      </button>
-                    )}
+                    <button
+                      onClick={(e) => toggleSaveProduct(product, e)}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer ${
+                        isInWishlist(product.id, 'product')
+                          ? 'bg-rose-50 border border-rose-300 ring-2 ring-rose-100'
+                          : 'bg-white/90 hover:bg-white border border-gray-200'
+                      }`}
+                      title={isInWishlist(product.id, 'product') ? 'Remove from saved items' : 'Pin to saved items'}
+                    >
+                      <PushPinIcon
+                        isPinned={isInWishlist(product.id, 'product')}
+                        size={16}
+                        idPrefix={`prod-tr-${product.id}`}
+                      />
+                    </button>
                   </div>
 
                   {/* Dark Overlay Category & Likes */}
@@ -409,36 +415,20 @@ export function Products() {
                     <span className="px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-[10px]">
                       {product.category || 'Product'}
                     </span>
-                    {userType === 'admin' || userType === 'resort' || userType === 'enterprise' ? (
-                      <div
-                        className="flex items-center gap-1.5 px-2.5 py-1 bg-black/70 backdrop-blur-md rounded-full text-white text-[11px] font-bold border border-white/10 whitespace-nowrap shadow-xs"
-                        title="Total Tourist Saves"
-                      >
-                        <PushPinIcon
-                          alwaysTilted
-                          size={14}
-                          idPrefix={`prod-admin-${product.id}`}
-                        />
-                        <span className="text-white font-extrabold whitespace-nowrap">
-                          Save: {getWishlistCount(product.id, 'product', product.likes)}
-                        </span>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={(e) => toggleSaveProduct(product, e)}
-                        className="flex items-center gap-1.5 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 whitespace-nowrap"
-                        title={isInWishlist(product.id, 'product') ? 'Saved in pins' : 'Click to pin product'}
-                      >
-                        <PushPinIcon
-                          isPinned={isInWishlist(product.id, 'product')}
-                          size={14}
-                          idPrefix={`prod-bl-${product.id}`}
-                        />
-                        <span className={isInWishlist(product.id, 'product') ? 'text-pink-400 font-extrabold whitespace-nowrap' : 'text-white whitespace-nowrap'}>
-                          Save: {getWishlistCount(product.id, 'product', product.likes)}
-                        </span>
-                      </button>
-                    )}
+                    <button
+                      onClick={(e) => toggleSaveProduct(product, e)}
+                      className="flex items-center gap-1.5 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 whitespace-nowrap"
+                      title={isInWishlist(product.id, 'product') ? 'Saved in pins' : 'Click to pin product'}
+                    >
+                      <PushPinIcon
+                        isPinned={isInWishlist(product.id, 'product')}
+                        size={14}
+                        idPrefix={`prod-bl-${product.id}`}
+                      />
+                      <span className={isInWishlist(product.id, 'product') ? 'text-red-400 font-extrabold whitespace-nowrap' : 'text-gray-200 whitespace-nowrap'}>
+                        Save: {getWishlistCount(product.id, 'product', product.likes)}
+                      </span>
+                    </button>
                   </div>
                 </div>
 
@@ -493,6 +483,38 @@ export function Products() {
             );
           })}
         </div>
+
+        {filteredProducts.length === 0 && (
+          <div className="bg-white rounded-3xl border border-gray-100 p-12 text-center my-8 shadow-xs">
+            <Search className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+            <h3 className="font-bold text-gray-800 text-base mb-1">No products found</h3>
+            <p className="text-xs text-gray-500 max-w-sm mx-auto mb-4">
+              {searchQuery
+                ? `We couldn't find any products matching "${searchQuery}". Try searching with different keywords or clearing your filters.`
+                : 'No products are currently available in this category.'}
+            </p>
+            <div className="flex justify-center gap-2">
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="px-4 py-2 bg-pink-50 text-pink-600 hover:bg-pink-100 font-bold text-xs rounded-full transition-colors border border-pink-200"
+                >
+                  Clear Search
+                </button>
+              )}
+              {categoryFilter !== 'All' && (
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter('All')}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 font-bold text-xs rounded-full transition-colors"
+                >
+                  Reset Category
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── PRODUCT DETAIL MODAL ── */}
@@ -543,23 +565,21 @@ export function Products() {
                   >
                     <Share2 className="h-4 w-4" />
                   </button>
-                  {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
-                    <button
-                      onClick={() => toggleSaveProduct(selectedProduct)}
-                      className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ${
-                        isInWishlist(selectedProduct.id, 'product')
-                          ? 'bg-rose-50 border-rose-300 shadow-sm'
-                          : 'border-gray-200 hover:bg-pink-50'
-                      }`}
-                      title={isInWishlist(selectedProduct.id, 'product') ? 'Remove from saved items' : 'Pin to saved items'}
-                    >
-                      <PushPinIcon
-                        isPinned={isInWishlist(selectedProduct.id, 'product')}
-                        size={18}
-                        idPrefix={`modal-prod-${selectedProduct.id}`}
-                      />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => toggleSaveProduct(selectedProduct)}
+                    className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ${
+                      isInWishlist(selectedProduct.id, 'product')
+                        ? 'bg-rose-50 border border-rose-300 shadow-sm'
+                        : 'border-gray-200 bg-white hover:bg-gray-50'
+                    }`}
+                    title={isInWishlist(selectedProduct.id, 'product') ? 'Remove from saved items' : 'Pin to saved items'}
+                  >
+                    <PushPinIcon
+                      isPinned={isInWishlist(selectedProduct.id, 'product')}
+                      size={18}
+                      idPrefix={`modal-prod-${selectedProduct.id}`}
+                    />
+                  </button>
                 </div>
               </div>
 

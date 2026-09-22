@@ -181,7 +181,7 @@ export function Attractions() {
       const matchesCategory = activeCategory === 'All' || item.category === activeCategory;
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch = !q || (
-        item.name.toLowerCase().includes(q) ||
+        (item.name && item.name.toLowerCase().includes(q)) ||
         (item.description && item.description.toLowerCase().includes(q)) ||
         (item.fullDescription && item.fullDescription.toLowerCase().includes(q)) ||
         (item.location && item.location.toLowerCase().includes(q)) ||
@@ -193,19 +193,8 @@ export function Attractions() {
 
   const handleToggleLike = async (e: React.MouseEvent, attraction: AttractionType) => {
     e.stopPropagation();
-    if (
-      userType === 'admin' ||
-      userType === 'resort' ||
-      userType === 'enterprise' ||
-      currentUser?.role === 'admin' ||
-      currentUser?.role === 'resort' ||
-      currentUser?.role === 'enterprise'
-    ) {
-      toast.info('Wishlist saving is available for tourist accounts only.');
-      return;
-    }
     if (!currentUser && !getAuthToken()) {
-      toast.info('Please log in or register as a tourist to save to wishlist');
+      toast.info('Please log in or register to save to wishlist');
       navigate('/tourist/login');
       return;
     }
@@ -405,23 +394,21 @@ export function Attractions() {
                     >
                       <Share2 className="h-3.5 w-3.5" />
                     </button>
-                    {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
-                      <button
-                        onClick={(e) => handleToggleLike(e, attraction)}
-                        className={`w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition-all hover:scale-110 active:scale-95 cursor-pointer ${
-                          isInWishlist(attraction.id, 'attraction')
-                            ? 'bg-rose-50 border border-rose-200'
-                            : 'bg-white/90 backdrop-blur-sm hover:bg-white'
-                        }`}
-                        title={isInWishlist(attraction.id, 'attraction') ? 'Remove from saved places' : 'Pin to saved places'}
-                      >
-                        <PushPinIcon
-                          isPinned={isInWishlist(attraction.id, 'attraction')}
-                          size={17}
-                          idPrefix={`attr-${attraction.id}`}
-                        />
-                      </button>
-                    )}
+                    <button
+                      onClick={(e) => handleToggleLike(e, attraction)}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition-all hover:scale-110 active:scale-95 cursor-pointer ${
+                        isInWishlist(attraction.id, 'attraction')
+                          ? 'bg-rose-50 border border-rose-300 ring-2 ring-rose-100'
+                          : 'bg-white/90 backdrop-blur-sm hover:bg-white border border-gray-200'
+                      }`}
+                      title={isInWishlist(attraction.id, 'attraction') ? 'Remove from saved places' : 'Pin to saved places'}
+                    >
+                      <PushPinIcon
+                        isPinned={isInWishlist(attraction.id, 'attraction')}
+                        size={17}
+                        idPrefix={`attr-${attraction.id}`}
+                      />
+                    </button>
                   </div>
 
                   {/* Left & Right Arrow Navigation (Visible when multiple images) */}
@@ -462,33 +449,18 @@ export function Attractions() {
                       <Tag className="h-3 w-3 text-pink-400" />
                       <span>{attraction.category}</span>
                     </div>
-                    {userType === 'admin' || userType === 'resort' || userType === 'enterprise' ? (
-                      <div
-                        className="flex items-center gap-1.5 bg-black/60 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[11px] font-semibold border border-white/10 whitespace-nowrap"
-                        title="Total Tourist Saves"
-                      >
-                        <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
-                          <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
-                        </svg>
-                        <span className="text-white whitespace-nowrap">
-                          Save: {getWishlistCount(attraction.id, 'attraction', attraction.likes)}
-                        </span>
-                      </div>
-                    ) : (
-                      <div
-                        className="flex items-center gap-1 bg-black/50 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[11px] font-medium whitespace-nowrap"
-                        title="Saved Pins"
-                      >
-                        <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
-                          <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
-                        </svg>
-                        <span className="text-white whitespace-nowrap">
-                          Save: {getWishlistCount(attraction.id, 'attraction', attraction.likes)}
-                        </span>
-                      </div>
-                    )}
+                    <div
+                      className="flex items-center gap-1.5 bg-black/60 backdrop-blur-sm text-white px-2 py-0.5 rounded-md text-[11px] font-semibold border border-white/10 whitespace-nowrap"
+                      title="Total Saves"
+                    >
+                      <svg className="h-3.5 w-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#F43F5E" />
+                        <circle cx="12" cy="9" r="2.5" fill="#FFFFFF" />
+                      </svg>
+                      <span className="text-white whitespace-nowrap">
+                        Save: {getWishlistCount(attraction.id, 'attraction', attraction.likes)}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -519,12 +491,34 @@ export function Attractions() {
         </div>
 
         {filteredAttractions.length === 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center my-6">
+          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center my-6 shadow-xs">
             <Search className="h-12 w-12 text-gray-300 mx-auto mb-3" />
             <h3 className="font-bold text-gray-800 text-base mb-1">No attractions found</h3>
-            <p className="text-xs text-gray-500 max-w-sm mx-auto">
-              We couldn't find any attractions matching "{searchQuery}". Try searching for something else or clearing your filters.
+            <p className="text-xs text-gray-500 max-w-sm mx-auto mb-4">
+              {searchQuery
+                ? `We couldn't find any attractions matching "${searchQuery}". Try searching for something else or clearing your filters.`
+                : 'No attractions match the selected category.'}
             </p>
+            <div className="flex justify-center gap-2">
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="px-4 py-2 bg-pink-50 text-pink-600 hover:bg-pink-100 font-bold text-xs rounded-full transition-colors border border-pink-200"
+                >
+                  Clear Search
+                </button>
+              )}
+              {activeCategory !== 'All' && (
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory('All')}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 font-bold text-xs rounded-full transition-colors"
+                >
+                  Reset Category
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -558,23 +552,21 @@ export function Attractions() {
 
               {/* Top-Right Action Buttons */}
               <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
-                {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
-                  <button
-                    onClick={(e) => handleToggleLike(e, selectedAttraction)}
-                    className={`w-9 h-9 rounded-full flex items-center justify-center shadow-md backdrop-blur-sm transition-all hover:scale-110 active:scale-95 cursor-pointer ${
-                      isInWishlist(selectedAttraction.id, 'attraction')
-                        ? 'bg-white text-rose-600'
-                        : 'bg-black/50 hover:bg-black/70 text-white'
-                    }`}
-                    title={isInWishlist(selectedAttraction.id, 'attraction') ? 'Remove from saved places' : 'Pin to saved places'}
-                  >
-                    <PushPinIcon
-                      isPinned={isInWishlist(selectedAttraction.id, 'attraction')}
-                      size={18}
-                      idPrefix={`modal-attr-${selectedAttraction.id}`}
-                    />
-                  </button>
-                )}
+                <button
+                  onClick={(e) => handleToggleLike(e, selectedAttraction)}
+                  className={`w-9 h-9 rounded-full flex items-center justify-center shadow-md backdrop-blur-sm transition-all hover:scale-110 active:scale-95 cursor-pointer ${
+                    isInWishlist(selectedAttraction.id, 'attraction')
+                      ? 'bg-rose-50 border border-rose-300 ring-2 ring-rose-100'
+                      : 'bg-white/90 hover:bg-white border border-gray-200'
+                  }`}
+                  title={isInWishlist(selectedAttraction.id, 'attraction') ? 'Remove from saved places' : 'Pin to saved places'}
+                >
+                  <PushPinIcon
+                    isPinned={isInWishlist(selectedAttraction.id, 'attraction')}
+                    size={18}
+                    idPrefix={`modal-attr-${selectedAttraction.id}`}
+                  />
+                </button>
                 <button
                   onClick={() => setSelectedAttraction(null)}
                   className="bg-black/50 hover:bg-black/70 text-white rounded-full p-2 backdrop-blur-sm transition-colors"

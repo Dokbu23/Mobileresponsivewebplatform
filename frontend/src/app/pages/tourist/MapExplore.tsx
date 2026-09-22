@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { MapPin, Hotel, Store, Mountain, Filter, Navigation, Compass, Crosshair, ExternalLink, X, Clock, Search, CheckCircle2, Plus, PlusCircle, Building2, AlertTriangle, ShieldCheck, Sparkles, Footprints } from 'lucide-react';
 import { toast } from 'sonner';
@@ -273,9 +273,11 @@ export function MapExplore() {
         lat: Number(l.latitude),
         lng: Number(l.longitude),
         name: decodeHtml(l.name),
-        type: l.type || 'resort',
-        description: decodeHtml(l.description),
-        location: decodeHtml(l.address),
+        type: (l.type || 'resort') as any,
+        isLandmark: true,
+        category: 'Landmark',
+        description: decodeHtml(l.description || 'Registered Landmark in Mansalay'),
+        location: decodeHtml(l.address || 'Mansalay, Oriental Mindoro'),
         image: l.image,
         virtual_tour_scenes: l.virtual_tour_scenes || l.user?.virtual_tour_scenes || getStoredScenes(l.type || 'resort', l.id) || getStoredScenes(l.type || 'resort', l.user_id),
         userId: l.user_id || l.userId,
@@ -315,11 +317,11 @@ export function MapExplore() {
       const mappedLandmarkDirs: DirectoryLocation[] = rawLandmarks.map((l: any) => ({
         id: `lm-${l.id}`,
         name: decodeHtml(l.name),
-        category: (l.type === 'resort' ? 'Resort' : l.type === 'enterprise' ? 'Market' : 'Landmark') as any,
-        icon: l.type === 'resort' ? '🏨' : l.type === 'enterprise' ? '🛍️' : '📍',
-        iconBg: l.type === 'resort' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600',
-        description: l.description || 'Landmark in Mansalay',
-        address: l.address || 'Mansalay, Oriental Mindoro',
+        category: 'Landmark',
+        icon: '📍',
+        iconBg: 'bg-amber-50 text-amber-600',
+        description: decodeHtml(l.description || 'Registered Landmark in Mansalay'),
+        address: decodeHtml(l.address || 'Mansalay, Oriental Mindoro'),
         coords: [Number(l.latitude), Number(l.longitude)],
         virtual_tour_scenes: l.virtual_tour_scenes || l.user?.virtual_tour_scenes || getStoredScenes(l.type || 'resort', l.id) || getStoredScenes(l.type || 'resort', l.user_id),
       }));
@@ -504,19 +506,81 @@ export function MapExplore() {
 
   const categories = useMemo(() => {
     const cats = Array.from(new Set(dynamicLocations.map(loc => loc.category).filter(Boolean)));
+    if (markers.some(m => m.isLandmark || String(m.id).startsWith('db-landmark-')) && !cats.includes('Landmark')) {
+      cats.push('Landmark');
+    }
     return ['All', ...cats];
-  }, [dynamicLocations]);
+  }, [dynamicLocations, markers]);
 
-  const filteredDirectory = dynamicLocations.filter(loc => {
-    if (!loc || !loc.name) return false;
-    const matchesCategory = filterCategory === 'All' || loc.category === filterCategory;
-    const matchesSearch = !searchQuery ||
-      (loc.name && loc.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (loc.description && loc.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (loc.address && loc.address.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredMarkers = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    return markers.filter(m => {
+      if (!m || !m.name) return false;
+      const isLandmark = Boolean(
+        m.isLandmark ||
+        String(m.id).startsWith('db-landmark-') ||
+        m.type === 'landmark' ||
+        m.category === 'Landmark'
+      );
 
-    return matchesCategory && matchesSearch;
-  });
+      const matchesCategory = filterCategory === 'All' ||
+        (filterCategory === 'Landmark' && isLandmark) ||
+        (filterCategory === 'Resort' && (m.type === 'resort' || m.category === 'Resort')) ||
+        (filterCategory === 'Attraction' && (m.type === 'attraction' || m.category === 'Attraction')) ||
+        (m.category && m.category.toLowerCase() === filterCategory.toLowerCase()) ||
+        (m.type && m.type.toLowerCase() === filterCategory.toLowerCase());
+
+      const matchesSearch = !q ||
+        (m.name && m.name.toLowerCase().includes(q)) ||
+        (m.description && m.description.toLowerCase().includes(q)) ||
+        (m.location && m.location.toLowerCase().includes(q)) ||
+        (m.type && m.type.toLowerCase().includes(q)) ||
+        (q === 'landmark' && isLandmark) ||
+        (q.includes('landmark') && isLandmark);
+
+      return matchesCategory && matchesSearch;
+    });
+  }, [markers, filterCategory, searchQuery]);
+
+  const filteredDirectory = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    return dynamicLocations.filter(loc => {
+      if (!loc || !loc.name) return false;
+      const isLandmark = loc.category === 'Landmark' || loc.id.startsWith('lm-');
+      const matchesCategory = filterCategory === 'All' ||
+        loc.category === filterCategory ||
+        (filterCategory === 'Landmark' && isLandmark);
+
+      const matchesSearch = !q ||
+        (loc.name && loc.name.toLowerCase().includes(q)) ||
+        (loc.description && loc.description.toLowerCase().includes(q)) ||
+        (loc.address && loc.address.toLowerCase().includes(q)) ||
+        (loc.category && loc.category.toLowerCase().includes(q)) ||
+        (q === 'landmark' && isLandmark) ||
+        (q.includes('landmark') && isLandmark);
+
+      return matchesCategory && matchesSearch;
+    });
+  }, [dynamicLocations, filterCategory, searchQuery]);
+
+  const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
+  const searchSuggestionsRef = useRef<HTMLDivElement | null>(null);
+
+  const searchSuggestions = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return [];
+    return filteredMarkers.slice(0, 6);
+  }, [filteredMarkers, searchQuery]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchSuggestionsRef.current && !searchSuggestionsRef.current.contains(e.target as Node)) {
+        setShowSearchSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const openGoogleMapsDirections = (destLat: number, destLng: number, destName: string) => {
     const origin = startPoint ? `${startPoint[0]},${startPoint[1]}` : 'Mansalay+Oriental+Mindoro';
@@ -542,15 +606,80 @@ export function MapExplore() {
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="relative w-full md:w-80">
+            <div ref={searchSuggestionsRef} className="relative w-full md:w-80">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search locations, beaches, resorts..."
-                className="w-full pl-10 pr-4 py-2.5 bg-white border border-pink-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-full text-xs font-medium placeholder:text-gray-400 shadow-2xs outline-none transition-all"
+                onFocus={() => setShowSearchSuggestions(true)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setShowSearchSuggestions(true);
+                }}
+                placeholder="Search landmarks, resorts, beaches..."
+                className="w-full pl-10 pr-10 py-2.5 bg-white border border-pink-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-full text-xs font-medium placeholder:text-gray-400 shadow-2xs outline-none transition-all"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setShowSearchSuggestions(false);
+                  }}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                  title="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+
+              {/* Real-time search suggestions dropdown */}
+              {showSearchSuggestions && searchQuery.trim() && searchSuggestions.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl shadow-xl border border-pink-100 overflow-hidden z-50 py-1.5 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-50 flex items-center justify-between">
+                    <span>Locations & Landmarks</span>
+                    <span>{searchSuggestions.length} found</span>
+                  </div>
+                  {searchSuggestions.map((m) => {
+                    const isLandmark = Boolean(
+                      m.isLandmark ||
+                      String(m.id).startsWith('db-landmark-') ||
+                      m.type === 'landmark' ||
+                      m.category === 'Landmark'
+                    );
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedDestination(m);
+                          setSearchQuery(m.name);
+                          setShowSearchSuggestions(false);
+                          window.scrollTo({ top: 200, behavior: 'smooth' });
+                        }}
+                        className="w-full px-3 py-2 text-left hover:bg-pink-50/60 flex items-center gap-2.5 transition-colors border-b border-gray-50 last:border-0 cursor-pointer"
+                      >
+                        <span className="text-base flex-shrink-0">
+                          {isLandmark ? '📍' : m.type === 'resort' ? '🏨' : m.type === 'enterprise' ? '🛍️' : '🌊'}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-gray-900 truncate">{m.name}</p>
+                          <p className="text-[10px] text-gray-400 truncate">{m.location || 'Mansalay, Oriental Mindoro'}</p>
+                        </div>
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                          isLandmark
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : m.type === 'resort'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : 'bg-pink-50 text-pink-700 border border-pink-200'
+                        }`}>
+                          {isLandmark ? 'Landmark' : m.type === 'resort' ? 'Resort' : 'Attraction'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <button
@@ -590,6 +719,14 @@ export function MapExplore() {
               <span className="text-[11px] font-medium text-pink-600 bg-pink-50 px-2.5 py-0.5 rounded-full border border-pink-200">
                 {isUsingLiveGps ? '📍 Based on your GPS' : '📍 Mansalay Center'}
               </span>
+              {searchQuery && (
+                <span className="text-[11px] font-bold text-gray-700 bg-gray-100 px-3 py-0.5 rounded-full flex items-center gap-1.5 border border-gray-200">
+                  <span>Map: {filteredMarkers.length} found for "{searchQuery}"</span>
+                  <button type="button" onClick={() => setSearchQuery('')} className="hover:text-pink-600 cursor-pointer">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              )}
             </div>
             <button
               onClick={() => openGoogleMapsDirections(MANSALAY_CENTER[0], MANSALAY_CENTER[1], 'Mansalay Town Center')}
@@ -603,7 +740,7 @@ export function MapExplore() {
           {/* Leaflet Map Box */}
           <div className="relative h-[500px]">
             <MansalayMap
-              markers={markers}
+              markers={filteredMarkers}
               height="500px"
               zoom={13}
               userLocation={userLocation}
@@ -770,38 +907,48 @@ export function MapExplore() {
                     </div>
                   </div>
 
-                  {/* Buttons Row */}
+                    {/* Buttons Row */}
                   <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
                     <button
                       onClick={() => {
-                        setSelectedDestination({
+                        const matchedMarker = markers.find(m => 
+                          String(m.id) === String(loc.id).replace('lm-', 'db-landmark-').replace('att-', 'attraction-').replace('res-', 'resort-') ||
+                          m.name.toLowerCase() === loc.name.toLowerCase()
+                        ) || {
                           id: loc.id,
                           lat: coords[0],
                           lng: coords[1],
                           name: loc.name,
-                          type: 'attraction',
-                          location: loc.address
-                        });
-                        window.scrollTo({ top: 300, behavior: 'smooth' });
+                          type: (loc.category === 'Resort' ? 'resort' : loc.category === 'Market' ? 'enterprise' : 'attraction') as any,
+                          isLandmark: loc.id.startsWith('lm-') || loc.category === 'Landmark',
+                          location: loc.address,
+                        };
+                        setSelectedDestination(matchedMarker);
+                        window.scrollTo({ top: 200, behavior: 'smooth' });
                       }}
-                      className="flex-1 py-2 px-3 bg-pink-50 hover:bg-pink-100 text-pink-600 font-bold rounded-full text-xs transition-colors flex items-center justify-center gap-1"
+                      className="flex-1 py-2 px-3 bg-pink-50 hover:bg-pink-100 text-pink-600 font-bold rounded-full text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer"
                     >
                       <span>Show on map</span>
                     </button>
 
                     <button
                       onClick={() => {
-                        setSelectedDestination({
+                        const matchedMarker = markers.find(m => 
+                          String(m.id) === String(loc.id).replace('lm-', 'db-landmark-').replace('att-', 'attraction-').replace('res-', 'resort-') ||
+                          m.name.toLowerCase() === loc.name.toLowerCase()
+                        ) || {
                           id: loc.id,
                           lat: coords[0],
                           lng: coords[1],
                           name: loc.name,
-                          type: 'attraction',
-                          location: loc.address
-                        });
+                          type: (loc.category === 'Resort' ? 'resort' : loc.category === 'Market' ? 'enterprise' : 'attraction') as any,
+                          isLandmark: loc.id.startsWith('lm-') || loc.category === 'Landmark',
+                          location: loc.address,
+                        };
+                        setSelectedDestination(matchedMarker);
                         setIsInAppNavOpen(true);
                       }}
-                      className="flex-1 py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold rounded-full text-xs transition-colors flex items-center justify-center gap-1"
+                      className="flex-1 py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold rounded-full text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer"
                     >
                       <Navigation className="h-3 w-3" />
                       <span>Directions</span>
@@ -843,6 +990,38 @@ export function MapExplore() {
               );
             })}
           </div>
+
+          {filteredDirectory.length === 0 && !loading && (
+            <div className="bg-white rounded-3xl border border-gray-100 p-12 text-center my-6 shadow-xs">
+              <Search className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+              <h3 className="font-bold text-gray-800 text-base mb-1">No locations or landmarks found</h3>
+              <p className="text-xs text-gray-500 max-w-sm mx-auto mb-4">
+                {searchQuery
+                  ? `We couldn't find any locations or landmarks matching "${searchQuery}". Try searching for landmarks, resorts, or beaches.`
+                  : 'No locations match the selected category.'}
+              </p>
+              <div className="flex justify-center gap-2">
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="px-4 py-2 bg-pink-50 text-pink-600 hover:bg-pink-100 font-bold text-xs rounded-full transition-colors border border-pink-200 cursor-pointer"
+                  >
+                    Clear Search
+                  </button>
+                )}
+                {filterCategory !== 'All' && (
+                  <button
+                    type="button"
+                    onClick={() => setFilterCategory('All')}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 font-bold text-xs rounded-full transition-colors cursor-pointer"
+                  >
+                    Reset Filter
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </section>
 
       </div>

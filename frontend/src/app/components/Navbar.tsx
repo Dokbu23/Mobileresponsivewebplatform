@@ -190,26 +190,6 @@ export function Navbar() {
 
           {/* Right Action Icons & Profile */}
           <div className="hidden md:flex items-center gap-3">
-            {/* Search Button */}
-            <button
-              onClick={() => navigate('/attractions')}
-              className="p-2 text-gray-600 dark:text-slate-300 hover:text-pink-500 dark:hover:text-pink-400 hover:bg-pink-50 dark:hover:bg-slate-800 rounded-full transition-colors"
-              title="Search"
-            >
-              <Search className="h-5 w-5" />
-            </button>
-
-            {/* Saved Places / Analytics & Save Button - Only shown when logged in */}
-            {currentUser && (
-              <button
-                onClick={() => navigate('/wishlist')}
-                className="p-2 text-gray-600 dark:text-slate-300 hover:text-pink-500 dark:hover:text-pink-400 hover:bg-pink-50 dark:hover:bg-slate-800 rounded-full transition-colors relative"
-                title={userType === 'tourist' ? 'My Saved Places' : 'Analytics & Save'}
-              >
-                <PushPinIcon alwaysTilted size={20} idPrefix="nav-wishlist" />
-              </button>
-            )}
-
             {/* Notification Bell - Only shown when logged in */}
             {currentUser && <NotificationBell />}
 

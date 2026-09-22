@@ -25,6 +25,8 @@ import {
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
 import { getAuthToken, getPublicJSON, formatImageUrl, API_BASE } from '../../lib/api';
+import { PushPinIcon } from '../../components/PushPinIcon';
+import { showDeleteConfirmDialog } from '../../lib/sweetAlert';
 
 interface ActivityItem {
   time: string;
@@ -436,13 +438,35 @@ export function Itinerary() {
     setBuilderDescription('');
   };
 
-  const handleDeleteCustomTrip = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setMyCustomTrips(prev => prev.filter(t => t.id !== id));
+  const handleDeleteCustomTrip = async (id: string, tripTitle?: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    const confirmed = await showDeleteConfirmDialog(
+      'Are you sure you want to delete?',
+      tripTitle
+        ? `Are you sure you want to delete "${tripTitle}"? This itinerary will be permanently removed.`
+        : 'Are you sure you want to delete this itinerary? This action cannot be undone.',
+      'Yes, Delete',
+      'Cancel'
+    );
+
+    if (!confirmed) return;
+
+    setMyCustomTrips(prev => {
+      const updated = prev.filter(t => t.id !== id);
+      const key = getUserTripStorageKey(currentUser);
+      try {
+        localStorage.setItem(key, JSON.stringify(updated));
+      } catch (err) {
+        console.error(err);
+      }
+      return updated;
+    });
+
     if (selectedItinerary?.id === id) {
       setSelectedItinerary(null);
     }
-    toast.success('Trip deleted');
+    toast.success('Itinerary deleted successfully');
   };
 
   const handleSaveOfficialToMyTrips = (officialTrip: ItineraryCard, e: React.MouseEvent) => {
@@ -459,6 +483,33 @@ export function Itinerary() {
     };
     setMyCustomTrips(prev => [copiedTrip, ...prev]);
     toast.success(`"${officialTrip.title}" saved to your trips!`);
+  };
+
+  const handleToggleOfficialTripPin = async (trip: ItineraryCard, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const isSaved = myCustomTrips.some(t => t.id === `saved-${trip.id}` || t.title === trip.title);
+    if (isSaved) {
+      const confirmed = await showDeleteConfirmDialog(
+        'Are you sure you want to delete?',
+        `Are you sure you want to remove "${trip.title}" from your saved trips?`,
+        'Yes, Remove',
+        'Cancel'
+      );
+      if (!confirmed) return;
+      setMyCustomTrips(prev => {
+        const updated = prev.filter(t => t.id !== `saved-${trip.id}` && t.title !== trip.title);
+        const key = getUserTripStorageKey(currentUser);
+        try {
+          localStorage.setItem(key, JSON.stringify(updated));
+        } catch (err) {
+          console.error(err);
+        }
+        return updated;
+      });
+      toast.success(`Removed "${trip.title}" from your saved trips.`);
+    } else {
+      handleSaveOfficialToMyTrips(trip, e);
+    }
   };
 
   const handlePrintItinerary = () => {
@@ -538,6 +589,29 @@ export function Itinerary() {
                       </span>
                     </div>
 
+                    {/* Top-Right Pin Button */}
+                    {(() => {
+                      const isSaved = myCustomTrips.some(t => t.id === `saved-${trip.id}` || t.title === trip.title);
+                      return (
+                        <button
+                          type="button"
+                          onClick={(e) => handleToggleOfficialTripPin(trip, e)}
+                          className={`absolute top-3 right-3 w-8 h-8 rounded-full shadow-sm flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 cursor-pointer z-10 ${
+                            isSaved
+                              ? 'bg-rose-50 border border-rose-300 ring-2 ring-rose-100'
+                              : 'bg-white/90 hover:bg-white border border-gray-200'
+                          }`}
+                          title={isSaved ? "Remove from saved trips" : "Pin to My Trips"}
+                        >
+                          <PushPinIcon
+                            isPinned={isSaved}
+                            size={16}
+                            idPrefix={`itin-tr-${trip.id}`}
+                          />
+                        </button>
+                      );
+                    })()}
+
                     <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-xs font-bold">
                       <span className="flex items-center gap-1 bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full text-[11px]">
                         <Clock className="h-3 w-3 text-pink-400" />
@@ -580,15 +654,23 @@ export function Itinerary() {
                         <span>View Schedule</span>
                         <ChevronRight className="h-3.5 w-3.5" />
                       </button>
-                      {canAccessBuilders && (
-                        <button
-                          onClick={(e) => handleSaveOfficialToMyTrips(trip, e)}
-                          className="p-2.5 bg-pink-50 hover:bg-pink-100 text-pink-600 rounded-full border border-pink-200 transition-colors flex-shrink-0"
-                          title="Save copy to My Trips"
-                        >
-                          <BookmarkPlus className="h-4 w-4" />
-                        </button>
-                      )}
+                      {(() => {
+                        const isSaved = myCustomTrips.some(t => t.id === `saved-${trip.id}` || t.title === trip.title);
+                        return (
+                          <button
+                            type="button"
+                            onClick={(e) => handleToggleOfficialTripPin(trip, e)}
+                            className={`p-2.5 rounded-full border transition-colors flex-shrink-0 cursor-pointer ${
+                              isSaved
+                                ? 'bg-rose-50 border-rose-300 ring-2 ring-rose-100 text-rose-600'
+                                : 'bg-white hover:bg-gray-50 border-gray-200 text-gray-500'
+                            }`}
+                            title={isSaved ? "Saved in My Trips" : "Pin to My Trips"}
+                          >
+                            <PushPinIcon isPinned={isSaved} size={16} idPrefix={`itin-btn-${trip.id}`} />
+                          </button>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -597,8 +679,8 @@ export function Itinerary() {
           )}
         </section>
 
-        {/* ── MY TRIPS & SAVED ITINERARIES (Tourists Only) ── */}
-        {canAccessBuilders && (
+        {/* ── MY TRIPS & SAVED ITINERARIES ── */}
+        {(canAccessBuilders || myCustomTrips.length > 0) && (
           <section className="mb-16">
             <div className="flex items-center gap-2 text-pink-500 text-xs font-bold uppercase tracking-wider mb-1">
               <BookmarkCheck className="h-4 w-4" />
@@ -608,7 +690,7 @@ export function Itinerary() {
               My Saved Trips & Itineraries ({myCustomTrips.length})
             </h2>
             <p className="text-xs text-gray-400 mb-6">
-              Private to your tourist account ({currentUser?.name || currentUser?.email || 'My Account'}) — only you can view and manage these saved schedules.
+              Private to your account ({currentUser?.name || currentUser?.email || 'My Account'}) — only you can view and manage these saved schedules.
             </p>
 
             {myCustomTrips.length === 0 ? (
@@ -635,8 +717,9 @@ export function Itinerary() {
                         </span>
                         <div className="flex items-center gap-1">
                           <button
-                            onClick={(e) => handleDeleteCustomTrip(trip.id, e)}
-                            className="p-1 text-gray-400 hover:text-red-500 rounded-full transition-colors"
+                            type="button"
+                            onClick={(e) => handleDeleteCustomTrip(trip.id, trip.title, e)}
+                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors cursor-pointer"
                             title="Delete trip"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -772,18 +855,27 @@ export function Itinerary() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handlePrintItinerary}
-                    className="px-3.5 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-full backdrop-blur-md transition-colors flex items-center gap-1.5"
+                    className="px-3.5 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-full backdrop-blur-md transition-colors flex items-center gap-1.5 cursor-pointer"
                   >
                     <Printer className="h-3.5 w-3.5" /> Print / PDF
                   </button>
-                  {canAccessBuilders && (
+                  {myCustomTrips.some(t => t.id === selectedItinerary.id) ? (
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteCustomTrip(selectedItinerary.id, selectedItinerary.title, e)}
+                      className="px-3.5 py-1.5 bg-red-500/90 hover:bg-red-600 text-white text-xs font-bold rounded-full backdrop-blur-md transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                      title="Delete Itinerary"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Delete Itinerary
+                    </button>
+                  ) : canAccessBuilders ? (
                     <button
                       onClick={(e) => handleSaveOfficialToMyTrips(selectedItinerary, e)}
-                      className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold rounded-full shadow-sm transition-colors flex items-center gap-1.5"
+                      className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold rounded-full shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       <BookmarkPlus className="h-3.5 w-3.5" /> Save to My Trips
                     </button>
-                  )}
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -843,22 +935,39 @@ export function Itinerary() {
 
             {/* Footer */}
             <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-2">
-              {selectedItinerary.isOfficial ? (
-                <button
-                  onClick={(e) => {
-                    handleSaveOfficialToMyTrips(selectedItinerary, e);
-                  }}
-                  className="px-4 py-2 bg-pink-50 hover:bg-pink-100 text-pink-600 border border-pink-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5"
-                >
-                  <BookmarkPlus className="h-4 w-4" />
-                  <span>Save to My Trips</span>
-                </button>
-              ) : (
-                <span className="text-xs text-gray-400 font-medium">Mansalay Tourism Travel Guide</span>
-              )}
+              {(() => {
+                const isCustom = myCustomTrips.some(t => t.id === selectedItinerary.id);
+                if (isCustom) {
+                  return (
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteCustomTrip(selectedItinerary.id, selectedItinerary.title, e)}
+                      className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>Delete Itinerary</span>
+                    </button>
+                  );
+                }
+                const isSaved = myCustomTrips.some(t => t.id === `saved-${selectedItinerary.id}` || t.title === selectedItinerary.title);
+                return (
+                  <button
+                    type="button"
+                    onClick={(e) => handleToggleOfficialTripPin(selectedItinerary, e)}
+                    className={`px-4 py-2 border rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer ${
+                      isSaved
+                        ? 'bg-rose-50 border-rose-300 text-rose-600 shadow-sm'
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <PushPinIcon isPinned={isSaved} size={15} idPrefix={`modal-itin-${selectedItinerary.id}`} />
+                    <span>{isSaved ? 'Pinned to My Trips' : 'Pin to My Trips'}</span>
+                  </button>
+                );
+              })()}
               <button
                 onClick={() => setSelectedItinerary(null)}
-                className="px-5 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-full text-xs font-bold"
+                className="px-5 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-full text-xs font-bold cursor-pointer"
               >
                 Close Schedule
               </button>

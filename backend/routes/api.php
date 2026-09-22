@@ -317,15 +317,53 @@ Route::group(['middleware' => ['jwt.auth']], function () {
 
             // Get IDs for this resort's content
             $accommodationIds = \App\Models\Accommodation::where('user_id', $user->id)->pluck('id');
+            $roomIds = \App\Models\ResortRoom::where('user_id', $user->id)->pluck('id');
+            $attractionIds = \App\Models\Attraction::where('user_id', $user->id)->pluck('id');
+            $eventIds = \App\Models\Event::where('user_id', $user->id)->pluck('id');
 
-            // Analytics & Save: count actual WishlistItem records for this resort's accommodations
+            // Analytics & Save: count actual WishlistItem records for this resort's rooms, attractions, events, stays, and profile
             $wishlistSaves = 0;
             try {
-                if (\Illuminate\Support\Facades\Schema::hasTable('wishlist_items') && $accommodationIds->isNotEmpty()) {
-                    $wishlistSaves = (int) \App\Models\WishlistItem::where('item_type', 'accommodation')
-                        ->whereIn('item_id', $accommodationIds->map(fn($id) => (string)$id))
+                if (\Illuminate\Support\Facades\Schema::hasTable('wishlist_items')) {
+                    // 1. Accommodations saves
+                    if ($accommodationIds->isNotEmpty()) {
+                        $wishlistSaves += (int) \App\Models\WishlistItem::where('item_type', 'accommodation')
+                            ->whereIn('item_id', $accommodationIds->map(fn($id) => (string)$id))
+                            ->count();
+                    }
+
+                    // 2. Resort Room saves (handles both 'room-{id}', numeric id, and item_type 'room' or 'accommodation')
+                    if ($roomIds->isNotEmpty()) {
+                        $formattedRoomIds = [];
+                        foreach ($roomIds as $rId) {
+                            $formattedRoomIds[] = (string)$rId;
+                            $formattedRoomIds[] = 'room-' . $rId;
+                        }
+                        $wishlistSaves += (int) \App\Models\WishlistItem::whereIn('item_type', ['room', 'accommodation'])
+                            ->whereIn('item_id', $formattedRoomIds)
+                            ->count();
+                    }
+
+                    // 3. Attractions saves
+                    if ($attractionIds->isNotEmpty()) {
+                        $wishlistSaves += (int) \App\Models\WishlistItem::where('item_type', 'attraction')
+                            ->whereIn('item_id', $attractionIds->map(fn($id) => (string)$id))
+                            ->count();
+                    }
+
+                    // 4. Events saves
+                    if ($eventIds->isNotEmpty()) {
+                        $wishlistSaves += (int) \App\Models\WishlistItem::where('item_type', 'event')
+                            ->whereIn('item_id', $eventIds->map(fn($id) => (string)$id))
+                            ->count();
+                    }
+
+                    // 5. Direct Resort Profile saves
+                    $wishlistSaves += (int) \App\Models\WishlistItem::whereIn('item_type', ['resort', 'accommodation'])
+                        ->where('item_id', (string)$user->id)
                         ->count();
                 }
+
                 // Add enterprise post saves as secondary signal
                 $postSavesDb = (int) \App\Models\EnterprisePost::where('user_id', $user->id)->sum('saves');
                 $wishlistSaves += $postSavesDb;

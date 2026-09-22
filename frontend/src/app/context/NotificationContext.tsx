@@ -17,7 +17,7 @@ import {
   markNotificationAsRead as apiMarkRead,
 } from '../lib/api';
 
-const POLL_INTERVAL_MS = 30000;
+const POLL_INTERVAL_MS = 6000;
 
 interface NotificationContextType {
   notifications: ApiNotification[];
@@ -134,13 +134,19 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       refresh();
     }, POLL_INTERVAL_MS);
 
-    // Re-fetch when the window regains focus
+    // Re-fetch when the window regains focus or when wishlist/content updates
     const handleFocus = () => refresh();
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('contentUpdated', handleFocus);
+    window.addEventListener('wishlistUpdated', handleFocus);
+    window.addEventListener('storage', handleFocus);
 
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('contentUpdated', handleFocus);
+      window.removeEventListener('wishlistUpdated', handleFocus);
+      window.removeEventListener('storage', handleFocus);
     };
   }, [refresh]);
 

@@ -123,19 +123,8 @@ export function Events() {
 
   const toggleSaveEvent = async (event: EventType, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (
-      userType === 'admin' ||
-      userType === 'resort' ||
-      userType === 'enterprise' ||
-      currentUser?.role === 'admin' ||
-      currentUser?.role === 'resort' ||
-      currentUser?.role === 'enterprise'
-    ) {
-      toast.info('Wishlist saving is available for tourist accounts only.');
-      return;
-    }
     if (!currentUser && !getAuthToken()) {
-      toast.info('Please log in or register as a tourist to save to wishlist');
+      toast.info('Please log in or register to save to wishlist');
       navigate('/tourist/login');
       return;
     }
@@ -165,11 +154,16 @@ export function Events() {
   // Filtered Events
   const filteredEvents = items.filter(ev => {
     // Search query filter
-    const matchesSearch = !searchQuery || 
-      ev.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (ev.category && ev.category.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (ev.location && ev.location.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (ev.description && ev.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch = !q || 
+      (ev.name && ev.name.toLowerCase().includes(q)) ||
+      (ev.category && ev.category.toLowerCase().includes(q)) ||
+      (ev.location && ev.location.toLowerCase().includes(q)) ||
+      (ev.description && ev.description.toLowerCase().includes(q)) ||
+      (ev.fullDescription && ev.fullDescription.toLowerCase().includes(q)) ||
+      (ev.date && ev.date.toLowerCase().includes(q)) ||
+      (Array.isArray(ev.tags) && ev.tags.some(t => t && t.toLowerCase().includes(q))) ||
+      (Array.isArray(ev.badges) && ev.badges.some(b => b && b.toLowerCase().includes(q)));
 
     // Category filter
     const matchesCategory = categoryFilter === 'All' || ev.category === categoryFilter;
@@ -203,15 +197,25 @@ export function Events() {
 
           {/* Search Input & Filter Dropdowns */}
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-            <div className="relative w-full sm:w-60">
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search events or location..."
-                className="w-full pl-10 pr-4 py-2.5 bg-white border border-pink-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-full text-xs font-medium placeholder:text-gray-400 shadow-2xs outline-none transition-all"
+                placeholder="Search events, tags, or location..."
+                className="w-full pl-10 pr-10 py-2.5 bg-white border border-pink-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-full text-xs font-medium placeholder:text-gray-400 shadow-2xs outline-none transition-all"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                  title="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
 
             <div className="relative w-full sm:w-36">
@@ -248,6 +252,9 @@ export function Events() {
         {/* ── EVENT COUNT ── */}
         <p className="text-xs font-semibold text-gray-400 mb-4">
           Showing <span className="text-gray-900 font-bold">{filteredEvents.length}</span> events
+          {searchQuery && (
+            <span> for "<span className="text-gray-900 font-bold">{searchQuery}</span>"</span>
+          )}
         </p>
 
         {/* ── EVENT CARDS GRID (4 COLUMNS) ── */}
@@ -292,33 +299,22 @@ export function Events() {
                     )}
                   </div>
 
-                  {/* Top Right Pin or Analytics Badge */}
-                  {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' ? (
-                    <button
-                      onClick={(e) => toggleSaveEvent(event, e)}
-                      title={isInWishlist(event.id, 'event') ? 'Remove from saved items' : 'Pin to saved items'}
-                      className={`absolute top-3 right-3 w-8 h-8 rounded-full shadow-sm flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 cursor-pointer ${
-                        isInWishlist(event.id, 'event')
-                          ? 'bg-rose-50 border border-rose-200'
-                          : 'bg-white/80 hover:bg-white text-gray-700'
-                      }`}
-                    >
-                      <PushPinIcon
-                        isPinned={isInWishlist(event.id, 'event')}
-                        size={16}
-                        idPrefix={`event-${event.id}`}
-                      />
-                    </button>
-                  ) : (
-                    <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-bold text-white flex items-center gap-1.5 whitespace-nowrap shadow-xs">
-                      <PushPinIcon
-                        alwaysTilted
-                        size={13}
-                        idPrefix={`event-admin-${event.id}`}
-                      />
-                      <span className="whitespace-nowrap">Save: {getWishlistCount(event.id, 'event', event.likes)}</span>
-                    </div>
-                  )}
+                  {/* Top Right Pin Button */}
+                  <button
+                    onClick={(e) => toggleSaveEvent(event, e)}
+                    title={isInWishlist(event.id, 'event') ? 'Remove from saved items' : 'Pin to saved items'}
+                    className={`absolute top-3 right-3 w-8 h-8 rounded-full shadow-sm flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 cursor-pointer ${
+                      isInWishlist(event.id, 'event')
+                        ? 'bg-rose-50 border border-rose-300 ring-2 ring-rose-100'
+                        : 'bg-white/90 hover:bg-white border border-gray-200 text-gray-700'
+                    }`}
+                  >
+                    <PushPinIcon
+                      isPinned={isInWishlist(event.id, 'event')}
+                      size={16}
+                      idPrefix={`event-${event.id}`}
+                    />
+                  </button>
 
                   {/* Dark Bottom Overlay with Title & Date */}
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-gray-950/90 via-gray-950/50 to-transparent p-4">
@@ -369,10 +365,37 @@ export function Events() {
         </div>
 
         {filteredEvents.length === 0 && !loading && (
-          <div className="bg-white rounded-3xl border border-gray-100 p-12 text-center my-8">
+          <div className="bg-white rounded-3xl border border-gray-100 p-12 text-center my-8 shadow-xs">
             <Calendar className="h-12 w-12 mx-auto text-pink-300 mb-3" />
-            <h3 className="text-base font-bold text-gray-900">No events match your criteria</h3>
-            <p className="text-xs text-gray-500 mt-1">Try clearing your filters or changing your search terms.</p>
+            <h3 className="text-base font-bold text-gray-900">No events found</h3>
+            <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1 mb-4">
+              {searchQuery
+                ? `We couldn't find any events matching "${searchQuery}". Try searching with different keywords or clearing your filters.`
+                : 'No events match the selected status or category filters.'}
+            </p>
+            <div className="flex justify-center gap-2">
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="px-4 py-2 bg-pink-50 text-pink-600 hover:bg-pink-100 font-bold text-xs rounded-full transition-colors border border-pink-200"
+                >
+                  Clear Search
+                </button>
+              )}
+              {(categoryFilter !== 'All' || statusFilter !== 'All') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryFilter('All');
+                    setStatusFilter('All');
+                  }}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 font-bold text-xs rounded-full transition-colors"
+                >
+                  Reset Filters
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -487,32 +510,21 @@ export function Events() {
 
               {/* Bottom Action Buttons */}
               <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
-                {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' ? (
-                  <button
-                    onClick={() => toggleSaveEvent(selectedEvent)}
-                    className={`flex-1 py-2.5 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-2 border cursor-pointer hover:scale-[1.02] active:scale-98 ${
-                      isInWishlist(selectedEvent.id, 'event')
-                        ? 'bg-rose-500 text-white border-rose-500 shadow-md shadow-rose-500/25'
-                        : 'border-rose-300 text-rose-600 hover:bg-rose-50'
-                    }`}
-                  >
-                    <PushPinIcon
-                      isPinned={isInWishlist(selectedEvent.id, 'event')}
-                      size={16}
-                      idPrefix={`modal-event-${selectedEvent.id}`}
-                    />
-                    <span>{isInWishlist(selectedEvent.id, 'event') ? 'Pinned to Saved' : 'Pin Event'} ({getWishlistCount(selectedEvent.id, 'event', selectedEvent.likes)})</span>
-                  </button>
-                ) : (
-                  <div className="flex-1 py-2.5 rounded-full text-xs font-bold flex items-center justify-center gap-2 bg-rose-50 text-rose-600 border border-rose-100 whitespace-nowrap">
-                    <PushPinIcon
-                      alwaysTilted
-                      size={15}
-                      idPrefix={`modal-event-admin-${selectedEvent.id}`}
-                    />
-                    <span>Save: {getWishlistCount(selectedEvent.id, 'event', selectedEvent.likes)}</span>
-                  </div>
-                )}
+                <button
+                  onClick={() => toggleSaveEvent(selectedEvent)}
+                  className={`flex-1 py-2.5 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-2 border cursor-pointer hover:scale-[1.02] active:scale-98 ${
+                    isInWishlist(selectedEvent.id, 'event')
+                      ? 'bg-rose-500 text-white border-rose-500 shadow-md shadow-rose-500/25'
+                      : 'border-gray-200 text-gray-700 bg-white hover:bg-gray-50'
+                  }`}
+                >
+                  <PushPinIcon
+                    isPinned={isInWishlist(selectedEvent.id, 'event')}
+                    size={16}
+                    idPrefix={`modal-event-${selectedEvent.id}`}
+                  />
+                  <span>{isInWishlist(selectedEvent.id, 'event') ? 'Pinned to Saved' : 'Pin Event'} ({getWishlistCount(selectedEvent.id, 'event', selectedEvent.likes)})</span>
+                </button>
 
                 <button
                   onClick={() => {

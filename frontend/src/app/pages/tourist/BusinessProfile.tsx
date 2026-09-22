@@ -6,7 +6,7 @@ import {
   MessageCircle, Heart,
   CheckCircle, ShoppingBag, ExternalLink,
   Pencil, Upload, X, Image as ImageIcon, Loader2,
-  Ticket, Tag, Copy, Check, Plus, MessageSquare,
+  Tag, Check, Plus, MessageSquare,
   Bookmark, Share2, ThumbsUp, Send, Bed, Waves,
   Compass, Palmtree, Megaphone, Calendar, FileText, Clock, Video,
   ChevronDown, ChevronUp, Users, Film, CheckCircle2, Trash2,
@@ -108,21 +108,10 @@ interface BusinessOwner {
   virtual_tour_scenes?: any;
 }
 
-interface PromoCodeItem {
-  id: number;
-  code: string;
-  description?: string;
-  type: 'percent' | 'fixed';
-  value: number;
-  min_amount?: number;
-  expires_at?: string;
-}
-
 interface BusinessProfileData {
   owner: BusinessOwner;
   accommodations?: any[];
   products?: any[];
-  promo_codes?: PromoCodeItem[];
   is_registered: boolean;
 }
 
@@ -403,7 +392,6 @@ export function BusinessProfile() {
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const videoFileInputRef = useRef<HTMLInputElement>(null);
   const [storeLocation, setStoreLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [copiedPromoCode, setCopiedPromoCode] = useState<string | null>(null);
   const [posts, setPosts] = useState<any[]>([]);
   const [activeProfileTab, setActiveProfileTab] = useState<'listings' | 'posts' | 'tour'>('listings');
   const [selectedPostCategory, setSelectedPostCategory] = useState<string>('all');
@@ -415,18 +403,15 @@ export function BusinessProfile() {
   const [isCoverMuted, setIsCoverMuted] = useState(true);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [productShareData, setProductShareData] = useState<{ title: string; description?: string; image?: string; category?: string } | null>(null);
-  const [isEditingTour, setIsEditingTour] = useState(false);
+  const [isEditingTour, setIsEditingTour] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get('manage') === 'true') {
+      setIsEditingTour(true);
+    }
+  }, [searchParams]);
   const [isVirtualTourModalOpen, setIsVirtualTourModalOpen] = useState(false);
   const [activeTourSceneId, setActiveTourSceneId] = useState<string | undefined>(undefined);
-
-  const handleCopyPromo = (code: string) => {
-    navigator.clipboard.writeText(code);
-    setCopiedPromoCode(code);
-    toast.success(`Promo code "${code}" copied to clipboard!`);
-    setTimeout(() => {
-      setCopiedPromoCode(prev => (prev === code ? null : prev));
-    }, 2500);
-  };
 
   const handleLikePost = async (postId: number | string) => {
     try {
@@ -638,6 +623,9 @@ export function BusinessProfile() {
     )
   );
   const isOwner = Boolean(isManageMode && isActualOwner);
+  const showTourEditor = Boolean(
+    isActualOwner && (isEditingTour !== null ? isEditingTour : isManageMode)
+  );
 
   const shopDisplayName = isResort
     ? (owner?.resort_name || owner?.name || 'Resort')
@@ -1392,6 +1380,18 @@ export function BusinessProfile() {
                 <span>{owner.phone || '0917-123-4567'}</span>
               </a>
 
+              {/* Gmail / Email Button */}
+              {owner.email && (
+                <a
+                  href={`mailto:${owner.email}`}
+                  className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full font-bold text-xs flex items-center gap-1.5 shadow-xs transition-all"
+                  title={`Email / Gmail: ${owner.email}`}
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  <span>{owner.email}</span>
+                </a>
+              )}
+
               {/* Facebook Button */}
               <a
                 href={owner.facebook_link || owner.facebook || 'https://facebook.com/DiscoverMansalayOfficial'}
@@ -1578,84 +1578,6 @@ export function BusinessProfile() {
                       );
                     })}
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* 🏷️ ACTIVE VOUCHERS / PROMO CODES */}
-            {data?.promo_codes && data.promo_codes.length > 0 && (
-              <div className="bg-gradient-to-r from-pink-500 via-rose-500 to-amber-500 rounded-2xl p-4 sm:p-5 mb-4 text-white shadow-md shadow-pink-500/10">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-xs">
-                      <Ticket className="h-4 w-4 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-extrabold tracking-wide uppercase">
-                        Available Shop Vouchers & Promo Discounts
-                      </h3>
-                      <p className="text-[11px] text-white/90 font-medium">Use these exclusive promo codes at checkout for instant discounts!</p>
-                    </div>
-                  </div>
-                  <span className="text-[11px] bg-white/20 backdrop-blur-xs px-2.5 py-0.5 rounded-full font-bold">
-                    {data.promo_codes.length} Active {data.promo_codes.length === 1 ? 'Voucher' : 'Vouchers'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {data.promo_codes.map((promo) => {
-                    const discountText = promo.type === 'percent' ? `${promo.value}% OFF` : `₱${Number(promo.value).toLocaleString()} OFF`;
-                    const isCopied = copiedPromoCode === promo.code;
-
-                    return (
-                      <div
-                        key={promo.id}
-                        className="bg-white rounded-xl p-3.5 text-gray-800 shadow-sm border border-white/50 flex items-center justify-between gap-3 relative overflow-hidden group"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="px-2 py-0.5 bg-pink-100 text-pink-700 font-extrabold text-xs rounded-md">
-                              {discountText}
-                            </span>
-                            {promo.min_amount && promo.min_amount > 0 ? (
-                              <span className="text-[10px] text-gray-500 font-medium truncate">
-                                Min. ₱{Number(promo.min_amount).toLocaleString()}
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="font-mono font-bold text-sm tracking-wider text-gray-900">
-                            {promo.code}
-                          </div>
-                          {promo.description && (
-                            <p className="text-[11px] text-gray-500 truncate mt-0.5">
-                              {promo.description}
-                            </p>
-                          )}
-                        </div>
-
-                        <button
-                          onClick={() => handleCopyPromo(promo.code)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 flex-shrink-0 active:scale-95 ${
-                            isCopied
-                              ? 'bg-emerald-500 text-white'
-                              : 'bg-gradient-to-r from-pink-500 to-rose-500 text-white hover:opacity-90 shadow-xs'
-                          }`}
-                        >
-                          {isCopied ? (
-                            <>
-                              <Check className="h-3.5 w-3.5" />
-                              <span>Copied</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="h-3.5 w-3.5" />
-                              <span>Copy Code</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    );
-                  })}
                 </div>
               </div>
             )}
@@ -1979,28 +1901,8 @@ export function BusinessProfile() {
                             </div>
                           ) : null}
 
-                          {/* Facebook-style Action Bar */}
-                          <div className="px-4 sm:px-6 py-3 border-t border-gray-100 flex items-center justify-between text-xs font-bold text-gray-600 bg-gray-50/50">
-                            <div className="flex items-center gap-4 sm:gap-6">
-                              <button
-                                type="button"
-                                onClick={() => handleLikePost(post.id)}
-                                className="flex items-center gap-1.5 hover:text-pink-600 active:scale-95 transition-all cursor-pointer py-1"
-                              >
-                                <PushPinIcon alwaysTilted size={16} idPrefix={`post-like-${post.id}`} />
-                                <span>{post.likes || 0} Pins</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => handleSavePost(post.id)}
-                                className="flex items-center gap-1.5 hover:text-purple-600 active:scale-95 transition-all cursor-pointer py-1"
-                              >
-                                <Bookmark className="h-4 w-4 text-purple-500 fill-purple-50" />
-                                <span>{post.saves || 0} Saves</span>
-                              </button>
-                            </div>
-
+                          {/* Action Bar */}
+                          <div className="px-4 sm:px-6 py-3 border-t border-gray-100 flex items-center justify-end text-xs font-bold text-gray-600 bg-gray-50/50">
                             <button
                               type="button"
                               onClick={() => setViewingPost(post)}
@@ -2024,7 +1926,7 @@ export function BusinessProfile() {
         {activeProfileTab === 'tour' && (
           <div className="space-y-6 animate-in fade-in duration-150 mb-6">
             {/* If the current user is the actual resort/enterprise owner (or admin) AND is in edit mode */}
-            {isActualOwner && (isManageMode || isEditingTour) ? (
+            {showTourEditor ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-3.5 bg-pink-50 border border-pink-200 rounded-2xl">
                   <div className="flex items-center gap-2">
@@ -2036,7 +1938,7 @@ export function BusinessProfile() {
                   <button
                     type="button"
                     onClick={() => setIsEditingTour(false)}
-                    className="px-3.5 py-1.5 bg-white hover:bg-gray-50 border border-pink-200 text-pink-700 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    className="px-3.5 py-1.5 bg-white hover:bg-pink-100/50 border border-pink-300 text-pink-700 hover:text-pink-800 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
                   >
                     <span>Switch to Visitor View</span>
                     <span>👁️</span>
@@ -2057,6 +1959,25 @@ export function BusinessProfile() {
             ) : (
               /* ── TOURIST / VISITOR VIEW: DIRECT LIVE 360° EMBEDDED PANORAMA VIEWER ── */
               <div className="space-y-4">
+                {/* Notice banner for owner in Visitor View */}
+                {isActualOwner && (
+                  <div className="flex items-center justify-between p-3.5 bg-blue-50/90 border border-blue-200 rounded-2xl animate-in fade-in duration-150">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+                      <span className="text-xs font-bold text-blue-900">
+                        👁️ Visitor View Active: You are testing what visitors and tourists experience
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingTour(true)}
+                      className="px-3.5 py-1.5 bg-white hover:bg-blue-100 border border-blue-300 text-blue-800 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Return to Scene Editor</span>
+                      <span>🛠️</span>
+                    </button>
+                  </div>
+                )}
                 {/* Header Showcase Card */}
                 <div className="bg-white rounded-3xl p-5 sm:p-6 border border-gray-100 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1">
@@ -2102,69 +2023,6 @@ export function BusinessProfile() {
           </div>
         )}
 
-        {/* 📞 CONTACT INFORMATION SECTION */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mt-4">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-8 h-8 rounded-xl bg-pink-50 text-pink-500 flex items-center justify-center">
-              <Phone className="h-4 w-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
-                Contact Information
-              </h3>
-              <p className="text-xs text-gray-500">
-                Get in touch with {shopName} directly
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {owner.email && (
-              <a href={`mailto:${owner.email}`} className="flex items-center gap-3 p-3.5 border border-gray-100 rounded-xl hover:border-pink-300 hover:bg-pink-50/50 transition-all">
-                <div className="w-9 h-9 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Mail className="h-4 w-4 text-pink-500" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] text-gray-400 font-bold uppercase">Email Address</div>
-                  <div className="text-xs text-gray-800 truncate font-semibold">{owner.email}</div>
-                </div>
-              </a>
-            )}
-            {owner.phone && (
-              <a href={`tel:${owner.phone}`} className="flex items-center gap-3 p-3.5 border border-gray-100 rounded-xl hover:border-pink-300 hover:bg-pink-50/50 transition-all">
-                <div className="w-9 h-9 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Phone className="h-4 w-4 text-pink-500" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] text-gray-400 font-bold uppercase">Contact Phone</div>
-                  <div className="text-xs text-gray-800 font-semibold">{owner.phone}</div>
-                </div>
-              </a>
-            )}
-            {owner.facebook_link && (
-              <a href={owner.facebook_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3.5 border border-gray-100 rounded-xl hover:border-blue-300 hover:bg-blue-50/50 transition-all">
-                <div className="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <ExternalLink className="h-4 w-4 text-blue-600" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] text-gray-400 font-bold uppercase">Facebook Page</div>
-                  <div className="text-xs text-blue-600 font-semibold truncate">Visit Facebook</div>
-                </div>
-              </a>
-            )}
-            {owner.instagram_link && (
-              <a href={owner.instagram_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3.5 border border-gray-100 rounded-xl hover:border-pink-300 hover:bg-pink-50/50 transition-all">
-                <div className="w-9 h-9 bg-pink-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <ExternalLink className="h-4 w-4 text-pink-600" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] text-gray-400 font-bold uppercase">Instagram</div>
-                  <div className="text-xs text-pink-600 font-semibold truncate">Visit Instagram</div>
-                </div>
-              </a>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* ── MODAL: VIEW FULL POST DETAIL ── */}
@@ -2298,25 +2156,7 @@ export function BusinessProfile() {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 bg-gray-50/80 border-t border-gray-100 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => handleLikePost(viewingPost.id)}
-                  className="flex items-center gap-1.5 text-xs font-bold text-pink-600 hover:text-pink-700 active:scale-95 transition-all cursor-pointer"
-                >
-                  <PushPinIcon alwaysTilted size={16} idPrefix={`modal-post-like-${viewingPost.id}`} />
-                  <span>{viewingPost.likes || 0} Pins</span>
-                </button>
-
-                <button
-                  onClick={() => handleSavePost(viewingPost.id)}
-                  className="flex items-center gap-1.5 text-xs font-bold text-purple-600 hover:text-purple-700 active:scale-95 transition-all cursor-pointer"
-                >
-                  <Bookmark className="h-4 w-4 fill-purple-500 text-purple-500" />
-                  <span>{viewingPost.saves || 0} Saves</span>
-                </button>
-              </div>
-
+            <div className="p-4 bg-gray-50/80 border-t border-gray-100 flex items-center justify-end">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
@@ -2336,8 +2176,14 @@ export function BusinessProfile() {
 
       {/* ── 🛏️ MODAL: ROOM & COTTAGE DETAILS VIEWER ── */}
       {viewingRoom && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
+        <div 
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
+          onClick={() => setViewingRoom(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-pink-50 via-rose-50 to-pink-50">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -2526,31 +2372,6 @@ export function BusinessProfile() {
                 )}
               </div>
             </div>
-
-            {/* Modal Footer Actions */}
-            <div className="p-4 bg-gray-50/90 border-t border-gray-100 flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => setViewingRoom(null)}
-                className="px-4 py-2.5 bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-              >
-                Close
-              </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setViewingRoom(null);
-                    handleChat();
-                  }}
-                  className="px-6 py-2.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white rounded-xl text-xs font-extrabold shadow-md shadow-pink-500/25 flex items-center gap-2 transition-all cursor-pointer"
-                >
-                  <MessageCircle className="h-4 w-4" />
-                  <span>Book / Inquire This Room</span>
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -2607,32 +2428,30 @@ export function BusinessProfile() {
                     <Share2 className="h-4 w-4" />
                   </button>
                   {/* Save/Wishlist Button */}
-                  {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' && (
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (!getAuthToken()) {
-                          toast.info('Please log in to save products to wishlist');
-                          navigate('/tourist/login');
-                          return;
-                        }
-                        if (isInWishlist(viewingProduct.id, 'product')) {
-                          const confirmed = await showUnsaveConfirmDialog(viewingProduct.name);
-                          if (confirmed) removeFromWishlist(viewingProduct.id, 'product', viewingProduct.name);
-                        } else {
-                          addToWishlist({ id: viewingProduct.id, type: 'product', title: viewingProduct.name, image: viewingProduct.image, category: viewingProduct.category, price: viewingProduct.price, likes: viewingProduct.likes } as any);
-                        }
-                      }}
-                      className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ${
-                        isInWishlist(viewingProduct.id, 'product')
-                          ? 'bg-rose-50 border-rose-300 shadow-sm'
-                          : 'border-gray-200 hover:bg-pink-50'
-                      }`}
-                      title={isInWishlist(viewingProduct.id, 'product') ? 'Remove from saved items' : 'Pin to saved items'}
-                    >
-                      <PushPinIcon isPinned={isInWishlist(viewingProduct.id, 'product')} size={18} idPrefix={`modal-bp-prod-${viewingProduct.id}`} />
-                    </button>
-                  )}
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!getAuthToken()) {
+                        toast.info('Please log in to save products to wishlist');
+                        navigate('/tourist/login');
+                        return;
+                      }
+                      if (isInWishlist(viewingProduct.id, 'product')) {
+                        const confirmed = await showUnsaveConfirmDialog(viewingProduct.name);
+                        if (confirmed) removeFromWishlist(viewingProduct.id, 'product', viewingProduct.name);
+                      } else {
+                        addToWishlist({ id: viewingProduct.id, type: 'product', title: viewingProduct.name, image: viewingProduct.image, category: viewingProduct.category, price: viewingProduct.price, likes: viewingProduct.likes } as any);
+                      }
+                    }}
+                    className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ${
+                      isInWishlist(viewingProduct.id, 'product')
+                        ? 'bg-rose-50 border-rose-300 shadow-sm'
+                        : 'border-gray-200 hover:bg-pink-50'
+                    }`}
+                    title={isInWishlist(viewingProduct.id, 'product') ? 'Remove from saved items' : 'Pin to saved items'}
+                  >
+                    <PushPinIcon isPinned={isInWishlist(viewingProduct.id, 'product')} size={18} idPrefix={`modal-bp-prod-${viewingProduct.id}`} />
+                  </button>
                 </div>
               </div>
 
@@ -3168,24 +2987,17 @@ function ProductCard({ product, onSelect }: any) {
             <span>📷 {product.images.length}</span>
           </div>
         )}
-        {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' ? (
-          <button
-            onClick={toggleSave}
-            className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer ${
-              isSaved
-                ? 'bg-rose-50 border border-rose-200'
-                : 'bg-white/80 hover:bg-white text-gray-700'
-            }`}
-            title={isSaved ? "Remove from saved items" : "Pin to saved items"}
-          >
-            <PushPinIcon isPinned={isSaved} size={15} idPrefix={`bp-prod-${product.id}`} />
-          </button>
-        ) : (
-          <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full text-[9px] font-bold text-white flex items-center gap-1 whitespace-nowrap">
-            <PushPinIcon alwaysTilted size={12} idPrefix={`bp-prod-adm-${product.id}`} />
-            <span>Save: {count}</span>
-          </div>
-        )}
+        <button
+          onClick={toggleSave}
+          className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer z-10 ${
+            isSaved
+              ? 'bg-rose-50 border border-rose-200'
+              : 'bg-white/80 hover:bg-white text-gray-700'
+          }`}
+          title={isSaved ? "Remove from saved items" : "Pin to saved items"}
+        >
+          <PushPinIcon isPinned={isSaved} size={15} idPrefix={`bp-prod-${product.id}`} />
+        </button>
         <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-md text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
           <PushPinIcon alwaysTilted size={12} idPrefix={`bp-prod-cnt-${product.id}`} />
           <span>{count}</span>
@@ -3351,25 +3163,18 @@ function AccommodationCard({ accommodation, onSelect }: any) {
           </>
         )}
 
-        {userType !== 'admin' && userType !== 'resort' && userType !== 'enterprise' ? (
-          <button
-            type="button"
-            onClick={toggleSave}
-            className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer z-10 ${
-              isSaved
-                ? 'bg-rose-50 border border-rose-200'
-                : 'bg-white/80 hover:bg-white text-gray-700'
-            }`}
-            title={isSaved ? "Remove from saved items" : "Pin to saved items"}
-          >
-            <PushPinIcon isPinned={isSaved} size={15} idPrefix={`bp-acc-${accommodation.id}`} />
-          </button>
-        ) : (
-          <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full text-[9px] font-bold text-white flex items-center gap-1 whitespace-nowrap z-10">
-            <PushPinIcon alwaysTilted size={12} idPrefix={`bp-acc-adm-${accommodation.id}`} />
-            <span>Save: {count}</span>
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={toggleSave}
+          className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer z-10 ${
+            isSaved
+              ? 'bg-rose-50 border border-rose-200'
+              : 'bg-white/80 hover:bg-white text-gray-700'
+          }`}
+          title={isSaved ? "Remove from saved items" : "Pin to saved items"}
+        >
+          <PushPinIcon isPinned={isSaved} size={15} idPrefix={`bp-acc-${accommodation.id}`} />
+        </button>
 
         <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 backdrop-blur-md text-white px-2 py-0.5 rounded-full text-[10px] font-bold z-10">
           <PushPinIcon alwaysTilted size={12} idPrefix={`bp-acc-cnt-${accommodation.id}`} />

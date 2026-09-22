@@ -58,7 +58,7 @@ export function ProfileSetupModal({ isOpen, onComplete }: ProfileSetupModalProps
         role: roleToSubmit,
         business_name: roleToSubmit !== 'tourist' ? businessName : undefined,
         barangay: roleToSubmit !== 'tourist' ? barangay : undefined,
-        phone: phone || undefined,
+        phone: phone ? (phone.startsWith('0') ? phone : `0${phone}`) : undefined,
         facebook_link: facebookLink || undefined,
         instagram_link: instagramLink || undefined,
       };
@@ -344,17 +344,33 @@ export function ProfileSetupModal({ isOpen, onComplete }: ProfileSetupModalProps
 
               {/* Phone Number */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                  Contact Phone Number (Call Link)
-                </label>
-                <div className="relative">
-                  <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                    Contact Phone Number (Call Link)
+                  </label>
+                  <span className="text-[10px] font-bold text-gray-400">
+                    PH (+63) 10-digit
+                  </span>
+                </div>
+                <div className="relative flex items-center">
+                  <div className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg pointer-events-none select-none z-10 shadow-2xs">
+                    <span className="text-xs leading-none">🇵🇭</span>
+                    <span className="text-xs font-black text-gray-700 dark:text-gray-200">+63</span>
+                  </div>
                   <input
-                    type="text"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="e.g. 0917-123-4567"
-                    className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:bg-white focus:border-pink-500 outline-none"
+                    onChange={(e) => {
+                      let val = e.target.value.replace(/\D/g, '');
+                      if (val.startsWith('63') && val.length > 2) val = val.slice(2);
+                      if (val.startsWith('0')) val = val.slice(1);
+                      setPhone(val.slice(0, 10));
+                    }}
+                    placeholder="917 123 4567"
+                    maxLength={10}
+                    className="w-full pl-[76px] pr-4 py-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:bg-white focus:border-pink-500 outline-none tracking-wider"
                   />
                 </div>
               </div>
