@@ -2537,12 +2537,6 @@ export function BusinessProfile() {
                       <Phone className="h-3.5 w-3.5" /> Call
                     </a>
                   )}
-                  <button
-                    onClick={() => { setViewingProduct(null); handleChat(); }}
-                    className="px-4 py-2 bg-gradient-to-r from-pink-500 to-rose-500 hover:opacity-90 text-white border-0 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
-                  >
-                    <MessageCircle className="h-3.5 w-3.5" /> Chat / Order
-                  </button>
                   {owner?.facebook_link && (
                     <a
                       href={owner.facebook_link}

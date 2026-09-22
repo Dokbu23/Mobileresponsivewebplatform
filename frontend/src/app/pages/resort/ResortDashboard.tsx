@@ -1771,14 +1771,6 @@ export function ResortDashboard() {
                       <div className="flex items-center gap-4">
                         <button
                           type="button"
-                          onClick={() => handleSavePost(post.id)}
-                          className="flex items-center gap-1.5 text-gray-600 hover:text-pink-600 transition-colors font-medium cursor-pointer"
-                        >
-                          <Bookmark className="h-4 w-4 text-pink-500 hover:scale-110 transition-transform" />
-                          <span>{post.saves || 0} saves</span>
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => {
                             if (navigator.share) {
                               navigator.share({
