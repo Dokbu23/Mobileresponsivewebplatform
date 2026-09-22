@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { MapPin, Navigation, X, Star, ChevronLeft, ChevronRight, Share2, Search, Tag, Camera, Phone, Facebook, Instagram, MessageCircle, ArrowRight, Video, Play, Filter, ChevronDown } from 'lucide-react';
-import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
+import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken, decodeHtml, recordView, cleanItineraryTitle } from '../../lib/api';
 import { ATTRACTION_CATEGORIES } from '../../lib/constants';
 import { VirtualTourModal } from '../../components/VirtualTourModal';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
@@ -115,7 +115,7 @@ export function Attractions() {
 
         return {
           id: String(d.id),
-          name: decodeHtml(d.name),
+          name: cleanItineraryTitle(d.name),
           description: decodeHtml(d.description),
           fullDescription: decodeHtml(d.full_description ?? d.fullDescription),
           image: mainImage,
@@ -150,7 +150,7 @@ export function Attractions() {
       } catch {}
       const mapped = customAttractions.filter(d => !deletedIds.has(String(d.id))).map((d: any) => ({
         id: String(d.id),
-        name: d.name,
+        name: cleanItineraryTitle(d.name),
         description: d.description,
         fullDescription: d.full_description ?? d.description,
         image: d.image || '/assets/default-attraction.jpg',

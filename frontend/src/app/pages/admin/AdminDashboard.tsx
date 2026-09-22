@@ -28,7 +28,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { toast } from 'sonner';
-import { getPublicJSON, formatImageUrl, API_BASE, decodeHtml } from '../../lib/api';
+import { getPublicJSON, formatImageUrl, API_BASE, decodeHtml, cleanItineraryTitle } from '../../lib/api';
 
 export function AdminDashboard() {
   const navigate = useNavigate();
@@ -215,7 +215,7 @@ export function AdminDashboard() {
         const realSaves = (localWishlistCounts[key] != null) ? localWishlistCounts[key] : (Number(item.view_count) || 0);
         return {
           id: item.id,
-          name: decodeHtml(item.name || item.store_name || item.title || 'Destination'),
+          name: cleanItineraryTitle(item.name || item.store_name || item.title || 'Destination'),
           category: decodeHtml(item.category || (item.itemType === 'accommodation' ? 'Resort' : (item.itemType === 'product' ? 'Product' : 'Attraction'))),
           saves: realSaves,
           image: item.image || (Array.isArray(item.images) && item.images[0]) || null,

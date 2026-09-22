@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PushPinIcon } from '../../components/PushPinIcon';
-import { getPublicJSON, API_BASE, decodeHtml, formatImageUrl } from '../../lib/api';
+import { getPublicJSON, API_BASE, decodeHtml, formatImageUrl, cleanItineraryTitle } from '../../lib/api';
 
 export function Wishlist() {
   const navigate = useNavigate();
@@ -69,7 +69,13 @@ export function Wishlist() {
         customList.forEach((c: any) => {
           if (!existingIds.has(String(c.id))) combined.unshift(c);
         });
-        return combined.filter((i: any) => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
+        return combined
+          .filter((i: any) => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)))
+          .map((i: any) => ({
+            ...i,
+            name: i.name ? cleanItineraryTitle(i.name) : i.name,
+            title: i.title ? cleanItineraryTitle(i.title) : i.title,
+          }));
       };
 
       const activeAttractions = mergeSection(attrRes, customAttractions);

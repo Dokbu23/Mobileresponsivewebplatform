@@ -112,6 +112,79 @@ export function decodeHtml(str: string | null | undefined): string {
 }
 
 /**
+ * Strip "(Itinerary)" or "(itenerary)" from titles and names
+ */
+export function cleanItineraryTitle(str: string | null | undefined): string {
+  if (!str) return '';
+  return decodeHtml(str)
+    .replace(/\s*\([iI]t[ie]nerary\)/gi, '')
+    .trim();
+}
+
+/**
+ * Sanitize all localStorage caches to permanently remove "(Itinerary)" from existing saved objects
+ */
+export function sanitizeStoredItineraryTitles() {
+  if (typeof window === 'undefined') return;
+  const keys = [
+    'discover-mansalay:custom_attractions',
+    'discover-mansalay:custom_itinerarys',
+    'discover-mansalay:published_itineraries',
+    'discover-mansalay:custom_resorts',
+    'discover-mansalay:custom_events',
+    'discover-mansalay:custom_products',
+    'discover-mansalay:wishlist'
+  ];
+
+  keys.forEach(key => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw && (raw.includes('(Itinerary)') || raw.includes('(itinerary)') || raw.includes('(Itenerary)'))) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.map((item: any) => {
+            if (!item || typeof item !== 'object') return item;
+            return {
+              ...item,
+              name: item.name ? cleanItineraryTitle(item.name) : item.name,
+              title: item.title ? cleanItineraryTitle(item.title) : item.title,
+            };
+          });
+          localStorage.setItem(key, JSON.stringify(cleaned));
+        }
+      }
+    } catch {}
+  });
+
+  // Also sanitize custom trips
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('discover-mansalay:custom-trips')) {
+        const raw = localStorage.getItem(k);
+        if (raw && (raw.includes('(Itinerary)') || raw.includes('(itinerary)') || raw.includes('(Itenerary)'))) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            const cleaned = parsed.map((item: any) => ({
+              ...item,
+              title: item.title ? cleanItineraryTitle(item.title) : item.title,
+              name: item.name ? cleanItineraryTitle(item.name) : item.name,
+            }));
+            localStorage.setItem(k, JSON.stringify(cleaned));
+          }
+        }
+      }
+    }
+  } catch {}
+}
+
+if (typeof window !== 'undefined') {
+  try {
+    sanitizeStoredItineraryTitles();
+  } catch {}
+}
+
+/**
  * Real-time view counter tracking helper
  */
 export function recordView(id: string | number, type: 'attraction' | 'accommodation' | 'resort' | 'product' | 'enterprise') {

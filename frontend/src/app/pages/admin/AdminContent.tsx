@@ -37,7 +37,7 @@ import {
   RefreshCw,
   Save
 } from 'lucide-react';
-import { getPublicJSON, postJSON, deleteJSON, API_BASE } from '../../lib/api';
+import { getPublicJSON, postJSON, deleteJSON, API_BASE, cleanItineraryTitle } from '../../lib/api';
 import {
   MANSALAY_BARANGAYS,
   ATTRACTION_CATEGORIES,
@@ -889,7 +889,7 @@ export function AdminContent() {
     const resolvedVideo = videoPreviewUrl || videoUrlInput.trim() || undefined;
     const newItemPayload: any = {
       id: editingId || Date.now(),
-      name: activeTab === 'itinerary' && !name.includes('Itinerary') ? `${name} (Itinerary)` : name,
+      name: cleanItineraryTitle(name),
       category: category || (activeTab === 'resort' ? 'Accommodation' : activeTab === 'product' ? 'Handicraft' : activeTab === 'attraction' ? 'Beach' : activeTab === 'event' ? 'Festival' : 'Beach & Relaxation'),
       type: category || (activeTab === 'resort' ? 'Accommodation' : 'General'),
       description,
@@ -920,7 +920,7 @@ export function AdminContent() {
       badge: itineraryBadge || (activeTab === 'itinerary' ? 'Official Tourism Itinerary' : undefined),
       days_count: numberOfDays,
       duration: `${numberOfDays} days`,
-      title: activeTab === 'itinerary' ? name : undefined,
+      title: activeTab === 'itinerary' ? cleanItineraryTitle(name) : undefined,
       highlights: highlightsText.split('\n').filter((h) => h.trim().length > 0),
       schedule: daySchedules,
       days: activeTab === 'itinerary' ? daySchedules.map((ds) => ({

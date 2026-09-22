@@ -7,7 +7,7 @@ import {
   Users, Waves, Trees, Info, Share2, Eye, Camera, CheckCircle, X
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken, decodeHtml } from '../../lib/api';
+import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken, decodeHtml, cleanItineraryTitle } from '../../lib/api';
 import { DetailModal, DetailModalItem } from '../../components/DetailModal';
 import { ShareModal } from '../../components/ShareModal';
 import { toast } from 'sonner';
@@ -121,9 +121,9 @@ export function Dashboard() {
           .filter(i => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)))
           .map(i => ({
             ...i,
-            name: i.name ? decodeHtml(i.name) : i.name,
-            title: i.title ? decodeHtml(i.title) : i.title,
-            resort_name: i.resort_name ? decodeHtml(i.resort_name) : i.resort_name,
+            name: i.name ? cleanItineraryTitle(i.name) : i.name,
+            title: i.title ? cleanItineraryTitle(i.title) : i.title,
+            resort_name: i.resort_name ? cleanItineraryTitle(i.resort_name) : i.resort_name,
             description: i.description ? decodeHtml(i.description) : i.description,
           }));
       };

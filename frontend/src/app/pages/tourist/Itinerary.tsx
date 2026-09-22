@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
-import { getAuthToken, getPublicJSON, formatImageUrl, API_BASE } from '../../lib/api';
+import { getAuthToken, getPublicJSON, formatImageUrl, API_BASE, cleanItineraryTitle } from '../../lib/api';
 import { PushPinIcon } from '../../components/PushPinIcon';
 import { showDeleteConfirmDialog } from '../../lib/sweetAlert';
 
@@ -227,7 +227,7 @@ export function Itinerary() {
 
         return {
           id: String(item.id),
-          title: item.title || item.name || 'Official Mansalay Itinerary',
+          title: cleanItineraryTitle(item.title || item.name) || 'Official Mansalay Itinerary',
           badge: item.badge || 'Official Tourism Plan',
           category: item.category || 'Travel Itinerary',
           duration: item.duration || `${item.days_count || days.length || 2} days`,
@@ -271,12 +271,19 @@ export function Itinerary() {
     try {
       const stored = localStorage.getItem(key);
       if (stored) {
-        setMyCustomTrips(JSON.parse(stored));
+        const parsed = JSON.parse(stored).map((t: any) => ({
+          ...t,
+          title: cleanItineraryTitle(t.title),
+        }));
+        setMyCustomTrips(parsed);
       } else {
         // One-time migration for current user if old shared storage exists
         const legacyStored = localStorage.getItem('discover-mansalay:custom-trips');
         if (legacyStored && currentUser?.id) {
-          const parsed = JSON.parse(legacyStored);
+          const parsed = JSON.parse(legacyStored).map((t: any) => ({
+            ...t,
+            title: cleanItineraryTitle(t.title),
+          }));
           setMyCustomTrips(parsed);
           localStorage.setItem(key, JSON.stringify(parsed));
           localStorage.removeItem('discover-mansalay:custom-trips');
