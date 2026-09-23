@@ -15,24 +15,65 @@ class AdminUserSeeder extends Seeder
      */
     public function run()
     {
-        $email = 'jaymarzx21@gmail.com';
-        $name = 'Tourism';
-        $password = 'admin123';
+        $accounts = [
+            [
+                'name' => 'Tourism Admin',
+                'email' => 'jaymarzx21@gmail.com',
+                'password' => Hash::make('admin123'),
+                'role' => 'admin',
+                'listing_status' => 'approved',
+                'subscription_status' => 'paid',
+                'is_active' => true,
+                'email_verified_at' => now(),
+            ],
+            [
+                'name' => 'Admin User',
+                'email' => 'admin@mansalay.com',
+                'password' => Hash::make('admin123'),
+                'role' => 'admin',
+                'listing_status' => 'approved',
+                'subscription_status' => 'paid',
+                'is_active' => true,
+                'email_verified_at' => now(),
+            ],
+            [
+                'name' => 'Mansalay Beach Resort',
+                'email' => 'resort@mansalay.com',
+                'password' => Hash::make('resort123'),
+                'role' => 'resort',
+                'listing_status' => 'approved',
+                'subscription_status' => 'paid',
+                'is_active' => true,
+                'email_verified_at' => now(),
+            ],
+            [
+                'name' => 'Local Handicrafts Shop',
+                'email' => 'enterprise@mansalay.com',
+                'password' => Hash::make('enterprise123'),
+                'role' => 'enterprise',
+                'listing_status' => 'approved',
+                'subscription_status' => 'paid',
+                'is_active' => true,
+                'email_verified_at' => now(),
+            ],
+            [
+                'name' => 'Juan Dela Cruz',
+                'email' => 'tourist@example.com',
+                'password' => Hash::make('tourist123'),
+                'role' => 'tourist',
+                'listing_status' => 'approved',
+                'subscription_status' => 'paid',
+                'is_active' => true,
+                'email_verified_at' => now(),
+            ],
+        ];
 
-        if (User::where('email', $email)->exists()) {
-            $this->command->info("Admin user already exists: {$email}");
-            return;
+        foreach ($accounts as $acc) {
+            User::updateOrCreate(
+                ['email' => $acc['email']],
+                $acc
+            );
+            $this->command->info("Account ready: {$acc['email']} (role: {$acc['role']})");
         }
-
-        $user = new User();
-        $user->name = $name;
-        $user->email = $email;
-        $user->password = Hash::make($password);
-        $user->role = 'admin';
-        $user->is_active = true;
-        $user->email_verified_at = now();
-        $user->save();
-
-        $this->command->info("Admin user created: {$email} (password: {$password})");
     }
 }

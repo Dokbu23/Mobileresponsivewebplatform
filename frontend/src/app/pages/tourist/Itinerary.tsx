@@ -82,7 +82,14 @@ export function Itinerary() {
 
   const isAdmin =
     currentUser?.role === 'admin' ||
-    userType === 'admin';
+    userType === 'admin' ||
+    (typeof window !== 'undefined' && (
+      localStorage.getItem('discover-mansalay:isAdmin') === 'true' ||
+      localStorage.getItem('discover-mansalay:userType') === 'admin' ||
+      localStorage.getItem('discover-mansalay:role') === 'admin' ||
+      localStorage.getItem('discover-mansalay:user')?.includes('"role":"admin"') ||
+      localStorage.getItem('discover-mansalay:currentUser')?.includes('"role":"admin"')
+    ));
 
   const isBusiness =
     (userType === 'resort' ||
@@ -431,6 +438,36 @@ export function Itinerary() {
     if (selectedItinerary?.id === id) setSelectedItinerary(null);
     window.dispatchEvent(new Event('contentUpdated'));
     toast.success('Official itinerary removed successfully');
+  };
+
+  const handlePublishToOfficial = async (trip: ItineraryCard, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const confirmed = await showDeleteConfirmDialog(
+      'Publish as Official Itinerary?',
+      `Are you sure you want to publish "${trip.title}" to Official Mansalay Itineraries? It will be publicly visible to all tourists.`,
+      'Yes, Publish',
+      'Cancel'
+    );
+    if (!confirmed) return;
+
+    await saveAndPublishItinerary({
+      ...trip,
+      isOfficial: true,
+      badge: 'Official Tourism Plan',
+    });
+
+    // Remove from private custom trips after publishing officially so it's transferred cleanly
+    setMyCustomTrips(prev => prev.filter(t => t.id !== trip.id));
+    const key = getUserTripStorageKey(currentUser);
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        const list = JSON.parse(stored).filter((t: any) => t.id !== trip.id);
+        localStorage.setItem(key, JSON.stringify(list));
+      }
+    } catch {}
+
+    toast.success(`"${trip.title}" is now published in Official Mansalay Itineraries!`);
   };
 
   // AI Itinerary Generator Logic
@@ -875,6 +912,17 @@ export function Itinerary() {
                           {trip.badge || 'Custom Trip'}
                         </span>
                         <div className="flex items-center gap-1">
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={(e) => handlePublishToOfficial(trip, e)}
+                              className="px-2.5 py-1 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white shadow-xs text-[10px] font-extrabold rounded-full transition-all flex items-center gap-1 cursor-pointer transform hover:scale-105 active:scale-95"
+                              title="Publish this trip to Official Mansalay Itineraries"
+                            >
+                              <Compass className="h-3 w-3" />
+                              <span>Publish Official</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={(e) => handleDeleteCustomTrip(trip.id, trip.title, e)}
@@ -1019,14 +1067,26 @@ export function Itinerary() {
                     <Printer className="h-3.5 w-3.5" /> Print / PDF
                   </button>
                   {myCustomTrips.some(t => t.id === selectedItinerary.id) ? (
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteCustomTrip(selectedItinerary.id, selectedItinerary.title, e)}
-                      className="px-3.5 py-1.5 bg-red-500/90 hover:bg-red-600 text-white text-xs font-bold rounded-full backdrop-blur-md transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
-                      title="Delete Itinerary"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" /> Delete Itinerary
-                    </button>
+                    <>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={(e) => handlePublishToOfficial(selectedItinerary, e)}
+                          className="px-3.5 py-1.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 text-white text-xs font-bold rounded-full shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+                          title="Publish as Official Route"
+                        >
+                          <Compass className="h-3.5 w-3.5" /> Publish to Official
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteCustomTrip(selectedItinerary.id, selectedItinerary.title, e)}
+                        className="px-3.5 py-1.5 bg-red-500/90 hover:bg-red-600 text-white text-xs font-bold rounded-full backdrop-blur-md transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                        title="Delete Itinerary"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Delete Itinerary
+                      </button>
+                    </>
                   ) : (
                     <>
                       {isAdmin && selectedItinerary.isOfficial && (
