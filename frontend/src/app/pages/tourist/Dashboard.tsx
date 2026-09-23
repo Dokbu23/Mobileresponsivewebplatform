@@ -467,7 +467,7 @@ export function Dashboard() {
             </div>
             <div>
               <p className="text-base sm:text-2xl font-black text-gray-900 leading-tight">
-                {formatCount(stats?.tourists || stats?.visitor_count || (attractions.reduce((sum, a) => sum + (Number(a.view_count) || 0), 0) + 12))}
+                {formatCount(stats?.tourists ?? stats?.visitor_count ?? attractions.reduce((sum, a) => sum + (Number(a.view_count) || 0), 0))}
               </p>
               <p className="text-[10px] sm:text-xs text-gray-500 font-medium group-hover:text-blue-600 transition-colors">Visitor Count</p>
             </div>
@@ -481,7 +481,7 @@ export function Dashboard() {
             </div>
             <div>
               <p className="text-base sm:text-2xl font-black text-gray-900 leading-tight">
-                {formatCount(attractions.length || stats?.attractions || 8)}
+                {formatCount(stats?.attractions ?? attractions.length)}
               </p>
               <p className="text-[10px] sm:text-xs text-gray-500 font-medium group-hover:text-emerald-600 transition-colors">Local Attractions</p>
             </div>
@@ -495,7 +495,7 @@ export function Dashboard() {
             </div>
             <div>
               <p className="text-base sm:text-2xl font-black text-gray-900 leading-tight">
-                {formatCount(displayBeaches.length || 4)}
+                {formatCount(featuredBeaches.length)}
               </p>
               <p className="text-[10px] sm:text-xs text-gray-500 font-medium group-hover:text-cyan-600 transition-colors">Beaches</p>
             </div>
@@ -509,7 +509,7 @@ export function Dashboard() {
             </div>
             <div>
               <p className="text-base sm:text-2xl font-black text-gray-900 leading-tight">
-                {formatCount(accommodations.length || stats?.resorts || 6)}
+                {formatCount(stats?.resorts ?? accommodations.length)}
               </p>
               <p className="text-[10px] sm:text-xs text-gray-500 font-medium group-hover:text-pink-600 transition-colors">Resorts</p>
             </div>
