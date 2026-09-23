@@ -328,8 +328,11 @@ export async function getJSON(path: string) {
   });
   
   if (res.status === 401) {
-    console.error('401 Unauthorized - Token expired or invalid');
-    handleUnauthorized();
+    console.warn(`401 Unauthorized on ${path}`);
+    const isBackground = path.includes('/notifications') || path.includes('/messages/unread');
+    if (!isBackground) {
+      handleUnauthorized();
+    }
     throw new Error('Authentication required');
   }
   
@@ -809,11 +812,19 @@ export interface NotificationListResponse {
 }
 
 export async function getNotifications(): Promise<NotificationListResponse> {
-  return getJSON('/notifications');
+  try {
+    return await getJSON('/notifications');
+  } catch {
+    return { success: true, notifications: [], unread_count: 0 };
+  }
 }
 
 export async function getUnreadNotificationCount(): Promise<{ success: boolean; unread_count: number }> {
-  return getJSON('/notifications/unread-count');
+  try {
+    return await getJSON('/notifications/unread-count');
+  } catch {
+    return { success: true, unread_count: 0 };
+  }
 }
 
 export async function markNotificationAsRead(id: number) {
