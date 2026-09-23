@@ -34,7 +34,25 @@ class JwtAuth
         }
 
         // Extract token from Authorization header or X-Auth-Token header
-        $token = $request->bearerToken() ?? $request->header('X-Auth-Token');
+        $token = $request->bearerToken() 
+            ?? $request->header('X-Auth-Token') 
+            ?? $request->header('x-auth-token');
+
+        if (!$token && $authHeader = $request->header('Authorization')) {
+            if (preg_match('/Bearer\s+(\S+)/i', $authHeader, $matches)) {
+                $token = $matches[1];
+            }
+        }
+        if (!$token && isset($_SERVER['HTTP_AUTHORIZATION'])) {
+            if (preg_match('/Bearer\s+(\S+)/i', $_SERVER['HTTP_AUTHORIZATION'], $matches)) {
+                $token = $matches[1];
+            }
+        }
+        if (!$token && isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+            if (preg_match('/Bearer\s+(\S+)/i', $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], $matches)) {
+                $token = $matches[1];
+            }
+        }
         
         if (!$token) {
             return response()->json([
@@ -107,7 +125,7 @@ class JwtAuth
             
             return response()->json([
                 'error' => 'Invalid token',
-                'message' => 'Authentication token is invalid or expired'
+                'message' => 'Authentication token is invalid or expired: ' . $e->getMessage()
             ], 401);
         }
 

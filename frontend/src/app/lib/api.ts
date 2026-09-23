@@ -307,6 +307,7 @@ function createHeaders(includeAuth: boolean = true, isFormData: boolean = false)
     const token = getAuthToken();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
+      headers['X-Auth-Token'] = token;
     }
   }
 

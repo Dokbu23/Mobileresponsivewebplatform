@@ -74,11 +74,16 @@ class TokenBlacklist extends Model
      */
     public static function isBlacklisted($token)
     {
-        $tokenHash = hash('sha256', $token);
-        
-        return self::where('token_hash', $tokenHash)
-            ->where('expires_at', '>', now()) // Only check non-expired entries
-            ->exists();
+        try {
+            $tokenHash = hash('sha256', $token);
+            
+            return self::where('token_hash', $tokenHash)
+                ->where('expires_at', '>', now()) // Only check non-expired entries
+                ->exists();
+        } catch (\Exception $e) {
+            \Log::warning('Token blacklist check skipped: ' . $e->getMessage());
+            return false;
+        }
     }
 
     /**
