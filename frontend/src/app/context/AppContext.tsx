@@ -94,6 +94,8 @@ export interface CurrentUser {
   address?: string;
   facebook_link?: string;
   instagram_link?: string;
+  opening_time?: string;
+  closing_time?: string;
   description?: string;
   view_count?: number;
   virtual_tour_scenes?: any;

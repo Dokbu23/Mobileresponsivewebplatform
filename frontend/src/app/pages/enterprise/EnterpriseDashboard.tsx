@@ -25,7 +25,8 @@ import {
   Play,
   ShieldCheck,
   Upload,
-  Megaphone
+  Megaphone,
+  Tag
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { getJSON, getPublicJSON, postJSON, deleteJSON, getStorageUrl } from '../../lib/api';
@@ -34,45 +35,6 @@ import { SubscriptionPaymentModal } from '../../components/SubscriptionPaymentMo
 import Swal from 'sweetalert2';
 import { toast } from 'sonner';
 import { cleanTags } from '../tourist/BusinessProfile';
-
-const OPEN_TIME_OPTIONS = [
-  '6:00 AM',
-  '6:30 AM',
-  '7:00 AM',
-  '7:30 AM',
-  '8:00 AM',
-  '8:30 AM',
-  '9:00 AM',
-  '9:30 AM',
-  '10:00 AM',
-  '10:30 AM',
-  '11:00 AM',
-  '11:30 AM',
-  '12:00 PM',
-  '1:00 PM',
-  '2:00 PM',
-  'Open 24 Hours',
-];
-
-const CLOSE_TIME_OPTIONS = [
-  '12:00 PM',
-  '1:00 PM',
-  '2:00 PM',
-  '3:00 PM',
-  '4:00 PM',
-  '4:30 PM',
-  '5:00 PM',
-  '5:30 PM',
-  '6:00 PM',
-  '6:30 PM',
-  '7:00 PM',
-  '7:30 PM',
-  '8:00 PM',
-  '8:30 PM',
-  '9:00 PM',
-  '9:30 PM',
-  '10:00 PM',
-];
 
 // 🛡️ Video Upload Validation & Utilities (Matching Admin Content)
 const ALLOWED_VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogv', '.mov'];
@@ -165,15 +127,9 @@ export function EnterpriseDashboard() {
   const [productName, setProductName] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
+  const [customCategory, setCustomCategory] = useState('');
   const [sellerName, setSellerName] = useState('');
   const [location, setLocation] = useState('');
-  const [businessHours, setBusinessHours] = useState('');
-  const [openTime, setOpenTime] = useState('');
-  const [closeTime, setCloseTime] = useState('');
-  const [openDropdownActive, setOpenDropdownActive] = useState(false);
-  const [closeDropdownActive, setCloseDropdownActive] = useState(false);
-  const openDropdownRef = useRef<HTMLDivElement | null>(null);
-  const closeDropdownRef = useRef<HTMLDivElement | null>(null);
   const [stock, setStock] = useState('');
 
   // Tags state
@@ -183,22 +139,6 @@ export function EnterpriseDashboard() {
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-
-
-  // Click outside listener to close dropdowns
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (openDropdownRef.current && !openDropdownRef.current.contains(event.target as Node)) {
-        setOpenDropdownActive(false);
-      }
-      if (closeDropdownRef.current && !closeDropdownRef.current.contains(event.target as Node)) {
-        setCloseDropdownActive(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   // Check for subscription verification and show congratulations
   useEffect(() => {
@@ -365,15 +305,18 @@ export function EnterpriseDashboard() {
 
       formData.append('content', postContent.trim() || defaultContent);
       
+      const resolvedCategory = category === 'Other'
+        ? (customCategory.trim() || 'Other')
+        : category.trim();
+
       if (postType === 'product') {
         if (productName.trim()) formData.append('product_name', productName.trim());
         if (price.trim()) formData.append('price', price.trim());
-        if (category.trim()) formData.append('category', category.trim());
+        if (resolvedCategory) formData.append('category', resolvedCategory);
         if (sellerName.trim() || storeProfile?.store_name || currentUser?.name) {
           formData.append('seller_name', sellerName.trim() || storeProfile?.store_name || currentUser?.name || '');
         }
         if (location.trim()) formData.append('location', location.trim());
-        if (businessHours.trim()) formData.append('business_hours', businessHours.trim());
         if (stock.trim()) formData.append('stock', stock.trim());
       } else if (postType === 'update') {
         formData.append('location', storeProfile?.barangay ? `${storeProfile.address ? storeProfile.address + ', ' : ''}${storeProfile.barangay}` : 'Mansalay, Oriental Mindoro');
@@ -384,7 +327,7 @@ export function EnterpriseDashboard() {
         ? tags
         : postType === 'update'
         ? ['Update', 'Announcement', 'Mansalay']
-        : [category || 'Handicraft', 'Product', 'Mansalay'].filter(Boolean);
+        : [resolvedCategory || 'Handicraft', 'Product', 'Mansalay'].filter(Boolean);
 
       formData.append('tags', JSON.stringify(computedTags));
 
@@ -421,10 +364,9 @@ export function EnterpriseDashboard() {
       setPostContent('');
       setProductName('');
       setPrice('');
+      setCategory('');
+      setCustomCategory('');
       setStock('');
-      setBusinessHours('');
-      setOpenTime('');
-      setCloseTime('');
       setTags([]);
       setTagInput('');
       setPostImageFile(null);
@@ -434,6 +376,7 @@ export function EnterpriseDashboard() {
       }
 
       toast.success('Post published successfully to database!');
+      window.dispatchEvent(new Event('contentUpdated'));
       setActiveTab('posts');
     } catch (err: any) {
       console.error('Failed to create post:', err);
@@ -522,22 +465,37 @@ export function EnterpriseDashboard() {
   // Merge database products with any product-type posts to ensure any published product listing immediately appears
   const allProducts = useMemo(() => {
     const list = [...products];
-    const existingNames = new Set(list.map((p) => String(p.name).toLowerCase().trim()));
 
     posts
       .filter((post) => post.type === 'product' || post.product_name)
       .forEach((post) => {
         const pName = String(post.product_name || post.content || '').trim();
-        const pKey = pName.toLowerCase();
-        if (pName && !existingNames.has(pKey)) {
-          existingNames.add(pKey);
+        const postImg = post.image || (post.images && post.images[0]) || '';
+        const numPrice = post.price ? (typeof post.price === 'string' ? parseFloat(post.price.replace(/[^0-9.]/g, '')) || 0 : post.price) : 0;
+        const numStock = post.stock ? (typeof post.stock === 'string' ? parseInt(post.stock.replace(/[^0-9]/g, '')) || 10 : post.stock) : 10;
+
+        const target = list.find((p) => 
+          (p.post_id && String(p.post_id) === String(post.id)) ||
+          String(p.id) === String(post.id) ||
+          String(p.id) === `post_${post.id}` ||
+          (postImg && (p.image === postImg || (Array.isArray(p.images) && p.images.includes(postImg))))
+        );
+
+        if (target) {
+          target.post_id = post.id;
+          if (postImg) target.image = postImg;
+          if (numPrice > 0) target.price = numPrice;
+          if (numStock > 0) target.stock = numStock;
+          if (pName && (!target.name || target.name === 'Product')) target.name = pName;
+        } else if (pName) {
           list.push({
             id: `post_${post.id}`,
+            post_id: post.id,
             name: pName,
             category: post.category || 'Handicraft',
-            price: post.price ? (typeof post.price === 'string' ? parseFloat(post.price.replace(/[^0-9.]/g, '')) || 0 : post.price) : 0,
-            stock: post.stock ? (typeof post.stock === 'string' ? parseInt(post.stock.replace(/[^0-9]/g, '')) || 10 : post.stock) : 10,
-            image: post.image || (post.images && post.images[0]) || '',
+            price: numPrice,
+            stock: numStock,
+            image: postImg,
             user_id: post.user_id,
             description: post.content,
             likes: post.likes || 0,
@@ -956,21 +914,42 @@ export function EnterpriseDashboard() {
                 </div>
 
                 {/* Row 2: Category & Seller */}
-                <div className="relative">
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-[#ec4899] transition-all appearance-none cursor-pointer"
-                  >
-                    <option value="">Category...</option>
-                    <option value="Handicraft">Handicraft</option>
-                    <option value="Food">Food & Delicacies</option>
-                    <option value="Souvenir">Souvenir</option>
-                    <option value="Clothing">Traditional Clothing</option>
-                    <option value="Agriculture">Agriculture & Honey</option>
-                    <option value="Other">Other</option>
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <div className="space-y-2">
+                  <div className="relative">
+                    <select
+                      value={category}
+                      onChange={(e) => {
+                        setCategory(e.target.value);
+                        if (e.target.value !== 'Other') {
+                          setCustomCategory('');
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-[#ec4899] transition-all appearance-none cursor-pointer"
+                    >
+                      <option value="">Category...</option>
+                      <option value="Handicraft">Handicraft</option>
+                      <option value="Food">Food & Delicacies</option>
+                      <option value="Souvenir">Souvenir</option>
+                      <option value="Clothing">Traditional Clothing</option>
+                      <option value="Agriculture">Agriculture & Honey</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+
+                  {category === 'Other' && (
+                    <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                      <Tag className="w-4 h-4 text-pink-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={customCategory}
+                        onChange={(e) => setCustomCategory(e.target.value)}
+                        placeholder="Enter category name (e.g. Coffee, Fresh Fruits) *"
+                        className="w-full pl-10 pr-3.5 py-2.5 bg-pink-50/40 border border-pink-300 rounded-lg text-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-[#ec4899] transition-all text-gray-800 font-medium shadow-2xs"
+                        autoFocus
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="relative">
@@ -1009,144 +988,6 @@ export function EnterpriseDashboard() {
                     className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-[#ec4899] transition-all"
                   />
                 </div>
-              </div>
-
-              {/* Operating / Business Hours Section with Dropdowns */}
-              <div className="space-y-1.5 pt-1">
-                <label className="block text-[11px] font-bold text-gray-600 flex items-center gap-1">
-                  <Clock className="h-3.5 w-3.5 text-pink-500" />
-                  <span>Business / Operating Hours</span>
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {/* Opening Time Custom Dropdown */}
-                  <div ref={openDropdownRef} className="relative">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOpenDropdownActive((prev) => !prev);
-                        setCloseDropdownActive(false);
-                      }}
-                      className={`w-full pl-3.5 pr-3 py-2.5 bg-white border rounded-lg text-xs font-semibold text-gray-800 text-left flex items-center justify-between shadow-2xs transition-all cursor-pointer ${
-                        openDropdownActive ? 'border-pink-500 ring-2 ring-pink-500/20' : 'border-gray-200 hover:border-pink-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <Clock className="h-3.5 w-3.5 text-pink-500 flex-shrink-0" />
-                        <span className={openTime ? 'text-gray-900 font-bold' : 'text-gray-400'}>
-                          {openTime || 'Opening Time (e.g. 8:00 AM)'}
-                        </span>
-                      </div>
-                      <ChevronDown
-                        className={`h-3.5 w-3.5 text-gray-400 transition-transform duration-200 flex-shrink-0 ${
-                          openDropdownActive ? 'rotate-180 text-pink-500' : ''
-                        }`}
-                      />
-                    </button>
-
-                    {/* Downward Popover Menu with Scroll */}
-                    {openDropdownActive && (
-                      <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white border border-gray-100 rounded-xl shadow-xl p-1 max-h-56 overflow-y-auto divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                        <div className="p-1.5 text-[10px] uppercase font-extrabold text-gray-400 tracking-wider sticky top-0 bg-white/95 backdrop-blur-xs z-10 border-b border-gray-100">
-                          Select Opening Time
-                        </div>
-                        <div className="py-1 space-y-0.5">
-                          {OPEN_TIME_OPTIONS.map((t) => (
-                            <button
-                              key={t}
-                              type="button"
-                              onClick={() => {
-                                setOpenTime(t);
-                                if (t === 'Open 24 Hours') {
-                                  setBusinessHours('Open 24 Hours');
-                                } else {
-                                  setBusinessHours(`${t} – ${closeTime || '5:00 PM'}`);
-                                }
-                                setOpenDropdownActive(false);
-                              }}
-                              className={`w-full px-3 py-1.5 text-left text-xs font-semibold rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
-                                openTime === t
-                                  ? 'bg-pink-50 text-pink-600 font-extrabold'
-                                  : 'text-gray-700 hover:bg-gray-50 hover:text-pink-600'
-                              }`}
-                            >
-                              <span>{t}</span>
-                              {openTime === t && <CheckCircle2 className="h-3.5 w-3.5 text-pink-500" />}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Closing Time Custom Dropdown */}
-                  <div ref={closeDropdownRef} className="relative">
-                    <button
-                      type="button"
-                      disabled={openTime === 'Open 24 Hours'}
-                      onClick={() => {
-                        setCloseDropdownActive((prev) => !prev);
-                        setOpenDropdownActive(false);
-                      }}
-                      className={`w-full pl-3.5 pr-3 py-2.5 bg-white border rounded-lg text-xs font-semibold text-gray-800 text-left flex items-center justify-between shadow-2xs transition-all cursor-pointer disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed ${
-                        closeDropdownActive ? 'border-rose-500 ring-2 ring-rose-500/20' : 'border-gray-200 hover:border-rose-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <Clock className="h-3.5 w-3.5 text-rose-500 flex-shrink-0" />
-                        <span className={closeTime ? 'text-gray-900 font-bold' : 'text-gray-400'}>
-                          {openTime === 'Open 24 Hours' ? 'N/A (24 Hours)' : closeTime || 'Closing Time (e.g. 5:00 PM)'}
-                        </span>
-                      </div>
-                      <ChevronDown
-                        className={`h-3.5 w-3.5 text-gray-400 transition-transform duration-200 flex-shrink-0 ${
-                          closeDropdownActive ? 'rotate-180 text-rose-500' : ''
-                        }`}
-                      />
-                    </button>
-
-                    {/* Downward Popover Menu with Scroll */}
-                    {closeDropdownActive && openTime !== 'Open 24 Hours' && (
-                      <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white border border-gray-100 rounded-xl shadow-xl p-1 max-h-56 overflow-y-auto divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                        <div className="p-1.5 text-[10px] uppercase font-extrabold text-gray-400 tracking-wider sticky top-0 bg-white/95 backdrop-blur-xs z-10 border-b border-gray-100">
-                          Select Closing Time
-                        </div>
-                        <div className="py-1 space-y-0.5">
-                          {CLOSE_TIME_OPTIONS.map((t) => (
-                            <button
-                              key={t}
-                              type="button"
-                              onClick={() => {
-                                setCloseTime(t);
-                                if (openTime && openTime !== 'Open 24 Hours') {
-                                  setBusinessHours(`${openTime} – ${t}`);
-                                }
-                                setCloseDropdownActive(false);
-                              }}
-                              className={`w-full px-3 py-1.5 text-left text-xs font-semibold rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
-                                closeTime === t
-                                  ? 'bg-rose-50 text-rose-600 font-extrabold'
-                                  : 'text-gray-700 hover:bg-gray-50 hover:text-rose-600'
-                              }`}
-                            >
-                              <span>{t}</span>
-                              {closeTime === t && <CheckCircle2 className="h-3.5 w-3.5 text-rose-500" />}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Schedule preview badge */}
-                {businessHours && (
-                  <p className="text-[11px] text-pink-600 font-bold mt-1.5 flex items-center gap-1.5">
-                    <span>⏰ Selected Hours:</span>
-                    <span className="bg-pink-50 px-2.5 py-0.5 rounded-md border border-pink-200 text-pink-700 font-semibold shadow-2xs">
-                      {businessHours}
-                    </span>
-                  </p>
-                )}
               </div>
             </div>
           )}
@@ -1304,8 +1145,9 @@ export function EnterpriseDashboard() {
                         </span>
                       )}
                       {categoryText && (
-                        <span className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200/60 text-xs font-medium rounded-full">
-                          {categoryText}
+                        <span className="px-3 py-1 bg-pink-50 text-pink-700 border border-pink-200/60 text-xs font-semibold rounded-full inline-flex items-center gap-1 shadow-2xs">
+                          <Tag className="w-3 h-3 text-pink-500" />
+                          <span>Category: {categoryText}</span>
                         </span>
                       )}
                       {locText && (

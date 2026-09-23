@@ -49,6 +49,8 @@ class ResortProfileController extends Controller
             'barangay'               => $user->barangay,
             'facebook_link'          => $user->facebook_link,
             'instagram_link'         => $user->instagram_link,
+            'opening_time'           => $user->opening_time,
+            'closing_time'           => $user->closing_time,
             'subscription_status'    => $user->subscription_status,
             'resort_name'            => $user->resort_name ?: $user->name,
             'resort_description'     => $user->resort_description ?: $user->description,
@@ -100,6 +102,8 @@ class ResortProfileController extends Controller
             'barangay'               => 'nullable|string|max:100',
             'facebook_link'          => 'nullable|string|max:500',
             'instagram_link'         => 'nullable|string|max:500',
+            'opening_time'           => 'nullable|string|max:50',
+            'closing_time'           => 'nullable|string|max:50',
             'latitude'               => 'nullable|numeric',
             'longitude'              => 'nullable|numeric',
             'images'                 => 'nullable|array|max:10',
@@ -115,6 +119,7 @@ class ResortProfileController extends Controller
             'resort_name', 'resort_description', 'resort_price_per_night',
             'resort_amenities', 'resort_facilities', 'resort_policies',
             'phone', 'address', 'barangay', 'facebook_link', 'instagram_link',
+            'opening_time', 'closing_time',
             'latitude', 'longitude', 'virtual_tour_scenes'
         ] as $field) {
             if ($request->has($field) && $request->input($field) !== null) {
@@ -278,6 +283,8 @@ class ResortProfileController extends Controller
                 'resort_amenities' => $user->resort_amenities ?? [],
                 'resort_facilities' => $user->resort_facilities,
                 'resort_policies' => $user->resort_policies,
+                'opening_time' => $user->opening_time,
+                'closing_time' => $user->closing_time,
                 'resort_is_setup' => (bool) $user->resort_is_setup,
             ],
         ], 201);

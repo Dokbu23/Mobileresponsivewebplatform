@@ -23,8 +23,8 @@ class CheckSubscription
             return $next($request);
         }
 
-        // Check if subscription is paid
-        if ($user->subscription_status !== 'paid') {
+        // Check if subscription is paid or active
+        if (!in_array($user->subscription_status, ['paid', 'active'])) {
             return response()->json([
                 'message' => 'Subscription payment required to access this feature',
                 'subscription_status' => $user->subscription_status,

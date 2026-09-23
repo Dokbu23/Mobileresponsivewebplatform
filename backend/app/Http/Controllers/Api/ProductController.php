@@ -27,7 +27,7 @@ class ProductController extends Controller
                 $productPosts = \App\Models\EnterprisePost::where(function($q) {
                     $q->where('type', 'product')
                       ->orWhereNotNull('product_name');
-                })->whereNotNull('user_id')->get();
+                })->whereNotNull('user_id')->orderBy('created_at', 'asc')->get();
                 foreach ($productPosts as $pPost) {
                     \App\Http\Controllers\Api\EnterprisePostController::syncProductFromPost($pPost);
                 }

@@ -67,6 +67,95 @@ export function cleanTags(rawTags: any): string[] {
   return result;
 }
 
+export const TIME_OPTIONS = [
+  'Open 24 Hours',
+  '05:00 AM',
+  '05:30 AM',
+  '06:00 AM',
+  '06:30 AM',
+  '07:00 AM',
+  '07:30 AM',
+  '08:00 AM',
+  '08:30 AM',
+  '09:00 AM',
+  '09:30 AM',
+  '10:00 AM',
+  '10:30 AM',
+  '11:00 AM',
+  '11:30 AM',
+  '12:00 PM',
+  '12:30 PM',
+  '01:00 PM',
+  '01:30 PM',
+  '02:00 PM',
+  '02:30 PM',
+  '03:00 PM',
+  '03:30 PM',
+  '04:00 PM',
+  '04:30 PM',
+  '05:00 PM',
+  '05:30 PM',
+  '06:00 PM',
+  '06:30 PM',
+  '07:00 PM',
+  '07:30 PM',
+  '08:00 PM',
+  '08:30 PM',
+  '09:00 PM',
+  '09:30 PM',
+  '10:00 PM',
+  '10:30 PM',
+  '11:00 PM',
+  '11:30 PM',
+  '12:00 AM',
+];
+
+export function getOperatingStatus(openingTime?: string, closingTime?: string): { isOpen: boolean; label: string } {
+  if (!openingTime && !closingTime) {
+    return { isOpen: true, label: 'Open Daily' };
+  }
+  if (openingTime === 'Open 24 Hours' || closingTime === 'Open 24 Hours') {
+    return { isOpen: true, label: 'Open 24 Hours' };
+  }
+
+  try {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const parseTimeToMinutes = (timeStr?: string): number | null => {
+      if (!timeStr) return null;
+      const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+      if (!match) return null;
+      let hours = parseInt(match[1], 10);
+      const minutes = parseInt(match[2], 10);
+      const period = match[3].toUpperCase();
+      if (period === 'PM' && hours !== 12) hours += 12;
+      if (period === 'AM' && hours === 12) hours = 0;
+      return hours * 60 + minutes;
+    };
+
+    const openMin = parseTimeToMinutes(openingTime || '08:00 AM');
+    const closeMin = parseTimeToMinutes(closingTime || '05:00 PM');
+
+    if (openMin === null || closeMin === null) {
+      return { isOpen: true, label: 'Open Today' };
+    }
+
+    let isOpen = false;
+    if (closeMin > openMin) {
+      isOpen = currentMinutes >= openMin && currentMinutes < closeMin;
+    } else {
+      isOpen = currentMinutes >= openMin || currentMinutes < closeMin;
+    }
+
+    return {
+      isOpen,
+      label: isOpen ? 'Open Now' : 'Closed',
+    };
+  } catch {
+    return { isOpen: true, label: 'Open Today' };
+  }
+}
 
 interface BusinessOwner {
   id: number;
@@ -99,6 +188,8 @@ interface BusinessOwner {
   resort_facilities?: string;
   resort_policies?: string;
   resort_is_setup?: boolean;
+  opening_time?: string;
+  closing_time?: string;
   avatar?: string;
   logo?: string;
   banner?: string;
@@ -382,6 +473,8 @@ export function BusinessProfile() {
     address: '',
     facebook_link: '',
     instagram_link: '',
+    opening_time: '08:00 AM',
+    closing_time: '05:00 PM',
   });
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -490,6 +583,9 @@ export function BusinessProfile() {
 
   useEffect(() => {
     loadBusinessProfile(false);
+    const onUpdate = () => loadBusinessProfile(true);
+    window.addEventListener('contentUpdated', onUpdate);
+    return () => window.removeEventListener('contentUpdated', onUpdate);
   }, [type, userId, currentUser?.id]);
 
   const owner = data?.owner;
@@ -573,24 +669,53 @@ export function BusinessProfile() {
   const allProducts = useMemo(() => {
     if (isResort) return [];
     const list = [...products];
-    const existingNames = new Set(list.map((p: any) => String(p.name || '').toLowerCase().trim()));
 
     if (Array.isArray(posts)) {
       posts
         .filter((post: any) => post.type === 'product' || post.type === 'products' || post.product_name)
         .forEach((post: any) => {
           const pName = String(post.product_name || post.content || '').trim();
-          const pKey = pName.toLowerCase();
-          if (pName && !existingNames.has(pKey)) {
-            existingNames.add(pKey);
+          const postImage = post.image || (Array.isArray(post.images) && post.images[0]) || '';
+          const postImages = Array.isArray(post.images) && post.images.length > 0 ? post.images : (postImage ? [postImage] : []);
+          const numPrice = post.price
+            ? (typeof post.price === 'string' ? parseFloat(post.price.replace(/[^0-9.]/g, '')) || 0 : post.price)
+            : 0;
+          const numStock = post.stock
+            ? (typeof post.stock === 'string' ? parseInt(post.stock.replace(/[^0-9]/g, '')) || 10 : post.stock)
+            : 10;
+
+          // Find if this post is already represented in list by post_id, id, or identical image
+          const targetProd = list.find((p: any) => 
+            (p.post_id && String(p.post_id) === String(post.id)) ||
+            String(p.id) === String(post.id) ||
+            String(p.id) === `post_prod_${post.id}` ||
+            (postImage && (p.image === postImage || (Array.isArray(p.images) && p.images.includes(postImage))))
+          );
+
+          if (targetProd) {
+            targetProd.post_id = post.id;
+            if (postImage) {
+              targetProd.image = postImage;
+              targetProd.images = postImages;
+            }
+            if (numPrice > 0) targetProd.price = numPrice;
+            if (numStock > 0) targetProd.stock = numStock;
+            if (post.content && (!targetProd.description || targetProd.description === pName)) {
+              targetProd.description = post.content;
+            }
+            if (pName && (!targetProd.name || targetProd.name === 'Product')) {
+              targetProd.name = pName;
+            }
+          } else if (pName) {
             list.push({
               id: `post_prod_${post.id}`,
+              post_id: post.id,
               name: pName,
               category: post.category || 'Handicraft',
-              price: post.price ? (typeof post.price === 'string' ? parseFloat(post.price.replace(/[^0-9.]/g, '')) || 0 : post.price) : 0,
-              stock: post.stock ? (typeof post.stock === 'string' ? parseInt(post.stock.replace(/[^0-9]/g, '')) || 10 : post.stock) : 10,
-              image: post.image || (post.images && post.images[0]) || '',
-              images: post.images || (post.image ? [post.image] : []),
+              price: numPrice,
+              stock: numStock,
+              image: postImage,
+              images: postImages,
               user_id: post.user_id || owner?.id,
               description: post.content,
               likes: post.likes || 0,
@@ -861,6 +986,8 @@ export function BusinessProfile() {
       address: owner.address || '',
       facebook_link: owner.facebook_link || owner.facebook || '',
       instagram_link: owner.instagram_link || owner.instagram || '',
+      opening_time: owner.opening_time || '08:00 AM',
+      closing_time: owner.closing_time || '05:00 PM',
     });
     setLogoFile(null);
     setLogoPreview(null);
@@ -936,6 +1063,8 @@ export function BusinessProfile() {
         formData.append('address', editForm.address.trim());
         formData.append('facebook_link', editForm.facebook_link.trim());
         formData.append('instagram_link', editForm.instagram_link.trim());
+        formData.append('opening_time', editForm.opening_time);
+        formData.append('closing_time', editForm.closing_time);
         if (storeLocation?.lat && storeLocation?.lng) {
           formData.append('latitude', String(storeLocation.lat));
           formData.append('longitude', String(storeLocation.lng));
@@ -989,6 +1118,8 @@ export function BusinessProfile() {
               address: editForm.address.trim(),
               facebook_link: editForm.facebook_link.trim(),
               instagram_link: editForm.instagram_link.trim(),
+              opening_time: editForm.opening_time,
+              closing_time: editForm.closing_time,
               latitude: storeLocation?.lat ?? prev.owner.latitude,
               longitude: storeLocation?.lng ?? prev.owner.longitude,
               resort_logo: newLogo || prev.owner.resort_logo,
@@ -1025,6 +1156,8 @@ export function BusinessProfile() {
         formData.append('address', editForm.address.trim());
         formData.append('facebook_link', editForm.facebook_link.trim());
         formData.append('instagram_link', editForm.instagram_link.trim());
+        formData.append('opening_time', editForm.opening_time);
+        formData.append('closing_time', editForm.closing_time);
         if (storeLocation?.lat && storeLocation?.lng) {
           formData.append('latitude', String(storeLocation.lat));
           formData.append('longitude', String(storeLocation.lng));
@@ -1078,6 +1211,8 @@ export function BusinessProfile() {
               address: editForm.address.trim(),
               facebook_link: editForm.facebook_link.trim(),
               instagram_link: editForm.instagram_link.trim(),
+              opening_time: editForm.opening_time,
+              closing_time: editForm.closing_time,
               latitude: storeLocation?.lat ?? prev.owner.latitude,
               longitude: storeLocation?.lng ?? prev.owner.longitude,
               store_logo: newLogo || prev.owner.store_logo,
@@ -1291,6 +1426,30 @@ export function BusinessProfile() {
                       <MapPin className="h-3 w-3 text-pink-500" />
                       {[owner.barangay, 'Mansalay, Oriental Mindoro'].filter(Boolean).join(', ')}
                     </span>
+                    <span className="text-gray-300">•</span>
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-pink-50 border border-pink-200 rounded-full text-pink-700 font-bold">
+                      <Clock className="h-3 w-3 text-pink-500" />
+                      <span>
+                        {owner.opening_time === 'Open 24 Hours' || owner.closing_time === 'Open 24 Hours'
+                          ? 'Open 24 Hours'
+                          : `${owner.opening_time || '8:00 AM'} – ${owner.closing_time || '5:00 PM'}`}
+                      </span>
+                    </span>
+                    {(() => {
+                      const status = getOperatingStatus(owner.opening_time, owner.closing_time);
+                      return (
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                            status.isOpen
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                              : 'bg-rose-50 text-rose-700 border-rose-300'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${status.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                          {status.label}
+                        </span>
+                      );
+                    })()}
                   </p>
                   {shopDescription && (() => {
                     const cleanText = shopDescription
@@ -1532,7 +1691,7 @@ export function BusinessProfile() {
                     <span>All Products</span>
                     <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-extrabold ${
                       selectedCategory === 'all' ? 'bg-white/30 text-white' : 'bg-gray-200 text-gray-700'
-                    }`}>{products.length}</span>
+                    }`}>{allProducts.length}</span>
                   </button>
 
                   {/* Dynamic Category chips */}
@@ -1826,12 +1985,26 @@ export function BusinessProfile() {
                               {post.content}
                             </p>
 
-                            {/* Optional Product / Price Badge */}
-                            {post.price && (
-                              <div className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-extrabold border border-emerald-200/60 shadow-2xs">
-                                <span>Price: {post.price}</span>
-                              </div>
-                            )}
+                            {/* Optional Product, Category & Price Badges */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {post.product_name && (
+                                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-xl text-xs font-bold border border-blue-200/60 shadow-2xs">
+                                  <Package className="w-3.5 h-3.5 text-blue-500" />
+                                  <span>{post.product_name}</span>
+                                </div>
+                              )}
+                              {post.category && (
+                                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-pink-50 text-pink-700 rounded-xl text-xs font-bold border border-pink-200/60 shadow-2xs">
+                                  <Tag className="w-3.5 h-3.5 text-pink-500" />
+                                  <span>Category: {post.category}</span>
+                                </div>
+                              )}
+                              {post.price && (
+                                <div className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-extrabold border border-emerald-200/60 shadow-2xs">
+                                  <span>Price: {post.price}</span>
+                                </div>
+                              )}
+                            </div>
 
                             {/* Tags */}
                             {(() => {
@@ -2079,11 +2252,25 @@ export function BusinessProfile() {
                 {viewingPost.content}
               </p>
 
-              {viewingPost.price && (
-                <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-extrabold border border-emerald-200">
-                  <span>Price / Rate: {viewingPost.price}</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                {viewingPost.product_name && (
+                  <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 text-blue-700 rounded-xl text-xs font-bold border border-blue-200">
+                    <Package className="w-3.5 h-3.5 text-blue-500" />
+                    <span>{viewingPost.product_name}</span>
+                  </div>
+                )}
+                {viewingPost.category && (
+                  <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-pink-50 text-pink-700 rounded-xl text-xs font-bold border border-pink-200">
+                    <Tag className="w-3.5 h-3.5 text-pink-500" />
+                    <span>Category: {viewingPost.category}</span>
+                  </div>
+                )}
+                {viewingPost.price && (
+                  <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl text-xs font-extrabold border border-emerald-200">
+                    <span>Price / Rate: {viewingPost.price}</span>
+                  </div>
+                )}
+              </div>
 
               {viewingPost.video ? (
                 <div className="rounded-2xl overflow-hidden bg-black border border-gray-100 aspect-video max-h-[380px] relative">
@@ -2857,6 +3044,48 @@ export function BusinessProfile() {
                   />
                 </div>
 
+                {/* Operating / Business Hours */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-pink-500" />
+                    <span>Business Operating Hours</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-500 mb-1">
+                        Opening Time
+                      </label>
+                      <select
+                        value={editForm.opening_time}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, opening_time: e.target.value }))}
+                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-pink-500 focus:bg-white cursor-pointer"
+                      >
+                        {TIME_OPTIONS.map((time) => (
+                          <option key={`edit-open-${time}`} value={time}>
+                            {time}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-500 mb-1">
+                        Closing Time
+                      </label>
+                      <select
+                        value={editForm.closing_time}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, closing_time: e.target.value }))}
+                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-900 focus:outline-pink-500 focus:bg-white cursor-pointer"
+                      >
+                        {TIME_OPTIONS.map((time) => (
+                          <option key={`edit-close-${time}`} value={time}>
+                            {time}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Description */}
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-bold text-gray-700 mb-1">
@@ -3000,6 +3229,12 @@ function ProductCard({ product, onSelect }: any) {
 
       {/* Product Info */}
       <div className="p-3">
+        {product.category && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 mb-1.5 text-[10px] font-semibold text-pink-600 bg-pink-50 rounded-md border border-pink-100">
+            <Tag className="w-2.5 h-2.5" />
+            {product.category}
+          </span>
+        )}
         <h3 className="text-sm text-gray-900 line-clamp-2 min-h-[40px] leading-snug mb-2 font-medium group-hover:text-pink-600 transition-colors">
           {product.name}
         </h3>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Store, Plus, Edit, Trash2, Package, TrendingUp, BarChart3, ChevronDown, CreditCard, Eye, CheckCircle, XCircle, Calendar, Upload, Image as ImageIcon, X, MapPin, Phone, Mail, Facebook, Instagram, ExternalLink, ShieldCheck, Sparkles } from 'lucide-react';
+import { Store, Plus, Edit, Trash2, Package, TrendingUp, BarChart3, ChevronDown, CreditCard, Eye, CheckCircle, XCircle, Calendar, Upload, Image as ImageIcon, X, MapPin, Phone, Mail, Facebook, Instagram, ExternalLink, ShieldCheck, Sparkles, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router';
 import { useApp } from '../../context/AppContext';
@@ -8,6 +8,7 @@ import { showPaymentMethodSuccess, showProductSuccess, showStatusUpdateSuccess }
 
 import { ResortVirtualTourManager } from '../../components/ResortVirtualTourManager';
 import { MANSALAY_BARANGAYS } from '../../lib/constants';
+import { TIME_OPTIONS } from '../tourist/BusinessProfile';
 
 interface ProductVariationForm {
   id?: number;
@@ -68,6 +69,8 @@ export function EnterpriseProfile() {
     address: '',
     facebook_link: '',
     instagram_link: '',
+    opening_time: '08:00 AM',
+    closing_time: '05:00 PM',
   });
   const [storeLogoFile, setStoreLogoFile] = useState<File | null>(null);
   const [storeLogoPreview, setStoreLogoPreview] = useState<string | null>(null);
@@ -81,6 +84,7 @@ export function EnterpriseProfile() {
     stock: 0,
     category: '',
   });
+  const [customCategory, setCustomCategory] = useState('');
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
@@ -126,6 +130,8 @@ export function EnterpriseProfile() {
         address: data?.address ?? '',
         facebook_link: data?.facebook_link ?? '',
         instagram_link: data?.instagram_link ?? '',
+        opening_time: data?.opening_time ?? '08:00 AM',
+        closing_time: data?.closing_time ?? '05:00 PM',
       });
 
       if (data?.store_logo) {
@@ -167,6 +173,8 @@ export function EnterpriseProfile() {
       formData.append('address', profileForm.address.trim());
       formData.append('facebook_link', profileForm.facebook_link.trim());
       formData.append('instagram_link', profileForm.instagram_link.trim());
+      formData.append('opening_time', profileForm.opening_time);
+      formData.append('closing_time', profileForm.closing_time);
       if (storeLocation?.lat && storeLocation?.lng) {
         formData.append('latitude', String(storeLocation.lat));
         formData.append('longitude', String(storeLocation.lng));
@@ -324,7 +332,11 @@ export function EnterpriseProfile() {
   ];
 
   const handleAddProduct = async () => {
-    if (!newProduct.name || !newProduct.price || !newProduct.stock || !newProduct.category) {
+    const finalCategory = newProduct.category === 'Other' 
+      ? (customCategory.trim() || 'Other') 
+      : newProduct.category;
+
+    if (!newProduct.name || !newProduct.price || !newProduct.stock || !finalCategory) {
       toast.error('Please fill all required fields');
       return;
     }
@@ -345,7 +357,7 @@ export function EnterpriseProfile() {
       form.append('description', newProduct.description ?? '');
       form.append('price', String(newProduct.price));
       form.append('stock', String(newProduct.stock));
-      form.append('category', newProduct.category ?? '');
+      form.append('category', finalCategory);
 
       // Append new image files (primary file as 'image', all as 'images[]')
       if (imageFiles.length > 0) {
@@ -406,6 +418,7 @@ export function EnterpriseProfile() {
       await fetchData();
 
       setNewProduct({ name: '', description: '', price: 0, stock: 0, category: '' });
+      setCustomCategory('');
       setImageFiles([]);
       setImagePreviews([]);
       setExistingImages([]);
@@ -604,14 +617,52 @@ export function EnterpriseProfile() {
               <p className="text-sm text-muted-foreground">Add, update, and manage your store products and listings</p>
             </div>
           </div>
-          <Link
-            to="/enterprise/dashboard"
-            className="px-4 py-2 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors inline-flex items-center gap-2"
-          >
-            <BarChart3 className="h-4 w-4" />
-            Dashboard
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              to={`/business/enterprise/${currentUser?.id}`}
+              className="px-4 py-2 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white rounded-lg transition-all inline-flex items-center gap-2 text-sm font-bold shadow-md shadow-pink-500/20"
+            >
+              <Store className="h-4 w-4" />
+              View & Edit Store Profile
+            </Link>
+            <Link
+              to="/enterprise/dashboard"
+              className="px-4 py-2 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors inline-flex items-center gap-2 text-sm font-medium"
+            >
+              <BarChart3 className="h-4 w-4" />
+              Dashboard
+            </Link>
+          </div>
         </div>
+      </div>
+
+      {/* Store Overview & Operating Hours */}
+      <div className="bg-white border-2 border-primary/20 rounded-2xl p-5 mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-pink-50 border border-pink-200 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Clock className="w-6 h-6 text-pink-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-extrabold text-gray-900">
+              {storeProfile?.store_name || currentUser?.name || 'My Store'}
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
+              <span>Operating Hours:</span>
+              <strong className="text-pink-600 font-bold">
+                {storeProfile?.opening_time === 'Open 24 Hours' || storeProfile?.closing_time === 'Open 24 Hours'
+                  ? 'Open 24 Hours'
+                  : `${storeProfile?.opening_time || currentUser?.opening_time || '08:00 AM'} – ${storeProfile?.closing_time || currentUser?.closing_time || '05:00 PM'}`}
+              </strong>
+            </p>
+          </div>
+        </div>
+        <Link
+          to={`/business/enterprise/${currentUser?.id}`}
+          className="px-4 py-2 bg-pink-50 hover:bg-pink-100 text-pink-700 text-xs font-bold rounded-xl border border-pink-200 transition-colors inline-flex items-center justify-center gap-1.5"
+        >
+          <Edit className="w-3.5 h-3.5" />
+          <span>Edit Hours & Profile</span>
+        </Link>
       </div>
 
       {/* Stats */}
@@ -745,11 +796,15 @@ export function EnterpriseProfile() {
                   placeholder="Enter product name"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Category</label>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium mb-1">Category</label>
                 <select
                   value={newProduct.category}
-                  onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setNewProduct({ ...newProduct, category: val });
+                    if (val !== 'Other') setCustomCategory('');
+                  }}
                   className="w-full px-4 py-3 border-2 border-primary/20 rounded-lg focus:border-primary outline-none bg-white"
                 >
                   <option value="">Select category</option>
@@ -757,7 +812,22 @@ export function EnterpriseProfile() {
                   <option value="Food">Food</option>
                   <option value="Clothing">Clothing</option>
                   <option value="Souvenirs">Souvenirs</option>
+                  <option value="Agriculture">Agriculture & Honey</option>
+                  <option value="Other">Other</option>
                 </select>
+
+                {newProduct.category === 'Other' && (
+                  <div className="relative animate-in fade-in slide-in-from-top-1 duration-200">
+                    <input
+                      type="text"
+                      value={customCategory}
+                      onChange={e => setCustomCategory(e.target.value)}
+                      placeholder="Specify custom category (e.g. Coffee, Fresh Fruits) *"
+                      className="w-full px-4 py-2.5 bg-pink-50/40 border-2 border-pink-300 rounded-lg text-sm placeholder:text-gray-400 focus:outline-none focus:border-pink-500 transition-all text-gray-800 font-medium"
+                      autoFocus
+                    />
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Price (₱)</label>

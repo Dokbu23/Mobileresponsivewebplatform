@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Hotel, Bed, Plus, Edit, Calendar, Users, TrendingUp, BarChart3, ChevronDown, CreditCard, Eye, CheckCircle, XCircle, Upload, Image as ImageIcon, X, Trash2, Play } from 'lucide-react';
+import { Hotel, Bed, Plus, Edit, Calendar, Users, TrendingUp, BarChart3, ChevronDown, CreditCard, Eye, CheckCircle, XCircle, Upload, Image as ImageIcon, X, Trash2, Play, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router';
 import { useApp } from '../../context/AppContext';
@@ -473,16 +473,52 @@ export function ResortProfile() {
               <p className="text-sm text-muted-foreground">Add, update, and manage your rooms, availability, and inventory</p>
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2">
+            <Link
+              to={`/business/resort/${currentUser?.id}`}
+              className="px-4 py-2 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white rounded-lg transition-all inline-flex items-center gap-2 text-sm font-bold shadow-md shadow-teal-500/20"
+            >
+              <Hotel className="h-4 w-4" />
+              View & Edit Resort Profile
+            </Link>
             <Link
               to="/resort/dashboard"
-              className="px-4 py-2 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors inline-flex items-center gap-2"
+              className="px-4 py-2 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors inline-flex items-center gap-2 text-sm font-medium"
             >
               <BarChart3 className="h-4 w-4" />
               Dashboard
             </Link>
           </div>
         </div>
+      </div>
+
+      {/* Resort Overview & Operating Hours */}
+      <div className="bg-white border-2 border-primary/20 rounded-2xl p-5 mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-cyan-50 border border-cyan-200 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Clock className="w-6 h-6 text-cyan-600" />
+          </div>
+          <div>
+            <h3 className="text-sm font-extrabold text-gray-900">
+              {resortProfile?.resort_name || currentUser?.name || 'My Resort'}
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
+              <span>Operating Hours:</span>
+              <strong className="text-cyan-700 font-bold">
+                {resortProfile?.opening_time === 'Open 24 Hours' || resortProfile?.closing_time === 'Open 24 Hours'
+                  ? 'Open 24 Hours'
+                  : `${resortProfile?.opening_time || currentUser?.opening_time || '08:00 AM'} – ${resortProfile?.closing_time || currentUser?.closing_time || '05:00 PM'}`}
+              </strong>
+            </p>
+          </div>
+        </div>
+        <Link
+          to={`/business/resort/${currentUser?.id}`}
+          className="px-4 py-2 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 text-xs font-bold rounded-xl border border-cyan-200 transition-colors inline-flex items-center justify-center gap-1.5"
+        >
+          <Edit className="w-3.5 h-3.5" />
+          <span>Edit Hours & Profile</span>
+        </Link>
       </div>
 
       <div className="bg-white border-2 border-primary/20 rounded-lg p-6 mb-8">

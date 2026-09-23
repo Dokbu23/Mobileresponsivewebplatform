@@ -162,6 +162,8 @@ class UserController extends Controller
             'description'    => 'nullable|string|max:1000',
             'facebook_link'  => 'nullable|string|max:255',
             'instagram_link' => 'nullable|string|max:255',
+            'opening_time'   => 'nullable|string|max:50',
+            'closing_time'   => 'nullable|string|max:50',
             'avatar'         => 'nullable',
         ]);
 
@@ -182,6 +184,8 @@ class UserController extends Controller
             'description'    => $data['description'] ?? null,
             'facebook_link'  => $data['facebook_link'] ?? null,
             'instagram_link' => $data['instagram_link'] ?? null,
+            'opening_time'   => $data['opening_time'] ?? null,
+            'closing_time'   => $data['closing_time'] ?? null,
             'avatar'         => $data['avatar'] ?? null,
         ], fn($v) => $v !== null));
 

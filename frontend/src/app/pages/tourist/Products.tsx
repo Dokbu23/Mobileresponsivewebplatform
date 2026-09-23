@@ -70,18 +70,38 @@ export function Products() {
       try {
         const postsData = await getPublicJSON('/enterprise-posts').catch(() => []);
         const rawPosts = Array.isArray(postsData) ? postsData : [];
+        // Only include product-type posts, ignore resort rooms and general updates
         rawPosts
-          .filter((p: any) => p.type === 'product' || p.product_name)
+          .filter((p: any) => p.type === 'product' || (p.type !== 'rooms' && p.type !== 'room' && p.type !== 'update' && p.product_name))
           .forEach((p: any) => {
             const pName = p.product_name || p.content;
             if (!pName) return;
-            const exists = raw.some((r: any) => 
-              (r.name && r.name.toLowerCase().trim() === pName.toLowerCase().trim()) ||
-              (r.id && p.id && String(r.id) === String(p.id))
+            const existing = raw.find((r: any) => 
+              (r.post_id && String(r.post_id) === String(p.id)) ||
+              String(r.id) === String(p.id) ||
+              String(r.id) === `ep_${p.id}` ||
+              (p.image && (r.image === p.image || (Array.isArray(r.images) && r.images.includes(p.image))))
             );
-            if (!exists) {
+            if (existing) {
+              existing.post_id = p.id;
+              if (p.image) {
+                const currentImgs = Array.isArray(existing.images) ? [...existing.images] : (existing.image ? [existing.image] : []);
+                if (!currentImgs.includes(p.image)) currentImgs.unshift(p.image);
+                existing.images = currentImgs;
+                existing.image = p.image;
+              }
+              if (p.price) {
+                const numPrice = typeof p.price === 'string' ? parseFloat(p.price.replace(/[^0-9.]/g, '')) || 0 : p.price;
+                if (numPrice > 0) existing.price = numPrice;
+              }
+              if (p.stock) {
+                const numStock = typeof p.stock === 'string' ? parseInt(p.stock.replace(/[^0-9]/g, '')) || 0 : p.stock;
+                if (numStock > 0) existing.stock = numStock;
+              }
+            } else {
               raw.unshift({
                 id: `ep_${p.id}`,
+                post_id: p.id,
                 name: pName,
                 description: p.content || pName,
                 price: p.price ? (typeof p.price === 'string' ? parseFloat(p.price.replace(/[^0-9.]/g, '')) || 0 : p.price) : 0,
@@ -118,10 +138,18 @@ export function Products() {
         if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
       } catch {}
 
-      const allRaw = [...raw].filter((i: any) => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
+      // Only filter out items that are posts (ep_ prefix) matching deleted/archived post IDs
+      const allRaw = [...raw].filter((i: any) => {
+        const idStr = String(i.id);
+        if (idStr.startsWith('ep_')) {
+          const postId = idStr.replace('ep_', '');
+          return !deletedIds.has(postId) && !archivedIds.has(postId);
+        }
+        return true;
+      });
       const existingIds = new Set(allRaw.map((r: any) => String(r.id)));
       customProducts.forEach((cp: any) => {
-        if (!existingIds.has(String(cp.id)) && !deletedIds.has(String(cp.id)) && !archivedIds.has(String(cp.id))) {
+        if (!existingIds.has(String(cp.id))) {
           allRaw.unshift(cp);
         }
       });

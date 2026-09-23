@@ -127,6 +127,8 @@ class AuthController extends Controller
             'phone' => ['nullable', 'string', 'max:20'],
             'facebook_link' => ['nullable', 'string', 'max:500'],
             'instagram_link' => ['nullable', 'string', 'max:500'],
+            'opening_time' => ['nullable', 'string', 'max:50'],
+            'closing_time' => ['nullable', 'string', 'max:50'],
         ]);
 
         $role = $validated['role'];
@@ -160,6 +162,12 @@ class AuthController extends Controller
         }
         if (!empty($validated['instagram_link'])) {
             $user->instagram_link = $validated['instagram_link'];
+        }
+        if (isset($validated['opening_time'])) {
+            $user->opening_time = $validated['opening_time'];
+        }
+        if (isset($validated['closing_time'])) {
+            $user->closing_time = $validated['closing_time'];
         }
 
         $user->save();

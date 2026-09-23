@@ -70,6 +70,8 @@ class User extends Authenticatable
         'store_is_setup',
         'facebook_link',
         'instagram_link',
+        'opening_time',
+        'closing_time',
         'virtual_tour_scenes',
     ];
 
@@ -150,6 +152,8 @@ class User extends Authenticatable
             'resort_amenities' => 'nullable|array',
             'resort_facilities' => 'nullable|string',
             'resort_policies' => 'nullable|string',
+            'opening_time' => 'nullable|string|max:50',
+            'closing_time' => 'nullable|string|max:50',
         ];
 
         if ($isSetup) {

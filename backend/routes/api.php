@@ -222,7 +222,17 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::patch('subscription/payments/{id}/verify', [SubscriptionController::class, 'verifyPayment']);
     });
 
-    // Admin payment settings management
+    // Admin payment settings management (supports both prefixed and root endpoints)
+    Route::group(['middleware' => ['role:admin']], function () {
+        Route::get('payment-settings', [PaymentSettingsController::class, 'getSettings']);
+        Route::put('payment-settings', [PaymentSettingsController::class, 'updateSettings']);
+        Route::get('payment-methods', [PaymentSettingsController::class, 'index']);
+        Route::post('payment-methods', [PaymentSettingsController::class, 'store']);
+        Route::put('payment-methods/{id}', [PaymentSettingsController::class, 'update']);
+        Route::delete('payment-methods/{id}', [PaymentSettingsController::class, 'destroy']);
+        Route::patch('payment-methods/{id}/toggle', [PaymentSettingsController::class, 'toggle']);
+    });
+
     Route::group(['prefix' => 'admin', 'middleware' => ['role:admin']], function () {
         // Payment settings
         Route::get('payment-settings', [PaymentSettingsController::class, 'getSettings']);
@@ -413,8 +423,8 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::delete('accommodations/{id}', [AccommodationController::class, 'destroy']);
     });
 
-    // Resort Profile Management Routes - JWT + role:resort required
-    Route::group(['middleware' => ['role:resort']], function () {
+    // Resort Profile Management Routes - JWT + role:resort,admin required
+    Route::group(['middleware' => ['role:resort,admin']], function () {
         Route::get('resort-profile', [App\Http\Controllers\Api\ResortProfileController::class, 'show']);
         Route::put('resort-profile', [App\Http\Controllers\Api\ResortProfileController::class, 'update']);
         Route::post('resort-profile', [App\Http\Controllers\Api\ResortProfileController::class, 'update']); // FormData upload support
@@ -424,7 +434,7 @@ Route::group(['middleware' => ['jwt.auth']], function () {
     });
 
     // Resort Room & Availability modifications - PROTECTED BY SUBSCRIPTION
-    Route::group(['middleware' => ['role:resort', 'check.subscription']], function () {
+    Route::group(['middleware' => ['role:resort,admin', 'check.subscription']], function () {
         Route::post('resort-rooms', [ResortRoomController::class, 'store']);
         Route::post('resort-rooms/{id}', [ResortRoomController::class, 'update']); // FormData support
         Route::put('resort-rooms/{id}', [ResortRoomController::class, 'update']);

@@ -637,6 +637,8 @@ class AccommodationController extends Controller
             'resort_is_setup'    => (bool) $owner->resort_is_setup,
             'facebook_link'      => $owner->facebook_link,
             'instagram_link'     => $owner->instagram_link,
+            'opening_time'       => $owner->opening_time,
+            'closing_time'       => $owner->closing_time,
             'latitude'           => $owner->latitude,
             'longitude'          => $owner->longitude,
             'video'              => $owner->video ?? $owner->video_url,

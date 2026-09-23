@@ -671,7 +671,7 @@ export function Wishlist() {
                     <Award className="h-5 w-5" />
                   </div>
                   <span className="text-[10px] font-extrabold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60">
-                    Top Performer
+                    {userType === 'resort' ? 'Top Stay' : 'Top Product'}
                   </span>
                 </div>
                 <div className="text-base sm:text-lg font-black text-gray-900 mt-3 truncate">

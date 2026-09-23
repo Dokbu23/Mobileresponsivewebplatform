@@ -53,7 +53,10 @@ class EnterprisePostController extends Controller
                         $p->saveQuietly();
                     }
                 }
+            }
 
+            // Sync from oldest to newest so newest post takes precedence
+            foreach ($posts->reverse() as $p) {
                 if ($p->type === 'product' || !empty($p->product_name)) {
                     self::syncProductFromPost($p, $p->user ?? $user);
                 } elseif ($p->type === 'rooms' || $p->type === 'room') {
@@ -135,24 +138,55 @@ class EnterprisePostController extends Controller
             $numericStock = 10;
         }
 
+        // Derive category from tags if not explicitly set
+        $category = $post->category;
+        if (empty($category) && !empty($post->tags)) {
+            $tagsList = is_array($post->tags) ? $post->tags : self::cleanTags($post->tags);
+            $validCats = ['Handicraft', 'Food', 'Souvenir', 'Clothing', 'Agriculture', 'Other', 'Pasalubong'];
+            foreach ($tagsList as $t) {
+                foreach ($validCats as $vc) {
+                    if (strcasecmp(trim($t), $vc) === 0) {
+                        $category = $vc;
+                        break 2;
+                    }
+                }
+            }
+        }
+        if (empty($category)) {
+            $category = 'Handicraft';
+        }
+
         $prodData = [
             'name'          => $prodName,
             'description'   => $post->content ?: $prodName,
             'price'         => $numericPrice,
             'stock'         => $numericStock,
-            'category'      => $post->category ?: 'Food',
+            'category'      => $category,
             'image'         => $post->image ?: null,
             'user_id'       => $user->id,
             'is_registered' => true,
+            'post_id'       => $post->id,
         ];
 
         if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'images')) {
             $prodData['images'] = !empty($post->image) ? [$post->image] : [];
         }
 
-        $existing = \App\Models\Product::where('user_id', $user->id)
-            ->where('name', $prodName)
-            ->first();
+        $existing = null;
+        if (!empty($post->id)) {
+            $existing = \App\Models\Product::where('post_id', $post->id)->first();
+        }
+        if (!$existing && !empty($post->image)) {
+            $existing = \App\Models\Product::where('user_id', $user->id)
+                ->where('image', $post->image)
+                ->first();
+        }
+        if (!$existing) {
+            $existing = \App\Models\Product::where('user_id', $user->id)
+                ->where('name', $prodName)
+                ->whereNull('post_id')
+                ->first();
+        }
 
         if ($existing) {
             $updateData = [
@@ -160,12 +194,12 @@ class EnterprisePostController extends Controller
                 'description' => $post->content ?: $prodName,
                 'price'       => $numericPrice,
                 'stock'       => $numericStock,
+                'post_id'     => $post->id,
             ];
-            if (!empty($post->category) && empty($existing->category)) {
-                $updateData['category'] = $post->category;
+            if (!empty($category)) {
+                $updateData['category'] = $category;
             }
-            // Only update image from post if product has NO image yet
-            if (empty($existing->image) && !empty($post->image)) {
+            if (!empty($post->image)) {
                 $updateData['image'] = $post->image;
                 if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'images')) {
                     $updateData['images'] = [$post->image];

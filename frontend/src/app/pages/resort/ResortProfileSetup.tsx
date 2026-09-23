@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, CheckCircle, Image as ImageIcon, Plus, Upload, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Image as ImageIcon, Plus, Upload, X, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { getJSON, postJSON } from '../../lib/api';
+import { TIME_OPTIONS } from '../tourist/BusinessProfile';
 
 const AMENITIES = [
   'WiFi',
@@ -27,6 +28,8 @@ export function ResortProfileSetup() {
   const [resortName, setResortName] = useState('');
   const [resortDescription, setResortDescription] = useState('');
   const [pricePerNight, setPricePerNight] = useState('');
+  const [openingTime, setOpeningTime] = useState('08:00 AM');
+  const [closingTime, setClosingTime] = useState('05:00 PM');
   const [amenities, setAmenities] = useState<string[]>([]);
   const [facilities, setFacilities] = useState('');
   const [policies, setPolicies] = useState('');
@@ -106,6 +109,8 @@ export function ResortProfileSetup() {
       formData.append('resort_name', resortName.trim());
       formData.append('resort_description', resortDescription.trim());
       formData.append('resort_price_per_night', pricePerNight);
+      formData.append('opening_time', openingTime);
+      formData.append('closing_time', closingTime);
       // Send amenities as form-array entries so Laravel receives them as an array
       if (amenities.length > 0) {
         amenities.forEach((amenity) => formData.append('resort_amenities[]', amenity));
@@ -187,6 +192,43 @@ export function ResortProfileSetup() {
                 className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
                 placeholder="e.g. 2500"
               />
+            </div>
+            {/* Operating / Business Hours */}
+            <div>
+              <label className="block text-sm font-medium mb-2 flex items-center gap-1.5">
+                <Clock className="w-4 h-4 text-primary" />
+                <span>Operating Hours</span>
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Opening Time</label>
+                  <select
+                    value={openingTime}
+                    onChange={(e) => setOpeningTime(e.target.value)}
+                    className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm bg-white cursor-pointer"
+                  >
+                    {TIME_OPTIONS.map((time) => (
+                      <option key={`resort-setup-open-${time}`} value={time}>
+                        {time}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Closing Time</label>
+                  <select
+                    value={closingTime}
+                    onChange={(e) => setClosingTime(e.target.value)}
+                    className="w-full px-3 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm bg-white cursor-pointer"
+                  >
+                    {TIME_OPTIONS.map((time) => (
+                      <option key={`resort-setup-close-${time}`} value={time}>
+                        {time}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
         )}

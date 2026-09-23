@@ -31,6 +31,8 @@ class EnterpriseProfileController extends Controller
             'instagram_link'    => $user->instagram_link,
             'latitude'          => $user->latitude,
             'longitude'         => $user->longitude,
+            'opening_time'      => $user->opening_time,
+            'closing_time'      => $user->closing_time,
             'virtual_tour_scenes' => $user->virtual_tour_scenes ?? [],
         ]);
     }
@@ -46,6 +48,8 @@ class EnterpriseProfileController extends Controller
         $data = $request->validate([
             'store_name'        => 'nullable|string|max:255',
             'store_description' => 'nullable|string',
+            'opening_time'      => 'nullable|string|max:50',
+            'closing_time'      => 'nullable|string|max:50',
             'logo'              => 'nullable',
             'banner'            => 'nullable',
             'store_logo'        => 'nullable',
@@ -111,6 +115,8 @@ class EnterpriseProfileController extends Controller
             'banner'            => 'nullable',
             'store_logo'        => 'nullable',
             'store_banner'      => 'nullable',
+            'opening_time'      => 'nullable|string|max:50',
+            'closing_time'      => 'nullable|string|max:50',
             'virtual_tour_scenes' => 'nullable|array',
         ]);
 
@@ -172,7 +178,7 @@ class EnterpriseProfileController extends Controller
             $updateData['video'] = null;
         }
 
-        foreach (['phone', 'address', 'barangay', 'facebook_link', 'instagram_link', 'latitude', 'longitude', 'virtual_tour_scenes'] as $field) {
+        foreach (['phone', 'address', 'barangay', 'facebook_link', 'instagram_link', 'latitude', 'longitude', 'virtual_tour_scenes', 'opening_time', 'closing_time'] as $field) {
             if ($request->has($field)) {
                 $updateData[$field] = $request->input($field);
             }
@@ -217,6 +223,22 @@ class EnterpriseProfileController extends Controller
             return response()->json(['message' => 'Store profile not found'], 404);
         }
 
+        // Auto-sync enterprise posts of type product to products table so they immediately appear in store profile
+        try {
+            $productPosts = \App\Models\EnterprisePost::where('user_id', $userId)
+                ->where(function($q) {
+                    $q->where('type', 'product')
+                      ->orWhereNotNull('product_name');
+                })
+                ->orderBy('created_at', 'asc')
+                ->get();
+            foreach ($productPosts as $pPost) {
+                EnterprisePostController::syncProductFromPost($pPost, $owner);
+            }
+        } catch (\Throwable $e) {
+            // sync error ignored
+        }
+
         $products = \App\Models\Product::where('user_id', $userId)
             ->get()
             ->map(function ($p) {
@@ -228,6 +250,8 @@ class EnterpriseProfileController extends Controller
                     'stock'       => (int) $p->stock,
                     'category'    => $p->category,
                     'image'       => $p->image,
+                    'images'      => $p->images ?? (!empty($p->image) ? [$p->image] : []),
+                    'likes'       => (int) ($p->likes ?? 0),
                 ];
             });
 
@@ -249,6 +273,8 @@ class EnterpriseProfileController extends Controller
                 'instagram_link'   => $owner->instagram_link,
                 'latitude'         => $owner->latitude,
                 'longitude'        => $owner->longitude,
+                'opening_time'     => $owner->opening_time,
+                'closing_time'     => $owner->closing_time,
                 'video'            => $owner->video ?? $owner->video_url,
                 'video_url'        => $owner->video_url ?? $owner->video,
                 'video_tour'       => $owner->video ?? $owner->video_url,

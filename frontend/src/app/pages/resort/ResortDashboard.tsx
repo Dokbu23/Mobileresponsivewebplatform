@@ -213,10 +213,8 @@ export function ResortDashboard() {
   const [postImageFiles, setPostImageFiles] = useState<File[]>([]);
   const [postImagePreviews, setPostImagePreviews] = useState<string[]>([]);
 
-  // Post form fields
   const [location, setLocation] = useState('');
   const [price, setPrice] = useState('');
-  const [businessHours, setBusinessHours] = useState('');
   const [stock, setStock] = useState('');
 
   // Context-specific form states
@@ -228,7 +226,6 @@ export function ResortDashboard() {
   // 2. Amenities specific
   const [amenityTypes, setAmenityTypes] = useState<string[]>(['Pool', 'Wi-Fi']);
   const [amenityAvailability, setAmenityAvailability] = useState<'public' | 'overnight'>('public');
-  const [amenityHours, setAmenityHours] = useState('6:00 AM - 10:00 PM');
 
   // 3. Activities specific
   const [activityName, setActivityName] = useState('');
@@ -623,16 +620,9 @@ export function ResortDashboard() {
         formData.append('price', price.trim());
       }
 
-      // Context-aware Hours / Schedule
-      if (postType === 'rooms') {
-        if (businessHours.trim()) formData.append('business_hours', businessHours.trim());
-      } else if (postType === 'amenities') {
-        const hours = amenityHours.trim() || businessHours.trim();
-        if (hours) formData.append('business_hours', hours);
-      } else if (postType === 'activities') {
-        if (activityInclusions.trim()) {
-          formData.append('business_hours', `Inclusions: ${activityInclusions.trim()}`);
-        }
+      // Context-aware Inclusions
+      if (postType === 'activities' && activityInclusions.trim()) {
+        formData.append('business_hours', `Inclusions: ${activityInclusions.trim()}`);
       }
 
       // Stock / Availability
@@ -695,14 +685,12 @@ export function ResortDashboard() {
       // Reset form
       setPostContent('');
       setPrice('');
-      setBusinessHours('');
       setStock('');
       setRoomTypeName('');
       setMaxGuests(4);
       setBedConfig('1 King Bed');
       setAmenityTypes(['Pool', 'Wi-Fi']);
       setAmenityAvailability('public');
-      setAmenityHours('6:00 AM - 10:00 PM');
       setActivityName('');
       setActivityInclusions('');
       setActivityPricingType('free');
@@ -1394,21 +1382,6 @@ export function ResortDashboard() {
                     🔒 Exclusive for overnight guests
                   </button>
                 </div>
-              </div>
-
-              {/* Operating Hours */}
-              <div>
-                <label className="block text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-cyan-600" />
-                  <span>Operating Hours</span>
-                </label>
-                <input
-                  type="text"
-                  value={amenityHours}
-                  onChange={e => setAmenityHours(e.target.value)}
-                  placeholder='e.g., "6:00 AM - 10:00 PM"'
-                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 outline-none focus:border-cyan-500 shadow-2xs"
-                />
               </div>
             </div>
           )}

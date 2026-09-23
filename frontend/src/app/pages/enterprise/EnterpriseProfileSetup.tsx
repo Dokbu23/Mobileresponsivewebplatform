@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Store, Upload } from 'lucide-react';
+import { Store, Upload, Clock } from 'lucide-react';
 import { API_BASE, getAuthToken } from '../../lib/api';
 import { toast } from 'sonner';
 import { showSuccessAlert } from '../../lib/sweetAlert';
+import { TIME_OPTIONS } from '../tourist/BusinessProfile';
 
 export function EnterpriseProfileSetup() {
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
   const [storeName, setStoreName] = useState('');
+  const [openingTime, setOpeningTime] = useState('08:00 AM');
+  const [closingTime, setClosingTime] = useState('05:00 PM');
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
@@ -45,6 +48,8 @@ export function EnterpriseProfileSetup() {
       if (storeName.trim()) {
         formData.append('store_name', storeName.trim());
       }
+      formData.append('opening_time', openingTime);
+      formData.append('closing_time', closingTime);
       if (logoFile) formData.append('logo', logoFile);
       if (bannerFile) formData.append('banner', bannerFile);
 
@@ -92,6 +97,44 @@ export function EnterpriseProfileSetup() {
             className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm"
           />
           <p className="text-xs text-muted-foreground mt-1">Leave blank to use the business name you entered during registration.</p>
+        </div>
+
+        {/* Operating / Business Hours */}
+        <div>
+          <label className="block text-sm font-medium mb-2 flex items-center gap-1.5">
+            <Clock className="w-4 h-4 text-primary" />
+            <span>Business Operating Hours</span>
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Opening Time</label>
+              <select
+                value={openingTime}
+                onChange={(e) => setOpeningTime(e.target.value)}
+                className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm bg-white cursor-pointer"
+              >
+                {TIME_OPTIONS.map((time) => (
+                  <option key={`setup-open-${time}`} value={time}>
+                    {time}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Closing Time</label>
+              <select
+                value={closingTime}
+                onChange={(e) => setClosingTime(e.target.value)}
+                className="w-full px-4 py-2.5 border-2 border-primary/20 rounded-lg focus:border-primary outline-none text-sm bg-white cursor-pointer"
+              >
+                {TIME_OPTIONS.map((time) => (
+                  <option key={`setup-close-${time}`} value={time}>
+                    {time}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         {/* Logo Upload */}

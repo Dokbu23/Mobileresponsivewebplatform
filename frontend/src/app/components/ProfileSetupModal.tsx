@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { MapPin, Hotel, Store, User, Building, CheckCircle2, ChevronRight, Sparkles, Loader2, ShieldCheck, AlertCircle, Phone, ExternalLink, LogOut } from 'lucide-react';
+import { MapPin, Hotel, Store, User, Building, CheckCircle2, ChevronRight, Sparkles, Loader2, ShieldCheck, AlertCircle, Phone, ExternalLink, LogOut, Clock } from 'lucide-react';
 import { postJSON, setAuthToken, removeAuthToken } from '../lib/api';
 import { useApp } from '../context/AppContext';
 import { showLogoutConfirm, showLogoutSuccess } from '../lib/sweetAlert';
@@ -9,6 +9,37 @@ import { toast } from 'sonner';
 type AccountRole = 'tourist' | 'resort' | 'enterprise';
 
 import { MANSALAY_BARANGAYS } from '../lib/constants';
+
+const TIME_OPTIONS = [
+  'Open 24 Hours',
+  '5:00 AM',
+  '5:30 AM',
+  '6:00 AM',
+  '6:30 AM',
+  '7:00 AM',
+  '7:30 AM',
+  '8:00 AM',
+  '8:30 AM',
+  '9:00 AM',
+  '9:30 AM',
+  '10:00 AM',
+  '10:30 AM',
+  '11:00 AM',
+  '11:30 AM',
+  '12:00 PM',
+  '1:00 PM',
+  '2:00 PM',
+  '3:00 PM',
+  '4:00 PM',
+  '5:00 PM',
+  '6:00 PM',
+  '7:00 PM',
+  '8:00 PM',
+  '9:00 PM',
+  '10:00 PM',
+  '11:00 PM',
+  '12:00 AM',
+];
 
 interface ProfileSetupModalProps {
   isOpen: boolean;
@@ -28,6 +59,8 @@ export function ProfileSetupModal({ isOpen, onComplete }: ProfileSetupModalProps
   const [phone, setPhone] = useState(currentUser?.phone || '');
   const [facebookLink, setFacebookLink] = useState('');
   const [instagramLink, setInstagramLink] = useState('');
+  const [openingTime, setOpeningTime] = useState('8:00 AM');
+  const [closingTime, setClosingTime] = useState('5:00 PM');
   const [loading, setLoading] = useState(false);
 
   // Splash auto-transition (1.5 seconds)
@@ -61,6 +94,8 @@ export function ProfileSetupModal({ isOpen, onComplete }: ProfileSetupModalProps
         phone: phone ? (phone.startsWith('0') ? phone : `0${phone}`) : undefined,
         facebook_link: facebookLink || undefined,
         instagram_link: instagramLink || undefined,
+        opening_time: roleToSubmit !== 'tourist' ? openingTime : undefined,
+        closing_time: roleToSubmit !== 'tourist' ? (openingTime === 'Open 24 Hours' ? 'Open 24 Hours' : closingTime) : undefined,
       };
 
       const response = await postJSON('/setup-profile', payload);
@@ -406,6 +441,48 @@ export function ProfileSetupModal({ isOpen, onComplete }: ProfileSetupModalProps
                     placeholder="e.g. instagram.com/yourbusiness"
                     className="w-full pl-10 pr-4 py-3 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:bg-white focus:border-pink-500 outline-none"
                   />
+                </div>
+              </div>
+
+              {/* Operating / Business Hours */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-pink-500" />
+                  Business Operating Hours
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                      Opening Time
+                    </label>
+                    <select
+                      value={openingTime}
+                      onChange={(e) => setOpeningTime(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:bg-white focus:border-pink-500 outline-none cursor-pointer"
+                    >
+                      {TIME_OPTIONS.map((time) => (
+                        <option key={`open-${time}`} value={time}>
+                          {time}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-1">
+                      Closing Time
+                    </label>
+                    <select
+                      value={closingTime}
+                      onChange={(e) => setClosingTime(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-gray-900 dark:text-white focus:bg-white focus:border-pink-500 outline-none cursor-pointer"
+                    >
+                      {TIME_OPTIONS.map((time) => (
+                        <option key={`close-${time}`} value={time}>
+                          {time}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
