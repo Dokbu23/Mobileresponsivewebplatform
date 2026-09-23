@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
-import { getAuthToken, getPublicJSON, formatImageUrl, API_BASE, cleanItineraryTitle } from '../../lib/api';
+import { getAuthToken, getPublicJSON, postJSON, deleteJSON, formatImageUrl, API_BASE, cleanItineraryTitle } from '../../lib/api';
 import { PushPinIcon } from '../../components/PushPinIcon';
 import { showDeleteConfirmDialog } from '../../lib/sweetAlert';
 
@@ -80,15 +80,17 @@ export function Itinerary() {
   const navigate = useNavigate();
   const { currentUser, userType } = useApp();
 
-  const isBusinessOrAdmin =
-    userType === 'admin' ||
-    userType === 'resort' ||
-    userType === 'enterprise' ||
+  const isAdmin =
     currentUser?.role === 'admin' ||
-    currentUser?.role === 'resort' ||
-    currentUser?.role === 'enterprise';
+    userType === 'admin';
 
-  const canAccessBuilders = !isBusinessOrAdmin;
+  const isBusiness =
+    (userType === 'resort' ||
+    userType === 'enterprise' ||
+    currentUser?.role === 'resort' ||
+    currentUser?.role === 'enterprise') && !isAdmin;
+
+  const canAccessBuilders = !isBusiness;
 
   const [myCustomTrips, setMyCustomTrips] = useState<ItineraryCard[]>([]);
 
@@ -186,40 +188,59 @@ export function Itinerary() {
 
       const mapped: ItineraryCard[] = uniqueItems.map((item: any) => {
         let days: DailyPlan[] = [];
-        if (Array.isArray(item.days) && item.days.length > 0) {
-          days = item.days;
-        } else if (Array.isArray(item.schedule) && item.schedule.length > 0) {
-          days = item.schedule.map((ds: any) => ({
-            day: ds.day || 1,
-            title: `Day ${ds.day || 1} Schedule`,
-            activities: [
-              ds.morning ? { time: '08:30 AM', activity: ds.morning, location: item.location || 'Mansalay' } : null,
-              ds.afternoon ? { time: '01:30 PM', activity: ds.afternoon, location: item.location || 'Mansalay' } : null,
-              ds.evening ? { time: '06:30 PM', activity: ds.evening, location: item.location || 'Mansalay' } : null,
-            ].filter(Boolean) as ActivityItem[],
-          }));
-        } else {
-          const count = Number(item.days_count || 2);
-          for (let d = 1; d <= count; d++) {
-            days.push({
-              day: d,
-              title: `Day ${d} Exploration`,
+        let parsedHighlights: string[] = [];
+        let parsedBadge = item.badge || 'Official Tourism Plan';
+        let parsedDuration = item.duration;
+
+        if (item.full_description) {
+          try {
+            const parsed = typeof item.full_description === 'string' ? JSON.parse(item.full_description) : item.full_description;
+            if (parsed && typeof parsed === 'object') {
+              if (Array.isArray(parsed.days) && parsed.days.length > 0) days = parsed.days;
+              if (Array.isArray(parsed.highlights) && parsed.highlights.length > 0) parsedHighlights = parsed.highlights;
+              if (parsed.badge) parsedBadge = parsed.badge;
+              if (parsed.duration) parsedDuration = parsed.duration;
+            }
+          } catch {}
+        }
+
+        if (days.length === 0) {
+          if (Array.isArray(item.days) && item.days.length > 0) {
+            days = item.days;
+          } else if (Array.isArray(item.schedule) && item.schedule.length > 0) {
+            days = item.schedule.map((ds: any) => ({
+              day: ds.day || 1,
+              title: `Day ${ds.day || 1} Schedule`,
               activities: [
-                { time: '09:00 AM', activity: `Morning Tour - Day ${d}`, location: item.location || 'Mansalay' },
-                { time: '02:00 PM', activity: `Afternoon Sightseeing & Local Experience`, location: item.location || 'Mansalay' },
-                { time: '06:00 PM', activity: `Evening Sunset & Dinner`, location: item.location || 'Mansalay' },
-              ]
-            });
+                ds.morning ? { time: '08:30 AM', activity: ds.morning, location: item.location || 'Mansalay' } : null,
+                ds.afternoon ? { time: '01:30 PM', activity: ds.afternoon, location: item.location || 'Mansalay' } : null,
+                ds.evening ? { time: '06:30 PM', activity: ds.evening, location: item.location || 'Mansalay' } : null,
+              ].filter(Boolean) as ActivityItem[],
+            }));
+          } else {
+            const count = Number(item.days_count || 2);
+            for (let d = 1; d <= count; d++) {
+              days.push({
+                day: d,
+                title: `Day ${d} Exploration`,
+                activities: [
+                  { time: '09:00 AM', activity: `Morning Tour - Day ${d}`, location: item.location || 'Mansalay' },
+                  { time: '02:00 PM', activity: `Afternoon Sightseeing & Local Experience`, location: item.location || 'Mansalay' },
+                  { time: '06:00 PM', activity: `Evening Sunset & Dinner`, location: item.location || 'Mansalay' },
+                ]
+              });
+            }
           }
         }
 
-        let parsedHighlights: string[] = [];
-        if (Array.isArray(item.highlights)) {
-          parsedHighlights = item.highlights;
-        } else if (typeof item.highlights === 'string' && item.highlights.trim()) {
-          parsedHighlights = item.highlights.split('\n').filter((h: string) => h.trim().length > 0);
-        } else if (item.description) {
-          parsedHighlights = [item.description.slice(0, 60)];
+        if (parsedHighlights.length === 0) {
+          if (Array.isArray(item.highlights)) {
+            parsedHighlights = item.highlights;
+          } else if (typeof item.highlights === 'string' && item.highlights.trim()) {
+            parsedHighlights = item.highlights.split('\n').filter((h: string) => h.trim().length > 0);
+          } else if (item.description) {
+            parsedHighlights = [item.description.slice(0, 60)];
+          }
         }
 
         const rawImg = item.image || (Array.isArray(item.images) ? item.images[0] : '');
@@ -228,12 +249,12 @@ export function Itinerary() {
         return {
           id: String(item.id),
           title: cleanItineraryTitle(item.title || item.name) || 'Official Mansalay Itinerary',
-          badge: item.badge || 'Official Tourism Plan',
+          badge: parsedBadge,
           category: item.category || 'Travel Itinerary',
-          duration: item.duration || `${item.days_count || days.length || 2} days`,
+          duration: parsedDuration || item.duration || `${item.days_count || days.length || 2} days`,
           saves: Number(item.saves || item.likes || 128),
           image: finalImg,
-          description: item.description || item.full_description || 'Curated travel plan by the Mansalay Tourism Office.',
+          description: item.description || (typeof item.full_description === 'string' && !item.full_description.startsWith('{') ? item.full_description : '') || 'Curated travel plan by the Mansalay Tourism Office.',
           highlights: parsedHighlights.length > 0 ? parsedHighlights : ['Mansalay Coastal Highlights', 'Cultural Experience', 'Local Cuisine'],
           days,
           isOfficial: true,
@@ -307,10 +328,115 @@ export function Itinerary() {
     }
   }, [myCustomTrips, currentUser?.id, currentUser?.email]);
 
+  // Save and Publish Helper (Publish to Official Itineraries if Admin, otherwise save to My Custom Trips)
+  const saveAndPublishItinerary = async (newItinerary: ItineraryCard) => {
+    if (isAdmin) {
+      newItinerary.isOfficial = true;
+      newItinerary.badge = 'Official Tourism Plan';
+
+      // 1. Instantly store in local storage published itineraries for immediate display
+      try {
+        const p1 = localStorage.getItem('discover-mansalay:published_itineraries');
+        const list = p1 ? JSON.parse(p1) : [];
+        const updated = [newItinerary, ...list.filter((x: any) => String(x.id) !== String(newItinerary.id))];
+        localStorage.setItem('discover-mansalay:published_itineraries', JSON.stringify(updated));
+      } catch (err) {
+        console.error('Local save notice:', err);
+      }
+
+      // 2. Persist to Backend database via POST /attractions
+      try {
+        const payload = {
+          name: newItinerary.title,
+          category: 'Itinerary',
+          location: 'Mansalay, Oriental Mindoro',
+          description: newItinerary.description || `${newItinerary.duration} official travel itinerary curated by Mansalay Tourism Office.`,
+          full_description: JSON.stringify({
+            days: newItinerary.days,
+            highlights: newItinerary.highlights,
+            badge: 'Official Tourism Plan',
+            duration: newItinerary.duration,
+            category: newItinerary.category,
+          }),
+          image: newItinerary.image || '/assets/mansalay_hero_bg.jpg',
+        };
+
+        const res = await postJSON('/attractions', payload);
+        if (res && res.id) {
+          newItinerary.id = String(res.id);
+          // Re-update local cache with the official database ID
+          try {
+            const p1 = localStorage.getItem('discover-mansalay:published_itineraries');
+            const list = p1 ? JSON.parse(p1) : [];
+            const updated = [newItinerary, ...list.filter((x: any) => String(x.id) !== String(newItinerary.id))];
+            localStorage.setItem('discover-mansalay:published_itineraries', JSON.stringify(updated));
+          } catch {}
+        }
+      } catch (err) {
+        console.warn('Backend publish notice (stored locally):', err);
+      }
+
+      setOfficialItineraries(prev => [newItinerary, ...prev.filter(t => String(t.id) !== String(newItinerary.id))]);
+      window.dispatchEvent(new Event('contentUpdated'));
+      toast.success('Official Mansalay Itinerary published! It is now visible to all tourists.');
+    } else {
+      setMyCustomTrips(prev => [newItinerary, ...prev]);
+      const key = getUserTripStorageKey(currentUser);
+      try {
+        const existing = JSON.parse(localStorage.getItem(key) || '[]');
+        localStorage.setItem(key, JSON.stringify([newItinerary, ...existing]));
+      } catch {}
+      toast.success('Your itinerary has been saved to My Custom Trips!');
+    }
+
+    setSelectedItinerary(newItinerary);
+  };
+
+  const handleDeleteOfficialTrip = async (id: string, tripTitle?: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!isAdmin) return;
+
+    const confirmed = await showDeleteConfirmDialog(
+      'Delete Official Itinerary?',
+      tripTitle
+        ? `Are you sure you want to delete "${tripTitle}" from official itineraries?`
+        : 'Are you sure you want to delete this official itinerary?',
+      'Yes, Delete',
+      'Cancel'
+    );
+    if (!confirmed) return;
+
+    if (/^\d+$/.test(String(id))) {
+      try {
+        await deleteJSON(`/attractions/${id}`);
+      } catch (err) {
+        console.warn('Backend delete notice:', err);
+      }
+    }
+
+    try {
+      const p1 = localStorage.getItem('discover-mansalay:published_itineraries');
+      if (p1) {
+        const list = JSON.parse(p1).filter((item: any) => String(item.id) !== String(id));
+        localStorage.setItem('discover-mansalay:published_itineraries', JSON.stringify(list));
+      }
+      const delPosts = JSON.parse(localStorage.getItem('discover-mansalay:deleted_posts') || '[]');
+      if (!delPosts.includes(String(id))) {
+        delPosts.push(String(id));
+        localStorage.setItem('discover-mansalay:deleted_posts', JSON.stringify(delPosts));
+      }
+    } catch {}
+
+    setOfficialItineraries(prev => prev.filter(t => String(t.id) !== String(id)));
+    if (selectedItinerary?.id === id) setSelectedItinerary(null);
+    window.dispatchEvent(new Event('contentUpdated'));
+    toast.success('Official itinerary removed successfully');
+  };
+
   // AI Itinerary Generator Logic
   const handleGenerateAiItinerary = () => {
     setIsGenerating(true);
-    setTimeout(() => {
+    setTimeout(async () => {
       const daysCount = parseInt(aiDurationDays, 10);
       const generatedDays: DailyPlan[] = [];
 
@@ -346,11 +472,11 @@ export function Itinerary() {
 
       const newItinerary: ItineraryCard = {
         id: `ai-itin-${Date.now()}`,
-        title: `AI Generated ${aiTravelStyle} (${daysCount} Days)`,
-        badge: 'AI Customized',
+        title: isAdmin ? `Official Mansalay ${aiTravelStyle} (${daysCount} Days)` : `AI Generated ${aiTravelStyle} (${daysCount} Days)`,
+        badge: isAdmin ? 'Official Tourism Plan' : 'AI Customized',
         category: aiTravelStyle,
         duration: `${daysCount} days`,
-        saves: 1,
+        saves: isAdmin ? 150 : 1,
         image: '/assets/mansalay_hero_bg.jpg',
         description: `Customized ${aiPace.toLowerCase()}-paced itinerary created for ${aiTravelStyle} in Mansalay.`,
         highlights: [
@@ -361,11 +487,9 @@ export function Itinerary() {
         days: generatedDays
       };
 
-      setMyCustomTrips(prev => [newItinerary, ...prev]);
+      await saveAndPublishItinerary(newItinerary);
       setIsGenerating(false);
       setShowAiModal(false);
-      setSelectedItinerary(newItinerary);
-      toast.success('Your AI itinerary has been generated!');
     }, 1200);
   };
 
@@ -415,7 +539,7 @@ export function Itinerary() {
     setBuilderDurationDays(prev => prev + 1);
   };
 
-  const handleSaveCustomBuilder = (e: React.FormEvent) => {
+  const handleSaveCustomBuilder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!builderTitle.trim()) {
       toast.error('Please enter a title for your trip.');
@@ -425,20 +549,18 @@ export function Itinerary() {
     const customCard: ItineraryCard = {
       id: `custom-itin-${Date.now()}`,
       title: builderTitle,
-      badge: 'My Custom Trip',
+      badge: isAdmin ? 'Official Tourism Plan' : 'My Custom Trip',
       category: builderCategory,
       duration: `${builderDays.length} days`,
-      saves: 1,
+      saves: isAdmin ? 150 : 1,
       image: '/assets/mansalay_hero_bg.jpg',
-      description: builderDescription || 'Personalized custom travel itinerary built with Mansalay Trip Planner.',
+      description: builderDescription || 'Personalized travel itinerary built with Mansalay Trip Planner.',
       highlights: builderDays.map(d => `${d.title} (${d.activities.length} spots)`),
       days: builderDays
     };
 
-    setMyCustomTrips(prev => [customCard, ...prev]);
+    await saveAndPublishItinerary(customCard);
     setShowBuilderModal(false);
-    setSelectedItinerary(customCard);
-    toast.success('Custom itinerary saved successfully!');
 
     // Reset form
     setBuilderTitle('');
@@ -548,17 +670,37 @@ export function Itinerary() {
 
         {/* ── 1. OFFICIAL TOURISM ITINERARIES (PUBLISHED BY ADMIN) ── */}
         <section className="mb-16">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
             <div>
               <div className="flex items-center gap-2 text-pink-500 text-xs font-bold uppercase tracking-wider mb-1">
                 <Compass className="h-4 w-4" />
                 <span>Official Tourism Routes</span>
               </div>
               <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">
-                Official Mansalay Itineraries ({officialItineraries.length})
+                Official Mansalay Itineraries
               </h2>
               <p className="text-xs text-gray-400 mt-0.5">Handcrafted recommended itineraries created by the Mansalay Tourism Office</p>
             </div>
+            {isAdmin && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setShowAiModal(true)}
+                  className="px-4 py-2 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold rounded-xl text-xs shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Wand2 className="h-3.5 w-3.5" />
+                  <span>AI Generate Route</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBuilderModal(true)}
+                  className="px-4 py-2 bg-white hover:bg-pink-50 text-pink-600 border border-pink-200 font-bold rounded-xl text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Build Manual Route</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {loadingOfficial ? (
@@ -661,6 +803,16 @@ export function Itinerary() {
                         <span>View Schedule</span>
                         <ChevronRight className="h-3.5 w-3.5" />
                       </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteOfficialTrip(trip.id, trip.title, e)}
+                          className="p-2.5 rounded-full border border-gray-200 hover:border-red-200 hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0 cursor-pointer"
+                          title="Delete Official Route"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                       {(() => {
                         const isSaved = myCustomTrips.some(t => t.id === `saved-${trip.id}` || t.title === trip.title);
                         return (
@@ -694,7 +846,7 @@ export function Itinerary() {
               <span>Private Itinerary Collection</span>
             </div>
             <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-1">
-              My Saved Trips & Itineraries ({myCustomTrips.length})
+              My Saved Trips & Itineraries
             </h2>
             <p className="text-xs text-gray-400 mb-6">
               Private to your account ({currentUser?.name || currentUser?.email || 'My Account'}) — only you can view and manage these saved schedules.
@@ -875,14 +1027,26 @@ export function Itinerary() {
                     >
                       <Trash2 className="h-3.5 w-3.5" /> Delete Itinerary
                     </button>
-                  ) : canAccessBuilders ? (
-                    <button
-                      onClick={(e) => handleSaveOfficialToMyTrips(selectedItinerary, e)}
-                      className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold rounded-full shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <BookmarkPlus className="h-3.5 w-3.5" /> Save to My Trips
-                    </button>
-                  ) : null}
+                  ) : (
+                    <>
+                      {isAdmin && selectedItinerary.isOfficial && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteOfficialTrip(selectedItinerary.id, selectedItinerary.title, e)}
+                          className="px-3.5 py-1.5 bg-red-500/90 hover:bg-red-600 text-white text-xs font-bold rounded-full backdrop-blur-md transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                          title="Delete Official Route"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Delete Route
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => handleSaveOfficialToMyTrips(selectedItinerary, e)}
+                        className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold rounded-full shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <BookmarkPlus className="h-3.5 w-3.5" /> Save to My Trips
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
