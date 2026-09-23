@@ -13,17 +13,21 @@ function resolveApiBase(): string {
     ) {
       return 'http://localhost:8000';
     }
+    if (host.includes('discovermansalay.cyou')) {
+      return 'https://api.discovermansalay.cyou';
+    }
   }
 
-  // 2. If deployed (e.g. Render, production domain)
-  const envApiBase = ((import.meta as any).env?.VITE_API_BASE as string | undefined) 
+  // 2. If deployed (e.g. EC2, Render, production domain)
+  const envApiBase = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined)
+    || ((import.meta as any).env?.VITE_API_BASE as string | undefined) 
     || ((import.meta as any).env?.VITE_API_URL as string | undefined);
 
   if (envApiBase && !envApiBase.includes('localhost') && !envApiBase.includes('127.0.0.1')) {
     return envApiBase;
   }
 
-  return 'https://discmansalay.onrender.com';
+  return 'https://api.discovermansalay.cyou';
 }
 
 const rawApiBase = resolveApiBase();
