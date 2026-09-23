@@ -11,6 +11,9 @@ import {
   Layers,
   Loader2,
   ChevronRight,
+  ChevronLeft,
+  ArrowRight,
+  ArrowLeft,
   Eye
 } from 'lucide-react';
 import { Tour360Scene } from './VirtualTourModal';
@@ -65,35 +68,51 @@ export function InlineVirtualTourViewer({
         style.id = 'pannellum-custom-walk-style';
         style.innerHTML = `
           .pnlm-hotspot-base.pnlm-scene {
-            width: 44px !important;
-            height: 44px !important;
-            margin-left: -22px !important;
-            margin-top: -22px !important;
-            background: radial-gradient(circle, rgba(16, 185, 129, 0.95) 0%, rgba(5, 150, 105, 0.85) 60%, rgba(4, 120, 87, 0.5) 100%) !important;
-            border: 2.5px solid #ffffff !important;
+            width: 50px !important;
+            height: 50px !important;
+            margin-left: -25px !important;
+            margin-top: -25px !important;
+            background: radial-gradient(circle, rgba(16, 185, 129, 0.98) 0%, rgba(5, 150, 105, 0.9) 65%, rgba(4, 120, 87, 0.75) 100%) !important;
+            border: 3px solid #ffffff !important;
             border-radius: 50% !important;
-            box-shadow: 0 0 20px rgba(16, 185, 129, 0.9), 0 0 35px rgba(16, 185, 129, 0.5) !important;
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.95), 0 0 45px rgba(16, 185, 129, 0.6) !important;
             cursor: pointer !important;
             transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
             animation: pnlmWalkPulse 2s infinite ease-in-out !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+          }
+          .pnlm-hotspot-base.pnlm-scene::after {
+            content: '➔' !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            color: #ffffff !important;
+            font-size: 24px !important;
+            font-weight: 900 !important;
+            line-height: 1 !important;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+            transform: translateY(-1px) !important;
           }
           .pnlm-hotspot-base.pnlm-scene:hover {
-            transform: scale(1.25) !important;
-            background: radial-gradient(circle, rgba(236, 72, 153, 0.95) 0%, rgba(219, 39, 119, 0.9) 60%, rgba(190, 24, 93, 0.5) 100%) !important;
-            border-color: #fdf2f8 !important;
-            box-shadow: 0 0 25px rgba(236, 72, 153, 0.9), 0 0 45px rgba(236, 72, 153, 0.6) !important;
+            transform: scale(1.3) !important;
+            background: radial-gradient(circle, rgba(236, 72, 153, 0.98) 0%, rgba(219, 39, 119, 0.92) 65%, rgba(190, 24, 93, 0.75) 100%) !important;
+            border-color: #ffffff !important;
+            box-shadow: 0 0 35px rgba(236, 72, 153, 0.95), 0 0 55px rgba(236, 72, 153, 0.7) !important;
           }
           .pnlm-hotspot-base.pnlm-scene .pnlm-tooltip span {
-            background-color: rgba(15, 23, 42, 0.9) !important;
-            backdrop-filter: blur(8px) !important;
+            background-color: rgba(15, 23, 42, 0.92) !important;
+            backdrop-filter: blur(10px) !important;
             color: #ffffff !important;
-            font-size: 11px !important;
+            font-size: 12px !important;
             font-weight: 700 !important;
-            padding: 5px 10px !important;
+            padding: 6px 12px !important;
             border-radius: 9999px !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            border: 1.5px solid rgba(255, 255, 255, 0.25) !important;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
             white-space: nowrap !important;
+            letter-spacing: 0.02em !important;
           }
           .pnlm-hotspot-base.pnlm-info {
             width: 32px !important;
@@ -246,6 +265,37 @@ export function InlineVirtualTourViewer({
     }
   };
 
+  const currentSceneIndex = scenes.findIndex((s) => s.id === activeSceneId);
+  const safeIndex = currentSceneIndex >= 0 ? currentSceneIndex : 0;
+  const prevScene = scenes.length > 0 ? scenes[(safeIndex - 1 + scenes.length) % scenes.length] : null;
+  const nextScene = scenes.length > 0 ? scenes[(safeIndex + 1) % scenes.length] : null;
+
+  const handleNextScene = useCallback(() => {
+    if (scenes.length <= 1) return;
+    const nextIdx = (safeIndex + 1) % scenes.length;
+    handleSelectScene(scenes[nextIdx].id);
+  }, [safeIndex, scenes]);
+
+  const handlePrevScene = useCallback(() => {
+    if (scenes.length <= 1) return;
+    const prevIdx = (safeIndex - 1 + scenes.length) % scenes.length;
+    handleSelectScene(scenes[prevIdx].id);
+  }, [safeIndex, scenes]);
+
+  // Keyboard arrow navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
+      if (e.key === 'ArrowRight') {
+        handleNextScene();
+      } else if (e.key === 'ArrowLeft') {
+        handlePrevScene();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleNextScene, handlePrevScene]);
+
   // Toggle auto rotate
   const toggleAutoRotate = () => {
     if (!pannellumInstanceRef.current) return;
@@ -292,6 +342,7 @@ export function InlineVirtualTourViewer({
         <div
           ref={containerRef}
           className="w-full h-[440px] sm:h-[520px] md:h-[580px] bg-gray-950 cursor-grab active:cursor-grabbing select-none"
+          style={{ minHeight: '440px' }}
         />
 
         {/* Loading Overlay */}
@@ -365,10 +416,64 @@ export function InlineVirtualTourViewer({
           </div>
         </div>
 
-        {/* Bottom Helper Instruction Badge */}
-        <div className="absolute bottom-4 left-4 z-10 pointer-events-none hidden sm:flex items-center gap-2 bg-black/55 backdrop-blur-md px-3 py-1.5 rounded-full text-white/90 text-[11px] border border-white/10 font-medium">
-          <Navigation className="h-3.5 w-3.5 text-emerald-400" />
-          <span>Click and drag to pan 360° • Click green circular arrows to walk to next area</span>
+        {/* ⬅️ PREVIOUS SCENE ARROW BUTTON */}
+        {scenes.length > 1 && (
+          <div className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 z-20 pointer-events-auto">
+            <button
+              type="button"
+              onClick={handlePrevScene}
+              className="group relative flex items-center justify-center w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-black/60 hover:bg-pink-600 text-white backdrop-blur-xl border border-white/20 hover:border-pink-300 shadow-2xl transition-all duration-200 hover:scale-110 active:scale-95 cursor-pointer"
+              title={`Previous: ${prevScene?.title || 'Previous Area'}`}
+              aria-label="Previous 360 scene"
+            >
+              <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8 transition-transform group-hover:-translate-x-1" />
+              {/* Tooltip hint on hover */}
+              <div className="absolute left-full ml-3 px-3 py-1.5 rounded-xl bg-gray-950/95 backdrop-blur-md text-white text-xs font-bold border border-white/15 whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 transition-all pointer-events-none -translate-x-2 group-hover:translate-x-0 hidden sm:flex items-center gap-1.5">
+                <span className="text-gray-400 font-normal">Prev:</span>
+                <span>{prevScene?.title}</span>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* ➡️ NEXT SCENE ARROW BUTTON */}
+        {scenes.length > 1 && (
+          <div className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 z-20 pointer-events-auto">
+            <button
+              type="button"
+              onClick={handleNextScene}
+              className="group relative flex items-center justify-center w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-pink-600/90 hover:bg-pink-600 text-white backdrop-blur-xl border border-pink-400/80 hover:border-white shadow-2xl shadow-pink-500/40 transition-all duration-200 hover:scale-110 active:scale-95 cursor-pointer"
+              title={`Next: ${nextScene?.title || 'Next Area'}`}
+              aria-label="Next 360 scene"
+            >
+              <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8 transition-transform group-hover:translate-x-1" />
+              {/* Tooltip hint on hover */}
+              <div className="absolute right-full mr-3 px-3 py-1.5 rounded-xl bg-gray-950/95 backdrop-blur-md text-white text-xs font-bold border border-white/15 whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 transition-all pointer-events-none translate-x-2 group-hover:translate-x-0 hidden sm:flex items-center gap-1.5">
+                <span>{nextScene?.title}</span>
+                <span className="text-pink-400 font-extrabold">Next ➔</span>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* Bottom Helper Instruction Badge & Quick Next Area Pill */}
+        <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between z-10 pointer-events-none">
+          <div className="hidden sm:flex items-center gap-2 bg-black/60 backdrop-blur-md px-3.5 py-1.5 rounded-full text-white/90 text-[11px] border border-white/10 font-medium">
+            <Navigation className="h-3.5 w-3.5 text-emerald-400" />
+            <span>Click & drag to pan • Click arrows (◀ / ▶) to walk to next 360° spot</span>
+          </div>
+
+          {scenes.length > 1 && (
+            <button
+              type="button"
+              onClick={handleNextScene}
+              className="pointer-events-auto ml-auto mr-16 sm:mr-20 flex items-center gap-2 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white px-3.5 py-1.5 rounded-full text-xs font-bold shadow-lg shadow-pink-500/30 border border-white/20 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+              title={`Next spot: ${nextScene?.title}`}
+            >
+              <span>Next Area</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -381,7 +486,26 @@ export function InlineVirtualTourViewer({
               Walkthrough Areas & Spots ({scenes.length})
             </h3>
           </div>
-          <span className="text-[11px] text-gray-400 font-medium">Select an area to jump immediately</span>
+          {scenes.length > 1 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handlePrevScene}
+                className="p-1.5 rounded-lg border border-gray-200 hover:border-pink-300 hover:bg-pink-50 text-gray-600 hover:text-pink-600 transition-colors cursor-pointer"
+                title="Previous Spot"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={handleNextScene}
+                className="p-1.5 rounded-lg border border-gray-200 hover:border-pink-300 hover:bg-pink-50 text-gray-600 hover:text-pink-600 transition-colors cursor-pointer"
+                title="Next Spot"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">

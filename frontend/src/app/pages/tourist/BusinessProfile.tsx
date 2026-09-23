@@ -682,33 +682,40 @@ export function BusinessProfile() {
       if (index < rawScenes.length - 1) {
         const nextSlot = rawScenes[index + 1];
         hotSpots.push({
-          pitch: -4,
-          yaw: 20,
-          text: `Walk to ${nextSlot.title || 'Next Spot'} ➡️`,
+          pitch: -6,
+          yaw: 0,
+          text: `Next Spot: ${nextSlot.title || 'Next Area'} ➔`,
           type: 'scene',
           targetSceneId: nextSlot.id || `scene_${index + 1}`,
           targetPitch: 0,
           targetYaw: 0,
         });
+      } else if (rawScenes.length > 1) {
+        // Loop back to the first spot when reaching the last spot
+        const firstSlot = rawScenes[0];
+        hotSpots.push({
+          pitch: -6,
+          yaw: 0,
+          text: `Return to ${firstSlot.title || 'Entrance'} 🔄`,
+          type: 'scene',
+          targetSceneId: firstSlot.id || 'scene_0',
+          targetPitch: 0,
+          targetYaw: 0,
+        });
       }
+
       if (index > 0) {
         const prevSlot = rawScenes[index - 1];
         hotSpots.push({
-          pitch: -5,
-          yaw: -160,
-          text: `⬅️ Return to ${prevSlot.title || 'Previous Spot'}`,
+          pitch: -6,
+          yaw: 180,
+          text: `⬅️ Back to ${prevSlot.title || 'Previous Area'}`,
           type: 'scene',
           targetSceneId: prevSlot.id || `scene_${index - 1}`,
           targetPitch: 0,
           targetYaw: 0,
         });
       }
-      hotSpots.push({
-        pitch: 5,
-        yaw: 45,
-        text: `${slot.title || `Spot #${index + 1}`} - ${shopDisplayName}`,
-        type: 'info',
-      });
 
       return {
         id: slot.id || `scene_${index}`,
@@ -1510,74 +1517,44 @@ export function BusinessProfile() {
           <>
             {/* 📁 CATEGORIES */}
             {!isResort && categories.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-4">
-                <div className="border-b border-gray-100 px-5 py-3 flex items-center justify-between">
-                  <h2 className="text-sm font-bold text-gray-800 tracking-widest">CATEGORIES</h2>
-                  {selectedCategory !== 'all' && (
-                    <button
-                      onClick={() => setSelectedCategory('all')}
-                      className="text-xs text-pink-500 hover:text-pink-600 font-semibold"
-                    >
-                      View All
-                    </button>
-                  )}
-                </div>
-                <div className="p-4">
-                  <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3 md:gap-4">
-                    {/* All Products */}
-                    <div
-                      onClick={() => setSelectedCategory('all')}
-                      className="flex flex-col items-center gap-2 cursor-pointer group"
-                    >
-                      <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden border-2 transition-all shadow-sm ${
-                        selectedCategory === 'all'
-                          ? 'border-pink-500 ring-4 ring-pink-100 scale-110'
-                          : 'border-gray-200 group-hover:border-pink-300 group-hover:scale-105'
-                      } bg-gradient-to-br from-pink-100 to-pink-50 flex items-center justify-center`}>
-                        <ShoppingBag className={`h-7 w-7 md:h-8 md:w-8 ${selectedCategory === 'all' ? 'text-pink-600' : 'text-pink-500'}`} />
-                      </div>
-                      <span className={`text-[10px] md:text-xs text-center font-medium leading-tight ${
-                        selectedCategory === 'all' ? 'text-pink-500 font-bold' : 'text-gray-700'
-                      }`}>
-                        All Products
-                        <div className="text-[9px] text-gray-400">({products.length})</div>
-                      </span>
-                    </div>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-3.5 mb-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* All Products chip */}
+                  <button
+                    onClick={() => setSelectedCategory('all')}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                      selectedCategory === 'all'
+                        ? 'bg-pink-500 text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    <ShoppingBag className="h-3 w-3" />
+                    <span>All Products</span>
+                    <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-extrabold ${
+                      selectedCategory === 'all' ? 'bg-white/30 text-white' : 'bg-gray-200 text-gray-700'
+                    }`}>{products.length}</span>
+                  </button>
 
-                    {/* Dynamic Categories */}
-                    {categories.map((category) => {
-                      const isSelected = selectedCategory === category.name;
-                      return (
-                        <div
-                          key={category.name}
-                          onClick={() => setSelectedCategory(category.name)}
-                          className="flex flex-col items-center gap-2 cursor-pointer group"
-                        >
-                          <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden border-2 transition-all shadow-sm ${
-                            isSelected
-                              ? 'border-pink-500 ring-4 ring-pink-100 scale-110'
-                              : 'border-gray-200 group-hover:border-pink-300 group-hover:scale-105'
-                          } bg-gray-100`}>
-                            <img
-                              src={getImageUrl(category.image)}
-                              alt={category.name}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                e.currentTarget.onerror = null;
-                                e.currentTarget.src = '/assets/default-product.jpg';
-                              }}
-                            />
-                          </div>
-                          <span className={`text-[10px] md:text-xs text-center font-medium leading-tight line-clamp-1 ${
-                            isSelected ? 'text-pink-500 font-bold' : 'text-gray-700'
-                          }`}>
-                            {category.name}
-                            <div className="text-[9px] text-gray-400">({category.count})</div>
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {/* Dynamic Category chips */}
+                  {categories.map((category) => {
+                    const isSelected = selectedCategory === category.name;
+                    return (
+                      <button
+                        key={category.name}
+                        onClick={() => setSelectedCategory(category.name)}
+                        className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                          isSelected
+                            ? 'bg-pink-500 text-white shadow-xs'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        <span>{category.name}</span>
+                        <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-extrabold ${
+                          isSelected ? 'bg-white/30 text-white' : 'bg-gray-200 text-gray-700'
+                        }`}>{category.count}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -2023,6 +2000,7 @@ export function BusinessProfile() {
 
                 {/* 🧭 LIVE EMBEDDED 360° PANORAMA VIEWER */}
                 <InlineVirtualTourViewer
+                  key={`tour-viewer-${isEditingTour}`}
                   scenes={tourScenes}
                   businessName={shopName}
                   businessType={isResort ? 'resort' : 'enterprise'}

@@ -942,7 +942,7 @@ export function ResortDashboard() {
           <div className="text-2xl font-bold text-gray-900">
             {(dbStats?.wishlist_saves ?? totalSaves).toLocaleString()}
           </div>
-          <div className="text-xs text-gray-500 mt-1">Analytics & Save</div>
+          <div className="text-xs text-gray-500 mt-1">Analytics & Saved</div>
           <div className="text-[11px] font-semibold text-emerald-600 mt-1">
             ↗ {dbStats?.saves_growth || '0%'}
           </div>

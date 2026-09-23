@@ -26,6 +26,7 @@ export interface RoomItem {
   amenities?: string[];
   features?: string[];
   virtual_tour_scenes?: any[];
+  likes?: number;
 }
 
 export interface AccommodationItem {
@@ -294,7 +295,7 @@ interface AccommodationCardProps {
   onCardClick: (activeRoom?: RoomItem) => void;
   onOpenLightbox: (images: string[], index: number, title: string) => void;
   onShare: (e: React.MouseEvent, activeRoom?: RoomItem) => void;
-  onSave: (e: React.MouseEvent) => void;
+  onSave: (e: React.MouseEvent, activeRoom?: RoomItem) => void;
   isInWishlist: boolean;
   wishlistCount: number;
   userType: string | null;
@@ -308,11 +309,12 @@ function AccommodationCardItem({
   onOpenLightbox,
   onShare,
   onSave,
-  isInWishlist,
-  wishlistCount,
+  isInWishlist: parentIsInWishlist,
+  wishlistCount: parentWishlistCount,
   userType,
   onResortClick,
 }: AccommodationCardProps) {
+  const { isInWishlist, getWishlistCount } = useApp();
   const [currentIdx, setCurrentIdx] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
@@ -343,6 +345,16 @@ function AccommodationCardItem({
   const hasMultipleRooms = rooms.length > 1;
   const currentRoomIdx = currentIdx < rooms.length ? currentIdx : 0;
   const currentRoom = rooms[currentRoomIdx] || rooms[0];
+
+  const isRoomSaved = isInWishlist(currentRoom.id, 'accommodation') ||
+    (currentRoom.room_id && isInWishlist(`room-${currentRoom.room_id}`, 'accommodation')) ||
+    isInWishlist(acc.id, 'accommodation');
+
+  const roomWishlistCount = Math.max(
+    getWishlistCount(currentRoom.id, 'accommodation', currentRoom.likes || 0),
+    currentRoom.room_id ? getWishlistCount(`room-${currentRoom.room_id}`, 'accommodation', 0) : 0,
+    getWishlistCount(acc.id, 'accommodation', acc.likes || 0)
+  );
 
   // Each carousel slide represents ONE room with that room's photo
   const currentRoomImage = formatImageUrl(
@@ -484,18 +496,18 @@ function AccommodationCardItem({
           </button>
           <button
             type="button"
-            onClick={onSave}
+            onClick={(e) => onSave(e, currentRoom)}
             className={`w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer ${
-              isInWishlist
+              isRoomSaved
                 ? 'bg-rose-50 border border-rose-300 ring-2 ring-rose-100'
                 : 'bg-white/90 hover:bg-white border border-gray-200'
             }`}
-            title={isInWishlist ? 'Remove from saved places' : 'Pin to saved places'}
+            title={isRoomSaved ? 'Remove from saved places' : 'Pin to saved places'}
           >
             <PushPinIcon
-              isPinned={isInWishlist}
+              isPinned={isRoomSaved}
               size={16}
-              idPrefix={`acc-tr-${acc.id}`}
+              idPrefix={`acc-tr-${currentRoom.id || acc.id}`}
             />
           </button>
         </div>
@@ -503,13 +515,13 @@ function AccommodationCardItem({
         {/* Dark Overlay Saves Counter & Interactive Pin Button */}
         <button
           type="button"
-          onClick={onSave}
+          onClick={(e) => onSave(e, currentRoom)}
           className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 z-10 whitespace-nowrap"
-          title={isInWishlist ? 'Saved in pins' : 'Click to pin stay'}
+          title={isRoomSaved ? 'Saved in pins' : 'Click to pin stay'}
         >
-          <PushPinIcon isPinned={isInWishlist} size={14} idPrefix={`acc-bl-${acc.id}`} />
-          <span className={isInWishlist ? 'text-red-400 font-extrabold whitespace-nowrap' : 'text-gray-200 whitespace-nowrap'}>
-            Save: {wishlistCount}
+          <PushPinIcon isPinned={isRoomSaved} size={14} idPrefix={`acc-bl-${currentRoom.id || acc.id}`} />
+          <span className={isRoomSaved ? 'text-red-400 font-extrabold whitespace-nowrap' : 'text-gray-200 whitespace-nowrap'}>
+            Save: {roomWishlistCount}
           </span>
         </button>
       </div>
@@ -892,30 +904,36 @@ export function Accommodations() {
     setSelectedAcc(acc);
   };
 
-  const toggleSaveAcc = async (acc: AccommodationItem, e?: React.MouseEvent) => {
+  const toggleSaveAcc = async (itemToSave: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!currentUser && !getAuthToken()) {
       toast.info('Please log in or register to save to wishlist');
       navigate('/tourist/login');
       return;
     }
-    if (isInWishlist(acc.id, 'accommodation')) {
-      const confirmed = await showUnsaveConfirmDialog(acc.name);
+    const saveId = itemToSave.id || (itemToSave.room_id ? `room-${itemToSave.room_id}` : undefined);
+    if (!saveId) return;
+
+    const itemName = itemToSave.name || itemToSave.title || 'Stay';
+
+    if (isInWishlist(saveId, 'accommodation')) {
+      const confirmed = await showUnsaveConfirmDialog(itemName);
       if (confirmed) {
-        removeFromWishlist(acc.id, 'accommodation', acc.name);
+        removeFromWishlist(saveId, 'accommodation', itemName);
       }
     } else {
       addToWishlist({
-        id: acc.id,
+        id: saveId,
         type: 'accommodation',
-        title: acc.name,
-        image: acc.image,
-        category: acc.type,
-        price: acc.pricePerNight,
-        likes: acc.likes,
+        title: itemName,
+        image: itemToSave.image || (Array.isArray(itemToSave.images) ? itemToSave.images[0] : undefined),
+        category: itemToSave.type || itemToSave.category || 'Room',
+        price: itemToSave.price_per_night || itemToSave.pricePerNight || itemToSave.price,
+        likes: itemToSave.likes,
       } as any);
     }
   };
+
 
   const predefinedStaysCategories = ACCOMMODATION_CATEGORIES;
 
@@ -1084,7 +1102,7 @@ export function Accommodations() {
                     category: targetRoom?.type || acc.type || 'Resort',
                   });
                 }}
-                onSave={(e) => toggleSaveAcc(acc, e)}
+                onSave={(e, targetRoom) => toggleSaveAcc(targetRoom || acc, e)}
                 isInWishlist={isInWishlist(acc.id, 'accommodation') || (Array.isArray(acc.rooms) && acc.rooms.some(r => isInWishlist(r.id, 'accommodation')))}
                 wishlistCount={getWishlistCount(acc.id, 'accommodation', acc.likes)}
                 userType={userType}
@@ -1303,18 +1321,18 @@ export function Accommodations() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => toggleSaveAcc(selectedAcc)}
+                      onClick={() => toggleSaveAcc(currentRoom || selectedAcc)}
                       className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ${
-                        isInWishlist(selectedAcc.id, 'accommodation')
+                        isInWishlist(currentRoom?.id || selectedAcc.id, 'accommodation')
                           ? 'bg-rose-50 border border-rose-300 shadow-sm'
                           : 'border-gray-200 bg-white hover:bg-gray-50'
                       }`}
-                      title={isInWishlist(selectedAcc.id, 'accommodation') ? 'Remove from saved places' : 'Pin to saved places'}
+                      title={isInWishlist(currentRoom?.id || selectedAcc.id, 'accommodation') ? 'Remove from saved places' : 'Pin to saved places'}
                     >
                       <PushPinIcon
-                        isPinned={isInWishlist(selectedAcc.id, 'accommodation')}
+                        isPinned={isInWishlist(currentRoom?.id || selectedAcc.id, 'accommodation')}
                         size={18}
-                        idPrefix={`modal-acc-tr-${selectedAcc.id}`}
+                        idPrefix={`modal-acc-tr-${currentRoom?.id || selectedAcc.id}`}
                       />
                     </button>
                   </div>

@@ -488,7 +488,7 @@ class EnterprisePostController extends Controller
                         $post->user_id,
                         'wishlist_saved',
                         'New Wishlist Save!',
-                        "{$touristName} saved your {$postTitle} to their wishlist! (Total: {$post->saves} saves)",
+                        "{$touristName} saved your {$postTitle} to their wishlist!",
                         [
                             'post_id' => $post->id,
                             'saves'   => $post->saves,

@@ -118,20 +118,25 @@ class AccommodationController extends Controller
                 $roomCachedViews = (int) Cache::get($roomCacheKey, 0);
                 // Also check owner-level resort views as fallback
                 $ownerCachedViews = $owner ? (int) Cache::get("view_count_resort_{$owner->id}", 0) : 0;
-                // Count wishlist saves for this room (stored as item_id='room-{id}', item_type='accommodation')
+                // Count wishlist saves for this room (stored as item_id='room-{id}' or '{id}', item_type='accommodation' or 'room')
                 $roomSaves = 0;
                 try {
                     if (Schema::hasTable('wishlist_items')) {
-                        $roomSaves = (int) \App\Models\WishlistItem::where('item_id', 'room-' . $room->id)
-                            ->where('item_type', 'accommodation')
-                            ->count();
-                        if ($roomSaves === 0) {
-                            $roomSaves = (int) \App\Models\WishlistItem::where('item_id', (string)$room->id)
-                                ->where('item_type', 'accommodation')
-                                ->count();
-                        }
+                        $roomSaves = (int) \App\Models\WishlistItem::where(function($q) use ($room) {
+                            $q->where('item_id', 'room-' . $room->id)
+                              ->orWhere('item_id', (string)$room->id)
+                              ->orWhere('item_id', 'post_room_' . $room->id);
+                        })
+                        ->where(function($q) {
+                            $q->where('item_type', 'accommodation')
+                              ->orWhere('item_type', 'room');
+                        })
+                        ->count();
                     }
                 } catch (\Throwable $e) {}
+
+                $roomLikes = isset($room->likes) ? (int)$room->likes : 0;
+                $finalRoomSaves = max($roomSaves, $roomLikes);
 
                 $handledResortIds[] = $room->user_id;
 
@@ -167,7 +172,7 @@ class AccommodationController extends Controller
                     'virtual_tour_scenes' => $room->virtual_tour_scenes ?? ($owner ? ($owner->virtual_tour_scenes ?? []) : []),
                     'view_count'       => max($roomCachedViews, 0),
                     'views'            => max($roomCachedViews, 0),
-                    'likes'            => $roomSaves,
+                    'likes'            => $finalRoomSaves,
                 ];
 
                 $roomGroups[$groupKey] = $roomItem;

@@ -91,6 +91,8 @@ class WishlistController extends Controller
             $isRoomId = true;
         } elseif (\Illuminate\Support\Str::startsWith($rawId, 'acc-')) {
             $cleanId = substr($rawId, 4);
+        } elseif (\Illuminate\Support\Str::startsWith($rawId, 'resort-')) {
+            $cleanId = substr($rawId, 7);
         }
 
         $detectedType = $isRoomId ? 'room' : $itemType;
@@ -280,22 +282,22 @@ class WishlistController extends Controller
                 // Determine message, title, and link based on detected item category
                 $title = 'New Wishlist Save!';
                 if ($detectedType === 'product') {
-                    $message = "{$touristLabel} saved your product \"{$itemName}\" to their wishlist! (Total: {$finalCount} saves)";
+                    $message = "{$touristLabel} saved your product \"{$itemName}\" to their wishlist!";
                     $link = ($ownerRole === 'enterprise') ? '/enterprise/dashboard' : '/enterprise/profile';
                 } elseif ($detectedType === 'room') {
-                    $message = "{$touristLabel} saved your room \"{$itemName}\" to their wishlist! (Total: {$finalCount} saves)";
+                    $message = "{$touristLabel} saved your room \"{$itemName}\" to their wishlist!";
                     $link = '/resort/dashboard';
                 } elseif ($detectedType === 'attraction') {
-                    $message = "{$touristLabel} saved your attraction \"{$itemName}\" to their wishlist! (Total: {$finalCount} saves)";
+                    $message = "{$touristLabel} saved your attraction \"{$itemName}\" to their wishlist!";
                     $link = ($ownerRole === 'resort') ? '/resort/dashboard' : '/attractions';
                 } elseif ($detectedType === 'event') {
-                    $message = "{$touristLabel} saved your event \"{$itemName}\" to their wishlist! (Total: {$finalCount} saves)";
+                    $message = "{$touristLabel} saved your event \"{$itemName}\" to their wishlist!";
                     $link = ($ownerRole === 'enterprise') ? '/enterprise/dashboard' : (($ownerRole === 'resort') ? '/resort/dashboard' : '/events');
                 } elseif ($detectedType === 'resort') {
-                    $message = "{$touristLabel} saved your resort \"{$itemName}\" to their wishlist! (Total: {$finalCount} saves)";
+                    $message = "{$touristLabel} saved your resort \"{$itemName}\" to their wishlist!";
                     $link = '/resort/dashboard';
                 } else {
-                    $message = "{$touristLabel} saved your resort stay \"{$itemName}\" to their wishlist! (Total: {$finalCount} saves)";
+                    $message = "{$touristLabel} saved your resort stay \"{$itemName}\" to their wishlist!";
                     $link = '/resort/dashboard';
                 }
 
@@ -325,7 +327,7 @@ class WishlistController extends Controller
                     Notification::notifyAdmins(
                         'wishlist_saved',
                         $title,
-                        "{$touristLabel} saved \"{$itemName}\" ({$detectedType}) to their wishlist! (Total: {$finalCount} saves)",
+                        "{$touristLabel} saved \"{$itemName}\" ({$detectedType}) to their wishlist!",
                         [
                             'item_id'   => $rawId,
                             'item_type' => $detectedType,
@@ -500,11 +502,17 @@ class WishlistController extends Controller
                     $key = "{$w->item_type}_{$w->item_id}";
                     $counts[$key] = max((int)($counts[$key] ?? 0), (int)$w->total);
 
-                    // Cross-map room prefixes
+                    // Cross-map room and resort prefixes
                     if (\Illuminate\Support\Str::startsWith($w->item_id, 'room-')) {
                         $plain = substr($w->item_id, 5);
                         $counts["accommodation_{$plain}"] = max((int)($counts["accommodation_{$plain}"] ?? 0), (int)$w->total);
                         $counts["room_{$plain}"] = max((int)($counts["room_{$plain}"] ?? 0), (int)$w->total);
+                    } elseif (\Illuminate\Support\Str::startsWith($w->item_id, 'resort-')) {
+                        $plain = substr($w->item_id, 7);
+                        $counts["accommodation_{$plain}"] = max((int)($counts["accommodation_{$plain}"] ?? 0), (int)$w->total);
+                        $counts["resort_{$plain}"] = max((int)($counts["resort_{$plain}"] ?? 0), (int)$w->total);
+                    } elseif (is_numeric($w->item_id) && ($w->item_type === 'accommodation' || $w->item_type === 'room')) {
+                        $counts["accommodation_room-{$w->item_id}"] = max((int)($counts["accommodation_room-{$w->item_id}"] ?? 0), (int)$w->total);
                     }
                 }
             }

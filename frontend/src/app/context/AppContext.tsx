@@ -71,11 +71,12 @@ export interface Booking {
 
 export interface WishlistItem {
   id: string | number;
-  type: 'attraction' | 'accommodation' | 'product' | 'event';
+  type: 'attraction' | 'accommodation' | 'product' | 'event' | 'room';
   title: string;
   image?: string;
   category?: string;
   price?: number;
+  likes?: number;
 }
 
 export interface CurrentUser {
@@ -416,28 +417,55 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const getWishlistCount = (id: string | number, type: string, baseCount: number = 0): number => {
-    const key = `${type}_${id}`;
-    if (wishlistCounts[key] !== undefined) {
-      return Number(wishlistCounts[key]);
+    const sId = String(id);
+    const cleanId = sId.replace(/^(room-|acc-|resort-)/, '');
+    const keys = [
+      `${type}_${sId}`,
+      `${type}_room-${cleanId}`,
+      `${type}_${cleanId}`,
+      type === 'accommodation' ? `room_${cleanId}` : null,
+      type === 'accommodation' ? `room_room-${cleanId}` : null,
+      type === 'accommodation' ? `accommodation_resort-${cleanId}` : null,
+    ].filter(Boolean) as string[];
+
+    for (const key of keys) {
+      if (wishlistCounts[key] !== undefined) {
+        return Math.max(Number(wishlistCounts[key]), Number(baseCount) || 0);
+      }
     }
     return Number(baseCount) || 0;
   };
 
   const addToWishlist = (item: WishlistItem) => {
     setWishlist(prev => {
-      if (prev.some(w => String(w.id) === String(item.id) && (w.type || 'attraction') === (item.type || 'attraction'))) {
+      const sId = String(item.id);
+      const cleanId = sId.replace(/^(room-|acc-|resort-)/, '');
+      if (prev.some(w => {
+        const wId = String(w.id);
+        const wClean = wId.replace(/^(room-|acc-|resort-)/, '');
+        return (wId === sId || (cleanId && wClean === cleanId)) && (w.type || 'attraction') === (item.type || 'attraction');
+      })) {
         return prev;
       }
       return [...prev, item];
     });
 
-    const key = `${item.type || 'attraction'}_${item.id}`;
+    const sId = String(item.id);
+    const cleanId = sId.replace(/^(room-|acc-|resort-)/, '');
+    const key = `${item.type || 'attraction'}_${sId}`;
     const baseVal = Number((item as any).likes) || 0;
     const currentCount = wishlistCounts[key] !== undefined ? Number(wishlistCounts[key]) : baseVal;
     const nextCount = currentCount + 1;
 
     setWishlistCounts(prev => {
       const updated = { ...prev, [key]: nextCount };
+      if (cleanId) {
+        updated[`${item.type || 'attraction'}_${cleanId}`] = nextCount;
+        if (item.type === 'accommodation' || item.type === 'room') {
+          updated[`accommodation_room-${cleanId}`] = nextCount;
+          updated[`room_${cleanId}`] = nextCount;
+        }
+      }
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('discover-mansalay:wishlist_counts', JSON.stringify(updated));
       }
@@ -484,17 +512,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const removeFromWishlist = (id: string | number, type: string, title?: string) => {
 
-    const existingItem = wishlist.find(w => String(w.id) === String(id) && (w.type || 'attraction') === (type || 'attraction'));
+    const sId = String(id);
+    const cleanId = sId.replace(/^(room-|acc-|resort-)/, '');
+
+    const existingItem = wishlist.find(w => {
+      const wId = String(w.id);
+      const wClean = wId.replace(/^(room-|acc-|resort-)/, '');
+      return (wId === sId || (cleanId && wClean === cleanId)) && (w.type || 'attraction') === (type || 'attraction');
+    });
     const itemTitle = title || existingItem?.title;
 
-    setWishlist(prev => prev.filter(w => !(String(w.id) === String(id) && (w.type || 'attraction') === (type || 'attraction'))));
+    setWishlist(prev => prev.filter(w => {
+      const wId = String(w.id);
+      const wClean = wId.replace(/^(room-|acc-|resort-)/, '');
+      return !((wId === sId || (cleanId && wClean === cleanId)) && (w.type || 'attraction') === (type || 'attraction'));
+    }));
 
-    const key = `${type || 'attraction'}_${id}`;
+    const key = `${type || 'attraction'}_${sId}`;
     const currentCount = wishlistCounts[key] !== undefined ? Number(wishlistCounts[key]) : 1;
     const nextCount = Math.max(0, currentCount - 1);
 
     setWishlistCounts(prev => {
       const updated = { ...prev, [key]: nextCount };
+      if (cleanId) {
+        updated[`${type || 'attraction'}_${cleanId}`] = nextCount;
+        if (type === 'accommodation' || type === 'room') {
+          updated[`accommodation_room-${cleanId}`] = nextCount;
+          updated[`room_${cleanId}`] = nextCount;
+        }
+      }
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('discover-mansalay:wishlist_counts', JSON.stringify(updated));
       }
@@ -522,6 +568,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (data?.likes !== undefined) {
             setWishlistCounts((prev) => {
               const updated = { ...prev, [key]: Number(data.likes) };
+              if (cleanId) {
+                updated[`${type || 'attraction'}_${cleanId}`] = Number(data.likes);
+                if (type === 'accommodation' || type === 'room') {
+                  updated[`accommodation_room-${cleanId}`] = Number(data.likes);
+                  updated[`room_${cleanId}`] = Number(data.likes);
+                }
+              }
               if (typeof window !== 'undefined') {
                 window.localStorage.setItem('discover-mansalay:wishlist_counts', JSON.stringify(updated));
               }
@@ -542,7 +595,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const isInWishlist = (id: string | number, type: string) => {
-    return wishlist.some(w => String(w.id) === String(id) && (w.type || 'attraction') === (type || 'attraction'));
+    const sId = String(id);
+    const cleanId = sId.replace(/^(room-|acc-|resort-)/, '');
+    return wishlist.some(w => {
+      const wId = String(w.id);
+      const wClean = wId.replace(/^(room-|acc-|resort-)/, '');
+      const typeMatch = (w.type || 'attraction') === (type || 'attraction');
+      return typeMatch && (wId === sId || (cleanId && wClean === cleanId));
+    });
   };
 
   return (

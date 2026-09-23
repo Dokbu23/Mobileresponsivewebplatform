@@ -704,7 +704,7 @@ export function EnterpriseDashboard() {
           <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
             {totalWishlistSaves.toLocaleString()}
           </div>
-          <div className="text-xs text-gray-500 mt-0.5">Analytics & Save</div>
+          <div className="text-xs text-gray-500 mt-0.5">Analytics & Saved</div>
           <div className="text-xs font-medium text-emerald-600 flex items-center gap-1 mt-2">
             <TrendingUp className="w-3.5 h-3.5" />
             {totalWishlistSaves > 0 ? `+${totalWishlistSaves}` : '+0'}

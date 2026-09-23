@@ -71,19 +71,19 @@ export function Navbar() {
       { to: '/admin/users', label: 'Account Management', icon: User },
       { to: '/admin/subscriptions', label: 'Manage Subscriptions', icon: CreditCard },
       { to: '/admin/publish', label: 'Publish Content', icon: Plus },
-      { to: '/wishlist', label: 'Analytics & Save', icon: PushPinNavIcon },
+      { to: '/wishlist', label: 'Analytics & Saved', icon: PushPinNavIcon },
     ],
     resort: [
       { to: '/resort/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: `/business/resort/${currentUser?.id ?? ''}?manage=true`, label: 'My Shop Profile', icon: Hotel },
       { to: '/resort/profile', label: 'Manage Rooms', icon: Bed },
-      { to: '/wishlist', label: 'Analytics & Save', icon: PushPinNavIcon },
+      { to: '/wishlist', label: 'Analytics & Saved', icon: PushPinNavIcon },
     ],
     enterprise: [
       { to: '/enterprise/dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { to: `/business/enterprise/${currentUser?.id ?? ''}?manage=true`, label: 'My Shop Profile', icon: Store },
       { to: '/enterprise/profile', label: 'Manage Products', icon: Package },
-      { to: '/wishlist', label: 'Analytics & Save', icon: PushPinNavIcon },
+      { to: '/wishlist', label: 'Analytics & Saved', icon: PushPinNavIcon },
     ],
   };
 
