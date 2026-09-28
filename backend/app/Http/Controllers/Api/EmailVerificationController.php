@@ -87,11 +87,18 @@ class EmailVerificationController extends Controller
     private function deliverEmail(string $toEmail, ?string $userName, string $code, string $subject): void
     {
         $brevoApiKey = env('BREVO_API_KEY');
-        $fromEmail = env('MAIL_FROM_ADDRESS', 'discoverymansalay@gmail.com');
-        $fromName = env('MAIL_FROM_NAME', 'DiscoverMansalay');
+        $fromEmail   = env('MAIL_FROM_ADDRESS', 'discoverymansalay@gmail.com');
+        $fromName    = env('MAIL_FROM_NAME', 'DiscoverMansalay');
+        $mailUser    = env('MAIL_USERNAME');
+
+        // Guard: ensure at least one delivery method is configured
+        if (empty($brevoApiKey) && empty($mailUser)) {
+            \Log::critical('No email delivery method configured. Set BREVO_API_KEY or MAIL_USERNAME/MAIL_PASSWORD in Render environment variables.');
+            throw new \RuntimeException('Email service is not configured on the server. Please contact the administrator.');
+        }
 
         $htmlContent = view('emails.verification-code', [
-            'code' => $code,
+            'code'     => $code,
             'userName' => $userName ?? 'User',
         ])->render();
 
@@ -99,27 +106,27 @@ class EmailVerificationController extends Controller
         if (!empty($brevoApiKey)) {
             try {
                 $response = \Illuminate\Support\Facades\Http::withHeaders([
-                    'api-key' => $brevoApiKey,
+                    'api-key'      => $brevoApiKey,
                     'Content-Type' => 'application/json',
-                    'Accept' => 'application/json',
+                    'Accept'       => 'application/json',
                 ])->timeout(10)->post('https://api.brevo.com/v3/smtp/email', [
                     'sender' => [
-                        'name' => $fromName,
+                        'name'  => $fromName,
                         'email' => $fromEmail,
                     ],
                     'to' => [
                         [
                             'email' => $toEmail,
-                            'name' => $userName ?? 'User',
+                            'name'  => $userName ?? 'User',
                         ]
                     ],
-                    'subject' => $subject,
+                    'subject'     => $subject,
                     'htmlContent' => $htmlContent,
                 ]);
 
                 if ($response->successful()) {
                     \Log::info('Email delivered successfully via Brevo HTTPS API', [
-                        'email' => $toEmail,
+                        'email'      => $toEmail,
                         'message_id' => $response->json('messageId'),
                     ]);
                     return;
@@ -127,7 +134,7 @@ class EmailVerificationController extends Controller
 
                 \Log::warning('Brevo API call returned non-200, trying Laravel Mail fallback', [
                     'status' => $response->status(),
-                    'body' => $response->body(),
+                    'body'   => $response->body(),
                 ]);
             } catch (\Throwable $e) {
                 \Log::warning('Brevo API request failed, falling back to Laravel Mail', [
@@ -136,7 +143,11 @@ class EmailVerificationController extends Controller
             }
         }
 
-        // 2. Fallback to standard Laravel Mail (SMTP / Log)
+        // 2. Fallback to standard Laravel Mail (SMTP / Log) — only if credentials exist
+        if (empty($mailUser)) {
+            throw new \RuntimeException('Brevo API failed and SMTP credentials (MAIL_USERNAME) are not set. Cannot deliver email.');
+        }
+
         Mail::to($toEmail)->send(new VerificationCodeMail($code, $userName ?? 'User'));
     }
 

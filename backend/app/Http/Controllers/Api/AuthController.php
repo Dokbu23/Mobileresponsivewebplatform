@@ -82,7 +82,7 @@ class AuthController extends Controller
             'exp' => $issuedAt + $ttl,
         ];
 
-        $token = JWT::encode($payload, config('jwt.secret'), config('jwt.algo', 'HS256'));
+        $token = JWT::encode($payload, $this->getJwtSecret(), config('jwt.algo', 'HS256'));
 
         $requiresSetup = empty($user->role) || $user->role === 'pending';
 
@@ -182,7 +182,7 @@ class AuthController extends Controller
             'iat' => $issuedAt,
             'exp' => $issuedAt + $ttl,
         ];
-        $token = JWT::encode($payload, config('jwt.secret'), config('jwt.algo', 'HS256'));
+        $token = JWT::encode($payload, $this->getJwtSecret(), config('jwt.algo', 'HS256'));
 
         // Notify admins if business user registered
         if (in_array($role, ['resort', 'enterprise'])) {
@@ -230,7 +230,7 @@ class AuthController extends Controller
         
         if ($token) {
             try {
-                $decoded = JWT::decode($token, new Key(config('jwt.secret'), config('jwt.algo', 'HS256')));
+                $decoded = JWT::decode($token, new Key($this->getJwtSecret(), config('jwt.algo', 'HS256')));
                 $expiresAt = isset($decoded->exp) ? date('Y-m-d H:i:s', $decoded->exp) : now()->addDays(14);
                 
                 \App\Models\TokenBlacklist::add(
@@ -289,7 +289,7 @@ class AuthController extends Controller
             'iat' => $issuedAt,
             'exp' => $issuedAt + $ttl,
         ];
-        $token = JWT::encode($payload, config('jwt.secret'), config('jwt.algo', 'HS256'));
+        $token = JWT::encode($payload, $this->getJwtSecret(), config('jwt.algo', 'HS256'));
 
         return response()->json([
             'token' => $token,
@@ -350,5 +350,13 @@ class AuthController extends Controller
             ],
             'requires_verification' => true,
         ], 201);
+    }
+
+    /**
+     * Get guaranteed non-empty JWT secret
+     */
+    private function getJwtSecret(): string
+    {
+        return (string) (config('jwt.secret') ?: env('JWT_SECRET') ?: env('APP_KEY') ?: 'discover-mansalay-jwt-master-secret-key-32chars-2026');
     }
 }

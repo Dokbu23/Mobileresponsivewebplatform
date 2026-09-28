@@ -64,7 +64,8 @@ class JwtAuth
         try {
             // SECURITY FIX #1: Use separate JWT_SECRET (not APP_KEY)
             // WHY: If APP_KEY leaks, only JWT tokens are affected (not sessions/encryption)
-            $decoded = JWT::decode($token, new Key(config('jwt.secret'), config('jwt.algo', 'HS256')));
+            $jwtSecret = (string) (config('jwt.secret') ?: env('JWT_SECRET') ?: env('APP_KEY') ?: 'discover-mansalay-jwt-master-secret-key-32chars-2026');
+            $decoded = JWT::decode($token, new Key($jwtSecret, config('jwt.algo', 'HS256')));
             
             // SECURITY FIX #2: Check token blacklist (logout support)
             // WHY: JWT is stateless, but we need to support logout

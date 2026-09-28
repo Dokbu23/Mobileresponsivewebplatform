@@ -84,6 +84,9 @@ services:
         sync: false
       - key: MAIL_FROM_NAME
         value: DiscoverMansalay
+      # Brevo (Sendinblue) Email API — primary email delivery on Render
+      - key: BREVO_API_KEY
+        sync: false
       # AI / LLM providers (set in Render dashboard)
       - key: GROQ_API_KEY
         sync: false

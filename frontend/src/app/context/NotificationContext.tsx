@@ -12,6 +12,7 @@ import {
   ApiNotification,
   deleteNotification as apiDeleteNotification,
   getAuthToken,
+  removeAuthToken,
   getNotifications as apiGetNotifications,
   markAllNotificationsAsRead as apiMarkAllRead,
   markNotificationAsRead as apiMarkRead,
@@ -111,15 +112,16 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       initializedRef.current = true;
     } catch (error: any) {
       // Silent fail — reset state if unauthenticated, avoid noise in console
-      if (error?.message === 'Authentication required' || !getAuthToken() || error?.message?.includes('429')) {
-        if (!getAuthToken() || error?.message === 'Authentication required') {
-          setNotifications([]);
-          setUnreadCount(0);
-          prevUnreadRef.current = 0;
-          prevTopIdRef.current = null;
-          initializedRef.current = false;
-        }
-      } else {
+      if (error?.message === 'Authentication required' || !getAuthToken()) {
+        // Clear stale/expired token so next poll interval returns early
+        // instead of hitting the API again and getting a 401 loop.
+        removeAuthToken();
+        setNotifications([]);
+        setUnreadCount(0);
+        prevUnreadRef.current = 0;
+        prevTopIdRef.current = null;
+        initializedRef.current = false;
+      } else if (!error?.message?.includes('429')) {
         console.warn('Failed to refresh notifications:', error);
       }
     } finally {

@@ -18,7 +18,7 @@ return [
     | Copy the output to .env as JWT_SECRET=xxx
     |
     */
-    'secret' => env('JWT_SECRET', env('APP_KEY')),
+    'secret' => env('JWT_SECRET') ?: env('APP_KEY') ?: 'discover-mansalay-jwt-master-secret-key-32chars-2026',
 
     /*
     |--------------------------------------------------------------------------

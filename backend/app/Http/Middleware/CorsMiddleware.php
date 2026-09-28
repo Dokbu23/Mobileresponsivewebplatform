@@ -30,17 +30,21 @@ class CorsMiddleware
             'http://127.0.0.1:3000',
             'http://127.0.0.1:5173',
             'http://127.0.0.1:5174',
-            
-            // Production URLs
+
+            // Production URLs (.com)
             'https://discovermansalay.com',
             'https://www.discovermansalay.com',
-            
+
+            // Production URLs (.cyou — actual live domain)
+            'https://discovermansalay.cyou',
+            'https://www.discovermansalay.cyou',
+
             // Render URLs
             'https://discmansalay.onrender.com',
             'https://discmansalay-frontend.onrender.com',
             'https://disc-mansalay.onrender.com',
             'https://disc-mansalay-frontend.onrender.com',
-            
+
             // Environment variable override (supports comma-separated list)
             ...array_filter(array_map('trim', explode(',', env('FRONTEND_URL', 'http://localhost:3000')))),
         ];
