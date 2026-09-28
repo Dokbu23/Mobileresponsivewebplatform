@@ -585,7 +585,7 @@ export function AdminContent() {
 
     setIsSavingBg(true);
     setUploadFileName(bgImageFile ? bgImageFile.name : 'Homepage Background Image');
-    setUploadStatusText('Saving background to database...');
+    setUploadStatusText('Saving...');
     setUploadProgress(20);
     setUploadModalOpen(true);
 
@@ -630,7 +630,7 @@ export function AdminContent() {
       window.dispatchEvent(new Event('storage'));
 
       setUploadProgress(100);
-      setUploadStatusText('Homepage background saved to database!');
+      setUploadStatusText('Saved!');
       await new Promise((resolve) => setTimeout(resolve, 300));
       setUploadModalOpen(false);
 
@@ -673,7 +673,7 @@ export function AdminContent() {
     let finalVideoUrl = '';
 
     setUploadFileName(selectedVideoFile ? selectedVideoFile.name : 'Homepage Video');
-    setUploadStatusText('Securing & uploading video to database...');
+    setUploadStatusText('Uploading...');
     setUploadProgress(10);
     setUploadModalOpen(true);
 
@@ -775,7 +775,7 @@ export function AdminContent() {
 
     // Database upload complete -> 100%
     setUploadProgress(100);
-    setUploadStatusText('Video successfully stored in database!');
+    setUploadStatusText('Uploaded!');
     await new Promise((res) => setTimeout(res, 400));
     setUploadModalOpen(false);
 
@@ -854,7 +854,7 @@ export function AdminContent() {
 
     setPublishing(true);
     setUploadFileName(name);
-    setUploadStatusText(`Processing and saving ${activeTab} to database...`);
+    setUploadStatusText('Uploading...');
     setUploadProgress(15);
     setUploadModalOpen(true);
 
@@ -1083,7 +1083,7 @@ export function AdminContent() {
 
     // Database operation finished -> 100%
     setUploadProgress(100);
-    setUploadStatusText('Published post saved to database!');
+    setUploadStatusText('Saved!');
     await new Promise((res) => setTimeout(res, 400));
     setUploadModalOpen(false);
 
