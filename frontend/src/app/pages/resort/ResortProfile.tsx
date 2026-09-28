@@ -207,7 +207,7 @@ export function ResortProfile() {
 
       await postJSON(`/resort-rooms/${room.id}`, formData, true);
       setRooms(prev => prev.map(r => r.id === room.id ? { ...r, is_available: newStatus } : r));
-      toast.success(`Room "${room.name}" marked as ${newStatus ? 'Active & Available' : 'Inactive / Hidden'}`);
+      toast.success(`Room ${newStatus ? 'activated' : 'hidden'}.`);
     } catch {
       toast.error('Failed to update room availability');
     }

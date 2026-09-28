@@ -375,7 +375,7 @@ export function EnterpriseDashboard() {
         fileInputRef.current.value = '';
       }
 
-      toast.success('Post published successfully to database!');
+      toast.success('Published!');
       window.dispatchEvent(new Event('contentUpdated'));
       setActiveTab('posts');
     } catch (err: any) {
@@ -427,7 +427,7 @@ export function EnterpriseDashboard() {
         try {
           await deleteJSON(`/enterprise-posts/${postId}`);
           setPosts((prev) => prev.filter((p) => p.id !== postId));
-          toast.success('Post removed from database.');
+          toast.success('Post deleted.');
         } catch (err: any) {
           toast.error(err?.message || 'Failed to delete post.');
         }
