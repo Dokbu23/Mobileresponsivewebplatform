@@ -490,7 +490,7 @@ export function AdminContent() {
       const urls = files.map((f) => URL.createObjectURL(f));
       setImagePreview(urls[0]);
       setImagePreviews(urls);
-      toast.success(`${files.length} image(s) selected!`);
+      toast.success(`${files.length} image(s) selected.`);
     }
   };
 
@@ -510,7 +510,7 @@ export function AdminContent() {
     setSelectedVideoFile(file);
     const objectUrl = URL.createObjectURL(file);
     setVideoPreviewUrl(objectUrl);
-    toast.success(`Video "${file.name}" passed security checks and is ready!`);
+    toast.success('Video ready to upload.');
   };
 
   // Load hero video from backend database on mount
@@ -573,7 +573,7 @@ export function AdminContent() {
     const previewUrl = URL.createObjectURL(file);
     setBgImagePreview(previewUrl);
     setBgUrlInput('');
-    toast.success(`Image "${file.name}" selected and ready to save!`);
+    toast.success('Image selected.');
   };
 
   const handleSaveHomeBackground = async (e?: React.FormEvent) => {
@@ -634,7 +634,7 @@ export function AdminContent() {
       await new Promise((resolve) => setTimeout(resolve, 300));
       setUploadModalOpen(false);
 
-      toast.success('🎉 Homepage background updated and saved in database!');
+      toast.success('Background updated!');
       setBgImageFile(null);
       setBgImagePreview(null);
       setBgUrlInput('');
@@ -664,7 +664,7 @@ export function AdminContent() {
     localStorage.setItem('discover-mansalay:homeBackground', defaultBg);
     window.dispatchEvent(new Event('homeBackgroundUpdated'));
     window.dispatchEvent(new Event('storage'));
-    toast.success('Homepage background reset to default image.');
+    toast.success('Homepage background reset to default.');
   };
 
   // 🛡️ SECURE VIDEO SAVE & PUBLISH HANDLER WITH ACCURATE UPLOAD PROGRESS
@@ -779,7 +779,7 @@ export function AdminContent() {
     await new Promise((res) => setTimeout(res, 400));
     setUploadModalOpen(false);
 
-    toast.success('🛡️ Homepage video saved directly to database!');
+    toast.success('Homepage video saved!');
 
     // Reset video inputs
     setVideoTitle('');
@@ -794,7 +794,7 @@ export function AdminContent() {
     setVideoPreviewUrl(null);
     window.dispatchEvent(new Event('heroVideoUpdated'));
     window.dispatchEvent(new Event('storage'));
-    toast.success('Homepage video removed. Reverted to default hero background.');
+    toast.success('Homepage video removed.');
   };
 
   const handleEditPost = (item: any) => {
@@ -1087,7 +1087,7 @@ export function AdminContent() {
     await new Promise((res) => setTimeout(res, 400));
     setUploadModalOpen(false);
 
-    toast.success(editingId ? `Updated ${activeTab} successfully!` : `Published ${activeTab} successfully!`);
+    toast.success(editingId ? 'Updated!' : 'Published!');
     resetForm();
     setPublishing(false);
   };
