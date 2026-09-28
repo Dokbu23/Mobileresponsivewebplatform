@@ -598,7 +598,7 @@ export function AdminContent() {
         const formData = new FormData();
         formData.append('image', bgImageFile);
 
-        const response = await fetch(`${API_BASE}/admin/site-settings/home-background`, {
+        const response = await fetch(`${API_BASE}/api/admin/site-settings/home-background`, {
           method: 'POST',
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
