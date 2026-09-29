@@ -11,6 +11,7 @@ import { useApp } from '../../context/AppContext';
 import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken, decodeHtml, cleanItineraryTitle } from '../../lib/api';
 import { DetailModal, DetailModalItem } from '../../components/DetailModal';
 import { ShareModal } from '../../components/ShareModal';
+import { PLACEHOLDER_IMAGE } from '../../lib/constants';
 import { toast } from 'sonner';
 
 export function Dashboard() {
@@ -167,8 +168,8 @@ export function Dashboard() {
     return `${n}+`;
   };
 
-  // Get image helper
-  const getImageUrl = (img: string | null | undefined, fallback: string = '/assets/mansalay_hero_bg.jpg') => {
+  // Get image helper (falls back to clean SVG placeholder rather than default hero beach image)
+  const getImageUrl = (img: string | null | undefined, fallback: string = PLACEHOLDER_IMAGE) => {
     return formatImageUrl(img) || fallback;
   };
 
@@ -324,22 +325,38 @@ export function Dashboard() {
       .slice(0, 4);
   }, [products, localViewCounts]);
 
-  // 8. Dynamic Gallery Images
-  const galleryImages = (() => {
-    const allWithImages = [...attractions, ...accommodations].filter((a) => a.image);
-    const mapped = allWithImages.map((a) => ({
-      src: getImageUrl(a.image),
-      title: a.name || a.resort_name || 'Mansalay Attraction',
-    }));
-    if (mapped.length > 0) return mapped.slice(0, 6);
-    return [
-      { src: '/assets/mansalay_hero_bg.jpg', title: 'Mansalay' }
-    ];
-  })();
+  // 8. Dynamic Gallery Images (Excludes placeholder / default hero bg, only takes actual uploaded items)
+  const galleryImages = useMemo(() => {
+    const rawItems: { src: string; title: string }[] = [];
+    const isRealImage = (src?: string | null) => {
+      if (!src) return false;
+      const clean = formatImageUrl(src);
+      return Boolean(clean && !clean.includes('mansalay_hero_bg.jpg') && clean !== '');
+    };
 
-  const getGalleryImgSrc = (index: number) => {
-    return galleryImages[index]?.src || '/assets/mansalay_hero_bg.jpg';
-  };
+    attractions.forEach((a: any) => {
+      const src = formatImageUrl(a.image);
+      if (isRealImage(src)) {
+        rawItems.push({ src: src!, title: a.name || 'Mansalay Attraction' });
+      }
+    });
+
+    accommodations.forEach((acc: any) => {
+      const src = formatImageUrl(acc.image || (acc.images && acc.images[0]));
+      if (isRealImage(src)) {
+        rawItems.push({ src: src!, title: acc.name || acc.resort_name || 'Resort' });
+      }
+    });
+
+    products.forEach((p: any) => {
+      const src = formatImageUrl(p.image || (p.images && p.images[0]));
+      if (isRealImage(src)) {
+        rawItems.push({ src: src!, title: p.name || p.store_name || 'Local Shop' });
+      }
+    });
+
+    return rawItems.slice(0, 4);
+  }, [attractions, accommodations, products]);
 
   // Card click handlers
   const openAttractionModal = (a: any) => {
@@ -636,12 +653,71 @@ export function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-            {/* Left Photo Grid */}
-            <div className="lg:col-span-5 grid grid-cols-2 gap-3">
-              <img src={getGalleryImgSrc(0)} alt="Mansalay 1" className="rounded-2xl h-36 w-full object-cover shadow-sm hover:scale-102 transition-transform" />
-              <img src={getGalleryImgSrc(1)} alt="Mansalay 2" className="rounded-2xl h-36 w-full object-cover shadow-sm hover:scale-102 transition-transform" />
-              <img src={getGalleryImgSrc(2)} alt="Mansalay 3" className="rounded-2xl h-36 w-full object-cover shadow-sm hover:scale-102 transition-transform" />
-              <img src={getGalleryImgSrc(3)} alt="Mansalay 4" className="rounded-2xl h-36 w-full object-cover shadow-sm hover:scale-102 transition-transform" />
+            {/* Left Photo Grid (Dynamic: adapts to available real uploaded photos, never repeats default beach image) */}
+            <div className="lg:col-span-5">
+              {galleryImages.length === 0 ? (
+                <div className="h-full min-h-[260px] rounded-3xl bg-gradient-to-br from-pink-50/60 via-gray-50 to-indigo-50/40 border border-gray-100 p-6 flex flex-col items-center justify-center text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-white shadow-xs border border-pink-100 flex items-center justify-center mb-3 text-pink-500">
+                    <Compass className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-sm font-bold text-gray-800">Experience Mansalay</h4>
+                  <p className="text-xs text-gray-400 mt-1 max-w-xs">
+                    Explore our local attractions, coastal stays, and indigenous culture.
+                  </p>
+                </div>
+              ) : galleryImages.length === 1 ? (
+                <div className="relative rounded-3xl overflow-hidden h-72 sm:h-80 w-full shadow-md group">
+                  <img
+                    src={galleryImages[0].src}
+                    alt={galleryImages[0].title}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end p-4">
+                    <span className="text-white text-xs font-bold">{galleryImages[0].title}</span>
+                  </div>
+                </div>
+              ) : galleryImages.length === 2 ? (
+                <div className="grid grid-cols-2 gap-3 h-72 sm:h-80">
+                  {galleryImages.map((img, idx) => (
+                    <div key={idx} className="relative rounded-2xl overflow-hidden h-full shadow-sm group">
+                      <img src={img.src} alt={img.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end p-3">
+                        <span className="text-white text-[11px] font-bold truncate">{img.title}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : galleryImages.length === 3 ? (
+                <div className="grid grid-cols-2 gap-3 h-72 sm:h-80">
+                  <div className="relative rounded-2xl overflow-hidden h-full shadow-sm group col-span-1">
+                    <img src={galleryImages[0].src} alt={galleryImages[0].title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end p-3">
+                      <span className="text-white text-[11px] font-bold truncate">{galleryImages[0].title}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-3 h-full">
+                    {galleryImages.slice(1, 3).map((img, idx) => (
+                      <div key={idx} className="relative rounded-2xl overflow-hidden flex-1 shadow-sm group">
+                        <img src={img.src} alt={img.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end p-2.5">
+                          <span className="text-white text-[10px] font-bold truncate">{img.title}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {galleryImages.slice(0, 4).map((img, idx) => (
+                    <div key={idx} className="relative rounded-2xl overflow-hidden h-36 shadow-sm group">
+                      <img src={img.src} alt={img.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end p-2.5">
+                        <span className="text-white text-[10px] font-bold truncate">{img.title}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Right Details */}

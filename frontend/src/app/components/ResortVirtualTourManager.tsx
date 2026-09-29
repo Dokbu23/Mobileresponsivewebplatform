@@ -28,60 +28,6 @@ export interface EditableSlot {
   previewUrl?: string;
 }
 
-const INITIAL_DEFAULT_SLOTS: EditableSlot[] = [
-  {
-    id: 'entrance',
-    title: '🚪 Entrance / Gate',
-    subtitle: 'Main Entrance & Scenic Approach',
-    imageUrl: 'https://pannellum.org/images/alma.jpg',
-  },
-  {
-    id: 'lobby',
-    title: '🏨 Lobby / Dining',
-    subtitle: 'Guest Reception & Dining Area',
-    imageUrl: 'https://pannellum.org/images/bma-0.jpg',
-  },
-  {
-    id: 'pool',
-    title: '🏊 Pool / Amenities',
-    subtitle: 'Freshwater Pool & Tropical Sun Loungers',
-    imageUrl: 'https://pannellum.org/images/jfk.jpg',
-  },
-  {
-    id: 'beach',
-    title: '🏖️ Beach Front / Cottages',
-    subtitle: 'Pristine Shoreline & Seafront Cottages',
-    imageUrl: 'https://pannellum.org/images/cerro-toco-0.jpg',
-  },
-];
-
-const ENTERPRISE_DEFAULT_SLOTS: EditableSlot[] = [
-  {
-    id: 'entrance',
-    title: '🚪 Store Entrance / Front',
-    subtitle: 'Street Entrance & Welcome Facade',
-    imageUrl: 'https://pannellum.org/images/alma.jpg',
-  },
-  {
-    id: 'showroom',
-    title: '🛍️ Main Showroom & Aisles',
-    subtitle: 'Featured Products & Customer Aisles',
-    imageUrl: 'https://pannellum.org/images/bma-0.jpg',
-  },
-  {
-    id: 'display',
-    title: '🍯 Products & Souvenir Shelf',
-    subtitle: 'Handicrafts, Delicacies & Souvenirs',
-    imageUrl: 'https://pannellum.org/images/jfk.jpg',
-  },
-  {
-    id: 'workshop',
-    title: '📦 Workshop / Crafting Area',
-    subtitle: 'Artisan Workshop & Packaging Counter',
-    imageUrl: 'https://pannellum.org/images/cerro-toco-0.jpg',
-  },
-];
-
 interface ResortVirtualTourManagerProps {
   resortId?: number | string;
   resortName?: string;
@@ -97,33 +43,46 @@ export function ResortVirtualTourManager({
   initialScenes,
   onSaveSuccess,
 }: ResortVirtualTourManagerProps) {
-  const defaultSlots = businessType === 'enterprise' ? ENTERPRISE_DEFAULT_SLOTS : INITIAL_DEFAULT_SLOTS;
-
   const storageKey = resortId
     ? `discover-mansalay:${businessType}_360_scenes_${resortId}`
     : `discover-mansalay:active_${businessType}_360_scenes`;
 
+  const PLACEHOLDER_DOMAIN = 'pannellum.org';
+
   const [slots, setSlots] = useState<EditableSlot[]>(() => {
+    // Load from initialScenes (backend) — filter out any placeholder-only scenes
     if (Array.isArray(initialScenes) && initialScenes.length > 0) {
-      return initialScenes.map((s: any, idx: number) => ({
-        id: s.id || `scene_${idx}`,
-        title: s.title || `📍 Spot #${idx + 1}`,
-        subtitle: s.subtitle || '',
-        imageUrl: s.imageUrl || s.panoramaUrl || '',
-      }));
+      const real = initialScenes.filter((s: any) => {
+        const url = s.previewUrl || s.imageUrl || s.panoramaUrl || '';
+        return url && !url.includes(PLACEHOLDER_DOMAIN);
+      });
+      if (real.length > 0) {
+        return real.map((s: any, idx: number) => ({
+          id: s.id || `scene_${idx}`,
+          title: s.title || `📍 Spot #${idx + 1}`,
+          subtitle: s.subtitle || '',
+          imageUrl: s.imageUrl || s.panoramaUrl || '',
+        }));
+      }
     }
+    // Load from localStorage — filter out placeholder-only scenes
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          const real = parsed.filter((s: any) => {
+            const url = s.previewUrl || s.imageUrl || s.panoramaUrl || '';
+            return url && !url.includes(PLACEHOLDER_DOMAIN);
+          });
+          if (real.length > 0) return real;
         }
       }
     } catch {
       // fallback
     }
-    return defaultSlots;
+    // No real scenes found — start empty
+    return [];
   });
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -205,24 +164,19 @@ export function ResortVirtualTourManager({
     const newId = `scene_${Date.now()}`;
     const newSlot: EditableSlot = {
       id: newId,
-      title: `📍 New Scene Spot #${slots.length + 1}`,
-      subtitle: 'Custom Location Spot / Room',
-      imageUrl: 'https://pannellum.org/images/alma.jpg',
+      title: `📍 Scene Spot #${slots.length + 1}`,
+      subtitle: 'Upload a 360° photo for this spot',
+      imageUrl: '', // empty — user must upload their own photo
     };
     setSlots((prev) => [...prev, newSlot]);
-    toast.success('New 360 scene slot added!');
+    toast.success('New 360° scene slot added! Upload a photo to activate it.');
   };
 
-  // Remove a scene slot
+  // Remove a scene slot (allow removing down to 0)
   const handleRemoveSlot = (index: number) => {
-    if (slots.length <= 1) {
-      toast.error('The 360 tour must have at least one (1) scene.');
-      return;
-    }
     const slotToRemove = slots[index];
-    const confirmed = window.confirm(`Are you sure you want to remove "${slotToRemove.title}"?`);
+    const confirmed = window.confirm(`Remove "${slotToRemove.title}"?`);
     if (!confirmed) return;
-
     setSlots((prev) => prev.filter((_, i) => i !== index));
     toast.info(`Removed "${slotToRemove.title}".`);
   };
@@ -449,7 +403,18 @@ export function ResortVirtualTourManager({
 
       {/* Slots List */}
       <div className="space-y-3">
-        {slots.map((slot, index) => (
+        {slots.length === 0 ? (
+          <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center space-y-3">
+            <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mx-auto">
+              <Compass className="h-6 w-6 text-gray-300" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-500">No 360° scenes yet</p>
+              <p className="text-xs text-gray-400 mt-0.5">Click "Add New Scene Slot" below to start building your virtual tour. Upload a 360° panoramic photo for each spot.</p>
+            </div>
+          </div>
+        ) : (
+          slots.map((slot, index) => (
           <div
             key={slot.id}
             className="bg-gray-50/60 hover:bg-gray-50 border border-gray-200 rounded-xl p-4 transition-colors"
@@ -576,7 +541,8 @@ export function ResortVirtualTourManager({
               </div>
             </div>
           </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Add Slot and Footer Controls */}

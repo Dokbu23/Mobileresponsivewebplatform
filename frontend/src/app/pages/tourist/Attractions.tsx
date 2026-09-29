@@ -636,9 +636,17 @@ export function Attractions() {
 
               {/* Virtual Tour & Video Player Box */}
               {(() => {
+                const PLACEHOLDER = 'pannellum.org';
+                const hasRealScenes =
+                  Array.isArray(selectedAttraction.virtual_tour_scenes) &&
+                  selectedAttraction.virtual_tour_scenes.length > 0 &&
+                  selectedAttraction.virtual_tour_scenes.some((s: any) => {
+                    const url = s.previewUrl || s.imageUrl || s.panoramaUrl || '';
+                    return url && !url.includes(PLACEHOLDER);
+                  });
                 const hasVirtualTour =
                   !!(selectedAttraction.video) ||
-                  !!(selectedAttraction.virtual_tour_scenes && selectedAttraction.virtual_tour_scenes.length > 0);
+                  hasRealScenes;
                 return (
                   <div className="bg-gradient-to-br from-indigo-50/70 via-white to-pink-50/40 border border-indigo-100 rounded-2xl p-4 sm:p-5 my-2 space-y-3">
                     <div className="flex items-center justify-between">

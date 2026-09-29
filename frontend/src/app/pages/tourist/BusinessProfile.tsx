@@ -21,7 +21,7 @@ import { ResortVirtualTourManager } from '../../components/ResortVirtualTourMana
 import { VirtualTourModal, Tour360Scene } from '../../components/VirtualTourModal';
 import { InlineVirtualTourViewer } from '../../components/InlineVirtualTourViewer';
 import { PushPinIcon } from '../../components/PushPinIcon';
-import { MANSALAY_BARANGAYS } from '../../lib/constants';
+import { MANSALAY_BARANGAYS, PLACEHOLDER_IMAGE } from '../../lib/constants';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
 
@@ -779,20 +779,15 @@ export function BusinessProfile() {
       } catch {}
     }
 
-    if (rawScenes.length === 0) {
-      rawScenes = isResort
-        ? [
-            { id: 'entrance', title: '🚪 Entrance / Gate', subtitle: 'Main Entrance & Scenic Approach', imageUrl: 'https://pannellum.org/images/alma.jpg' },
-            { id: 'lobby', title: '🏨 Lobby / Dining', subtitle: 'Guest Reception & Dining Area', imageUrl: 'https://pannellum.org/images/bma-0.jpg' },
-            { id: 'pool', title: '🏊 Pool / Amenities', subtitle: 'Freshwater Pool & Tropical Sun Loungers', imageUrl: 'https://pannellum.org/images/jfk.jpg' },
-            { id: 'beach', title: '🏖️ Beach Front / Cottages', subtitle: 'Pristine Shoreline & Seafront Cottages', imageUrl: 'https://pannellum.org/images/cerro-toco-0.jpg' },
-          ]
-        : [
-            { id: 'entrance', title: '🚪 Store Entrance / Front', subtitle: 'Street Entrance & Welcome Facade', imageUrl: 'https://pannellum.org/images/alma.jpg' },
-            { id: 'showroom', title: '🛍️ Main Showroom & Aisles', subtitle: 'Featured Products & Customer Aisles', imageUrl: 'https://pannellum.org/images/bma-0.jpg' },
-            { id: 'display', title: '🍯 Products & Souvenir Shelf', subtitle: 'Handicrafts, Delicacies & Souvenirs', imageUrl: 'https://pannellum.org/images/jfk.jpg' },
-          ];
-    }
+    // Filter out default placeholder-only scenes (pannellum.org) — treat as no real tour
+    const PLACEHOLDER_DOMAIN = 'pannellum.org';
+    const hasRealScenes = rawScenes.some((s: any) => {
+      const url = s.previewUrl || s.imageUrl || s.panoramaUrl || '';
+      return url && !url.includes(PLACEHOLDER_DOMAIN);
+    });
+
+    // If all scenes are just placeholders (no real upload), treat as empty
+    if (!hasRealScenes) return [];
 
     return rawScenes.map((slot: any, index: number) => {
       const rawImg = slot.previewUrl || slot.imageUrl || slot.panoramaUrl || '';
@@ -938,8 +933,8 @@ export function BusinessProfile() {
   const activeStatus = getActiveStatus();
 
   const getImageUrl = (img: string) => {
-    if (!img) return isResort ? '/assets/default-accommodation.jpg' : '/assets/default-product.jpg';
-    return formatImageUrl(img) || (isResort ? '/assets/default-accommodation.jpg' : '/assets/default-product.jpg');
+    if (!img) return PLACEHOLDER_IMAGE;
+    return formatImageUrl(img) || PLACEHOLDER_IMAGE;
   };
 
   const totalProducts = items.length;
@@ -1958,7 +1953,7 @@ export function BusinessProfile() {
                                 src={getImageUrl(shopLogo || '')}
                                 alt={shopName}
                                 className="w-11 h-11 rounded-full object-cover border-2 border-pink-100 shadow-2xs flex-shrink-0"
-                                onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                                onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }}
                               />
                               <div>
                                 <div className="flex items-center gap-1.5">
@@ -2054,7 +2049,7 @@ export function BusinessProfile() {
                                 src={getImageUrl(post.image)}
                                 alt="Post media"
                                 className="w-full h-full object-cover group-hover/img:scale-[1.01] transition-transform duration-300 max-h-[540px]"
-                                onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                                onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }}
                               />
                               {Array.isArray(post.images) && post.images.length > 1 && (
                                 <span className="absolute bottom-3 right-3 px-3 py-1 bg-black/70 backdrop-blur-md text-white text-xs font-extrabold rounded-full flex items-center gap-1.5 border border-white/20 shadow-md">
@@ -2206,7 +2201,7 @@ export function BusinessProfile() {
                   src={getImageUrl(shopLogo || '')}
                   alt={shopName}
                   className="w-11 h-11 rounded-full object-cover border border-gray-200"
-                  onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                  onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }}
                 />
                 <div>
                   <div className="flex items-center gap-1.5">
@@ -2303,7 +2298,7 @@ export function BusinessProfile() {
                           src={getImageUrl(imgUrl)}
                           alt={`Post Photo ${imgIdx + 1}`}
                           className="w-full h-full object-cover hover:scale-105 transition-transform"
-                          onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                          onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }}
                         />
                       </div>
                     ))}
@@ -2315,7 +2310,7 @@ export function BusinessProfile() {
                     src={getImageUrl(viewingPost.image)}
                     alt="Post Full View"
                     className="w-full h-auto max-h-[380px] object-cover"
-                    onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                    onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }}
                   />
                 </div>
               ) : null}

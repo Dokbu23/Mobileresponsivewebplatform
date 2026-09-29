@@ -283,9 +283,18 @@ export function DetailModal({ item, onClose }: DetailModalProps) {
 
           {/* ── Virtual Tour Box ── */}
           {(() => {
+            const PLACEHOLDER = 'pannellum.org';
+            const scenes = item.virtual_tour_scenes;
+            const hasRealScenes =
+              Array.isArray(scenes) &&
+              scenes.length > 0 &&
+              scenes.some((s: any) => {
+                const url = s.previewUrl || s.imageUrl || s.panoramaUrl || '';
+                return url && !url.includes(PLACEHOLDER);
+              });
             const hasVirtualTour =
-              !!(item.video || (item as any).video_url || (item as any).virtual_tour_video) ||
-              !!(item as any).virtual_tour_scenes?.length;
+              !!(item.video || item.video_url || item.virtual_tour_video) ||
+              hasRealScenes;
             return hasVirtualTour ? (
               <div className="bg-pink-50/50 dark:bg-slate-800/60 p-4 rounded-2xl border border-pink-100 dark:border-slate-700/60 text-center space-y-2.5 my-3">
                 <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-pink-600 dark:text-pink-400">

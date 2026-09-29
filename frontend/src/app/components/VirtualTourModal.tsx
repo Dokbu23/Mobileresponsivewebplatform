@@ -90,120 +90,6 @@ interface VirtualTourModalProps {
   initialSceneId?: string;
 }
 
-// Curated 360 Equirectangular Panoramas of Mansalay vibe (Beach, Coastal Resort, Pavilion, Poolside)
-const DEFAULT_MANSALAY_360_SCENES: Tour360Scene[] = [
-  {
-    id: 'entrance',
-    title: 'Welcome Gate & Boardwalk',
-    subtitle: 'Main Entrance & Scenic Approach',
-    panoramaUrl: 'https://pannellum.org/images/alma.jpg',
-    hotSpots: [
-      {
-        pitch: -3,
-        yaw: 110,
-        text: 'Walk to Resort Lobby & Lounge ➡️',
-        type: 'scene',
-        targetSceneId: 'lobby',
-        targetPitch: 0,
-        targetYaw: 0,
-      },
-      {
-        pitch: 5,
-        yaw: 30,
-        text: 'Welcome to Mansalay Eco-Tourism Destination',
-        type: 'info',
-      },
-    ],
-  },
-  {
-    id: 'lobby',
-    title: 'Resort Lobby & Veranda',
-    subtitle: 'Guest Reception & Dining Area',
-    panoramaUrl: 'https://pannellum.org/images/bma-0.jpg',
-    hotSpots: [
-      {
-        pitch: -5,
-        yaw: -175,
-        text: '⬅️ Back to Welcome Gate',
-        type: 'scene',
-        targetSceneId: 'entrance',
-        targetPitch: -3,
-        targetYaw: -70,
-      },
-      {
-        pitch: -4,
-        yaw: 20,
-        text: 'Walk to Poolside Deck & Tropical Garden 🏊',
-        type: 'scene',
-        targetSceneId: 'pool',
-        targetPitch: -2,
-        targetYaw: 0,
-      },
-      {
-        pitch: 2,
-        yaw: -45,
-        text: 'Reception & Information Desk',
-        type: 'info',
-      },
-    ],
-  },
-  {
-    id: 'pool',
-    title: 'Poolside Deck & Garden',
-    subtitle: 'Relaxation Deck with Palm Trees',
-    panoramaUrl: 'https://pannellum.org/images/jfk.jpg',
-    hotSpots: [
-      {
-        pitch: -5,
-        yaw: -170,
-        text: '⬅️ Return to Lobby & Lounge',
-        type: 'scene',
-        targetSceneId: 'lobby',
-        targetPitch: 0,
-        targetYaw: -160,
-      },
-      {
-        pitch: -3,
-        yaw: 35,
-        text: 'Walk to White Sand Beachfront 🏖️',
-        type: 'scene',
-        targetSceneId: 'beach',
-        targetPitch: 0,
-        targetYaw: 0,
-      },
-      {
-        pitch: 1,
-        yaw: -80,
-        text: 'Freshwater Infinity Pool & Sunbeds',
-        type: 'info',
-      },
-    ],
-  },
-  {
-    id: 'beach',
-    title: 'Beach Front & Mansalay Bay',
-    subtitle: 'Pristine Shoreline & Ocean Breeze',
-    panoramaUrl: 'https://pannellum.org/images/cerro-toco-0.jpg',
-    hotSpots: [
-      {
-        pitch: -4,
-        yaw: -180,
-        text: '⬅️ Return to Poolside Garden',
-        type: 'scene',
-        targetSceneId: 'pool',
-        targetPitch: -2,
-        targetYaw: -145,
-      },
-      {
-        pitch: 6,
-        yaw: 45,
-        text: 'Mansalay Marine Sanctuary & Coral View',
-        type: 'info',
-      },
-    ],
-  },
-];
-
 type ModalTab = '360' | 'streetview' | 'video';
 
 export function VirtualTourModal({
@@ -227,10 +113,14 @@ export function VirtualTourModal({
   const effectiveLng = lng ?? coords?.[1] ?? 121.4394;
   const hasVideo = Boolean(videoUrl && String(videoUrl).trim() !== '');
 
-  // UI state
-  const [activeTab, setActiveTab] = useState<ModalTab>('360');
+  // UI state - default to video if video exists and no 360 tour uploaded
+  const has360 = Boolean(customScenes && customScenes.some((s: any) => {
+    const url = s.panoramaUrl || s.imageUrl || '';
+    return url && !url.includes('pannellum.org');
+  }));
+  const [activeTab, setActiveTab] = useState<ModalTab>(has360 ? '360' : hasVideo ? 'video' : '360');
   const [activeSceneId, setActiveSceneId] = useState<string>(
-    initialSceneId || (customScenes && customScenes.length > 0 ? customScenes[0].id : 'entrance')
+    initialSceneId || (customScenes && customScenes.length > 0 ? customScenes[0].id : '')
   );
 
   useEffect(() => {
@@ -305,7 +195,7 @@ export function VirtualTourModal({
         };
       });
     }
-    return DEFAULT_MANSALAY_360_SCENES;
+    return [];
   }, [customScenes]);
   const currentScene = scenes.find((s) => s.id === activeSceneId) || scenes[0];
 
@@ -447,9 +337,9 @@ export function VirtualTourModal({
     });
   }, []);
 
-  // Initialize Pannellum when tab is '360' and modal is open
+  // Initialize Pannellum when tab is '360', modal is open, and has valid scenes
   useEffect(() => {
-    if (!isOpen || activeTab !== '360') return;
+    if (!isOpen || activeTab !== '360' || scenes.length === 0) return;
 
     let isMounted = true;
     setIsPannellumLoading(true);
@@ -836,12 +726,34 @@ export function VirtualTourModal({
           {/* TAB 1: 360° Walkthrough (Pannellum) */}
           {activeTab === '360' && (
             <div className="relative w-full h-full min-h-[380px] sm:min-h-[460px] md:min-h-[520px] flex flex-col">
-              {/* Pannellum Container */}
-              <div
-                ref={viewerContainerRef}
-                className="w-full h-full flex-1"
-                style={{ minHeight: '380px' }}
-              />
+              {scenes.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center min-h-[380px] w-full text-white bg-slate-950">
+                  <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/10 flex items-center justify-center mb-4 text-pink-400">
+                    <Compass className="w-8 h-8 opacity-75" />
+                  </div>
+                  <h4 className="text-base sm:text-lg font-extrabold text-white">360° Virtual Tour Not Available</h4>
+                  <p className="text-xs text-slate-400 max-w-sm mt-1.5 mb-5 leading-relaxed">
+                    {attractionName} does not have an uploaded 360° virtual tour yet.
+                  </p>
+                  {hasVideo && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('video')}
+                      className="px-5 py-2.5 bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white rounded-full font-bold text-xs flex items-center gap-2 shadow-lg shadow-pink-500/30 transition-all cursor-pointer"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>Watch Video Tour Instead</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {/* Pannellum Container */}
+                  <div
+                    ref={viewerContainerRef}
+                    className="w-full h-full flex-1"
+                    style={{ minHeight: '380px' }}
+                  />
 
               {/* Loading State */}
               {isPannellumLoading && (
@@ -974,29 +886,33 @@ export function VirtualTourModal({
               )}
 
               {/* Bottom Scene Quick Navigation Bar */}
-              <div className="absolute bottom-3 inset-x-3 z-20 flex flex-col items-center">
-                <div className="bg-slate-950/85 backdrop-blur-md p-1.5 rounded-2xl border border-slate-800/90 shadow-2xl flex items-center gap-1.5 max-w-full overflow-x-auto no-scrollbar">
-                  {scenes.map((scene, idx) => {
-                    const isActive = scene.id === activeSceneId;
-                    return (
-                      <button
-                        key={scene.id}
-                        onClick={() => handleSelectScene(scene.id)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
-                          isActive
-                            ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-md shadow-pink-500/20 ring-2 ring-pink-400/40'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-                        }`}
-                      >
-                        <span className="w-4 h-4 rounded-full bg-black/30 flex items-center justify-center text-[10px]">
-                          {idx + 1}
-                        </span>
-                        <span>{scene.title}</span>
-                      </button>
-                    );
-                  })}
+              {scenes.length > 1 && (
+                <div className="absolute bottom-3 inset-x-3 z-20 flex flex-col items-center">
+                  <div className="bg-slate-950/85 backdrop-blur-md p-1.5 rounded-2xl border border-slate-800/90 shadow-2xl flex items-center gap-1.5 max-w-full overflow-x-auto no-scrollbar">
+                    {scenes.map((scene, idx) => {
+                      const isActive = scene.id === activeSceneId;
+                      return (
+                        <button
+                          key={scene.id}
+                          onClick={() => handleSelectScene(scene.id)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
+                            isActive
+                              ? 'bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-md shadow-pink-500/20 ring-2 ring-pink-400/40'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                          }`}
+                        >
+                          <span className="w-4 h-4 rounded-full bg-black/30 flex items-center justify-center text-[10px]">
+                            {idx + 1}
+                          </span>
+                          <span>{scene.title}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
+                </>
+              )}
             </div>
           )}
 

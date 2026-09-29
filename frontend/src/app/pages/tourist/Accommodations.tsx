@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { Hotel, MapPin, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink, Footprints, Maximize2, FileText } from 'lucide-react';
 import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
-import { ACCOMMODATION_CATEGORIES } from '../../lib/constants';
+import { ACCOMMODATION_CATEGORIES, PLACEHOLDER_IMAGE } from '../../lib/constants';
 import { useApp } from '../../context/AppContext';
 import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
@@ -359,7 +359,7 @@ function AccommodationCardItem({
   // Each carousel slide represents ONE room with that room's photo
   const currentRoomImage = formatImageUrl(
     currentRoom.image || (currentRoom.images && currentRoom.images[0]) || acc.image
-  ) || '/assets/mansalay_hero_bg.jpg';
+  ) || PLACEHOLDER_IMAGE;
 
   const handlePrev = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -420,7 +420,7 @@ function AccommodationCardItem({
           alt={`${currentRoom.name} - ${acc.resort_name || acc.name}`}
           onClick={handleImageClick}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 cursor-zoom-in"
-          onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+          onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }}
           loading="lazy"
         />
 
@@ -716,7 +716,7 @@ function FullscreenGalleryModal({
           src={currentSrc}
           alt={`${title} - Photo ${index + 1}`}
           className="max-h-[75vh] max-w-full object-contain rounded-xl shadow-2xl transition-all duration-300"
-          onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+          onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }}
         />
 
         {images.length > 1 && (
@@ -1136,7 +1136,7 @@ export function Accommodations() {
 
         const currentRoomImg = formatImageUrl(
           currentRoom.image || (currentRoom.images && currentRoom.images[0]) || selectedAcc.image
-        ) || '/assets/mansalay_hero_bg.jpg';
+        ) || PLACEHOLDER_IMAGE;
 
         const handleModalPrevRoom = (e: React.MouseEvent) => {
           e.stopPropagation();
@@ -1207,7 +1207,7 @@ export function Accommodations() {
                       title: `${selectedAcc.resort_name || selectedAcc.name} — ${currentRoom.name}`,
                     });
                   }}
-                  onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                  onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }}
                 />
 
                 {/* Close Button Top-Right */}
@@ -1473,8 +1473,16 @@ export function Accommodations() {
 
                   {/* 360° Walkthrough & Virtual Tour Button */}
                   {(() => {
+                    const PLACEHOLDER = 'pannellum.org';
+                    const hasRealScenes =
+                      Array.isArray(selectedAcc.virtual_tour_scenes) &&
+                      selectedAcc.virtual_tour_scenes.length > 0 &&
+                      selectedAcc.virtual_tour_scenes.some((s: any) => {
+                        const url = s.previewUrl || s.imageUrl || s.panoramaUrl || '';
+                        return url && !url.includes(PLACEHOLDER);
+                      });
                     const hasVirtualTour =
-                      (selectedAcc.virtual_tour_scenes && selectedAcc.virtual_tour_scenes.length > 0) ||
+                      hasRealScenes ||
                       !!(selectedAcc.virtual_tour_video || (selectedAcc as any).video);
                     return hasVirtualTour ? (
                       <button
