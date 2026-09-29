@@ -1180,7 +1180,7 @@ export function AdminContent() {
 
               <div>
                 <h3 className="text-lg font-extrabold text-gray-900">
-                  {uploadProgress < 100 ? 'Uploading to Database...' : 'Upload Complete!'}
+                  {uploadProgress < 100 ? 'Uploading...' : 'Done!'}
                 </h3>
                 <p className="text-xs text-gray-500 font-medium mt-1 truncate">
                   {uploadFileName ? `File: ${uploadFileName}` : uploadStatusText}
@@ -1204,7 +1204,7 @@ export function AdminContent() {
               {/* Security Note */}
               <div className="pt-2 border-t border-gray-100 flex items-center justify-center gap-1.5 text-[11px] text-gray-400 font-medium">
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-                <span>Database upload & security validation in progress</span>
+                <span>Please wait...</span>
               </div>
             </div>
           </div>
@@ -1491,6 +1491,7 @@ export function AdminContent() {
                         <>
                           <Upload className="h-8 w-8 text-gray-400 group-hover:text-pink-500 mx-auto mb-2 transition-colors" />
                           <p className="text-xs font-bold text-gray-700">Click to upload cover image</p>
+                          <p className="text-[11px] text-gray-400 mt-1 font-medium">JPG, PNG, WEBP · Max 10MB per image</p>
                         </>
                       )}
                     </div>
@@ -1950,6 +1951,7 @@ export function AdminContent() {
                         <>
                           <Upload className="h-8 w-8 text-gray-400 group-hover:text-pink-500 mx-auto mb-2 transition-colors" />
                           <p className="text-xs font-bold text-gray-700">Click to upload multiple images</p>
+                          <p className="text-[11px] text-gray-400 mt-1 font-medium">JPG, PNG, WEBP · Max 10MB per image</p>
                         </>
                       )}
                     </div>
@@ -1990,10 +1992,11 @@ export function AdminContent() {
                               if (videoFileInputRef.current) videoFileInputRef.current.value = '';
                             }
                           }}
-                          placeholder="https://www.youtube.com/watch?v=... or https://example.com/attraction-tour.mp4"
+                          placeholder="https://www.youtube.com/watch?v=... or https://example.com/tour.mp4"
                           className="w-full pl-9 pr-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                         />
                       </div>
+                      <p className="text-[11px] text-gray-400 mt-1 font-medium">Must start with https:// — YouTube, Facebook, or direct MP4/WebM link</p>
                     </div>
 
                     {/* OR Divider */}
@@ -2227,7 +2230,7 @@ export function AdminContent() {
                       ? 'bg-emerald-500/90 text-white border border-emerald-400/40'
                       : 'bg-black/60 text-white/90 border border-white/20'
                   }`}>
-                    {isCustomHomeBg ? '✓ Custom Database Background Active' : 'Default Wallpaper'}
+                    {isCustomHomeBg ? '✓ Custom Background' : 'Default Wallpaper'}
                   </span>
                 </div>
               </div>
@@ -2323,12 +2326,12 @@ export function AdminContent() {
                     {isSavingBg ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Saving to Database...</span>
+                        <span>Saving...</span>
                       </>
                     ) : (
                       <>
                         <Save className="w-4 h-4" />
-                        <span>Save Background to Database</span>
+                        <span>Save Background</span>
                       </>
                     )}
                   </button>

@@ -24,6 +24,7 @@ interface AttractionType {
   view_count?: number;
   rating?: number;
   likes?: number;
+  virtual_tour_scenes?: any[];
 }
 
 export function Attractions() {
@@ -634,48 +635,73 @@ export function Attractions() {
               </div>
 
               {/* Virtual Tour & Video Player Box */}
-              <div className="bg-gradient-to-br from-indigo-50/70 via-white to-pink-50/40 border border-indigo-100 rounded-2xl p-4 sm:p-5 my-2 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-extrabold text-gray-900 text-sm">
-                    <Video className="h-4 w-4 text-indigo-600" />
-                    <span>{selectedAttraction.video ? '🎥 Virtual Video Tour Available' : 'Virtual Tour Available'}</span>
-                  </div>
-                  {selectedAttraction.video && (
-                    <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                      Video Ready
-                    </span>
-                  )}
-                </div>
+              {(() => {
+                const hasVirtualTour =
+                  !!(selectedAttraction.video) ||
+                  !!(selectedAttraction.virtual_tour_scenes && selectedAttraction.virtual_tour_scenes.length > 0);
+                return (
+                  <div className="bg-gradient-to-br from-indigo-50/70 via-white to-pink-50/40 border border-indigo-100 rounded-2xl p-4 sm:p-5 my-2 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-extrabold text-gray-900 text-sm">
+                        <Video className="h-4 w-4 text-indigo-600" />
+                        <span>{selectedAttraction.video ? '🎥 Virtual Video Tour Available' : hasVirtualTour ? 'Virtual Tour Available' : 'Virtual Tour'}</span>
+                      </div>
+                      {selectedAttraction.video ? (
+                        <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          Video Ready
+                        </span>
+                      ) : !hasVirtualTour ? (
+                        <span className="text-[10px] font-bold bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          Not Available
+                        </span>
+                      ) : null}
+                    </div>
 
-                {selectedAttraction.video ? (
-                  <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black shadow-inner border border-gray-800">
-                    {selectedAttraction.video.includes('youtube.com') || selectedAttraction.video.includes('youtu.be') ? (
-                      <iframe
-                        src={selectedAttraction.video.includes('watch?v=') ? `https://www.youtube.com/embed/${selectedAttraction.video.split('v=')[1]?.split('&')[0]}` : selectedAttraction.video.includes('youtu.be/') ? `https://www.youtube.com/embed/${selectedAttraction.video.split('youtu.be/')[1]?.split('?')[0]}` : selectedAttraction.video}
-                        title={`Virtual Tour - ${selectedAttraction.name}`}
-                        className="w-full h-full border-0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                        allowFullScreen
-                      />
+                    {selectedAttraction.video ? (
+                      <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black shadow-inner border border-gray-800">
+                        {selectedAttraction.video.includes('youtube.com') || selectedAttraction.video.includes('youtu.be') ? (
+                          <iframe
+                            src={selectedAttraction.video.includes('watch?v=') ? `https://www.youtube.com/embed/${selectedAttraction.video.split('v=')[1]?.split('&')[0]}` : selectedAttraction.video.includes('youtu.be/') ? `https://www.youtube.com/embed/${selectedAttraction.video.split('youtu.be/')[1]?.split('?')[0]}` : selectedAttraction.video}
+                            title={`Virtual Tour - ${selectedAttraction.name}`}
+                            className="w-full h-full border-0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                            allowFullScreen
+                          />
+                        ) : (
+                          <video
+                            src={selectedAttraction.video.startsWith('http') ? selectedAttraction.video : `${API_BASE}${selectedAttraction.video}`}
+                            controls
+                            playsInline
+                            className="w-full h-full object-cover"
+                          />
+                        )}
+                      </div>
+                    ) : null}
+
+                    {hasVirtualTour ? (
+                      <button
+                        onClick={() => setIsVirtualTourOpen(true)}
+                        className="w-full py-2.5 bg-pink-500 hover:bg-pink-600 active:bg-pink-700 text-white font-bold rounded-xl text-xs shadow-md shadow-pink-500/20 transition-all flex items-center justify-center gap-2 group cursor-pointer"
+                      >
+                        <Play className="h-3.5 w-3.5 fill-white" />
+                        <span>Open Fullscreen Virtual Tour</span>
+                      </button>
                     ) : (
-                      <video
-                        src={selectedAttraction.video.startsWith('http') ? selectedAttraction.video : `${API_BASE}${selectedAttraction.video}`}
-                        controls
-                        playsInline
-                        className="w-full h-full object-cover"
-                      />
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] text-center text-gray-400 font-medium">No virtual tour posted for this attraction yet</p>
+                        <button
+                          disabled
+                          className="w-full py-2.5 bg-gray-100 text-gray-400 border border-dashed border-gray-200 font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-not-allowed select-none opacity-60"
+                          title="No virtual tour has been set up for this attraction"
+                        >
+                          <Play className="h-3.5 w-3.5 text-gray-300" />
+                          <span>Virtual Tour — Unavailable</span>
+                        </button>
+                      </div>
                     )}
                   </div>
-                ) : null}
-
-                <button
-                  onClick={() => setIsVirtualTourOpen(true)}
-                  className="w-full py-2.5 bg-pink-500 hover:bg-pink-600 active:bg-pink-700 text-white font-bold rounded-xl text-xs shadow-md shadow-pink-500/20 transition-all flex items-center justify-center gap-2 group cursor-pointer"
-                >
-                  <Play className="h-3.5 w-3.5 fill-white" />
-                  <span>Open Fullscreen Virtual Tour</span>
-                </button>
-              </div>
+                );
+              })()}
 
               {/* Contact & Connect Section matching screenshot */}
               <div>

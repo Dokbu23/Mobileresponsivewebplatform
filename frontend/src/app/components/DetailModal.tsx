@@ -22,6 +22,13 @@ export interface DetailModalItem {
   instagram_link?: string;
   instagram?: string;
   video?: string;
+  video_url?: string;
+  virtual_tour_video?: string;
+  virtual_tour_scenes?: any[];
+  latitude?: number | string;
+  lat?: number | string;
+  longitude?: number | string;
+  lng?: number | string;
   // Attraction-specific
   view_count?: number;
   // Event-specific
@@ -275,19 +282,42 @@ export function DetailModal({ item, onClose }: DetailModalProps) {
           )}
 
           {/* ── Virtual Tour Box ── */}
-          <div className="bg-pink-50/50 dark:bg-slate-800/60 p-4 rounded-2xl border border-pink-100 dark:border-slate-700/60 text-center space-y-2.5 my-3">
-            <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-pink-600 dark:text-pink-400">
-              <Play className="h-4 w-4 fill-pink-500 text-pink-500" />
-              <span>Virtual Tour Available</span>
-            </div>
-            <button
-              onClick={() => setIsVirtualTourOpen(true)}
-              className="w-full py-3.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 active:scale-95 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider shadow-lg shadow-pink-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Play className="h-4 w-4 fill-white" />
-              <span>Virtual Tour</span>
-            </button>
-          </div>
+          {(() => {
+            const hasVirtualTour =
+              !!(item.video || (item as any).video_url || (item as any).virtual_tour_video) ||
+              !!(item as any).virtual_tour_scenes?.length;
+            return hasVirtualTour ? (
+              <div className="bg-pink-50/50 dark:bg-slate-800/60 p-4 rounded-2xl border border-pink-100 dark:border-slate-700/60 text-center space-y-2.5 my-3">
+                <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-pink-600 dark:text-pink-400">
+                  <Play className="h-4 w-4 fill-pink-500 text-pink-500" />
+                  <span>Virtual Tour Available</span>
+                </div>
+                <button
+                  onClick={() => setIsVirtualTourOpen(true)}
+                  className="w-full py-3.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 active:scale-95 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider shadow-lg shadow-pink-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Play className="h-4 w-4 fill-white" />
+                  <span>Virtual Tour</span>
+                </button>
+              </div>
+            ) : (
+              <div className="bg-gray-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-dashed border-gray-200 dark:border-slate-700/40 text-center space-y-2 my-3 opacity-70">
+                <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-gray-400 dark:text-slate-500">
+                  <Play className="h-4 w-4 text-gray-300" />
+                  <span>Virtual Tour</span>
+                </div>
+                <p className="text-[11px] text-gray-400 dark:text-slate-500 font-medium">No virtual tour has been posted yet</p>
+                <button
+                  disabled
+                  className="w-full py-3 bg-gray-100 dark:bg-slate-700/50 text-gray-400 dark:text-slate-500 border border-gray-200 dark:border-slate-600 font-extrabold rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-not-allowed select-none"
+                  title="No virtual tour has been posted for this listing"
+                >
+                  <Play className="h-4 w-4 text-gray-300" />
+                  <span>Unavailable</span>
+                </button>
+              </div>
+            );
+          })()}
 
           {/* ── Contact & Connect Section ── */}
           {(() => {

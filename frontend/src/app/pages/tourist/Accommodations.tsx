@@ -1472,14 +1472,34 @@ export function Accommodations() {
                   </div>
 
                   {/* 360° Walkthrough & Virtual Tour Button */}
-                  <button
-                    type="button"
-                    onClick={() => setIsVirtualTourOpen(true)}
-                    className="w-full mt-2 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-md shadow-emerald-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
-                  >
-                    <Footprints className="h-4 w-4 text-emerald-100" />
-                    <span>360° Walkthrough & Virtual Tour</span>
-                  </button>
+                  {(() => {
+                    const hasVirtualTour =
+                      (selectedAcc.virtual_tour_scenes && selectedAcc.virtual_tour_scenes.length > 0) ||
+                      !!(selectedAcc.virtual_tour_video || (selectedAcc as any).video);
+                    return hasVirtualTour ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsVirtualTourOpen(true)}
+                        className="w-full mt-2 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold rounded-xl text-xs shadow-md shadow-emerald-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98]"
+                      >
+                        <Footprints className="h-4 w-4 text-emerald-100" />
+                        <span>360° Walkthrough & Virtual Tour</span>
+                      </button>
+                    ) : (
+                      <div className="w-full mt-2 space-y-1.5">
+                        <p className="text-[11px] text-center text-gray-400 font-medium">No virtual tour posted for this resort yet</p>
+                        <button
+                          type="button"
+                          disabled
+                          className="w-full py-2.5 bg-gray-100 text-gray-400 border border-dashed border-gray-200 font-extrabold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-not-allowed select-none opacity-60"
+                          title="No virtual tour available for this resort"
+                        >
+                          <Footprints className="h-4 w-4 text-gray-300" />
+                          <span>360° Virtual Tour — Unavailable</span>
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

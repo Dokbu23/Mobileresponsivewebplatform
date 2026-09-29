@@ -416,7 +416,7 @@ export function EnterpriseDashboard() {
   const handleDeletePost = (postId: string | number) => {
     Swal.fire({
       title: 'Delete Post?',
-      text: 'Are you sure you want to remove this post from the database?',
+      text: 'Are you sure you want to delete this post?',
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#ec4899',

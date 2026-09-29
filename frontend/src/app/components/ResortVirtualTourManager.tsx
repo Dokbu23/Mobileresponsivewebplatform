@@ -530,34 +530,39 @@ export function ResortVirtualTourManager({
                 </div>
 
                 {/* Upload File Button */}
-                <label
-                  htmlFor={`tour360-upload-${slot.id}-${index}`}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer border ${
-                    uploadingSlotIndex === index
-                      ? 'bg-rose-50 text-rose-300 border-rose-100 pointer-events-none opacity-70'
-                      : 'bg-white hover:bg-rose-50 text-gray-500 hover:text-rose-400 border-gray-200 hover:border-rose-200'
-                  }`}
-                >
-                  {uploadingSlotIndex === index ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span>Uploading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-3 w-3" />
-                      <span>Change Photo</span>
-                    </>
-                  )}
-                  <input
-                    id={`tour360-upload-${slot.id}-${index}`}
-                    type="file"
-                    accept="image/*"
-                    disabled={uploadingSlotIndex !== null}
-                    onChange={(e) => handleFileChange(index, e)}
-                    className="hidden"
-                  />
-                </label>
+                <div className="flex flex-col items-end gap-1">
+                  <label
+                    htmlFor={`tour360-upload-${slot.id}-${index}`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer border ${
+                      uploadingSlotIndex === index
+                        ? 'bg-rose-50 text-rose-300 border-rose-100 pointer-events-none opacity-70'
+                        : 'bg-white hover:bg-rose-50 text-gray-500 hover:text-rose-400 border-gray-200 hover:border-rose-200'
+                    }`}
+                  >
+                    {uploadingSlotIndex === index ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-3 w-3" />
+                        <span>Change Photo</span>
+                      </>
+                    )}
+                    <input
+                      id={`tour360-upload-${slot.id}-${index}`}
+                      type="file"
+                      accept="image/*"
+                      disabled={uploadingSlotIndex !== null}
+                      onChange={(e) => handleFileChange(index, e)}
+                      className="hidden"
+                    />
+                  </label>
+                  <span className="text-[10px] text-gray-400 font-medium leading-tight text-right">
+                    JPG/PNG/WEBP · Max 10MB
+                  </span>
+                </div>
 
                 {/* Remove Slot Button */}
                 <button
