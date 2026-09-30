@@ -25,7 +25,7 @@ export function Wishlist() {
   const [localViewCounts, setLocalViewCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
-  const isAdministrator = isAdmin || userType === 'admin';
+  const isAdministrator = isAdmin || (userType as any) === 'admin' || currentUser?.role === 'admin';
   const isBusinessUser = userType === 'resort' || userType === 'enterprise';
   const canViewAnalytics = isAdministrator || isBusinessUser;
 
@@ -393,7 +393,7 @@ export function Wishlist() {
   // ── Role-Based Access Control (RBAC) Engine ──
   const isResort = userType === 'resort';
   const isEnterprise = userType === 'enterprise';
-  const isAdminAccount = isAdministrator || userType === 'admin';
+  const isAdminAccount = isAdministrator;
 
   // Automatically sync category tab with role permissions
   useEffect(() => {
@@ -751,8 +751,8 @@ export function Wishlist() {
           </div>
         )}
 
-        {/* ── SECTOR / PLATFORM-WIDE KPI CARDS (RBAC Scoped) ── */}
-        {canViewAnalytics && (
+        {/* ── SECTOR / PLATFORM-WIDE KPI CARDS (RBAC Scoped - Hidden for Resort users to prevent duplicate metrics) ── */}
+        {canViewAnalytics && !isResort && (
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
               <div className="flex items-center gap-2">
@@ -760,17 +760,13 @@ export function Wishlist() {
                   <Sparkles className="h-4 w-4 text-pink-600" />
                 </div>
                 <h2 className="text-base font-black text-gray-900 uppercase tracking-wider">
-                  {isResort
-                    ? 'Your Added Rooms Insights'
-                    : isEnterprise
+                  {isEnterprise
                     ? 'Your Products Insights'
                     : 'Platform-Wide Tourism Insights'}
                 </h2>
               </div>
               <span className="text-xs font-bold text-gray-600 bg-white border border-gray-200/90 px-3 py-1 rounded-full shadow-2xs self-start sm:self-auto">
-                {isResort
-                  ? 'Your Resort · Added Rooms Only'
-                  : isEnterprise
+                {isEnterprise
                   ? 'Your Enterprise · Products Only'
                   : 'Mansalay Municipality · Full Visibility'}
               </span>
@@ -796,9 +792,7 @@ export function Wishlist() {
                     {totalSavesInScope.toLocaleString()}
                   </div>
                   <div className="text-xs font-bold text-gray-600 mt-1">
-                    {isResort
-                      ? 'Total Saves on Your Rooms'
-                      : isEnterprise
+                    {isEnterprise
                       ? 'Total Saves on Your Products'
                       : 'Total Community Saves'}
                   </div>
@@ -817,7 +811,7 @@ export function Wishlist() {
                 </div>
                 <div className="mt-4">
                   <div className="text-base sm:text-lg font-black text-gray-900 truncate">
-                    {topItemInScope?.name || (isResort ? 'No rooms added yet' : isEnterprise ? 'No products added yet' : 'Mansalay Beach')}
+                    {topItemInScope?.name || (isEnterprise ? 'No products added yet' : 'Mansalay Beach')}
                   </div>
                   <div className="text-xs font-bold text-amber-700 mt-1">
                     {topItemInScope ? `#1 Top Saved (${topItemInScope.saves} saves)` : 'Waiting for saves'}
@@ -840,9 +834,7 @@ export function Wishlist() {
                     {totalListingsInScope}
                   </div>
                   <div className="text-xs font-bold text-gray-600 mt-1">
-                    {isResort
-                      ? 'Active Added Rooms'
-                      : isEnterprise
+                    {isEnterprise
                       ? 'Active Product Listings'
                       : 'Active Platform Listings'}
                   </div>
@@ -864,9 +856,7 @@ export function Wishlist() {
                     {avgSavesInScope}
                   </div>
                   <div className="text-xs font-bold text-gray-600 mt-1">
-                    {isResort
-                      ? 'Avg Saves / Room'
-                      : isEnterprise
+                    {isEnterprise
                       ? 'Avg Saves / Product'
                       : 'Avg Saves / Listing'}
                   </div>
