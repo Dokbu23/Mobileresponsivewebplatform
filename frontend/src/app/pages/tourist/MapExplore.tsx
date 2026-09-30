@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { MapPin, Hotel, Store, Mountain, Filter, Navigation, Compass, Crosshair, ExternalLink, X, Clock, Search, CheckCircle2, Plus, PlusCircle, Building2, AlertTriangle, ShieldCheck, Sparkles, Footprints } from 'lucide-react';
+import { MapPin, Hotel, Store, Mountain, Filter, Navigation, Compass, Crosshair, ExternalLink, X, Clock, Search, CheckCircle2, Plus, PlusCircle, Building2, AlertTriangle, ShieldCheck, Sparkles, Footprints, Images, ChevronLeft, ChevronRight, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import { getPublicJSON, getPublicLandmarks, createLandmark, isPointInMansalayPolygon, getRouteWithFallback, getCurrentUserRole, getAuthToken, decodeHtml } from '../../lib/api';
 import { MansalayMap, MapMarker, UserGpsData } from '../../components/MansalayMap';
@@ -86,6 +86,7 @@ interface DirectoryLocation {
   description: string;
   address: string;
   coords: [number, number];
+  images?: string[];
   virtual_tour_scenes?: Tour360Scene[];
 }
 
@@ -133,8 +134,14 @@ export function MapExplore() {
     category: 'Resort',
     description: '',
     address: 'Mansalay, Oriental Mindoro',
-    image: '',
   });
+  const [landmarkImageFiles, setLandmarkImageFiles] = useState<File[]>([]);
+  const [landmarkImagePreviews, setLandmarkImagePreviews] = useState<string[]>([]);
+
+  // Gallery lightbox state
+  const [galleryImages, setGalleryImages] = useState<string[]>([]);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+  const [showGallery, setShowGallery] = useState(false);
 
   // Continuous High-Accuracy Device GPS Position Watch
   useEffect(() => {
@@ -323,6 +330,7 @@ export function MapExplore() {
         description: decodeHtml(l.description || 'Registered Landmark in Mansalay'),
         address: decodeHtml(l.address || 'Mansalay, Oriental Mindoro'),
         coords: [Number(l.latitude), Number(l.longitude)],
+        images: Array.isArray(l.images) && l.images.length > 0 ? l.images : (l.image ? [l.image] : []),
         virtual_tour_scenes: l.virtual_tour_scenes || l.user?.virtual_tour_scenes || getStoredScenes(l.type || 'resort', l.id) || getStoredScenes(l.type || 'resort', l.user_id),
       }));
 
@@ -401,13 +409,14 @@ export function MapExplore() {
       : 'Mansalay, Oriental Mindoro';
 
     setClickedCoords(coords);
+    setLandmarkImageFiles([]);
+    setLandmarkImagePreviews([]);
     setLandmarkForm({
       name: prefilledName,
       type: defaultType,
       category: defaultType === 'resort' ? 'Resort' : 'Enterprise',
       description: (currentUser as any)?.store_description || (currentUser as any)?.resort_description || (currentUser as any)?.description || '',
       address: prefilledAddress,
-      image: '',
     });
     setShowAddLandmarkModal(true);
   };
@@ -447,7 +456,7 @@ export function MapExplore() {
         address: landmarkForm.address,
         latitude: clickedCoords.lat,
         longitude: clickedCoords.lng,
-        image: landmarkForm.image,
+        images: landmarkImageFiles.length > 0 ? landmarkImageFiles : undefined,
         virtual_tour_scenes: scenesToAttach,
       });
 
@@ -899,8 +908,51 @@ export function MapExplore() {
                       </span>
                     </div>
 
-                    <p className="text-xs text-gray-600 leading-relaxed mb-4 min-h-[36px]">{loc.description}</p>
-                    
+                    <p className="text-xs text-gray-600 leading-relaxed mb-3 min-h-[36px]">{loc.description}</p>
+
+                    {/* Google Maps-style photo strip */}
+                    {loc.images && loc.images.length > 0 && (
+                      <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
+                        {loc.images.slice(0, 5).map((imgUrl, imgIdx) => (
+                          <div key={imgIdx} className="relative flex-shrink-0">
+                            <img
+                              src={imgUrl}
+                              alt={`${loc.name} photo ${imgIdx + 1}`}
+                              className="w-20 h-16 object-cover rounded-xl cursor-pointer hover:opacity-90 transition-opacity border border-gray-100"
+                              onClick={() => {
+                                setGalleryImages(loc.images || []);
+                                setGalleryIndex(imgIdx);
+                                setShowGallery(true);
+                              }}
+                            />
+                            {imgIdx === 4 && loc.images && loc.images.length > 5 && (
+                              <button
+                                onClick={() => {
+                                  setGalleryImages(loc.images || []);
+                                  setGalleryIndex(4);
+                                  setShowGallery(true);
+                                }}
+                                className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center text-white text-xs font-bold"
+                              >
+                                +{loc.images.length - 5}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => {
+                            setGalleryImages(loc.images || []);
+                            setGalleryIndex(0);
+                            setShowGallery(true);
+                          }}
+                          className="flex-shrink-0 w-20 h-16 rounded-xl bg-pink-50 border border-pink-200 hover:bg-pink-100 transition-colors flex flex-col items-center justify-center gap-1 text-pink-600"
+                        >
+                          <Images className="h-4 w-4" />
+                          <span className="text-[10px] font-bold">All {loc.images.length}</span>
+                        </button>
+                      </div>
+                    )}
+
                     <div className="flex items-center gap-1.5 text-[11px] text-pink-500 font-semibold mb-6">
                       <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
                       <span className="truncate">{loc.address}</span>
@@ -1163,16 +1215,67 @@ export function MapExplore() {
                 />
               </div>
 
-              {/* Image URL */}
+              {/* Multi-Image Upload */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Image URL (Optional)</label>
-                <input
-                  type="url"
-                  value={landmarkForm.image}
-                  onChange={(e) => setLandmarkForm({ ...landmarkForm, image: e.target.value })}
-                  placeholder="https://images.unsplash.com/..."
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-xl text-xs font-medium outline-none transition-all"
-                />
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5 flex items-center gap-2">
+                  <Camera className="h-3.5 w-3.5 text-pink-500" />
+                  Photos (up to 10) — like Google Maps
+                </label>
+                <label
+                  htmlFor="landmark-images"
+                  className="flex flex-col items-center justify-center gap-2 p-5 border-2 border-dashed border-pink-200 rounded-2xl cursor-pointer hover:border-pink-400 hover:bg-pink-50/40 transition-all text-center"
+                >
+                  <Images className="h-7 w-7 text-pink-400" />
+                  <span className="text-xs font-bold text-gray-600">
+                    {landmarkImageFiles.length > 0
+                      ? `${landmarkImageFiles.length} photo${landmarkImageFiles.length > 1 ? 's' : ''} selected — click to add more`
+                      : 'Click to upload photos of your place'}
+                  </span>
+                  <span className="text-[11px] text-gray-400">JPG, PNG, WEBP · Max 10MB each</span>
+                  <input
+                    id="landmark-images"
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp,image/avif"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      if (files.length === 0) return;
+                      const combined = [...landmarkImageFiles, ...files].slice(0, 10);
+                      setLandmarkImageFiles(combined);
+                      const previews = combined.map(f => URL.createObjectURL(f));
+                      setLandmarkImagePreviews(previews);
+                    }}
+                  />
+                </label>
+                {/* Thumbnail strip */}
+                {landmarkImagePreviews.length > 0 && (
+                  <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
+                    {landmarkImagePreviews.map((src, i) => (
+                      <div key={i} className="relative flex-shrink-0">
+                        <img
+                          src={src}
+                          alt={`preview-${i}`}
+                          className="w-16 h-16 object-cover rounded-xl border border-pink-200 shadow-xs cursor-pointer"
+                          onClick={() => { setGalleryImages(landmarkImagePreviews); setGalleryIndex(i); setShowGallery(true); }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newFiles = landmarkImageFiles.filter((_, idx) => idx !== i);
+                            const newPreviews = landmarkImagePreviews.filter((_, idx) => idx !== i);
+                            URL.revokeObjectURL(landmarkImagePreviews[i]);
+                            setLandmarkImageFiles(newFiles);
+                            setLandmarkImagePreviews(newPreviews);
+                          }}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] font-bold shadow"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* 360 Virtual Walkthrough Status */}
@@ -1213,6 +1316,72 @@ export function MapExplore() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── FULLSCREEN PHOTO GALLERY LIGHTBOX (Google Maps style) ── */}
+      {showGallery && galleryImages.length > 0 && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center"
+          onClick={() => setShowGallery(false)}
+        >
+          {/* Close */}
+          <button
+            onClick={() => setShowGallery(false)}
+            className="absolute top-4 right-4 z-10 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+          >
+            <X className="h-6 w-6" />
+          </button>
+
+          {/* Counter */}
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white text-sm font-bold bg-black/40 px-4 py-1.5 rounded-full backdrop-blur-sm">
+            {galleryIndex + 1} / {galleryImages.length}
+          </div>
+
+          {/* Main image */}
+          <img
+            src={galleryImages[galleryIndex]}
+            alt={`Gallery photo ${galleryIndex + 1}`}
+            className="max-h-[80vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+
+          {/* Prev */}
+          {galleryImages.length > 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setGalleryIndex(prev => (prev - 1 + galleryImages.length) % galleryImages.length); }}
+              className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/25 text-white rounded-full transition-colors"
+            >
+              <ChevronLeft className="h-6 w-6" />
+            </button>
+          )}
+
+          {/* Next */}
+          {galleryImages.length > 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setGalleryIndex(prev => (prev + 1) % galleryImages.length); }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-white/10 hover:bg-white/25 text-white rounded-full transition-colors"
+            >
+              <ChevronRight className="h-6 w-6" />
+            </button>
+          )}
+
+          {/* Thumbnail filmstrip */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 overflow-x-auto max-w-[90vw] pb-1 px-2" onClick={(e) => e.stopPropagation()}>
+            {galleryImages.map((src, i) => (
+              <img
+                key={i}
+                src={src}
+                alt={`thumb-${i}`}
+                onClick={() => setGalleryIndex(i)}
+                className={`w-14 h-10 object-cover rounded-lg flex-shrink-0 cursor-pointer transition-all ${
+                  i === galleryIndex
+                    ? 'ring-2 ring-pink-400 opacity-100 scale-105'
+                    : 'opacity-50 hover:opacity-80'
+                }`}
+              />
+            ))}
           </div>
         </div>
       )}

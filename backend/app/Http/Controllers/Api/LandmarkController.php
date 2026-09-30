@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Landmark;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
 class LandmarkController extends Controller
@@ -77,7 +78,8 @@ class LandmarkController extends Controller
     }
 
     /**
-     * Store a newly created landmark with strict role-based authorization and polygon geofence validation.
+     * Store a newly created landmark with strict role-based authorization,
+     * polygon geofence validation, and multiple photo upload support.
      */
     public function store(Request $request)
     {
@@ -87,20 +89,22 @@ class LandmarkController extends Controller
         // 1. TOURISTS ARE STRICTLY FORBIDDEN FROM CREATING LANDMARKS
         if ($role === 'tourist') {
             return response()->json([
-                'error' => 'LANDMARK_CREATION_NOT_ALLOWED',
+                'error'   => 'LANDMARK_CREATION_NOT_ALLOWED',
                 'message' => 'Tourists are not allowed to create landmarks.',
             ], 403);
         }
 
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'type' => 'required|in:resort,enterprise',
-            'category' => 'nullable|string|max:100',
-            'description' => 'nullable|string|max:1000',
-            'address' => 'nullable|string|max:255',
-            'latitude' => 'required|numeric',
-            'longitude' => 'required|numeric',
-            'image' => 'nullable|string|max:500',
+            'name'                => 'required|string|max:255',
+            'type'                => 'required|in:resort,enterprise',
+            'category'            => 'nullable|string|max:100',
+            'description'         => 'nullable|string|max:1000',
+            'address'             => 'nullable|string|max:255',
+            'latitude'            => 'required|numeric',
+            'longitude'           => 'required|numeric',
+            'image'               => 'nullable|string|max:500',
+            'images'              => 'nullable|array|max:10',
+            'images.*'            => 'nullable|file|mimes:jpg,jpeg,png,webp,avif|max:10240',
             'virtual_tour_scenes' => 'nullable|array',
         ], [
             'type.in' => 'Only Resort and Enterprise landmarks are allowed.',
@@ -109,7 +113,7 @@ class LandmarkController extends Controller
         if ($validator->fails()) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $validator->errors(),
+                'errors'  => $validator->errors(),
             ], 422);
         }
 
@@ -118,7 +122,7 @@ class LandmarkController extends Controller
         // 2. RESORT USER CAN ONLY CREATE RESORT LANDMARKS
         if ($role === 'resort' && $requestedType !== 'resort') {
             return response()->json([
-                'error' => 'INVALID_LANDMARK_TYPE_FOR_ROLE',
+                'error'   => 'INVALID_LANDMARK_TYPE_FOR_ROLE',
                 'message' => 'Resort accounts can only create Resort landmarks.',
             ], 403);
         }
@@ -126,7 +130,7 @@ class LandmarkController extends Controller
         // 3. ENTERPRISE USER CAN ONLY CREATE ENTERPRISE LANDMARKS
         if ($role === 'enterprise' && $requestedType !== 'enterprise') {
             return response()->json([
-                'error' => 'INVALID_LANDMARK_TYPE_FOR_ROLE',
+                'error'   => 'INVALID_LANDMARK_TYPE_FOR_ROLE',
                 'message' => 'Enterprise accounts can only create Enterprise landmarks.',
             ], 403);
         }
@@ -137,33 +141,88 @@ class LandmarkController extends Controller
         // 4. Strict Server-Side Mansalay Polygon Geofence Check
         if (!self::isPointInMansalayPolygon($lat, $lng)) {
             return response()->json([
-                'error' => 'OUTSIDE_MANSALAY_BOUNDARY',
+                'error'   => 'OUTSIDE_MANSALAY_BOUNDARY',
                 'message' => 'Landmark location must be within Mansalay, Oriental Mindoro.',
             ], 422);
         }
 
+        // 5. Handle multiple photo uploads
+        $uploadedImages = [];
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $file) {
+                if ($file && $file->isValid()) {
+                    $path = $file->store('landmark-photos', 'public');
+                    $uploadedImages[] = '/storage/' . $path;
+                }
+            }
+        }
+        // Fallback: single image URL field
+        $primaryImage = !empty($uploadedImages) ? $uploadedImages[0] : ($request->input('image') ?? null);
+
+        // 6. Attach virtual tour scenes
         $scenes = $request->input('virtual_tour_scenes');
         if (empty($scenes) && $user && !empty($user->virtual_tour_scenes)) {
             $scenes = $user->virtual_tour_scenes;
         }
 
         $landmark = Landmark::create([
-            'user_id' => $user ? $user->id : null,
-            'name' => $request->name,
-            'type' => $requestedType,
-            'category' => $request->category ?? ucfirst($requestedType),
-            'description' => $request->description,
-            'address' => $request->address,
-            'latitude' => $lat,
-            'longitude' => $lng,
-            'image' => $request->image,
+            'user_id'             => $user ? $user->id : null,
+            'name'                => $request->name,
+            'type'                => $requestedType,
+            'category'            => $request->category ?? ucfirst($requestedType),
+            'description'         => $request->description,
+            'address'             => $request->address,
+            'latitude'            => $lat,
+            'longitude'           => $lng,
+            'image'               => $primaryImage,
+            'images'              => !empty($uploadedImages) ? $uploadedImages : null,
             'virtual_tour_scenes' => $scenes,
-            'is_active' => true,
+            'is_active'           => true,
         ]);
 
         return response()->json([
-            'message' => 'Landmark created successfully!',
+            'message'  => 'Landmark created successfully!',
             'landmark' => $landmark,
         ], 201);
+    }
+
+    /**
+     * Add more photos to an existing landmark (owner or admin only).
+     */
+    public function addPhotos(Request $request, $id)
+    {
+        $landmark = Landmark::findOrFail($id);
+        $user     = $request->user();
+
+        if ($user && ($user->role !== 'admin') && $landmark->user_id !== $user->id) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $request->validate([
+            'images'   => 'required|array|min:1|max:10',
+            'images.*' => 'required|file|mimes:jpg,jpeg,png,webp,avif|max:10240',
+        ]);
+
+        $existingImages = $landmark->images ?? [];
+        $newImages      = [];
+
+        foreach ($request->file('images') as $file) {
+            if ($file && $file->isValid()) {
+                $path        = $file->store('landmark-photos', 'public');
+                $newImages[] = '/storage/' . $path;
+            }
+        }
+
+        $allImages = array_merge($existingImages, $newImages);
+        $landmark->update([
+            'images' => $allImages,
+            'image'  => $allImages[0] ?? $landmark->image,
+        ]);
+
+        return response()->json([
+            'message'  => 'Photos added successfully!',
+            'images'   => $allImages,
+            'landmark' => $landmark->fresh(),
+        ]);
     }
 }

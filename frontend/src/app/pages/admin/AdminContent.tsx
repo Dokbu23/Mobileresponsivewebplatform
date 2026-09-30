@@ -157,6 +157,19 @@ const CLOSE_TIME_OPTIONS = [
   '12:00 AM',
 ];
 
+// ⏰ ALL 24-HOUR TIME OPTIONS (Every 15 minutes, from 12:00 AM to 11:45 PM)
+const ALL_EVENT_TIME_OPTIONS: string[] = (() => {
+  const times: string[] = [];
+  for (let h = 0; h < 24; h++) {
+    const period = h < 12 ? 'AM' : 'PM';
+    const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    for (const m of ['00', '15', '30', '45']) {
+      times.push(`${hour12}:${m} ${period}`);
+    }
+  }
+  return times;
+})();
+
 export function AdminContent() {
   const [mainMode, setMainMode] = useState<MainMode>('publish');
   const [activeTab, setActiveTab] = useState<ContentTab>('resort');
@@ -201,7 +214,39 @@ export function AdminContent() {
   const [price, setPrice] = useState('');
   const [stock, setStock] = useState('10');
   const [eventDate, setEventDate] = useState('');
-  const [eventTime, setEventTime] = useState('');
+  const [eventStartTime, setEventStartTime] = useState('8:00 AM');
+  const [eventEndTime, setEventEndTime] = useState('5:00 PM');
+  const [eventTime, setEventTime] = useState('8:00 AM – 5:00 PM');
+  const [isCustomEventTime, setIsCustomEventTime] = useState(false);
+
+  const handleEventStartTimeChange = (start: string) => {
+    setEventStartTime(start);
+    if (start === 'All Day') {
+      setEventTime('All Day');
+      setEventEndTime('');
+    } else if (start && eventEndTime && eventEndTime !== 'All Day' && eventEndTime !== 'No End Time') {
+      setEventTime(`${start} – ${eventEndTime}`);
+    } else if (start) {
+      setEventTime(start);
+    } else {
+      setEventTime('');
+    }
+  };
+
+  const handleEventEndTimeChange = (end: string) => {
+    setEventEndTime(end);
+    if (!end || end === 'No End Time') {
+      if (eventStartTime && eventStartTime !== 'All Day') {
+        setEventTime(eventStartTime);
+      } else {
+        setEventTime('');
+      }
+    } else if (eventStartTime && eventStartTime !== 'All Day') {
+      setEventTime(`${eventStartTime} – ${end}`);
+    } else {
+      setEventTime(end);
+    }
+  };
   const [coverImageUrl, setCoverImageUrl] = useState('');
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImageFiles, setCoverImageFiles] = useState<File[]>([]);
@@ -464,7 +509,10 @@ export function AdminContent() {
     setPrice('');
     setStock('10');
     setEventDate('');
-    setEventTime('');
+    setEventStartTime('8:00 AM');
+    setEventEndTime('5:00 PM');
+    setEventTime('8:00 AM – 5:00 PM');
+    setIsCustomEventTime(false);
     setCoverImageUrl('');
     setCoverImageFile(null);
     setCoverImageFiles([]);
@@ -824,7 +872,24 @@ export function AdminContent() {
     setPrice(item.price || item.price_per_night || '');
     setStock(String(item.stock || 10));
     setEventDate(item.date || '');
-    setEventTime(item.time || '');
+    const rawTime = item.time || '';
+    setEventTime(rawTime);
+    if (rawTime === 'All Day' || rawTime.toLowerCase().includes('all day')) {
+      setEventStartTime('All Day');
+      setEventEndTime('');
+    } else if (rawTime.includes('–') || rawTime.includes('-')) {
+      const delimiter = rawTime.includes('–') ? '–' : '-';
+      const parts = rawTime.split(delimiter);
+      if (parts[0]) setEventStartTime(parts[0].trim());
+      if (parts[1]) setEventEndTime(parts[1].trim());
+    } else if (rawTime) {
+      setEventStartTime(rawTime);
+      setEventEndTime('');
+    } else {
+      setEventStartTime('8:00 AM');
+      setEventEndTime('5:00 PM');
+      setEventTime('8:00 AM – 5:00 PM');
+    }
     setCoverImageUrl(item.image || '');
     setImagePreview(item.image ? (item.image.startsWith('http') ? item.image : `${API_BASE}${item.image}`) : null);
     if (item.video) {
@@ -895,7 +960,7 @@ export function AdminContent() {
       description,
       full_description: fullDescription || description,
       location: location || 'Mansalay, Oriental Mindoro',
-      operating_hours: operatingHours,
+      operating_hours: activeTab === 'attraction' ? operatingHours : undefined,
       price: numPrice,
       price_per_night: numPrice,
       stock: Number(stock || 10),
@@ -905,7 +970,7 @@ export function AdminContent() {
       seller_name: productOwner || shopName,
       sellerName: shopName || productOwner,
       date: eventDate || new Date().toISOString().split('T')[0],
-      time: eventTime || '9:00 AM – 5:00 PM',
+      time: eventTime || '8:00 AM – 5:00 PM',
       image: finalImageUrl || '',
       images: finalImagesList.length > 0 ? finalImagesList : (finalImageUrl ? [finalImageUrl] : []),
       video: resolvedVideo,
@@ -969,7 +1034,7 @@ export function AdminContent() {
           formData.append('video_url', videoUrlInput.trim());
         }
         if (location) formData.append('location', location);
-        if (operatingHours) formData.append('operating_hours', operatingHours);
+        if (activeTab === 'attraction' && operatingHours) formData.append('operating_hours', operatingHours);
         if (fullDescription) formData.append('full_description', fullDescription);
         formData.append('price', String(numPrice));
         formData.append('price_per_night', String(numPrice));
@@ -1692,7 +1757,9 @@ export function AdminContent() {
                   {activeTab === 'event' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-bold text-gray-800 mb-1.5">Event Date *</label>
+                        <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                          Event Date <span className="text-pink-500">*</span>
+                        </label>
                         <input
                           type="date"
                           required
@@ -1702,14 +1769,77 @@ export function AdminContent() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-800 mb-1.5">Event Time</label>
-                        <input
-                          type="text"
-                          value={eventTime}
-                          onChange={(e) => setEventTime(e.target.value)}
-                          placeholder="e.g. 9:00 AM – 9:00 PM"
-                          className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium focus:border-pink-500 outline-none"
-                        />
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-xs font-bold text-gray-800">
+                            Event Time <span className="text-pink-500">*</span>
+                          </label>
+                          <div className="flex items-center gap-2">
+                            {eventTime && (
+                              <span className="text-[11px] font-semibold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md border border-pink-100 flex items-center gap-1">
+                                <span>⏰</span> {eventTime}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setIsCustomEventTime(!isCustomEventTime)}
+                              className="text-[10px] text-pink-600 hover:text-pink-700 underline font-semibold transition-colors"
+                            >
+                              {isCustomEventTime ? 'Choose Dropdown' : '✏️ Custom Time'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {isCustomEventTime ? (
+                          <div className="relative">
+                            <Clock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-pink-500" />
+                            <input
+                              type="text"
+                              value={eventTime}
+                              onChange={(e) => setEventTime(e.target.value)}
+                              placeholder="e.g. 8:15 AM – 5:45 PM"
+                              className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:border-pink-500 outline-none"
+                            />
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="relative">
+                              <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-pink-500 pointer-events-none" />
+                              <select
+                                value={eventStartTime}
+                                onChange={(e) => handleEventStartTimeChange(e.target.value)}
+                                className="w-full pl-8 pr-7 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:border-pink-500 outline-none appearance-none cursor-pointer hover:border-pink-300 transition-colors"
+                              >
+                                <option value="">Select Start Time...</option>
+                                <option value="All Day">All Day</option>
+                                {ALL_EVENT_TIME_OPTIONS.map((time) => (
+                                  <option key={`start-${time}`} value={time}>
+                                    {time}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                            </div>
+
+                            <div className="relative">
+                              <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-rose-500 pointer-events-none" />
+                              <select
+                                value={eventEndTime}
+                                disabled={eventStartTime === 'All Day'}
+                                onChange={(e) => handleEventEndTimeChange(e.target.value)}
+                                className="w-full pl-8 pr-7 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:border-rose-500 outline-none appearance-none cursor-pointer hover:border-rose-300 transition-colors disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+                              >
+                                <option value="">Select End Time...</option>
+                                <option value="No End Time">No End Time</option>
+                                {ALL_EVENT_TIME_OPTIONS.map((time) => (
+                                  <option key={`end-${time}`} value={time}>
+                                    {time}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1728,7 +1858,7 @@ export function AdminContent() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className={activeTab === 'attraction' ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : ''}>
                     <div>
                       <label className="block text-xs font-bold text-gray-800 mb-1.5">Barangay / Location</label>
                       <div className="relative">
@@ -1748,134 +1878,70 @@ export function AdminContent() {
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-xs font-bold text-gray-800 mb-1.5">
-                        Operating Hours <span className="text-gray-400 font-normal">(AM to PM)</span>
-                      </label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        {/* Opening Time Custom Dropdown (Opens strictly downward & Scrollable) */}
-                        <div ref={openDropdownRef} className="relative">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOpenDropdownActive(prev => !prev);
-                              setCloseDropdownActive(false);
-                            }}
-                            className={`w-full pl-3.5 pr-3 py-2.5 bg-white border rounded-xl text-xs font-semibold text-gray-800 text-left flex items-center justify-between shadow-2xs transition-all ${
-                              openDropdownActive ? 'border-pink-500 ring-2 ring-pink-500/20' : 'border-gray-200 hover:border-pink-300'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 truncate">
-                              <Clock className="h-4 w-4 text-pink-500 flex-shrink-0" />
-                              <span className={openTime ? 'text-gray-900 font-bold' : 'text-gray-400'}>
-                                {openTime || 'Opening Time (e.g. 8:00 AM)'}
-                              </span>
-                            </div>
-                            <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${openDropdownActive ? 'rotate-180 text-pink-500' : ''}`} />
-                          </button>
-
-                          {/* Downward Popover Menu with Scroll */}
-                          {openDropdownActive && (
-                            <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white border border-gray-100 rounded-2xl shadow-xl p-1 max-h-56 overflow-y-auto divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                              <div className="p-1.5 text-[10px] uppercase font-extrabold text-gray-400 tracking-wider sticky top-0 bg-white/95 backdrop-blur-xs z-10 border-b border-gray-100">
-                                Select Opening Time
-                              </div>
-                              <div className="py-1 space-y-0.5">
-                                {OPEN_TIME_OPTIONS.map((t) => (
-                                  <button
-                                    key={t}
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenTime(t);
-                                      if (t === 'Open 24 Hours') {
-                                        setOperatingHours('Open 24 Hours');
-                                      } else {
-                                        setOperatingHours(`${t} – ${closeTime || '5:00 PM'}`);
-                                      }
-                                      setOpenDropdownActive(false);
-                                    }}
-                                    className={`w-full px-3 py-2 text-left text-xs font-semibold rounded-xl flex items-center justify-between transition-colors ${
-                                      openTime === t
-                                        ? 'bg-pink-50 text-pink-600 font-extrabold'
-                                        : 'text-gray-700 hover:bg-gray-50 hover:text-pink-600'
-                                    }`}
-                                  >
-                                    <span>{t}</span>
-                                    {openTime === t && <CheckCircle2 className="h-3.5 w-3.5 text-pink-500" />}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
+                    {activeTab === 'attraction' && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-xs font-bold text-gray-800">
+                            Visiting / Operating Hours <span className="text-gray-400 font-normal">(Optional)</span>
+                          </label>
+                          {operatingHours && (
+                            <span className="text-[11px] font-semibold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md border border-pink-100">
+                              ⏰ {operatingHours}
+                            </span>
                           )}
                         </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="relative">
+                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-pink-500 pointer-events-none" />
+                            <select
+                              value={openTime}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setOpenTime(val);
+                                if (val === 'Open 24 Hours') {
+                                  setOperatingHours('Open 24 Hours');
+                                } else if (val && closeTime) {
+                                  setOperatingHours(`${val} – ${closeTime}`);
+                                } else if (val) {
+                                  setOperatingHours(val);
+                                }
+                              }}
+                              className="w-full pl-8 pr-7 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:border-pink-500 outline-none appearance-none cursor-pointer"
+                            >
+                              <option value="">Opening Time...</option>
+                              {OPEN_TIME_OPTIONS.map((t) => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                            </select>
+                            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                          </div>
 
-                        {/* Closing Time Custom Dropdown (Opens strictly downward & Scrollable) */}
-                        <div ref={closeDropdownRef} className="relative">
-                          <button
-                            type="button"
-                            disabled={openTime === 'Open 24 Hours'}
-                            onClick={() => {
-                              setCloseDropdownActive(prev => !prev);
-                              setOpenDropdownActive(false);
-                            }}
-                            className={`w-full pl-3.5 pr-3 py-2.5 bg-white border rounded-xl text-xs font-semibold text-gray-800 text-left flex items-center justify-between shadow-2xs transition-all disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed ${
-                              closeDropdownActive ? 'border-rose-500 ring-2 ring-rose-500/20' : 'border-gray-200 hover:border-rose-300'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 truncate">
-                              <Clock className="h-4 w-4 text-rose-500 flex-shrink-0" />
-                              <span className={closeTime ? 'text-gray-900 font-bold' : 'text-gray-400'}>
-                                {openTime === 'Open 24 Hours' ? 'N/A (24 Hours)' : (closeTime || 'Closing Time (e.g. 5:00 PM)')}
-                              </span>
-                            </div>
-                            <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 flex-shrink-0 ${closeDropdownActive ? 'rotate-180 text-rose-500' : ''}`} />
-                          </button>
-
-                          {/* Downward Popover Menu with Scroll */}
-                          {closeDropdownActive && openTime !== 'Open 24 Hours' && (
-                            <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-white border border-gray-100 rounded-2xl shadow-xl p-1 max-h-56 overflow-y-auto divide-y divide-gray-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                              <div className="p-1.5 text-[10px] uppercase font-extrabold text-gray-400 tracking-wider sticky top-0 bg-white/95 backdrop-blur-xs z-10 border-b border-gray-100">
-                                Select Closing Time
-                              </div>
-                              <div className="py-1 space-y-0.5">
-                                {CLOSE_TIME_OPTIONS.map((t) => (
-                                  <button
-                                    key={t}
-                                    type="button"
-                                    onClick={() => {
-                                      setCloseTime(t);
-                                      if (openTime && openTime !== 'Open 24 Hours') {
-                                        setOperatingHours(`${openTime} – ${t}`);
-                                      }
-                                      setCloseDropdownActive(false);
-                                    }}
-                                    className={`w-full px-3 py-2 text-left text-xs font-semibold rounded-xl flex items-center justify-between transition-colors ${
-                                      closeTime === t
-                                        ? 'bg-rose-50 text-rose-600 font-extrabold'
-                                        : 'text-gray-700 hover:bg-gray-50 hover:text-rose-600'
-                                    }`}
-                                  >
-                                    <span>{t}</span>
-                                    {closeTime === t && <CheckCircle2 className="h-3.5 w-3.5 text-rose-500" />}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                          <div className="relative">
+                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-rose-500 pointer-events-none" />
+                            <select
+                              value={closeTime}
+                              disabled={openTime === 'Open 24 Hours'}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setCloseTime(val);
+                                if (openTime && openTime !== 'Open 24 Hours' && val) {
+                                  setOperatingHours(`${openTime} – ${val}`);
+                                }
+                              }}
+                              className="w-full pl-8 pr-7 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:border-rose-500 outline-none appearance-none cursor-pointer disabled:bg-gray-50 disabled:text-gray-400"
+                            >
+                              <option value="">Closing Time...</option>
+                              {CLOSE_TIME_OPTIONS.map((t) => (
+                                <option key={t} value={t}>{t}</option>
+                              ))}
+                            </select>
+                            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
+                          </div>
                         </div>
                       </div>
-
-                      {/* Schedule preview badge */}
-                      {operatingHours && (
-                        <p className="text-[11px] text-pink-600 font-bold mt-2 flex items-center gap-1.5">
-                          <span>⏰ Selected Hours:</span>
-                          <span className="bg-pink-50 px-2.5 py-0.5 rounded-md border border-pink-200 text-pink-700 font-semibold shadow-2xs">
-                            {operatingHours}
-                          </span>
-                        </p>
-                      )}
-                    </div>
+                    )}
                   </div>
+
 
                   {/* Optional Contact Details (Phone & Email) */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -992,6 +992,73 @@ export function EnterpriseDashboard() {
             </div>
           )}
 
+          {/* Tags section for Enterprise */}
+          <div className="space-y-2 bg-gray-50/70 p-3.5 rounded-xl border border-gray-100">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-pink-500" />
+                <span>Product / Post Tags <span className="font-normal text-gray-400 text-[11px]">(Optional)</span></span>
+              </label>
+              {tags.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTags([])}
+                  className="text-[11px] text-rose-500 hover:text-rose-700 font-semibold cursor-pointer"
+                >
+                  Clear all ({tags.length})
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs select-none">#</span>
+                <input
+                  type="text"
+                  value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddTag();
+                    }
+                  }}
+                  placeholder="Add custom tag (e.g. Handmade, Organic, Pasalubong)..."
+                  className="w-full pl-7 pr-3.5 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-800 outline-none focus:border-pink-500 shadow-2xs placeholder:text-gray-400"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleAddTag}
+                disabled={!tagInput.trim()}
+                className="px-4 py-2 bg-pink-500 hover:bg-pink-600 disabled:opacity-40 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs transition-all cursor-pointer disabled:cursor-not-allowed flex-shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Tag</span>
+              </button>
+            </div>
+
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {tags.map((t) => (
+                  <span
+                    key={t}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-pink-50 text-pink-700 border border-pink-200 rounded-lg text-xs font-bold shadow-2xs animate-in fade-in"
+                  >
+                    <span>#{t}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(t)}
+                      className="hover:text-rose-600 rounded-full p-0.5 transition-colors cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Submit Button */}
           <div className="flex justify-end pt-1">
             <button

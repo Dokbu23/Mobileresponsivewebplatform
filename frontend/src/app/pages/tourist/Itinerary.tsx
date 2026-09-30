@@ -55,20 +55,9 @@ interface ItineraryCard {
   isOfficial?: boolean;
 }
 
-const MANASALAY_LOCATIONS = [
-  'Buktot Beach, Mansalay',
-  'Sidell Kite Festival Grounds',
-  'PGD Beach Marine Sanctuary',
-  'Mangyan Cultural Village',
-  'Mangyan Burial Cave',
-  'Melzar Mountain Trailhead',
-  'Mahalta Hills Viewpoint',
-  "Nature's Gift Garden & Eco Hub",
-  'Hidden Waterfalls Park',
-  'Mansalay Town Plaza & Heritage Center',
-  'Mansalay Pasalubong Center',
-  'MB Hiraya Beachfront'
-];
+// Dynamic locations — populated from API (attractions + resorts + enterprises)
+// No hardcoded fallback: show only real registered data
+const FALLBACK_LOCATIONS: string[] = [];
 
 const getUserTripStorageKey = (user: any) => {
   if (user?.id) return `discover-mansalay:custom-trips:user_${user.id}`;
@@ -105,6 +94,10 @@ export function Itinerary() {
   const [loadingOfficial, setLoadingOfficial] = useState(false);
   const [selectedItinerary, setSelectedItinerary] = useState<ItineraryCard | null>(null);
 
+  // Dynamic locations fetched from registered attractions, resorts, enterprises
+  const [dynamicLocations, setDynamicLocations] = useState<string[]>(FALLBACK_LOCATIONS);
+  const [loadingLocations, setLoadingLocations] = useState(false);
+
   // Modals
   const [showAiModal, setShowAiModal] = useState(false);
   const [showBuilderModal, setShowBuilderModal] = useState(false);
@@ -125,16 +118,16 @@ export function Itinerary() {
       day: 1,
       title: 'Day 1 Arrival & Exploration',
       activities: [
-        { time: '09:00 AM', activity: 'Arrival & Welcome Drinks', location: 'Mansalay Town Center' },
-        { time: '02:00 PM', activity: 'Beach Relaxation', location: 'Buktot Beach, Mansalay' }
+        { time: '09:00 AM', activity: 'Arrival & Welcome Drinks', location: '' },
+        { time: '02:00 PM', activity: 'Beach Relaxation', location: '' }
       ]
     },
     {
       day: 2,
       title: 'Day 2 Cultural Tour & Sunset',
       activities: [
-        { time: '10:00 AM', activity: 'Indigenous Village Visit', location: 'Mangyan Cultural Village' },
-        { time: '05:00 PM', activity: 'Sunset View & Local Dinner', location: 'Sidell Kite Festival Grounds' }
+        { time: '10:00 AM', activity: 'Indigenous Village Visit', location: '' },
+        { time: '05:00 PM', activity: 'Sunset View & Local Dinner', location: '' }
       ]
     }
   ]);
@@ -287,6 +280,61 @@ export function Itinerary() {
       window.removeEventListener('storage', handleRefresh);
       window.removeEventListener('itineraryUpdated', handleRefresh);
     };
+  }, []);
+
+  // Fetch dynamic locations from registered attractions, resorts & enterprises
+  useEffect(() => {
+    const fetchLocations = async () => {
+      setLoadingLocations(true);
+      try {
+        const names: string[] = [];
+        const seen = new Set<string>();
+        const addName = (n: string) => {
+          const trimmed = n?.trim();
+          if (trimmed && !seen.has(trimmed)) {
+            seen.add(trimmed);
+            names.push(trimmed);
+          }
+        };
+
+        // Attractions
+        try {
+          const attractions = await getPublicJSON('/attractions');
+          if (Array.isArray(attractions)) {
+            attractions
+              .filter((a: any) => a.category !== 'Itinerary' && !a.days_count)
+              .forEach((a: any) => addName(a.name || a.title));
+          }
+        } catch {}
+
+        // Resorts
+        try {
+          const resorts = await getPublicJSON('/resorts');
+          if (Array.isArray(resorts)) {
+            resorts.forEach((r: any) => addName(r.resort_name || r.name));
+          }
+        } catch {}
+
+        // Enterprises
+        try {
+          const enterprises = await getPublicJSON('/enterprises');
+          if (Array.isArray(enterprises)) {
+            enterprises.forEach((e: any) => addName(e.business_name || e.store_name || e.name));
+          }
+        } catch {}
+
+        setDynamicLocations(names);
+      } catch (err) {
+        console.warn('Could not fetch dynamic locations:', err);
+      } finally {
+        setLoadingLocations(false);
+      }
+    };
+
+    fetchLocations();
+    // Re-fetch when new business registers or content updates
+    window.addEventListener('contentUpdated', fetchLocations);
+    return () => window.removeEventListener('contentUpdated', fetchLocations);
   }, []);
 
   // Load tourist personal saved trips for CURRENT logged-in user only
@@ -485,7 +533,9 @@ export function Itinerary() {
             {
               time: '08:30 AM',
               activity: `Morning ${aiTravelStyle} Experience`,
-              location: MANASALAY_LOCATIONS[(i * 2) % MANASALAY_LOCATIONS.length],
+              location: dynamicLocations.length > 0
+                ? dynamicLocations[(i * 2) % dynamicLocations.length]
+                : 'Mansalay',
               notes: 'Recommended morning activity with minimal crowds'
             },
             {
@@ -496,12 +546,16 @@ export function Itinerary() {
             {
               time: '03:30 PM',
               activity: 'Afternoon Sightseeing & Photo Walk',
-              location: MANASALAY_LOCATIONS[(i * 2 + 1) % MANASALAY_LOCATIONS.length]
+              location: dynamicLocations.length > 0
+                ? dynamicLocations[(i * 2 + 1) % dynamicLocations.length]
+                : 'Mansalay'
             },
             {
               time: '06:30 PM',
               activity: 'Evening Dinner & Sunset Viewing',
-              location: 'Sidell Kite Festival Grounds'
+              location: dynamicLocations.length > 0
+                ? dynamicLocations[i % dynamicLocations.length]
+                : 'Mansalay'
             }
           ]
         });
@@ -537,7 +591,7 @@ export function Itinerary() {
       next[dayIndex].activities.push({
         time: '02:00 PM',
         activity: 'New Activity',
-        location: MANASALAY_LOCATIONS[0]
+        location: dynamicLocations[0] || ''
       });
       return next;
     });
@@ -569,7 +623,7 @@ export function Itinerary() {
         day: prev.length + 1,
         title: `Day ${prev.length + 1} Mansalay Tour`,
         activities: [
-          { time: '09:00 AM', activity: 'Morning Activity', location: MANASALAY_LOCATIONS[0] }
+          { time: '09:00 AM', activity: 'Morning Activity', location: dynamicLocations[0] || '' }
         ]
       }
     ]);
@@ -730,7 +784,30 @@ export function Itinerary() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowBuilderModal(true)}
+                  onClick={() => {
+                    const firstLoc = dynamicLocations[0] || '';
+                    setBuilderTitle('');
+                    setBuilderDescription('');
+                    setBuilderDays([
+                      {
+                        day: 1,
+                        title: 'Day 1 Arrival & Exploration',
+                        activities: [
+                          { time: '09:00 AM', activity: 'Arrival & Welcome Drinks', location: firstLoc },
+                          { time: '02:00 PM', activity: 'Beach Relaxation', location: firstLoc }
+                        ]
+                      },
+                      {
+                        day: 2,
+                        title: 'Day 2 Cultural Tour & Sunset',
+                        activities: [
+                          { time: '10:00 AM', activity: 'Indigenous Village Visit', location: firstLoc },
+                          { time: '05:00 PM', activity: 'Sunset View & Local Dinner', location: firstLoc }
+                        ]
+                      }
+                    ]);
+                    setShowBuilderModal(true);
+                  }}
                   className="px-4 py-2 bg-white hover:bg-pink-50 text-pink-600 border border-pink-200 font-bold rounded-xl text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -1004,7 +1081,30 @@ export function Itinerary() {
 
               {/* Manual Builder Option */}
               <div
-                onClick={() => setShowBuilderModal(true)}
+                onClick={() => {
+                  const firstLoc = dynamicLocations[0] || '';
+                  setBuilderTitle('');
+                  setBuilderDescription('');
+                  setBuilderDays([
+                    {
+                      day: 1,
+                      title: 'Day 1 Arrival & Exploration',
+                      activities: [
+                        { time: '09:00 AM', activity: 'Arrival & Welcome Drinks', location: firstLoc },
+                        { time: '02:00 PM', activity: 'Beach Relaxation', location: firstLoc }
+                      ]
+                    },
+                    {
+                      day: 2,
+                      title: 'Day 2 Cultural Tour & Sunset',
+                      activities: [
+                        { time: '10:00 AM', activity: 'Indigenous Village Visit', location: firstLoc },
+                        { time: '05:00 PM', activity: 'Sunset View & Local Dinner', location: firstLoc }
+                      ]
+                    }
+                  ]);
+                  setShowBuilderModal(true);
+                }}
                 className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-pink-300 transition-all cursor-pointer text-left group flex flex-col justify-between"
               >
                 <div>
@@ -1418,15 +1518,37 @@ export function Itinerary() {
                             onChange={(e) => handleUpdateActivity(dayIdx, actIdx, 'activity', e.target.value)}
                             className="flex-1 p-1 border border-gray-200 rounded-md text-[11px] font-semibold"
                           />
-                          <select
-                            value={act.location}
-                            onChange={(e) => handleUpdateActivity(dayIdx, actIdx, 'location', e.target.value)}
-                            className="w-36 p-1 border border-gray-200 rounded-md text-[11px]"
-                          >
-                            {MANASALAY_LOCATIONS.map((loc, i) => (
-                              <option key={i} value={loc}>{loc}</option>
-                            ))}
-                          </select>
+                          {dynamicLocations.length > 0 ? (
+                            <select
+                              value={dynamicLocations.includes(act.location) ? act.location : ''}
+                              onChange={(e) => {
+                                if (e.target.value !== '') {
+                                  handleUpdateActivity(dayIdx, actIdx, 'location', e.target.value);
+                                }
+                              }}
+                              className="w-36 p-1 border border-gray-200 rounded-md text-[11px]"
+                              title={act.location}
+                            >
+                              {!dynamicLocations.includes(act.location) && act.location && (
+                                <option value="" disabled>{act.location.length > 18 ? act.location.slice(0, 16) + '…' : act.location}</option>
+                              )}
+                              {!dynamicLocations.includes(act.location) && !act.location && (
+                                <option value="" disabled>Select a location</option>
+                              )}
+                              {dynamicLocations.map((loc, i) => (
+                                <option key={i} value={loc}>{loc.length > 22 ? loc.slice(0, 20) + '…' : loc}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              value={act.location}
+                              onChange={(e) => handleUpdateActivity(dayIdx, actIdx, 'location', e.target.value)}
+                              placeholder={loadingLocations ? 'Loading...' : 'Type location'}
+                              disabled={loadingLocations}
+                              className="w-36 p-1 border border-gray-200 rounded-md text-[11px] font-medium"
+                            />
+                          )}
                           <button
                             type="button"
                             onClick={() => handleRemoveActivity(dayIdx, actIdx)}

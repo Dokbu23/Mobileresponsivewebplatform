@@ -161,7 +161,7 @@ export function Navbar() {
 
           {/* Desktop Navigation Links */}
           <div className="hidden lg:flex items-center gap-1 xl:gap-2">
-            {navLinks.map(link => {
+            {navLinks.filter(link => !(link.path === '/itinerary' && userType === 'admin')).map(link => {
               const isActive = location.pathname === link.path || (link.label === 'Home' && (location.pathname === '/' || location.pathname === '/dashboard'));
               const isProtectedLink = (link.path === '/map' || link.path === '/itinerary');
 
@@ -322,7 +322,7 @@ export function Navbar() {
         {/* Mobile Navigation */}
         {isOpen && (
           <div className="lg:hidden pb-4 pt-2 space-y-1.5 border-t border-gray-100 dark:border-slate-800">
-            {navLinks.map(link => (
+            {navLinks.filter(link => !(link.path === '/itinerary' && userType === 'admin')).map(link => (
               <Link
                 key={link.path}
                 to={link.path}

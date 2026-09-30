@@ -65,13 +65,7 @@ function formatRelativeTime(timestamp: string) {
 }
 
 function formatNotificationMessage(notification: ApiNotification): string {
-  if (notification.type === 'wishlist_saved') {
-    const msg = notification.message || '';
-    if (msg.startsWith('You added') || msg.startsWith('You saved')) {
-      return msg.replace(/^You (added|saved) your/i, 'A tourist $1 your');
-    }
-  }
-  return notification.message;
+  return notification.message || '';
 }
 
 export function NotificationBell() {

@@ -695,11 +695,44 @@ export async function createLandmark(data: {
   latitude: number;
   longitude: number;
   image?: string;
+  images?: File[];
   virtual_tour_scenes?: any[];
 }) {
   let created: any = null;
   try {
-    created = await postJSON('/landmarks', data, true);
+    if (data.images && data.images.length > 0) {
+      // Use FormData for multipart file upload
+      const form = new FormData();
+      form.append('name', data.name);
+      form.append('type', data.type);
+      if (data.category) form.append('category', data.category);
+      if (data.description) form.append('description', data.description);
+      if (data.address) form.append('address', data.address);
+      form.append('latitude', String(data.latitude));
+      form.append('longitude', String(data.longitude));
+      if (data.image) form.append('image', data.image);
+      if (data.virtual_tour_scenes) {
+        form.append('virtual_tour_scenes', JSON.stringify(data.virtual_tour_scenes));
+      }
+      data.images.forEach((file) => form.append('images[]', file));
+
+      const token = getAuthToken();
+      const res = await fetch(`${API_BASE}/landmarks`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message || 'Upload failed');
+      created = json;
+    } else {
+      created = await postJSON('/landmarks', {
+        name: data.name, type: data.type, category: data.category,
+        description: data.description, address: data.address,
+        latitude: data.latitude, longitude: data.longitude,
+        image: data.image, virtual_tour_scenes: data.virtual_tour_scenes,
+      }, true);
+    }
   } catch (err) {
     console.warn('Backend landmark creation endpoint error, storing locally:', err);
   }
@@ -711,6 +744,8 @@ export async function createLandmark(data: {
     const newLandmark = {
       id: created?.landmark?.id || created?.id || `local-lm-${Date.now()}`,
       ...data,
+      images: created?.landmark?.images || null,
+      image: created?.landmark?.image || data.image || null,
       created_at: new Date().toISOString(),
       is_active: true,
     };

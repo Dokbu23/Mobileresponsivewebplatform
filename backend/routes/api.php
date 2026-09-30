@@ -57,6 +57,7 @@ Route::group(['prefix' => 'public'], function () {
     Route::get('accommodations/{id}', [AccommodationController::class, 'show']);
     Route::get('landmarks', [LandmarkController::class, 'index']);
     Route::post('landmarks', [LandmarkController::class, 'store']);
+    Route::post('landmarks/{id}/photos', [LandmarkController::class, 'addPhotos']);
 
     // Public Wishlist & Likes API
     Route::post('wishlist/toggle', [WishlistController::class, 'toggle']);

@@ -514,7 +514,8 @@ class EnterprisePostController extends Controller
             $owner = $post->user;
             $link = ($owner && $owner->role === 'resort') ? '/resort/dashboard' : '/enterprise/profile';
 
-            if (!empty($post->user_id) && (!$user || (int)$post->user_id !== (int)$user->id)) {
+            // Verify owner is a valid business account (never a tourist) and not the saving user
+            if ($owner && in_array($owner->role, ['enterprise', 'resort']) && (!$user || (int)$post->user_id !== (int)$user->id)) {
                 $cacheKey = "notif_post_save_{$post->user_id}_{$post->id}_" . ($user ? $user->id : 'guest');
                 if (!\Illuminate\Support\Facades\Cache::has($cacheKey)) {
                     \Illuminate\Support\Facades\Cache::put($cacheKey, true, now()->addSeconds(10));

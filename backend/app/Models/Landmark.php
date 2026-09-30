@@ -19,6 +19,7 @@ class Landmark extends Model
         'latitude',
         'longitude',
         'image',
+        'images',
         'is_active',
         'virtual_tour_scenes',
     ];
@@ -28,6 +29,7 @@ class Landmark extends Model
         'longitude' => 'float',
         'is_active' => 'boolean',
         'virtual_tour_scenes' => 'array',
+        'images' => 'array',
     ];
 
     /**

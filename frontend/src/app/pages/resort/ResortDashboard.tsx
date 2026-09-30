@@ -238,6 +238,8 @@ export function ResortDashboard() {
 
   // Common tags state
   const [tags, setTags] = useState<string[]>([]);
+  const [customTagInput, setCustomTagInput] = useState('');
+  const [customAmenityInput, setCustomAmenityInput] = useState('');
 
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -251,6 +253,20 @@ export function ResortDashboard() {
     }
   };
 
+  // Helper to add custom tag
+  const handleAddCustomTag = (e?: React.MouseEvent | React.KeyboardEvent) => {
+    if (e) e.preventDefault();
+    const cleanTag = customTagInput.trim().replace(/^#/, '');
+    if (cleanTag && !tags.includes(cleanTag)) {
+      setTags(prev => [...prev, cleanTag]);
+      setCustomTagInput('');
+    }
+  };
+
+  // Helper to remove any tag
+  const handleRemoveTag = (tagToRemove: string) => {
+    setTags(prev => prev.filter(t => t !== tagToRemove));
+  };
 
   // Helper to toggle amenity multi-select tag
   const handleToggleAmenityType = (amenity: string) => {
@@ -258,6 +274,19 @@ export function ResortDashboard() {
       setAmenityTypes(amenityTypes.filter(a => a !== amenity));
     } else {
       setAmenityTypes([...amenityTypes, amenity]);
+    }
+  };
+
+  // Helper to add custom amenity
+  const handleAddCustomAmenity = (e?: React.MouseEvent | React.KeyboardEvent) => {
+    if (e) e.preventDefault();
+    const cleanAmenity = customAmenityInput.trim();
+    if (cleanAmenity && !amenityTypes.includes(cleanAmenity)) {
+      setAmenityTypes(prev => [...prev, cleanAmenity]);
+      if (!tags.includes(cleanAmenity)) {
+        setTags(prev => [...prev, cleanAmenity]);
+      }
+      setCustomAmenityInput('');
     }
   };
 
@@ -697,6 +726,8 @@ export function ResortDashboard() {
       setBeachViewLocation('From the room balcony');
       setBeachTimeOfDay('🌅 Sunrise');
       setTags([]);
+      setCustomTagInput('');
+      setCustomAmenityInput('');
       handleRemoveImage();
 
       // Refresh post feed and real-time stats
@@ -1325,11 +1356,40 @@ export function ResortDashboard() {
           {postType === 'amenities' && (
             <div className="p-4 bg-cyan-50/60 rounded-2xl border border-cyan-200/80 space-y-3.5 animate-in fade-in duration-200">
               {/* Amenity Type */}
-              <div>
-                <label className="block text-xs font-bold text-gray-800 mb-1.5 flex items-center gap-1.5">
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-gray-800 flex items-center gap-1.5">
                   <Waves className="w-3.5 h-3.5 text-cyan-600" />
-                  <span>Amenity Type</span>
+                  <span>Amenity Type <span className="font-normal text-gray-400 text-[11px]">(Click or add custom)</span></span>
                 </label>
+
+                {/* Input to add other amenity */}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={customAmenityInput}
+                      onChange={(e) => setCustomAmenityInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddCustomAmenity();
+                        }
+                      }}
+                      placeholder="Add other amenity (e.g. Sauna, Jacuzzi, Billiards, KTV)..."
+                      className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 outline-none focus:border-cyan-500 shadow-2xs placeholder:text-gray-400"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddCustomAmenity}
+                    disabled={!customAmenityInput.trim()}
+                    className="px-3.5 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-40 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-2xs transition-all cursor-pointer disabled:cursor-not-allowed flex-shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add</span>
+                  </button>
+                </div>
+
                 <div className="flex flex-wrap gap-1.5">
                   {['Pool', 'Wi-Fi', 'Restaurant', 'Parking', 'Bar', 'Grill Station', 'Beach Chairs', 'Kids Playground'].map((item) => {
                     const isSelected = amenityTypes.includes(item);
@@ -1349,6 +1409,23 @@ export function ResortDashboard() {
                       </button>
                     );
                   })}
+                  {amenityTypes.filter(item => !['Pool', 'Wi-Fi', 'Restaurant', 'Parking', 'Bar', 'Grill Station', 'Beach Chairs', 'Kids Playground'].includes(item)).map((customItem) => (
+                    <span
+                      key={customItem}
+                      className="text-xs px-3 py-1.5 rounded-xl border border-cyan-500 bg-cyan-600 text-white shadow-2xs font-bold flex items-center gap-1.5 animate-in fade-in"
+                    >
+                      <Check className="w-3 h-3" />
+                      <span>{customItem}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAmenityType(customItem)}
+                        className="hover:text-rose-200 p-0.5 transition-colors cursor-pointer"
+                        title="Remove"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
                 </div>
               </div>
 
@@ -1520,42 +1597,106 @@ export function ResortDashboard() {
             </div>
           )}
 
-          {/* Quick Context-Specific Tag Pills */}
-          <div className="space-y-1.5">
+          {/* Quick Context-Specific Tag Pills & Add Custom Tag */}
+          <div className="space-y-2.5 bg-gray-50/70 p-3.5 rounded-2xl border border-gray-200/80">
             <div className="flex items-center justify-between">
-              <label className="block text-[11px] font-bold text-gray-700 flex items-center gap-1">
-                <Tag className="w-3 h-3 text-pink-500" />
-                <span>Quick {POST_CONTEXTS[postType]?.title} Tags <span className="font-normal text-gray-400">(Click to toggle)</span>:</span>
+              <label className="block text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5 text-pink-500" />
+                <span>
+                  {POST_CONTEXTS[postType]?.title} Tags{' '}
+                  <span className="font-normal text-gray-400 text-[11px]">(Click suggested or add custom)</span>
+                </span>
               </label>
               {tags.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setTags([])}
-                  className="text-[10px] text-rose-500 hover:text-rose-700 font-semibold cursor-pointer"
+                  className="text-[11px] text-rose-500 hover:text-rose-700 font-semibold cursor-pointer transition-colors"
                 >
-                  Clear tags ({tags.length})
+                  Clear all ({tags.length})
                 </button>
               )}
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {POST_CONTEXTS[postType]?.suggestedTags.map((st) => {
-                const isSelected = tags.includes(st);
-                return (
-                  <button
-                    key={st}
-                    type="button"
-                    onClick={() => handleToggleTag(st)}
-                    className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
-                      isSelected
-                        ? 'bg-pink-500 text-white border-pink-500 font-bold shadow-2xs'
-                        : 'bg-gray-50 hover:bg-gray-100 text-gray-700 border-gray-200'
-                    }`}
-                  >
-                    {isSelected ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3 text-gray-400" />}
-                    <span>{st}</span>
-                  </button>
-                );
-              })}
+
+            {/* Input to Add New Custom Tag */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs select-none">#</span>
+                <input
+                  type="text"
+                  value={customTagInput}
+                  onChange={(e) => setCustomTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddCustomTag();
+                    }
+                  }}
+                  placeholder={`Add custom tag (e.g. Jacuzzi, Sunset View, BBQ Station)...`}
+                  className="w-full pl-7 pr-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 shadow-2xs transition-all placeholder:text-gray-400"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleAddCustomTag}
+                disabled={!customTagInput.trim()}
+                className="px-4 py-2 bg-pink-500 hover:bg-pink-600 disabled:opacity-40 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-2xs transition-all cursor-pointer disabled:cursor-not-allowed flex-shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Tag</span>
+              </button>
+            </div>
+
+            {/* Active Custom Tags that aren't in suggestedTags */}
+            {tags.some(t => !POST_CONTEXTS[postType]?.suggestedTags.includes(t)) && (
+              <div className="space-y-1 pt-1">
+                <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Your Custom Tags:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {tags.filter(t => !POST_CONTEXTS[postType]?.suggestedTags.includes(t)).map((ct) => (
+                    <span
+                      key={ct}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-pink-50 text-pink-700 border border-pink-200 rounded-lg text-xs font-bold shadow-2xs animate-in fade-in zoom-in-95 duration-150"
+                    >
+                      <span>#{ct}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTag(ct)}
+                        className="hover:text-rose-600 rounded-full p-0.5 transition-colors cursor-pointer"
+                        title="Remove tag"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Suggested Quick Tags */}
+            <div className="space-y-1 pt-1">
+              <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+                Quick Suggested Tags:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {POST_CONTEXTS[postType]?.suggestedTags.map((st) => {
+                  const isSelected = tags.includes(st);
+                  return (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => handleToggleTag(st)}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 font-medium ${
+                        isSelected
+                          ? 'bg-pink-500 text-white border-pink-500 font-bold shadow-2xs'
+                          : 'bg-white hover:bg-gray-100 text-gray-700 border-gray-200 hover:border-pink-300'
+                      }`}
+                    >
+                      {isSelected ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3 text-gray-400" />}
+                      <span>{st}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 

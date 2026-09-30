@@ -237,72 +237,138 @@ class WishlistController extends Controller
                 $finalCount = 1;
             }
 
-            // Real-time Notification for Resort and Enterprise Owners
+            // Real-time Notification for Verified Business/Product Owners
             try {
+                $ownerUser = null;
                 $ownerId = null;
                 $itemName = 'item';
                 $link = null;
 
-                if ($model) {
-                    $ownerId = $model->user_id ?? ($model->id ?? null);
-                    if ($model instanceof User) {
-                        $ownerId = $model->id;
-                        $itemName = $model->resort_name ?: ($model->name ?: 'Resort');
-                    } else {
-                        $itemName = $model->name ?? ($model->product_name ?? ($model->title ?? 'item'));
-                    }
+                // 1. Determine Item Name
+                if ($model instanceof User) {
+                    $itemName = $model->resort_name ?: ($model->name ?: 'Resort');
+                } elseif ($model) {
+                    $itemName = $model->name ?? ($model->product_name ?? ($model->title ?? 'item'));
                 }
 
-                // Resolve owner if null
-                if (!$ownerId && $model && !empty($itemName)) {
-                    if ($detectedType === 'product') {
-                        $ownerId = EnterprisePost::where('title', $itemName)
-                            ->orWhere('product_name', $itemName)
-                            ->value('user_id');
-                        if (!$ownerId) {
-                            $ownerId = User::where('role', 'enterprise')->value('id');
+                // 2. Identify the true owner of the item based on project models and relationships
+                if ($model instanceof Product) {
+                    // Check direct product owner (belongsTo User)
+                    if (!empty($model->user_id)) {
+                        $ownerUser = User::find($model->user_id);
+                    }
+                    // If product user_id is null, check if linked via post_id to EnterprisePost
+                    if (!$ownerUser && !empty($model->post_id)) {
+                        $linkedPost = EnterprisePost::find($model->post_id);
+                        if ($linkedPost && !empty($linkedPost->user_id)) {
+                            $ownerUser = User::find($linkedPost->user_id);
                         }
-                    } elseif (in_array($detectedType, ['room', 'accommodation', 'resort', 'attraction'])) {
-                        $ownerId = User::where('role', 'resort')
-                            ->where(function($q) use ($itemName) {
-                                $q->where('resort_name', $itemName)
-                                  ->orWhere('name', $itemName)
-                                  ->orWhere('resort_name', 'LIKE', "%{$itemName}%");
-                            })->value('id');
+                    }
+                    // If still null, check if there's a matching EnterprisePost by title/product_name created by an enterprise
+                    if (!$ownerUser && !empty($itemName) && $itemName !== 'item') {
+                        $postOwnerId = EnterprisePost::where(function($q) use ($itemName) {
+                            $q->where('product_name', $itemName)
+                              ->orWhere('title', $itemName);
+                        })->whereNotNull('user_id')->value('user_id');
+
+                        if ($postOwnerId) {
+                            $ownerUser = User::find($postOwnerId);
+                        }
+                    }
+                    // If no enterprise owner is found, $ownerUser remains null.
+                    // NEVER fallback to $model->id (product primary key) or pick an arbitrary enterprise!
+                } elseif ($model instanceof EnterprisePost) {
+                    if (!empty($model->user_id)) {
+                        $ownerUser = User::find($model->user_id);
+                    }
+                } elseif ($model instanceof ResortRoom) {
+                    if (!empty($model->user_id)) {
+                        $ownerUser = User::find($model->user_id);
+                    }
+                } elseif ($model instanceof Accommodation) {
+                    if (!empty($model->user_id)) {
+                        $ownerUser = User::find($model->user_id);
+                    }
+                } elseif ($model instanceof User && $model->role === 'resort') {
+                    // Direct resort profile was saved
+                    $ownerUser = $model;
+                } elseif ($model instanceof Attraction) {
+                    if (!empty($model->user_id)) {
+                        $ownerUser = User::find($model->user_id);
+                    }
+                } elseif ($model instanceof Event) {
+                    if (!empty($model->user_id)) {
+                        $ownerUser = User::find($model->user_id);
                     }
                 }
 
-                // Determine owner details and role
-                $ownerUser = $ownerId ? User::find($ownerId) : null;
-                $ownerRole = $ownerUser ? $ownerUser->role : null;
+                // 3. STRICT RECIPIENT VALIDATION & TOURIST PRECLUSION
+                // A tourist must NEVER receive a "saved your product/room" notification!
+                if ($ownerUser) {
+                    if ($ownerUser->role === 'tourist') {
+                        $ownerUser = null;
+                    }
+                }
 
-                // Format tourist name
+                if ($ownerUser) {
+                    $ownerId = (int)$ownerUser->id;
+                    $actorId = $user ? (int)$user->id : null;
+
+                    // Actor cannot be their own recipient
+                    if ($actorId && $ownerId === $actorId) {
+                        $ownerUser = null;
+                        $ownerId = null;
+                    }
+                }
+
+                // Verify owner has appropriate business role for the item category
+                if ($ownerUser) {
+                    $ownerRole = $ownerUser->role;
+                    if (in_array($detectedType, ['product', 'post'])) {
+                        // Product owner must be enterprise or resort
+                        if (!in_array($ownerRole, ['enterprise', 'resort'])) {
+                            $ownerUser = null;
+                            $ownerId = null;
+                        }
+                    } elseif (in_array($detectedType, ['room', 'accommodation', 'resort'])) {
+                        // Room/stay owner must be resort
+                        if ($ownerRole !== 'resort') {
+                            $ownerUser = null;
+                            $ownerId = null;
+                        }
+                    }
+                }
+
+                // 4. FORMAT AND DISPATCH NOTIFICATION
                 $touristLabel = $user ? ($user->name ?: 'A tourist') : 'A tourist';
 
-                // Determine message, title, and link based on detected item category
-                $title = 'New Wishlist Save!';
-                if ($detectedType === 'product') {
-                    $message = "{$touristLabel} saved your product \"{$itemName}\" to their wishlist!";
-                    $link = ($ownerRole === 'enterprise') ? '/enterprise/dashboard' : '/enterprise/profile';
-                } elseif ($detectedType === 'room') {
-                    $message = "{$touristLabel} saved your room \"{$itemName}\" to their wishlist!";
-                    $link = '/resort/dashboard';
-                } elseif ($detectedType === 'attraction') {
-                    $message = "{$touristLabel} saved your attraction \"{$itemName}\" to their wishlist!";
-                    $link = ($ownerRole === 'resort') ? '/resort/dashboard' : '/attractions';
-                } elseif ($detectedType === 'event') {
-                    $message = "{$touristLabel} saved your event \"{$itemName}\" to their wishlist!";
-                    $link = ($ownerRole === 'enterprise') ? '/enterprise/dashboard' : (($ownerRole === 'resort') ? '/resort/dashboard' : '/events');
-                } elseif ($detectedType === 'resort') {
-                    $message = "{$touristLabel} saved your resort \"{$itemName}\" to their wishlist!";
-                    $link = '/resort/dashboard';
-                } else {
-                    $message = "{$touristLabel} saved your resort stay \"{$itemName}\" to their wishlist!";
-                    $link = '/resort/dashboard';
-                }
+                if ($ownerUser && !empty($ownerId)) {
+                    $ownerRole = $ownerUser->role;
+                    $title = 'New Wishlist Save!';
 
-                // Dispatch notification to the specific owner (resort or enterprise)
-                if (!empty($ownerId) && (!$user || (int)$ownerId !== (int)$user->id)) {
+                    if ($detectedType === 'product' || $detectedType === 'post') {
+                        $message = "{$touristLabel} saved your product \"{$itemName}\" to their wishlist!";
+                        $link = ($ownerRole === 'enterprise') ? '/enterprise/dashboard' : '/enterprise/profile';
+                    } elseif ($detectedType === 'room') {
+                        $message = "{$touristLabel} saved your room \"{$itemName}\" to their wishlist!";
+                        $link = '/resort/dashboard';
+                    } elseif ($detectedType === 'accommodation') {
+                        $message = "{$touristLabel} saved your accommodation \"{$itemName}\" to their wishlist!";
+                        $link = '/resort/dashboard';
+                    } elseif ($detectedType === 'resort') {
+                        $message = "{$touristLabel} saved your resort \"{$itemName}\" to their wishlist!";
+                        $link = '/resort/dashboard';
+                    } elseif ($detectedType === 'attraction') {
+                        $message = "{$touristLabel} saved your attraction \"{$itemName}\" to their wishlist!";
+                        $link = ($ownerRole === 'resort') ? '/resort/dashboard' : '/attractions';
+                    } elseif ($detectedType === 'event') {
+                        $message = "{$touristLabel} saved your event \"{$itemName}\" to their wishlist!";
+                        $link = ($ownerRole === 'enterprise') ? '/enterprise/dashboard' : (($ownerRole === 'resort') ? '/resort/dashboard' : '/events');
+                    } else {
+                        $message = "{$touristLabel} saved your \"{$itemName}\" to their wishlist!";
+                        $link = ($ownerRole === 'resort') ? '/resort/dashboard' : '/enterprise/dashboard';
+                    }
+
                     $cacheKey = "notif_wishlist_{$ownerId}_{$detectedType}_{$cleanId}_" . ($user ? $user->id : 'guest');
                     if (!Cache::has($cacheKey)) {
                         Cache::put($cacheKey, true, now()->addSeconds(10));
@@ -322,20 +388,24 @@ class WishlistController extends Controller
                             $link
                         );
                     }
-                } elseif (empty($ownerId)) {
-                    // Fallback to notify admin if tourism asset has no direct resort/enterprise owner
-                    Notification::notifyAdmins(
-                        'wishlist_saved',
-                        $title,
-                        "{$touristLabel} saved \"{$itemName}\" ({$detectedType}) to their wishlist!",
-                        [
-                            'item_id'   => $rawId,
-                            'item_type' => $detectedType,
-                            'item_name' => $itemName,
-                            'saves'     => $finalCount,
-                        ],
-                        '/admin/dashboard'
-                    );
+                } elseif (empty($ownerId) && in_array($detectedType, ['attraction', 'event'])) {
+                    // Only notify admins for municipal/public attractions & events that don't belong to a business
+                    $cacheKey = "notif_wishlist_admin_{$detectedType}_{$cleanId}_" . ($user ? $user->id : 'guest');
+                    if (!Cache::has($cacheKey)) {
+                        Cache::put($cacheKey, true, now()->addSeconds(10));
+                        Notification::notifyAdmins(
+                            'wishlist_saved',
+                            'New Wishlist Save!',
+                            "{$touristLabel} saved \"{$itemName}\" ({$detectedType}) to their wishlist!",
+                            [
+                                'item_id'   => $rawId,
+                                'item_type' => $detectedType,
+                                'item_name' => $itemName,
+                                'saves'     => $finalCount,
+                            ],
+                            '/admin/dashboard'
+                        );
+                    }
                 }
             } catch (\Throwable $e) {
                 Log::warning('Failed to dispatch wishlist notification: ' . $e->getMessage());
