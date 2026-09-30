@@ -308,7 +308,7 @@ export function AdminContent() {
   const [itineraryPosts, setItineraryPosts] = useState<any[]>([]);
 
   // 📁 SELECTION & ARCHIVE MANAGEMENT STATE
-  const [selectedPostIds, setSelectedPostIds] = useState<Set<string | number>>(new Set());
+  const [selectedPostIds, setSelectedPostIds] = useState<(string | number)[]>([]);
   const [archivedPostIds, setArchivedPostIds] = useState<Set<string | number>>(() => {
     try {
       const stored = localStorage.getItem('discover-mansalay:archived_posts');
@@ -338,29 +338,37 @@ export function AdminContent() {
   };
 
   const toggleSelectPost = (id: string | number) => {
-    const updated = new Set(selectedPostIds);
-    if (updated.has(id)) {
-      updated.delete(id);
-    } else {
-      updated.add(id);
-    }
-    setSelectedPostIds(updated);
+    if (id == null) return;
+    setSelectedPostIds((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((item) => item !== id);
+      }
+      return [...prev, id];
+    });
   };
 
   const toggleSelectAllList = (postsList: any[]) => {
-    const allIds = postsList.map((p) => p.id);
-    const areAllSelected = allIds.length > 0 && allIds.every((id) => selectedPostIds.has(id));
-    const updated = new Set(selectedPostIds);
+    const listIds = postsList
+      .map((p) => p.id)
+      .filter((id) => id != null);
+    if (listIds.length === 0) return;
+
+    const areAllSelected = listIds.every((id) => selectedPostIds.includes(id));
     if (areAllSelected) {
-      allIds.forEach((id) => updated.delete(id));
+      setSelectedPostIds((prev) => prev.filter((id) => !listIds.includes(id)));
     } else {
-      allIds.forEach((id) => updated.add(id));
+      setSelectedPostIds((prev) => {
+        const next = [...prev];
+        listIds.forEach((id) => {
+          if (!next.includes(id)) next.push(id);
+        });
+        return next;
+      });
     }
-    setSelectedPostIds(updated);
   };
 
   const handleArchiveSelected = (idsToArchive?: (string | number)[]) => {
-    const targetIds = idsToArchive || Array.from(selectedPostIds);
+    const targetIds = (idsToArchive || selectedPostIds).filter((id) => id != null);
     if (targetIds.length === 0) return;
 
     const updatedArchived = new Set(archivedPostIds);
@@ -371,9 +379,7 @@ export function AdminContent() {
     });
     saveArchivedPostIds(updatedArchived);
 
-    const updatedSelected = new Set(selectedPostIds);
-    targetIds.forEach((id) => updatedSelected.delete(id));
-    setSelectedPostIds(updatedSelected);
+    setSelectedPostIds((prev) => prev.filter((id) => !targetIds.includes(id)));
 
     window.dispatchEvent(new Event('contentUpdated'));
     window.dispatchEvent(new Event('storage'));
@@ -382,7 +388,7 @@ export function AdminContent() {
   };
 
   const handleUnarchiveSelected = (idsToRestore?: (string | number)[]) => {
-    const targetIds = idsToRestore || Array.from(selectedPostIds);
+    const targetIds = (idsToRestore || selectedPostIds).filter((id) => id != null);
     if (targetIds.length === 0) return;
 
     const updatedArchived = new Set(archivedPostIds);
@@ -393,9 +399,7 @@ export function AdminContent() {
     });
     saveArchivedPostIds(updatedArchived);
 
-    const updatedSelected = new Set(selectedPostIds);
-    targetIds.forEach((id) => updatedSelected.delete(id));
-    setSelectedPostIds(updatedSelected);
+    setSelectedPostIds((prev) => prev.filter((id) => !targetIds.includes(id)));
 
     window.dispatchEvent(new Event('contentUpdated'));
     window.dispatchEvent(new Event('storage'));
@@ -403,15 +407,26 @@ export function AdminContent() {
     toast.success(`Restored ${targetIds.length} post(s) from Archive!`);
   };
 
+  const getCategoryForPostId = (id: string | number): ContentTab => {
+    const sId = String(id);
+    if (resortPosts.some((p) => String(p.id) === sId)) return 'resort';
+    if (enterprisePosts.some((p) => String(p.id) === sId)) return 'product';
+    if (attractionPosts.some((p) => String(p.id) === sId)) return 'attraction';
+    if (eventPosts.some((p) => String(p.id) === sId)) return 'event';
+    if (itineraryPosts.some((p) => String(p.id) === sId)) return 'itinerary';
+    return activeTab;
+  };
+
   const handleDeleteSelectedBatch = async () => {
-    const targetIds = Array.from(selectedPostIds);
+    const targetIds = selectedPostIds.filter((id) => id != null);
     if (targetIds.length === 0) return;
     if (!window.confirm(`Are you sure you want to permanently delete ${targetIds.length} selected post(s)?`)) return;
 
     for (const id of targetIds) {
-      await handleDeletePost(id, undefined, true);
+      const category = getCategoryForPostId(id);
+      await handleDeletePost(id, category, true);
     }
-    setSelectedPostIds(new Set());
+    setSelectedPostIds([]);
     toast.success(`Permanently deleted ${targetIds.length} post(s)!`);
   };
 
@@ -1158,36 +1173,40 @@ export function AdminContent() {
   };
 
   const handleDeletePost = async (id: number | string, tabType?: ContentTab, skipConfirm: boolean = false) => {
+    if (id == null) return;
     if (!skipConfirm && !confirm('Are you sure you want to permanently delete this item?')) return;
-    const type = tabType || activeTab;
+    const type = tabType || getCategoryForPostId(id);
 
     // 1. Permanently record in deletedPostIds set
     const updatedDeleted = new Set(deletedPostIds);
     updatedDeleted.add(String(id));
-    updatedDeleted.add(Number(id));
+    if (!isNaN(Number(id))) updatedDeleted.add(Number(id));
     saveDeletedPostIds(updatedDeleted);
 
     // 2. Remove from archivedPostIds set
     const updatedArchived = new Set(archivedPostIds);
     updatedArchived.delete(id);
     updatedArchived.delete(String(id));
-    updatedArchived.delete(Number(id));
+    if (!isNaN(Number(id))) updatedArchived.delete(Number(id));
     saveArchivedPostIds(updatedArchived);
 
-    // 3. Remove from selectedPostIds set
-    const updatedSelected = new Set(selectedPostIds);
-    updatedSelected.delete(id);
-    updatedSelected.delete(String(id));
-    updatedSelected.delete(Number(id));
-    setSelectedPostIds(updatedSelected);
+    // 3. Remove from selectedPostIds array
+    setSelectedPostIds((prev) => prev.filter((item) => String(item) !== String(id) && item !== id));
 
-    // 4. Immediately update React state so item vanishes instantly (0ms delay)
-    const filterOut = (prev: any[]) => prev.filter((i) => String(i.id) !== String(id));
-    setResortPosts(filterOut);
-    setEnterprisePosts(filterOut);
-    setAttractionPosts(filterOut);
-    setEventPosts(filterOut);
-    setItineraryPosts(filterOut);
+    // 4. Immediately update React state so ONLY the deleted item vanishes
+    const filterOut = (prev: any[]) => prev.filter((i) => i && i.id != null && String(i.id) !== String(id));
+    if (type === 'resort') setResortPosts(filterOut);
+    else if (type === 'product') setEnterprisePosts(filterOut);
+    else if (type === 'attraction') setAttractionPosts(filterOut);
+    else if (type === 'event') setEventPosts(filterOut);
+    else if (type === 'itinerary') setItineraryPosts(filterOut);
+    else {
+      setResortPosts(filterOut);
+      setEnterprisePosts(filterOut);
+      setAttractionPosts(filterOut);
+      setEventPosts(filterOut);
+      setItineraryPosts(filterOut);
+    }
     setPublishedItems(filterOut);
 
     // 5. Clean up local storage caches
@@ -1195,7 +1214,7 @@ export function AdminContent() {
       const existingStr = localStorage.getItem(`discover-mansalay:${key}`);
       if (existingStr) {
         const existing = JSON.parse(existingStr);
-        const updated = existing.filter((i: any) => String(i.id) !== String(id));
+        const updated = existing.filter((i: any) => i && i.id != null && String(i.id) !== String(id));
         localStorage.setItem(`discover-mansalay:${key}`, JSON.stringify(updated));
       }
     });
@@ -1204,7 +1223,7 @@ export function AdminContent() {
     window.dispatchEvent(new Event('contentUpdated'));
     window.dispatchEvent(new Event('storage'));
 
-    // 7. Send delete request to backend API asynchronously
+    // 7. Send delete request to backend API asynchronously for ONLY this specific ID
     try {
       let endpoint = `/accommodations/${id}`;
       if (type === 'product') endpoint = `/admin/products/${id}`;
@@ -2527,22 +2546,22 @@ export function AdminContent() {
           const visibleEvents = eventPosts.filter((p) => showArchivedOnly ? isArchived(p.id) : !isArchived(p.id));
           const visibleItineraries = itineraryPosts.filter((p) => showArchivedOnly ? isArchived(p.id) : !isArchived(p.id));
 
-          const areAllResortsSelected = visibleResorts.length > 0 && visibleResorts.every((p) => selectedPostIds.has(p.id));
-          const areAllProductsSelected = visibleProducts.length > 0 && visibleProducts.every((p) => selectedPostIds.has(p.id));
-          const areAllAttractionsSelected = visibleAttractions.length > 0 && visibleAttractions.every((p) => selectedPostIds.has(p.id));
-          const areAllEventsSelected = visibleEvents.length > 0 && visibleEvents.every((p) => selectedPostIds.has(p.id));
-          const areAllItinerariesSelected = visibleItineraries.length > 0 && visibleItineraries.every((p) => selectedPostIds.has(p.id));
+          const areAllResortsSelected = visibleResorts.length > 0 && visibleResorts.every((p) => selectedPostIds.includes(p.id));
+          const areAllProductsSelected = visibleProducts.length > 0 && visibleProducts.every((p) => selectedPostIds.includes(p.id));
+          const areAllAttractionsSelected = visibleAttractions.length > 0 && visibleAttractions.every((p) => selectedPostIds.includes(p.id));
+          const areAllEventsSelected = visibleEvents.length > 0 && visibleEvents.every((p) => selectedPostIds.includes(p.id));
+          const areAllItinerariesSelected = visibleItineraries.length > 0 && visibleItineraries.every((p) => selectedPostIds.includes(p.id));
 
           return (
             <div className="space-y-6 font-sans">
-              {/* TOP TOOLBAR: ACTIVE VS ARCHIVE VAULT TOGGLE & BATCH ARCHIVE */}
+              {/* TOP TOOLBAR: ACTIVE VS ARCHIVE VAULT TOGGLE & BATCH ARCHIVE / DELETE */}
               <div className="bg-white rounded-3xl border border-gray-100 p-4 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
                 {/* Left: Active vs Archive Vault */}
                 <div className="flex items-center gap-2">
                   <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200/60">
                     <button
-                      onClick={() => { setShowArchivedOnly(false); setSelectedPostIds(new Set()); }}
-                      className={`px-4 py-1.5 rounded-xl text-xs font-extrabold transition-all ${
+                      onClick={() => { setShowArchivedOnly(false); setSelectedPostIds([]); }}
+                      className={`px-4 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
                         !showArchivedOnly
                           ? 'bg-white text-gray-900 shadow-2xs'
                           : 'text-gray-500 hover:text-gray-900'
@@ -2551,8 +2570,8 @@ export function AdminContent() {
                       Active Posts
                     </button>
                     <button
-                      onClick={() => { setShowArchivedOnly(true); setSelectedPostIds(new Set()); }}
-                      className={`px-4 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 ${
+                      onClick={() => { setShowArchivedOnly(true); setSelectedPostIds([]); }}
+                      className={`px-4 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
                         showArchivedOnly
                           ? 'bg-pink-500 text-white shadow-xs'
                           : 'text-gray-500 hover:text-pink-600'
@@ -2568,32 +2587,41 @@ export function AdminContent() {
                 </div>
 
                 {/* Right: Batch Archive / Restore / Delete Action */}
-                {selectedPostIds.size > 0 && (
+                {selectedPostIds.length > 0 && (
                   <div className="flex items-center gap-2 animate-in fade-in duration-200">
                     <span className="text-xs font-bold text-gray-500">
-                      {selectedPostIds.size} item(s) selected
+                      {selectedPostIds.length} item(s) selected
                     </span>
 
                     {!showArchivedOnly ? (
-                      <button
-                        onClick={() => handleArchiveSelected()}
-                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-xs font-extrabold shadow-xs transition-all flex items-center gap-1.5"
-                      >
-                        <Archive className="h-3.5 w-3.5" />
-                        <span>Archive Selected</span>
-                      </button>
+                      <>
+                        <button
+                          onClick={() => handleArchiveSelected()}
+                          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-xs font-extrabold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Archive className="h-3.5 w-3.5" />
+                          <span>Archive Selected</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSelectedBatch()}
+                          className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-extrabold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span>Delete Selected</span>
+                        </button>
+                      </>
                     ) : (
                       <>
                         <button
                           onClick={() => handleUnarchiveSelected()}
-                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-extrabold shadow-xs transition-all flex items-center gap-1.5"
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-extrabold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                         >
                           <ArchiveRestore className="h-3.5 w-3.5" />
                           <span>Restore Selected</span>
                         </button>
                         <button
                           onClick={() => handleDeleteSelectedBatch()}
-                          className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-extrabold shadow-xs transition-all flex items-center gap-1.5"
+                          className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-extrabold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                           <span>Delete Selected</span>
@@ -2635,7 +2663,7 @@ export function AdminContent() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {visibleResorts.map((item) => {
-                      const isSelected = selectedPostIds.has(item.id);
+                      const isSelected = selectedPostIds.includes(item.id);
                       return (
                         <div
                           key={item.id}
@@ -2647,7 +2675,7 @@ export function AdminContent() {
                           <div className="flex items-center gap-3 min-w-0">
                             <input
                               type="checkbox"
-                              checked={isSelected}
+                              checked={selectedPostIds.includes(item.id)}
                               onChange={(e) => { e.stopPropagation(); toggleSelectPost(item.id); }}
                               className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
                             />
@@ -2665,19 +2693,29 @@ export function AdminContent() {
 
                           <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                             {!showArchivedOnly ? (
-                              <button
-                                onClick={() => handleArchiveSelected([item.id])}
-                                className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
-                                title="Archive resort"
-                              >
-                                <Archive className="h-4 w-4" />
-                                <span className="hidden sm:inline">Archive</span>
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleArchiveSelected([item.id])}
+                                  className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
+                                  title="Archive resort"
+                                >
+                                  <Archive className="h-4 w-4" />
+                                  <span className="hidden sm:inline">Archive</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePost(item.id, 'resort')}
+                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
+                                  title="Permanently delete resort"
+                                >
+                                  <Trash2 className="h-4 w-4 text-rose-500" />
+                                  <span className="hidden sm:inline text-rose-600">Delete</span>
+                                </button>
+                              </>
                             ) : (
                               <>
                                 <button
                                   onClick={() => handleUnarchiveSelected([item.id])}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
+                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
                                   title="Restore resort"
                                 >
                                   <ArchiveRestore className="h-4 w-4" />
@@ -2685,7 +2723,7 @@ export function AdminContent() {
                                 </button>
                                 <button
                                   onClick={() => handleDeletePost(item.id, 'resort')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
+                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
                                   title="Permanently delete resort"
                                 >
                                   <Trash2 className="h-4 w-4 text-rose-500" />
@@ -2693,7 +2731,7 @@ export function AdminContent() {
                                 </button>
                               </>
                             )}
-                            <button onClick={() => { setActiveTab('resort'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors"><Pencil className="h-4 w-4" /></button>
+                            <button onClick={() => { setActiveTab('resort'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors cursor-pointer"><Pencil className="h-4 w-4" /></button>
                           </div>
                         </div>
                       );
@@ -2733,7 +2771,7 @@ export function AdminContent() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {visibleProducts.map((item) => {
-                      const isSelected = selectedPostIds.has(item.id);
+                      const isSelected = selectedPostIds.includes(item.id);
                       return (
                         <div
                           key={item.id}
@@ -2745,7 +2783,7 @@ export function AdminContent() {
                           <div className="flex items-center gap-3 min-w-0">
                             <input
                               type="checkbox"
-                              checked={isSelected}
+                              checked={selectedPostIds.includes(item.id)}
                               onChange={(e) => { e.stopPropagation(); toggleSelectPost(item.id); }}
                               className="h-4 w-4 rounded text-pink-600 focus:ring-pink-500 cursor-pointer"
                             />
@@ -2763,19 +2801,29 @@ export function AdminContent() {
 
                           <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                             {!showArchivedOnly ? (
-                              <button
-                                onClick={() => handleArchiveSelected([item.id])}
-                                className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
-                                title="Archive product"
-                              >
-                                <Archive className="h-4 w-4" />
-                                <span className="hidden sm:inline">Archive</span>
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleArchiveSelected([item.id])}
+                                  className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
+                                  title="Archive product"
+                                >
+                                  <Archive className="h-4 w-4" />
+                                  <span className="hidden sm:inline">Archive</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePost(item.id, 'product')}
+                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
+                                  title="Permanently delete product"
+                                >
+                                  <Trash2 className="h-4 w-4 text-rose-500" />
+                                  <span className="hidden sm:inline text-rose-600">Delete</span>
+                                </button>
+                              </>
                             ) : (
                               <>
                                 <button
                                   onClick={() => handleUnarchiveSelected([item.id])}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
+                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
                                   title="Restore product"
                                 >
                                   <ArchiveRestore className="h-4 w-4" />
@@ -2783,7 +2831,7 @@ export function AdminContent() {
                                 </button>
                                 <button
                                   onClick={() => handleDeletePost(item.id, 'product')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
+                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
                                   title="Permanently delete product"
                                 >
                                   <Trash2 className="h-4 w-4 text-rose-500" />
@@ -2791,7 +2839,7 @@ export function AdminContent() {
                                 </button>
                               </>
                             )}
-                            <button onClick={() => { setActiveTab('product'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors"><Pencil className="h-4 w-4" /></button>
+                            <button onClick={() => { setActiveTab('product'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors cursor-pointer"><Pencil className="h-4 w-4" /></button>
                           </div>
                         </div>
                       );
@@ -2831,7 +2879,7 @@ export function AdminContent() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {visibleAttractions.map((item) => {
-                      const isSelected = selectedPostIds.has(item.id);
+                      const isSelected = selectedPostIds.includes(item.id);
                       return (
                         <div
                           key={item.id}
@@ -2843,7 +2891,7 @@ export function AdminContent() {
                           <div className="flex items-center gap-3 min-w-0">
                             <input
                               type="checkbox"
-                              checked={isSelected}
+                              checked={selectedPostIds.includes(item.id)}
                               onChange={(e) => { e.stopPropagation(); toggleSelectPost(item.id); }}
                               className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                             />
@@ -2861,19 +2909,29 @@ export function AdminContent() {
 
                           <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                             {!showArchivedOnly ? (
-                              <button
-                                onClick={() => handleArchiveSelected([item.id])}
-                                className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
-                                title="Archive attraction"
-                              >
-                                <Archive className="h-4 w-4" />
-                                <span className="hidden sm:inline">Archive</span>
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleArchiveSelected([item.id])}
+                                  className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
+                                  title="Archive attraction"
+                                >
+                                  <Archive className="h-4 w-4" />
+                                  <span className="hidden sm:inline">Archive</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePost(item.id, 'attraction')}
+                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
+                                  title="Permanently delete attraction"
+                                >
+                                  <Trash2 className="h-4 w-4 text-rose-500" />
+                                  <span className="hidden sm:inline text-rose-600">Delete</span>
+                                </button>
+                              </>
                             ) : (
                               <>
                                 <button
                                   onClick={() => handleUnarchiveSelected([item.id])}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
+                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
                                   title="Restore attraction"
                                 >
                                   <ArchiveRestore className="h-4 w-4" />
@@ -2881,7 +2939,7 @@ export function AdminContent() {
                                 </button>
                                 <button
                                   onClick={() => handleDeletePost(item.id, 'attraction')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
+                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
                                   title="Permanently delete attraction"
                                 >
                                   <Trash2 className="h-4 w-4 text-rose-500" />
@@ -2889,7 +2947,7 @@ export function AdminContent() {
                                 </button>
                               </>
                             )}
-                            <button onClick={() => { setActiveTab('attraction'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors"><Pencil className="h-4 w-4" /></button>
+                            <button onClick={() => { setActiveTab('attraction'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors cursor-pointer"><Pencil className="h-4 w-4" /></button>
                           </div>
                         </div>
                       );
@@ -2929,7 +2987,7 @@ export function AdminContent() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {visibleEvents.map((item) => {
-                      const isSelected = selectedPostIds.has(item.id);
+                      const isSelected = selectedPostIds.includes(item.id);
                       return (
                         <div
                           key={item.id}
@@ -2941,7 +2999,7 @@ export function AdminContent() {
                           <div className="flex items-center gap-3 min-w-0">
                             <input
                               type="checkbox"
-                              checked={isSelected}
+                              checked={selectedPostIds.includes(item.id)}
                               onChange={(e) => { e.stopPropagation(); toggleSelectPost(item.id); }}
                               className="h-4 w-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
                             />
@@ -2959,19 +3017,29 @@ export function AdminContent() {
 
                           <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                             {!showArchivedOnly ? (
-                              <button
-                                onClick={() => handleArchiveSelected([item.id])}
-                                className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
-                                title="Archive event"
-                              >
-                                <Archive className="h-4 w-4" />
-                                <span className="hidden sm:inline">Archive</span>
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleArchiveSelected([item.id])}
+                                  className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
+                                  title="Archive event"
+                                >
+                                  <Archive className="h-4 w-4" />
+                                  <span className="hidden sm:inline">Archive</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePost(item.id, 'event')}
+                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
+                                  title="Permanently delete event"
+                                >
+                                  <Trash2 className="h-4 w-4 text-rose-500" />
+                                  <span className="hidden sm:inline text-rose-600">Delete</span>
+                                </button>
+                              </>
                             ) : (
                               <>
                                 <button
                                   onClick={() => handleUnarchiveSelected([item.id])}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
+                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
                                   title="Restore event"
                                 >
                                   <ArchiveRestore className="h-4 w-4" />
@@ -2979,7 +3047,7 @@ export function AdminContent() {
                                 </button>
                                 <button
                                   onClick={() => handleDeletePost(item.id, 'event')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
+                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
                                   title="Permanently delete event"
                                 >
                                   <Trash2 className="h-4 w-4 text-rose-500" />
@@ -2987,7 +3055,7 @@ export function AdminContent() {
                                 </button>
                               </>
                             )}
-                            <button onClick={() => { setActiveTab('event'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors"><Pencil className="h-4 w-4" /></button>
+                            <button onClick={() => { setActiveTab('event'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors cursor-pointer"><Pencil className="h-4 w-4" /></button>
                           </div>
                         </div>
                       );
@@ -3027,7 +3095,7 @@ export function AdminContent() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {visibleItineraries.map((item) => {
-                      const isSelected = selectedPostIds.has(item.id);
+                      const isSelected = selectedPostIds.includes(item.id);
                       return (
                         <div
                           key={item.id}
@@ -3039,7 +3107,7 @@ export function AdminContent() {
                           <div className="flex items-center gap-3 min-w-0">
                             <input
                               type="checkbox"
-                              checked={isSelected}
+                              checked={selectedPostIds.includes(item.id)}
                               onChange={(e) => { e.stopPropagation(); toggleSelectPost(item.id); }}
                               className="h-4 w-4 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
                             />
@@ -3057,19 +3125,29 @@ export function AdminContent() {
 
                           <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                             {!showArchivedOnly ? (
-                              <button
-                                onClick={() => handleArchiveSelected([item.id])}
-                                className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
-                                title="Archive itinerary"
-                              >
-                                <Archive className="h-4 w-4" />
-                                <span className="hidden sm:inline">Archive</span>
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleArchiveSelected([item.id])}
+                                  className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
+                                  title="Archive itinerary"
+                                >
+                                  <Archive className="h-4 w-4" />
+                                  <span className="hidden sm:inline">Archive</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePost(item.id, 'itinerary')}
+                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
+                                  title="Permanently delete itinerary"
+                                >
+                                  <Trash2 className="h-4 w-4 text-rose-500" />
+                                  <span className="hidden sm:inline text-rose-600">Delete</span>
+                                </button>
+                              </>
                             ) : (
                               <>
                                 <button
                                   onClick={() => handleUnarchiveSelected([item.id])}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
+                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
                                   title="Restore itinerary"
                                 >
                                   <ArchiveRestore className="h-4 w-4" />
@@ -3077,7 +3155,7 @@ export function AdminContent() {
                                 </button>
                                 <button
                                   onClick={() => handleDeletePost(item.id, 'itinerary')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1"
+                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
                                   title="Permanently delete itinerary"
                                 >
                                   <Trash2 className="h-4 w-4 text-rose-500" />
@@ -3085,7 +3163,7 @@ export function AdminContent() {
                                 </button>
                               </>
                             )}
-                            <button onClick={() => { setActiveTab('itinerary'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors"><Pencil className="h-4 w-4" /></button>
+                            <button onClick={() => { setActiveTab('itinerary'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors cursor-pointer"><Pencil className="h-4 w-4" /></button>
                           </div>
                         </div>
                       );
