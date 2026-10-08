@@ -26,7 +26,11 @@ import {
   ShieldCheck,
   Upload,
   Megaphone,
-  Tag
+  Tag,
+  XCircle,
+  AlertCircle,
+  RotateCcw,
+  Edit
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { getJSON, getPublicJSON, postJSON, deleteJSON, getStorageUrl } from '../../lib/api';
@@ -96,6 +100,8 @@ interface EnterprisePost {
   tags?: string[];
   likes: number;
   saves: number;
+  status?: 'pending' | 'approved' | 'rejected';
+  rejection_remarks?: string;
   created_at?: string;
   createdAt?: string;
   user_id?: number | string;
@@ -139,6 +145,75 @@ export function EnterpriseDashboard() {
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Edit & Resubmit Modal State
+  const [editingPost, setEditingPost] = useState<EnterprisePost | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editProductName, setEditProductName] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editCategory, setEditCategory] = useState('');
+  const [editStock, setEditStock] = useState('');
+  const [editLocation, setEditLocation] = useState('');
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [isResubmitting, setIsResubmitting] = useState(false);
+
+  const handleStartEditPost = (post: EnterprisePost) => {
+    setEditingPost(post);
+    setEditProductName(post.product_name || post.productName || '');
+    setEditContent(post.content || '');
+    setEditPrice(post.price !== undefined && post.price !== null ? String(post.price) : '');
+    setEditCategory(post.category || '');
+    setEditStock(post.stock !== undefined && post.stock !== null ? String(post.stock) : '');
+    setEditLocation(post.location || '');
+    setEditImageFile(null);
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveResubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPost) return;
+    if (!editContent.trim()) {
+      toast.error('Post content/description is required.');
+      return;
+    }
+
+    try {
+      setIsResubmitting(true);
+      const formData = new FormData();
+      formData.append('content', editContent.trim());
+      if (editProductName.trim()) formData.append('product_name', editProductName.trim());
+      if (editPrice.trim()) formData.append('price', editPrice.trim());
+      if (editCategory.trim()) formData.append('category', editCategory.trim());
+      if (editStock.trim()) formData.append('stock', editStock.trim());
+      if (editLocation.trim()) formData.append('location', editLocation.trim());
+      if (editImageFile) {
+        formData.append('image', editImageFile);
+      }
+
+      const updated = await postJSON(`/enterprise-posts/${editingPost.id}`, formData);
+
+      toast.success('Post updated and resubmitted for admin review!');
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === editingPost.id
+            ? {
+                ...p,
+                ...updated,
+                status: 'pending',
+                rejection_remarks: undefined,
+              }
+            : p
+        )
+      );
+      setIsEditModalOpen(false);
+      setEditingPost(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to resubmit post.');
+    } finally {
+      setIsResubmitting(false);
+    }
+  };
 
   // Check for subscription verification and show congratulations
   useEffect(() => {
@@ -375,7 +450,7 @@ export function EnterpriseDashboard() {
         fileInputRef.current.value = '';
       }
 
-      toast.success('Published!');
+      toast.success('Post submitted for review! It will be publicly visible once approved by the Tourism Office.');
       window.dispatchEvent(new Event('contentUpdated'));
       setActiveTab('posts');
     } catch (err: any) {
@@ -1150,6 +1225,58 @@ export function EnterpriseDashboard() {
                     key={post.id}
                     className="bg-white rounded-2xl border border-gray-100 p-5 shadow-[0_1px_6px_rgba(0,0,0,0.03)] space-y-4 hover:border-pink-200 transition-all group"
                   >
+                    {/* Status Header Bar */}
+                    <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                      <div className="flex items-center gap-2">
+                        {post.status === 'pending' && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                            <Clock className="w-3.5 h-3.5 text-amber-600" />
+                            Pending Review
+                          </span>
+                        )}
+                        {(!post.status || post.status === 'approved') && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            Approved & Public
+                          </span>
+                        )}
+                        {post.status === 'rejected' && (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                            Needs Revision
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-400">{timeAgo}</span>
+                    </div>
+
+                    {/* Rejection Feedback Box if Rejected */}
+                    {post.status === 'rejected' && (
+                      <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-3">
+                        <div className="flex items-start gap-3">
+                          <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <h5 className="text-xs font-bold text-rose-900 uppercase tracking-wide">
+                              Admin Moderation Feedback:
+                            </h5>
+                            <p className="text-sm text-rose-800 mt-1 font-medium leading-relaxed">
+                              {post.rejection_remarks || 'Please update your post information and resubmit for review.'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex justify-end pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditPost(post)}
+                            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Edit & Resubmit Post</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Post Video or Image Media */}
                     {videoUrl ? (
                       <div className="relative rounded-xl overflow-hidden bg-black aspect-video max-h-80">
@@ -1251,10 +1378,20 @@ export function EnterpriseDashboard() {
                       </div>
                     )}
 
-                    {/* Footer Bar: Timestamp */}
-                    <div className="flex items-center justify-end pt-2 border-t border-gray-100 text-xs text-gray-400">
+                    {/* Footer Bar: Actions & Timestamp */}
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs text-gray-400">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditPost(post)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 transition-all cursor-pointer font-semibold text-xs"
+                          title="Edit post"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                      </div>
                       <div className="flex items-center gap-3">
-                        <span>{timeAgo}</span>
                         <button
                           type="button"
                           onClick={() => handleDeletePost(post.id)}
@@ -1398,6 +1535,125 @@ export function EnterpriseDashboard() {
           </div>
         )}
       </div>
+
+      {/* Edit & Resubmit Modal */}
+      {isEditModalOpen && editingPost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100 flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {editingPost.status === 'rejected' ? 'Revise & Resubmit Post' : 'Edit Post'}
+                </h3>
+                <p className="text-xs text-gray-500">
+                  {editingPost.status === 'rejected'
+                    ? 'Fix the remarks below to get your post approved.'
+                    : 'Changes will be submitted for admin moderation.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveResubmit} className="p-6 space-y-4">
+              {editingPost.status === 'rejected' && editingPost.rejection_remarks && (
+                <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">Admin Feedback:</span>
+                    <span>{editingPost.rejection_remarks}</span>
+                  </div>
+                </div>
+              )}
+
+              {editingPost.type === 'product' && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Product Title</label>
+                  <input
+                    type="text"
+                    value={editProductName}
+                    onChange={(e) => setEditProductName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500"
+                    placeholder="Product name"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Description / Content <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 resize-none"
+                  placeholder="Describe your product or announcement..."
+                  required
+                />
+              </div>
+
+              {editingPost.type === 'product' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Price (₱)</label>
+                    <input
+                      type="text"
+                      value={editPrice}
+                      onChange={(e) => setEditPrice(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500"
+                      placeholder="e.g. 250"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Stock</label>
+                    <input
+                      type="text"
+                      value={editStock}
+                      onChange={(e) => setEditStock(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500"
+                      placeholder="e.g. 15"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Upload New Image (Optional)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setEditImageFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-pink-50 file:text-pink-600 hover:file:bg-pink-100"
+                />
+              </div>
+
+              <div className="p-4 border-t border-gray-100 bg-gray-50/70 -mx-6 -mb-6 mt-6 rounded-b-3xl flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 font-semibold text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResubmitting || !editContent.trim()}
+                  className="px-6 py-2.5 rounded-xl bg-[#ec4899] hover:bg-[#db2777] text-white font-bold text-xs shadow-md shadow-pink-500/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>{isResubmitting ? 'Submitting...' : 'Save & Resubmit for Review'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

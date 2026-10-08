@@ -6,6 +6,7 @@ import { postJSON, setAuthToken } from '../lib/api';
 import { toast } from 'sonner';
 import { showErrorAlert, showLoginSuccess } from '../lib/sweetAlert';
 import { ProfileSetupModal } from '../components/ProfileSetupModal';
+import { GoogleAuthButton } from '../components/GoogleAuthButton';
 
 export type AccountRole = 'tourist' | 'admin' | 'resort' | 'enterprise';
 
@@ -274,8 +275,18 @@ export function UnifiedLogin({ defaultRole }: UnifiedLoginProps) {
               </button>
             </form>
 
-            {/* Divider */}
-            <div className="flex items-center gap-3 my-6">
+            {/* Google Authentication Divider */}
+            <div className="flex items-center gap-3 my-4">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">or continue with</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+
+            {/* Google Sign In Button */}
+            <GoogleAuthButton mode="signin" disabled={loading} />
+
+            {/* Register Divider */}
+            <div className="flex items-center gap-3 my-4">
               <div className="flex-1 h-px bg-gray-200" />
               <span className="text-[10px] font-bold text-gray-400 uppercase">New here?</span>
               <div className="flex-1 h-px bg-gray-200" />

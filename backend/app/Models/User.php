@@ -37,6 +37,8 @@ class User extends Authenticatable
         // Basic user info (safe to fill)
         'name', 
         'email', 
+        'google_id',
+        'auth_provider',
         'email_verified_at',
         'password',
         'phone', 

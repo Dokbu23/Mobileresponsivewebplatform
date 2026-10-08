@@ -16,6 +16,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import Swal from 'sweetalert2';
 import { VirtualTourModal, Tour360Scene } from './VirtualTourModal';
 import { API_BASE, postJSON, getAuthToken } from '../lib/api';
 
@@ -173,10 +174,20 @@ export function ResortVirtualTourManager({
   };
 
   // Remove a scene slot (allow removing down to 0)
-  const handleRemoveSlot = (index: number) => {
+  const handleRemoveSlot = async (index: number) => {
     const slotToRemove = slots[index];
-    const confirmed = window.confirm(`Remove "${slotToRemove.title}"?`);
-    if (!confirmed) return;
+    const result = await Swal.fire({
+      title: 'Remove Scene?',
+      text: `Remove "${slotToRemove.title}" from your virtual tour?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, remove',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+    });
+    if (!result.isConfirmed) return;
     setSlots((prev) => prev.filter((_, i) => i !== index));
     toast.info(`Removed "${slotToRemove.title}".`);
   };

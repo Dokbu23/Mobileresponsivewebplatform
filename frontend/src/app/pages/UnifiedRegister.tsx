@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router';
 import { MapPin, Mail, Lock, UserPlus, User, Phone, Eye, EyeOff, X, Shield, CheckCircle2, ChevronRight } from 'lucide-react';
 import { postJSON } from '../lib/api';
 import { toast } from 'sonner';
+import { GoogleAuthButton } from '../components/GoogleAuthButton';
 
 export function UnifiedRegister() {
   const navigate = useNavigate();
@@ -362,8 +363,18 @@ export function UnifiedRegister() {
             </button>
           </form>
 
+          {/* Google Authentication Divider */}
+          <div className="flex items-center gap-3 my-4">
+            <div className="flex-1 h-px bg-gray-200" />
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">or register with</span>
+            <div className="flex-1 h-px bg-gray-200" />
+          </div>
+
+          {/* Google Sign Up Button */}
+          <GoogleAuthButton mode="signup" disabled={loading} />
+
           {/* Divider + Login Link */}
-          <div className="mt-6 pt-5 border-t border-gray-100 text-center">
+          <div className="mt-5 pt-4 border-t border-gray-100 text-center">
             <p className="text-xs text-gray-500 font-medium">
               Already have an account?{' '}
               <Link to="/login" className="font-extrabold text-pink-600 hover:text-pink-700 hover:underline transition-colors">

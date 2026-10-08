@@ -43,7 +43,10 @@ import {
   DollarSign,
   Check,
   Info,
-  Minus
+  Minus,
+  XCircle,
+  AlertCircle,
+  RotateCcw
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { getJSON, getPublicJSON, postJSON, putJSON, deleteJSON, getStorageUrl, API_BASE, getAuthToken } from '../../lib/api';
@@ -109,6 +112,8 @@ interface ResortPost {
   tags?: string[];
   likes: number;
   saves: number;
+  status?: 'pending' | 'approved' | 'rejected';
+  rejection_remarks?: string;
   created_at?: string;
 }
 
@@ -243,6 +248,72 @@ export function ResortDashboard() {
 
   const [isSubmittingPost, setIsSubmittingPost] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Edit & Resubmit Modal State
+  const [editingPost, setEditingPost] = useState<ResortPost | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editRoomName, setEditRoomName] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editCapacity, setEditCapacity] = useState('');
+  const [editLocation, setEditLocation] = useState('');
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [isResubmitting, setIsResubmitting] = useState(false);
+
+  const handleStartEditPost = (post: ResortPost) => {
+    setEditingPost(post);
+    setEditRoomName(post.product_name || post.title || '');
+    setEditContent(post.content || '');
+    setEditPrice(post.price !== undefined && post.price !== null ? String(post.price).replace(/^₱\s*/, '') : '');
+    setEditCapacity(post.stock !== undefined && post.stock !== null ? String(post.stock) : '');
+    setEditLocation(post.location || '');
+    setEditImageFile(null);
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveResubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPost) return;
+    if (!editContent.trim()) {
+      toast.error('Post content is required.');
+      return;
+    }
+
+    try {
+      setIsResubmitting(true);
+      const formData = new FormData();
+      formData.append('content', editContent.trim());
+      if (editRoomName.trim()) formData.append('product_name', editRoomName.trim());
+      if (editPrice.trim()) formData.append('price', editPrice.trim());
+      if (editCapacity.trim()) formData.append('stock', editCapacity.trim());
+      if (editLocation.trim()) formData.append('location', editLocation.trim());
+      if (editImageFile) {
+        formData.append('image', editImageFile);
+      }
+
+      const updated = await postJSON(`/enterprise-posts/${editingPost.id}`, formData);
+
+      toast.success('Post updated and resubmitted for admin review!');
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === editingPost.id
+            ? {
+                ...p,
+                ...updated,
+                status: 'pending',
+                rejection_remarks: undefined,
+              }
+            : p
+        )
+      );
+      setIsEditModalOpen(false);
+      setEditingPost(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to resubmit post.');
+    } finally {
+      setIsResubmitting(false);
+    }
+  };
 
   // Helper to toggle a tag on/off
   const handleToggleTag = (tagVal: string) => {
@@ -709,7 +780,7 @@ export function ResortDashboard() {
         throw new Error(errorData?.message || 'Failed to publish post');
       }
 
-      toast.success('Post published successfully!');
+      toast.success('Post submitted for review! It will be publicly visible once approved by the Tourism Office.');
 
       // Reset form
       setPostContent('');
@@ -1786,6 +1857,60 @@ export function ResortDashboard() {
                   key={post.id}
                   className="bg-white border border-gray-200/80 rounded-2xl overflow-hidden shadow-sm hover:shadow transition-all"
                 >
+                  {/* Status Header Bar */}
+                  <div className="flex items-center justify-between p-4 pb-2 border-b border-gray-100">
+                    <div className="flex items-center gap-2">
+                      {post.status === 'pending' && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          <Clock className="w-3.5 h-3.5 text-amber-600" />
+                          Pending Review
+                        </span>
+                      )}
+                      {(!post.status || post.status === 'approved') && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          Approved & Public
+                        </span>
+                      )}
+                      {post.status === 'rejected' && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                          <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                          Needs Revision
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-gray-400 text-[11px]">
+                      {getRelativeTime(post.created_at)}
+                    </span>
+                  </div>
+
+                  {/* Rejection Feedback Box if Rejected */}
+                  {post.status === 'rejected' && (
+                    <div className="m-4 mb-0 bg-rose-50 border border-rose-200 rounded-2xl p-4 space-y-3">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <h5 className="text-xs font-bold text-rose-900 uppercase tracking-wide">
+                            Admin Moderation Feedback:
+                          </h5>
+                          <p className="text-sm text-rose-800 mt-1 font-medium leading-relaxed">
+                            {post.rejection_remarks || 'Please update your post information and resubmit for review.'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditPost(post)}
+                          className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Edit & Resubmit Post</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Post Video or Image with Category Badge */}
                   {videoUrl ? (
                     <div className="relative aspect-video max-h-80 w-full bg-black overflow-hidden">
@@ -1883,6 +2008,15 @@ export function ResortDashboard() {
                     {/* Footer / Interaction Bar */}
                     <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-xs text-gray-500">
                       <div className="flex items-center gap-4">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditPost(post)}
+                          className="flex items-center gap-1 text-gray-500 hover:text-blue-600 transition-colors cursor-pointer"
+                          title="Edit post"
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                          <span>Edit</span>
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -2003,6 +2137,132 @@ export function ResortDashboard() {
             >
               {savingSocial ? 'Saving...' : 'Save Social Links'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit & Resubmit Modal */}
+      {isEditModalOpen && editingPost && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100 flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {editingPost.status === 'rejected' ? 'Revise & Resubmit Post' : 'Edit Post'}
+                </h3>
+                <p className="text-xs text-gray-500">
+                  {editingPost.status === 'rejected'
+                    ? 'Fix the remarks below to get your post approved.'
+                    : 'Changes will be submitted for admin moderation.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveResubmit} className="p-6 space-y-4">
+              {editingPost.status === 'rejected' && editingPost.rejection_remarks && (
+                <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">Admin Feedback:</span>
+                    <span>{editingPost.rejection_remarks}</span>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Title / Room Name</label>
+                <input
+                  type="text"
+                  value={editRoomName}
+                  onChange={(e) => setEditRoomName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500"
+                  placeholder="e.g. Deluxe Beachfront Suite"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Caption / Description <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full p-3.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 resize-none"
+                  placeholder="Describe your room, amenities, or beach view..."
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Price per Night (₱)</label>
+                  <input
+                    type="text"
+                    value={editPrice}
+                    onChange={(e) => setEditPrice(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500"
+                    placeholder="e.g. 2500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Guest Capacity</label>
+                  <input
+                    type="text"
+                    value={editCapacity}
+                    onChange={(e) => setEditCapacity(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500"
+                    placeholder="e.g. 4"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Location / View Angle</label>
+                <input
+                  type="text"
+                  value={editLocation}
+                  onChange={(e) => setEditLocation(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500"
+                  placeholder="e.g. Beachfront, Barangay Manaul"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Upload New Image (Optional)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setEditImageFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-pink-50 file:text-pink-600 hover:file:bg-pink-100"
+                />
+              </div>
+
+              <div className="p-4 border-t border-gray-100 bg-gray-50/70 -mx-6 -mb-6 mt-6 rounded-b-3xl flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 font-semibold text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResubmitting || !editContent.trim()}
+                  className="px-6 py-2.5 rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-bold text-xs shadow-md shadow-pink-500/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>{isResubmitting ? 'Submitting...' : 'Save & Resubmit for Review'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

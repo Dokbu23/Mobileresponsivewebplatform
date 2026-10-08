@@ -191,7 +191,10 @@ if (typeof window !== 'undefined') {
 /**
  * Real-time view counter tracking helper
  */
-export function recordView(id: string | number, type: 'attraction' | 'accommodation' | 'resort' | 'product' | 'enterprise') {
+export function recordView(
+  id: string | number,
+  type: 'attraction' | 'accommodation' | 'resort' | 'product' | 'enterprise' | 'culture' | 'history' | string
+) {
   if (!id) return;
   try {
     const key = `view_count_${type}_${id}`;

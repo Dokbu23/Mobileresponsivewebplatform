@@ -29,6 +29,13 @@ class EnterprisePost extends Model
         'tags',
         'likes',
         'saves',
+        'status',
+        'approved_by',
+        'approved_at',
+        'rejected_by',
+        'rejected_at',
+        'rejection_remarks',
+        'moderation_history',
     ];
 
     protected $casts = [
@@ -36,10 +43,23 @@ class EnterprisePost extends Model
         'images' => 'array',
         'likes' => 'integer',
         'saves' => 'integer',
+        'moderation_history' => 'array',
+        'approved_at' => 'datetime',
+        'rejected_at' => 'datetime',
     ];
 
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function approver()
+    {
+        return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function rejecter()
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
     }
 }

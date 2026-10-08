@@ -23,6 +23,8 @@ export function Footer() {
               <li><Link to="/events" className="text-sm text-muted-foreground hover:text-primary">Events</Link></li>
               <li><Link to="/products" className="text-sm text-muted-foreground hover:text-primary">Products</Link></li>
               <li><Link to="/accommodations" className="text-sm text-muted-foreground hover:text-primary">Accommodations</Link></li>
+              <li><Link to="/culture-arts" className="text-sm text-muted-foreground hover:text-primary">Culture & Arts</Link></li>
+              <li><Link to="/history" className="text-sm text-muted-foreground hover:text-primary">History</Link></li>
             </ul>
           </div>
 

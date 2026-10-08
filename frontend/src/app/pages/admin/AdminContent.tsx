@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import Swal from 'sweetalert2';
 import {
   Hotel,
   Package,
@@ -35,7 +37,9 @@ import {
   Image as ImageIcon,
   Sparkles,
   RefreshCw,
-  Save
+  Save,
+  Palette,
+  BookOpen
 } from 'lucide-react';
 import { getPublicJSON, postJSON, deleteJSON, API_BASE, cleanItineraryTitle } from '../../lib/api';
 import {
@@ -43,11 +47,13 @@ import {
   ATTRACTION_CATEGORIES,
   ACCOMMODATION_CATEGORIES,
   PRODUCT_CATEGORIES,
-  EVENT_CATEGORIES
+  EVENT_CATEGORIES,
+  CULTURE_ARTS_CATEGORIES,
+  HISTORY_CATEGORIES
 } from '../../lib/constants';
 
-type ContentTab = 'resort' | 'product' | 'attraction' | 'event' | 'itinerary';
-type MainMode = 'publish' | 'background' | 'videos' | 'manage';
+type ContentTab = 'resort' | 'product' | 'attraction' | 'event' | 'itinerary' | 'culture' | 'history';
+type MainMode = 'publish' | 'background' | 'videos';
 
 // 🛡️ SECURITY CONSTANTS & VALIDATORS FOR VIDEO UPLOADS
 const ALLOWED_VIDEO_MIME_TYPES = [
@@ -170,7 +176,19 @@ const ALL_EVENT_TIME_OPTIONS: string[] = (() => {
   return times;
 })();
 
+// 🗺️ ROUTE MAP: maps each content tab to the correct public-facing tourist page
+const PUBLISH_SUCCESS_ROUTES: Record<ContentTab, string> = {
+  resort:     '/accommodations',
+  product:    '/products',
+  attraction: '/attractions',
+  event:      '/events',
+  itinerary:  '/itinerary',   // ← MUST go to /itinerary, NOT /attractions
+  culture:    '/culture-arts',
+  history:    '/history',
+};
+
 export function AdminContent() {
+  const navigate = useNavigate();
   const [mainMode, setMainMode] = useState<MainMode>('publish');
   const [activeTab, setActiveTab] = useState<ContentTab>('resort');
   const [loading, setLoading] = useState(false);
@@ -299,6 +317,15 @@ export function AdminContent() {
     return localStorage.getItem('discover-mansalay:heroVideo');
   });
 
+  // 🎨 CULTURE & ARTS SPECIFIC STATE
+  const [artistName, setArtistName] = useState('');
+  const [periodEra, setPeriodEra] = useState('');
+
+  // 📜 HISTORY SPECIFIC STATE
+  const [historicalPeriod, setHistoricalPeriod] = useState('');
+  const [historyDate, setHistoryDate] = useState('');
+  const [sourceAuthor, setSourceAuthor] = useState('');
+
   // Manage posts state
   const [publishedItems, setPublishedItems] = useState<any[]>([]);
   const [resortPosts, setResortPosts] = useState<any[]>([]);
@@ -306,6 +333,8 @@ export function AdminContent() {
   const [attractionPosts, setAttractionPosts] = useState<any[]>([]);
   const [eventPosts, setEventPosts] = useState<any[]>([]);
   const [itineraryPosts, setItineraryPosts] = useState<any[]>([]);
+  const [culturePosts, setCulturePosts] = useState<any[]>([]);
+  const [historyPosts, setHistoryPosts] = useState<any[]>([]);
 
   // 📁 SELECTION & ARCHIVE MANAGEMENT STATE
   const [selectedPostIds, setSelectedPostIds] = useState<(string | number)[]>([]);
@@ -414,20 +443,41 @@ export function AdminContent() {
     if (attractionPosts.some((p) => String(p.id) === sId)) return 'attraction';
     if (eventPosts.some((p) => String(p.id) === sId)) return 'event';
     if (itineraryPosts.some((p) => String(p.id) === sId)) return 'itinerary';
+    if (culturePosts.some((p) => String(p.id) === sId)) return 'culture';
+    if (historyPosts.some((p) => String(p.id) === sId)) return 'history';
     return activeTab;
   };
 
   const handleDeleteSelectedBatch = async () => {
     const targetIds = selectedPostIds.filter((id) => id != null);
     if (targetIds.length === 0) return;
-    if (!window.confirm(`Are you sure you want to permanently delete ${targetIds.length} selected post(s)?`)) return;
+    const result = await Swal.fire({
+      title: 'Delete Selected Posts?',
+      text: `Are you sure you want to permanently delete ${targetIds.length} selected post(s)? This action cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, delete all',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+    });
+    if (!result.isConfirmed) return;
 
     for (const id of targetIds) {
       const category = getCategoryForPostId(id);
       await handleDeletePost(id, category, true);
     }
     setSelectedPostIds([]);
-    toast.success(`Permanently deleted ${targetIds.length} post(s)!`);
+    Swal.fire({
+      icon: 'success',
+      title: 'Batch Deleted',
+      text: `Permanently deleted ${targetIds.length} post(s).`,
+      showConfirmButton: false,
+      timer: 2000,
+      toast: true,
+      position: 'top-end',
+    });
   };
 
   useEffect(() => {
@@ -474,11 +524,13 @@ export function AdminContent() {
         return combined;
       };
 
-      const [resorts, products, attractions, events] = await Promise.all([
+      const [resorts, products, attractions, events, cultures, histories] = await Promise.all([
         fetchSection('/accommodations', ['custom_resorts', 'custom_resort', 'custom_accommodations']),
         fetchSection('/products', ['custom_products', 'custom_product']),
         fetchSection('/attractions', ['custom_attractions', 'custom_attraction']),
         fetchSection('/events', ['custom_events', 'custom_event']),
+        fetchSection('/culture-arts', ['custom_cultures', 'custom_culture_arts']),
+        fetchSection('/histories', ['custom_histories']),
       ]);
 
       const isDeleted = (id: string | number) =>
@@ -491,18 +543,24 @@ export function AdminContent() {
       const filteredAttractions = attractions.filter((a) => !isDeleted(a.id) && a.category !== 'Itinerary' && !a.days_count);
       const filteredEvents = events.filter((i) => !isDeleted(i.id));
       const filteredItineraries = attractions.filter((a) => !isDeleted(a.id) && (a.category === 'Itinerary' || a.days_count));
+      const filteredCultures = cultures.filter((i) => !isDeleted(i.id));
+      const filteredHistories = histories.filter((i) => !isDeleted(i.id));
 
       setResortPosts(filteredResorts);
       setEnterprisePosts(filteredProducts);
       setAttractionPosts(filteredAttractions);
       setEventPosts(filteredEvents);
       setItineraryPosts(filteredItineraries);
+      setCulturePosts(filteredCultures);
+      setHistoryPosts(filteredHistories);
       
       let currentActiveItems = filteredResorts;
       if (activeTab === 'product') currentActiveItems = filteredProducts;
       if (activeTab === 'attraction') currentActiveItems = filteredAttractions;
       if (activeTab === 'event') currentActiveItems = filteredEvents;
       if (activeTab === 'itinerary') currentActiveItems = filteredItineraries;
+      if (activeTab === 'culture') currentActiveItems = filteredCultures;
+      if (activeTab === 'history') currentActiveItems = filteredHistories;
       setPublishedItems(currentActiveItems);
     } catch {
       // Fallback empty
@@ -541,6 +599,11 @@ export function AdminContent() {
     setContactNumber('');
     setEmail('');
     setWebsite('');
+    setArtistName('');
+    setPeriodEra('');
+    setHistoricalPeriod('');
+    setHistoryDate('');
+    setSourceAuthor('');
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (videoFileInputRef.current) videoFileInputRef.current.value = '';
   };
@@ -921,6 +984,12 @@ export function AdminContent() {
     setContactNumber(item.contact_number || item.phone || '');
     setEmail(item.email || '');
     setWebsite(item.website || '');
+    setArtistName(item.artist_name || '');
+    setPeriodEra(item.period_era || '');
+    setHistoricalPeriod(item.period || item.historical_period || '');
+    setHistoryDate(item.date || '');
+    setSourceAuthor(item.source || item.author || '');
+    setFullDescription(item.full_description || '');
     setMainMode('publish');
   };
 
@@ -970,7 +1039,15 @@ export function AdminContent() {
     const newItemPayload: any = {
       id: editingId || Date.now(),
       name: cleanItineraryTitle(name),
-      category: category || (activeTab === 'resort' ? 'Accommodation' : activeTab === 'product' ? 'Handicraft' : activeTab === 'attraction' ? 'Beach' : activeTab === 'event' ? 'Festival' : 'Beach & Relaxation'),
+      category: category || (
+        activeTab === 'resort' ? 'Accommodation' :
+        activeTab === 'product' ? 'Handicraft' :
+        activeTab === 'attraction' ? 'Beach' :
+        activeTab === 'event' ? 'Festival' :
+        activeTab === 'culture' ? 'Traditional Dance' :
+        activeTab === 'history' ? 'Origins & Municipal History' :
+        'Beach & Relaxation'
+      ),
       type: category || (activeTab === 'resort' ? 'Accommodation' : 'General'),
       description,
       full_description: fullDescription || description,
@@ -984,7 +1061,7 @@ export function AdminContent() {
       store_name: shopName,
       seller_name: productOwner || shopName,
       sellerName: shopName || productOwner,
-      date: eventDate || new Date().toISOString().split('T')[0],
+      date: activeTab === 'history' ? (historyDate || eventDate || new Date().toISOString().split('T')[0]) : (eventDate || new Date().toISOString().split('T')[0]),
       time: eventTime || '8:00 AM – 5:00 PM',
       image: finalImageUrl || '',
       images: finalImagesList.length > 0 ? finalImagesList : (finalImageUrl ? [finalImageUrl] : []),
@@ -995,6 +1072,12 @@ export function AdminContent() {
       phone: contactNumber,
       email,
       website,
+      artist_name: artistName,
+      period_era: periodEra,
+      period: historicalPeriod,
+      historical_period: historicalPeriod,
+      source: sourceAuthor,
+      author: sourceAuthor,
       created_at: new Date().toISOString(),
       // Itinerary Specific Fields
       badge: itineraryBadge || (activeTab === 'itinerary' ? 'Official Tourism Itinerary' : undefined),
@@ -1020,6 +1103,8 @@ export function AdminContent() {
       if (activeTab === 'attraction') endpoint = '/attractions';
       if (activeTab === 'event') endpoint = '/events';
       if (activeTab === 'itinerary') endpoint = '/attractions';
+      if (activeTab === 'culture') endpoint = '/admin/culture-arts';
+      if (activeTab === 'history') endpoint = '/admin/histories';
 
       if (editingId) {
         endpoint = `${endpoint}/${editingId}`;
@@ -1064,6 +1149,22 @@ export function AdminContent() {
         }
         if (email) formData.append('email', email);
         if (website) formData.append('website', website);
+
+        if (activeTab === 'culture') {
+          if (artistName) formData.append('artist_name', artistName);
+          if (periodEra) formData.append('period_era', periodEra);
+        }
+        if (activeTab === 'history') {
+          if (historicalPeriod) {
+            formData.append('period', historicalPeriod);
+            formData.append('historical_period', historicalPeriod);
+          }
+          if (historyDate) formData.append('date', historyDate);
+          if (sourceAuthor) {
+            formData.append('source', sourceAuthor);
+            formData.append('author', sourceAuthor);
+          }
+        }
 
         if (editingId) {
           formData.append('_method', 'PUT');
@@ -1167,9 +1268,29 @@ export function AdminContent() {
     await new Promise((res) => setTimeout(res, 400));
     setUploadModalOpen(false);
 
-    toast.success(editingId ? 'Updated!' : 'Published!');
+    // ✅ Navigate to the correct public-facing page based on what was published.
+    // IMPORTANT: itinerary → /itinerary  (NOT /attractions)
+    const destinationRoute = PUBLISH_SUCCESS_ROUTES[activeTab];
+
+    toast.success(editingId ? 'Updated successfully!' : 'Published successfully!', {
+      description: editingId
+        ? `Your ${activeTab} has been updated.`
+        : `Your ${activeTab} is now live! Redirecting to the ${activeTab} page...`,
+      action: {
+        label: 'View Page',
+        onClick: () => navigate(destinationRoute),
+      },
+    });
+
     resetForm();
     setPublishing(false);
+
+    // Auto-navigate to the corresponding public page so admin can verify the new entry
+    if (!editingId) {
+      setTimeout(() => {
+        navigate(destinationRoute);
+      }, 1500);
+    }
   };
 
   const handleDeletePost = async (id: number | string, tabType?: ContentTab, skipConfirm: boolean = false) => {
@@ -1200,17 +1321,21 @@ export function AdminContent() {
     else if (type === 'attraction') setAttractionPosts(filterOut);
     else if (type === 'event') setEventPosts(filterOut);
     else if (type === 'itinerary') setItineraryPosts(filterOut);
+    else if (type === 'culture') setCulturePosts(filterOut);
+    else if (type === 'history') setHistoryPosts(filterOut);
     else {
       setResortPosts(filterOut);
       setEnterprisePosts(filterOut);
       setAttractionPosts(filterOut);
       setEventPosts(filterOut);
       setItineraryPosts(filterOut);
+      setCulturePosts(filterOut);
+      setHistoryPosts(filterOut);
     }
     setPublishedItems(filterOut);
 
     // 5. Clean up local storage caches
-    ['custom_resorts', 'custom_products', 'custom_attractions', 'custom_events', 'custom_itinerarys'].forEach((key) => {
+    ['custom_resorts', 'custom_products', 'custom_attractions', 'custom_events', 'custom_itinerarys', 'custom_cultures', 'custom_histories'].forEach((key) => {
       const existingStr = localStorage.getItem(`discover-mansalay:${key}`);
       if (existingStr) {
         const existing = JSON.parse(existingStr);
@@ -1229,6 +1354,8 @@ export function AdminContent() {
       if (type === 'product') endpoint = `/admin/products/${id}`;
       if (type === 'attraction' || type === 'itinerary') endpoint = `/attractions/${id}`;
       if (type === 'event') endpoint = `/events/${id}`;
+      if (type === 'culture') endpoint = `/admin/culture-arts/${id}`;
+      if (type === 'history') endpoint = `/admin/histories/${id}`;
 
       try {
         await deleteJSON(endpoint);
@@ -1339,29 +1466,17 @@ export function AdminContent() {
             <Video className="h-3.5 w-3.5" />
             <span>🎥 Videos</span>
           </button>
-
-          <button
-            onClick={() => setMainMode('manage')}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 ${
-              mainMode === 'manage'
-                ? 'bg-pink-500 text-white shadow-md shadow-pink-500/20'
-                : 'bg-white border border-gray-200 text-gray-700 hover:border-pink-300 hover:text-pink-600'
-            }`}
-          >
-            <ClipboardList className="h-3.5 w-3.5" />
-            <span>Manage Posts</span>
-          </button>
         </div>
 
         {/* ── PUBLISH CARD CONTAINER ── */}
         {mainMode === 'publish' && (
           <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden p-6 sm:p-8">
             
-            {/* 5 SUB-TABS ROW */}
+            {/* 7 SUB-TABS ROW */}
             <div className="flex border-b border-gray-100 mb-6 overflow-x-auto scrollbar-none">
               <button
                 onClick={() => { setActiveTab('resort'); resetForm(); }}
-                className={`px-6 py-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${
+                className={`px-5 py-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${
                   activeTab === 'resort'
                     ? 'border-pink-500 text-pink-600 bg-pink-50/30'
                     : 'border-transparent text-gray-500 hover:text-pink-600'
@@ -1373,7 +1488,7 @@ export function AdminContent() {
 
               <button
                 onClick={() => { setActiveTab('product'); resetForm(); }}
-                className={`px-6 py-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${
+                className={`px-5 py-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${
                   activeTab === 'product'
                     ? 'border-pink-500 text-pink-600 bg-pink-50/30'
                     : 'border-transparent text-gray-500 hover:text-pink-600'
@@ -1385,7 +1500,7 @@ export function AdminContent() {
 
               <button
                 onClick={() => { setActiveTab('attraction'); resetForm(); }}
-                className={`px-6 py-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${
+                className={`px-5 py-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${
                   activeTab === 'attraction'
                     ? 'border-pink-500 text-pink-600 bg-pink-50/30'
                     : 'border-transparent text-gray-500 hover:text-pink-600'
@@ -1397,7 +1512,7 @@ export function AdminContent() {
 
               <button
                 onClick={() => { setActiveTab('event'); resetForm(); }}
-                className={`px-6 py-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${
+                className={`px-5 py-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${
                   activeTab === 'event'
                     ? 'border-pink-500 text-pink-600 bg-pink-50/30'
                     : 'border-transparent text-gray-500 hover:text-pink-600'
@@ -1409,7 +1524,7 @@ export function AdminContent() {
 
               <button
                 onClick={() => { setActiveTab('itinerary'); resetForm(); }}
-                className={`px-6 py-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${
+                className={`px-5 py-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${
                   activeTab === 'itinerary'
                     ? 'border-pink-500 text-pink-600 bg-pink-50/30'
                     : 'border-transparent text-gray-500 hover:text-pink-600'
@@ -1418,12 +1533,40 @@ export function AdminContent() {
                 <MapPin className="h-4 w-4 text-rose-500" />
                 <span>Itinerary</span>
               </button>
+
+              <button
+                onClick={() => { setActiveTab('culture'); resetForm(); }}
+                className={`px-5 py-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${
+                  activeTab === 'culture'
+                    ? 'border-pink-500 text-pink-600 bg-pink-50/30'
+                    : 'border-transparent text-gray-500 hover:text-pink-600'
+                }`}
+              >
+                <Palette className="h-4 w-4 text-indigo-500" />
+                <span>Culture & Arts</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab('history'); resetForm(); }}
+                className={`px-5 py-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${
+                  activeTab === 'history'
+                    ? 'border-pink-500 text-pink-600 bg-pink-50/30'
+                    : 'border-transparent text-gray-500 hover:text-pink-600'
+                }`}
+              >
+                <BookOpen className="h-4 w-4 text-teal-600" />
+                <span>History</span>
+              </button>
             </div>
 
             {/* INFO CALLOUT BANNER */}
             <div className={`p-4 text-xs font-semibold rounded-2xl mb-6 flex items-center justify-between ${
               activeTab === 'itinerary' 
                 ? 'bg-pink-50/80 border border-pink-200/80 text-pink-600' 
+                : activeTab === 'culture'
+                ? 'bg-indigo-50/80 border border-indigo-200/80 text-indigo-600'
+                : activeTab === 'history'
+                ? 'bg-teal-50/80 border border-teal-200/80 text-teal-700'
                 : 'bg-blue-50/80 border border-blue-200/80 text-blue-600'
             }`}>
               <span>
@@ -1432,6 +1575,8 @@ export function AdminContent() {
                 {activeTab === 'attraction' && 'Post a tourist attraction or natural landmark in Mansalay.'}
                 {activeTab === 'event' && 'Post an upcoming festival, cultural celebration, or community event.'}
                 {activeTab === 'itinerary' && 'Create a curated suggested itinerary that appears in the Itinerary Planner for tourists to browse and adopt.'}
+                {activeTab === 'culture' && 'Post indigenous Mangyan art, cultural traditions, music, handicrafts, and artistic heritage.'}
+                {activeTab === 'history' && 'Post historical milestones, origin stories, colonial/post-war heritage, and notable figures of Mansalay.'}
               </span>
               {editingId && (
                 <button
@@ -1713,6 +1858,8 @@ export function AdminContent() {
                           activeTab === 'resort' ? 'e.g. MB Hiraya Beach Resort' :
                           activeTab === 'product' ? 'e.g. Traditional Mangyan Woven Basket' :
                           activeTab === 'attraction' ? 'e.g. Buktot White Beach' :
+                          activeTab === 'culture' ? 'e.g. Traditional Hanunuo Mangyan Ambahan & Script' :
+                          activeTab === 'history' ? 'e.g. The Founding of Mansalay (1960)' :
                           'e.g. Mansalay Cultural Festival'
                         }
                         className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium focus:border-pink-500 outline-none"
@@ -1755,9 +1902,96 @@ export function AdminContent() {
                             ))}
                           </>
                         )}
+                        {activeTab === 'culture' && (
+                          <>
+                            {CULTURE_ARTS_CATEGORIES.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                          </>
+                        )}
+                        {activeTab === 'history' && (
+                          <>
+                            {HISTORY_CATEGORIES.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                          </>
+                        )}
                       </select>
                     </div>
                   </div>
+
+                  {/* 🎨 Dedicated Culture & Arts Specific Fields */}
+                  {activeTab === 'culture' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                          Artist / Artisan / Cultural Bearer <span className="text-gray-400 font-normal">(Optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={artistName}
+                          onChange={(e) => setArtistName(e.target.value)}
+                          placeholder="e.g. Ginaw Bilog / Hanunuo Mangyan Elders"
+                          className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium focus:border-pink-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                          Cultural Period / Tradition Era <span className="text-gray-400 font-normal">(Optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={periodEra}
+                          onChange={(e) => setPeriodEra(e.target.value)}
+                          placeholder="e.g. Pre-colonial Ancestral Tradition"
+                          className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium focus:border-pink-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 📜 Dedicated History Specific Fields */}
+                  {activeTab === 'history' && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                          Historical Era / Period <span className="text-pink-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={historicalPeriod}
+                          onChange={(e) => setHistoricalPeriod(e.target.value)}
+                          placeholder="e.g. 1960s / Pre-colonial / Spanish Era"
+                          className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium focus:border-pink-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                          Specific Date / Year <span className="text-gray-400 font-normal">(Optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={historyDate}
+                          onChange={(e) => setHistoryDate(e.target.value)}
+                          placeholder="e.g. 1960, November 15, or Ancient"
+                          className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium focus:border-pink-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                          Source / Historical Archives <span className="text-gray-400 font-normal">(Optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={sourceAuthor}
+                          onChange={(e) => setSourceAuthor(e.target.value)}
+                          placeholder="e.g. Municipal Tourism Office Records"
+                          className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium focus:border-pink-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {activeTab === 'product' && (
                     <div>
@@ -1865,17 +2099,42 @@ export function AdminContent() {
 
                   <div>
                     <label className="block text-xs font-bold text-gray-800 mb-1.5">
-                      Description <span className="text-pink-500">*</span>
+                      {activeTab === 'culture' ? 'Brief Overview / Summary' :
+                       activeTab === 'history' ? 'Brief Overview / Excerpt' :
+                       'Description'} <span className="text-pink-500">*</span>
                     </label>
                     <textarea
-                      rows={4}
+                      rows={3}
                       required
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Describe this place, product, or event in detail..."
+                      placeholder={
+                        activeTab === 'culture' ? 'A concise summary of this cultural tradition, artwork, or practice...' :
+                        activeTab === 'history' ? 'A brief historical overview shown on the card preview...' :
+                        'Describe this place, product, or event in detail...'
+                      }
                       className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium focus:border-pink-500 outline-none"
                     />
                   </div>
+
+                  {(activeTab === 'culture' || activeTab === 'history') && (
+                    <div>
+                      <label className="block text-xs font-bold text-gray-800 mb-1.5">
+                        {activeTab === 'history' ? 'Full Historical Narrative / Story' : 'Full Cultural Details & Background'} <span className="text-gray-400 font-normal">(Detailed content for details modal)</span>
+                      </label>
+                      <textarea
+                        rows={6}
+                        value={fullDescription}
+                        onChange={(e) => setFullDescription(e.target.value)}
+                        placeholder={
+                          activeTab === 'history'
+                            ? 'Complete historical account, context, key figures, timeline milestones, and archival notes...'
+                            : 'In-depth cultural background, meaning, materials, methods, and heritage preservation...'
+                        }
+                        className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium focus:border-pink-500 outline-none"
+                      />
+                    </div>
+                  )}
 
                   <div className={activeTab === 'attraction' ? 'grid grid-cols-1 md:grid-cols-2 gap-4' : ''}>
                     <div>
@@ -2532,648 +2791,6 @@ export function AdminContent() {
             </form>
           </div>
         )}
-
-        {/* ── MANAGE POSTS MODE (STRICT CATEGORY-SCOPED SELECT ALL & ARCHIVE SYSTEM) ── */}
-        {mainMode === 'manage' && (() => {
-          const isArchived = (id: string | number) =>
-            archivedPostIds.has(id) ||
-            archivedPostIds.has(String(id)) ||
-            (typeof id === 'string' && !isNaN(Number(id)) && archivedPostIds.has(Number(id)));
-
-          const visibleResorts = resortPosts.filter((p) => showArchivedOnly ? isArchived(p.id) : !isArchived(p.id));
-          const visibleProducts = enterprisePosts.filter((p) => showArchivedOnly ? isArchived(p.id) : !isArchived(p.id));
-          const visibleAttractions = attractionPosts.filter((p) => showArchivedOnly ? isArchived(p.id) : !isArchived(p.id));
-          const visibleEvents = eventPosts.filter((p) => showArchivedOnly ? isArchived(p.id) : !isArchived(p.id));
-          const visibleItineraries = itineraryPosts.filter((p) => showArchivedOnly ? isArchived(p.id) : !isArchived(p.id));
-
-          const areAllResortsSelected = visibleResorts.length > 0 && visibleResorts.every((p) => selectedPostIds.includes(p.id));
-          const areAllProductsSelected = visibleProducts.length > 0 && visibleProducts.every((p) => selectedPostIds.includes(p.id));
-          const areAllAttractionsSelected = visibleAttractions.length > 0 && visibleAttractions.every((p) => selectedPostIds.includes(p.id));
-          const areAllEventsSelected = visibleEvents.length > 0 && visibleEvents.every((p) => selectedPostIds.includes(p.id));
-          const areAllItinerariesSelected = visibleItineraries.length > 0 && visibleItineraries.every((p) => selectedPostIds.includes(p.id));
-
-          return (
-            <div className="space-y-6 font-sans">
-              {/* TOP TOOLBAR: ACTIVE VS ARCHIVE VAULT TOGGLE & BATCH ARCHIVE / DELETE */}
-              <div className="bg-white rounded-3xl border border-gray-100 p-4 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
-                {/* Left: Active vs Archive Vault */}
-                <div className="flex items-center gap-2">
-                  <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200/60">
-                    <button
-                      onClick={() => { setShowArchivedOnly(false); setSelectedPostIds([]); }}
-                      className={`px-4 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-                        !showArchivedOnly
-                          ? 'bg-white text-gray-900 shadow-2xs'
-                          : 'text-gray-500 hover:text-gray-900'
-                      }`}
-                    >
-                      Active Posts
-                    </button>
-                    <button
-                      onClick={() => { setShowArchivedOnly(true); setSelectedPostIds([]); }}
-                      className={`px-4 py-1.5 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
-                        showArchivedOnly
-                          ? 'bg-pink-500 text-white shadow-xs'
-                          : 'text-gray-500 hover:text-pink-600'
-                      }`}
-                    >
-                      <Archive className="h-3.5 w-3.5" />
-                      <span>Archive Vault</span>
-                      <span className="px-1.5 py-0.2 bg-white/20 text-white rounded-full text-[10px]">
-                        {archivedPostIds.size}
-                      </span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Right: Batch Archive / Restore / Delete Action */}
-                {selectedPostIds.length > 0 && (
-                  <div className="flex items-center gap-2 animate-in fade-in duration-200">
-                    <span className="text-xs font-bold text-gray-500">
-                      {selectedPostIds.length} item(s) selected
-                    </span>
-
-                    {!showArchivedOnly ? (
-                      <>
-                        <button
-                          onClick={() => handleArchiveSelected()}
-                          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-xs font-extrabold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Archive className="h-3.5 w-3.5" />
-                          <span>Archive Selected</span>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteSelectedBatch()}
-                          className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-extrabold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          <span>Delete Selected</span>
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => handleUnarchiveSelected()}
-                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-extrabold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <ArchiveRestore className="h-3.5 w-3.5" />
-                          <span>Restore Selected</span>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteSelectedBatch()}
-                          className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-extrabold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          <span>Delete Selected</span>
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* 1. RESORT POSTS SECTION */}
-              <div className="bg-white rounded-3xl border border-gray-100/90 shadow-2xs p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Hotel className="h-5 w-5 text-blue-600" />
-                    <h3 className="text-base font-extrabold text-gray-900">Resort Posts</h3>
-                    <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">
-                      {visibleResorts.length}
-                    </span>
-                  </div>
-
-                  {visibleResorts.length > 0 && (
-                    <button
-                      onClick={() => toggleSelectAllList(visibleResorts)}
-                      className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
-                    >
-                      {areAllResortsSelected ? <CheckSquare className="h-4 w-4 text-blue-600" /> : <Square className="h-4 w-4 text-blue-400" />}
-                      <span>{areAllResortsSelected ? 'Deselect All Resorts' : 'Select All Resorts'}</span>
-                    </button>
-                  )}
-                </div>
-
-                {visibleResorts.length === 0 ? (
-                  <div className="py-12 text-center">
-                    <p className="text-sm text-gray-400 font-medium">
-                      {showArchivedOnly ? 'No archived resort posts.' : 'No resort posts yet.'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {visibleResorts.map((item) => {
-                      const isSelected = selectedPostIds.includes(item.id);
-                      return (
-                        <div
-                          key={item.id}
-                          onClick={() => toggleSelectPost(item.id)}
-                          className={`p-3.5 border rounded-2xl flex items-center justify-between bg-white transition-all cursor-pointer shadow-2xs ${
-                            isSelected ? 'border-blue-500 bg-blue-50/20 ring-1 ring-blue-500' : 'border-gray-100 hover:border-pink-200'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <input
-                              type="checkbox"
-                              checked={selectedPostIds.includes(item.id)}
-                              onChange={(e) => { e.stopPropagation(); toggleSelectPost(item.id); }}
-                              className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
-                            />
-                            <img
-                              src={item.image ? (item.image.startsWith('http') ? item.image : `${API_BASE}${item.image}`) : '/assets/mansalay_hero_bg.jpg'}
-                              alt={item.name}
-                              className="w-12 h-12 rounded-xl object-cover border border-gray-100 flex-shrink-0"
-                              onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
-                            />
-                            <div className="min-w-0">
-                              <h4 className="text-xs font-bold text-gray-900 truncate">{item.name}</h4>
-                              <p className="text-[11px] text-gray-400 font-medium truncate">{item.location || 'Mansalay'}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                            {!showArchivedOnly ? (
-                              <>
-                                <button
-                                  onClick={() => handleArchiveSelected([item.id])}
-                                  className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Archive resort"
-                                >
-                                  <Archive className="h-4 w-4" />
-                                  <span className="hidden sm:inline">Archive</span>
-                                </button>
-                                <button
-                                  onClick={() => handleDeletePost(item.id, 'resort')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Permanently delete resort"
-                                >
-                                  <Trash2 className="h-4 w-4 text-rose-500" />
-                                  <span className="hidden sm:inline text-rose-600">Delete</span>
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => handleUnarchiveSelected([item.id])}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Restore resort"
-                                >
-                                  <ArchiveRestore className="h-4 w-4" />
-                                  <span className="hidden sm:inline">Restore</span>
-                                </button>
-                                <button
-                                  onClick={() => handleDeletePost(item.id, 'resort')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Permanently delete resort"
-                                >
-                                  <Trash2 className="h-4 w-4 text-rose-500" />
-                                  <span className="hidden sm:inline text-rose-600">Delete</span>
-                                </button>
-                              </>
-                            )}
-                            <button onClick={() => { setActiveTab('resort'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors cursor-pointer"><Pencil className="h-4 w-4" /></button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* 2. ENTERPRISE POSTS SECTION */}
-              <div className="bg-white rounded-3xl border border-gray-100/90 shadow-2xs p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Package className="h-5 w-5 text-pink-600" />
-                    <h3 className="text-base font-extrabold text-gray-900">Enterprise Posts</h3>
-                    <span className="px-2 py-0.5 bg-pink-100 text-pink-700 text-xs font-bold rounded-full">
-                      {visibleProducts.length}
-                    </span>
-                  </div>
-
-                  {visibleProducts.length > 0 && (
-                    <button
-                      onClick={() => toggleSelectAllList(visibleProducts)}
-                      className="px-3 py-1.5 bg-pink-50 hover:bg-pink-100 text-pink-700 border border-pink-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
-                    >
-                      {areAllProductsSelected ? <CheckSquare className="h-4 w-4 text-pink-600" /> : <Square className="h-4 w-4 text-pink-400" />}
-                      <span>{areAllProductsSelected ? 'Deselect All Products' : 'Select All Products'}</span>
-                    </button>
-                  )}
-                </div>
-
-                {visibleProducts.length === 0 ? (
-                  <div className="py-12 text-center">
-                    <p className="text-sm text-gray-400 font-medium">
-                      {showArchivedOnly ? 'No archived enterprise posts.' : 'No enterprise posts yet.'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {visibleProducts.map((item) => {
-                      const isSelected = selectedPostIds.includes(item.id);
-                      return (
-                        <div
-                          key={item.id}
-                          onClick={() => toggleSelectPost(item.id)}
-                          className={`p-3.5 border rounded-2xl flex items-center justify-between bg-white transition-all cursor-pointer shadow-2xs ${
-                            isSelected ? 'border-pink-500 bg-pink-50/20 ring-1 ring-pink-500' : 'border-gray-100 hover:border-pink-200'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <input
-                              type="checkbox"
-                              checked={selectedPostIds.includes(item.id)}
-                              onChange={(e) => { e.stopPropagation(); toggleSelectPost(item.id); }}
-                              className="h-4 w-4 rounded text-pink-600 focus:ring-pink-500 cursor-pointer"
-                            />
-                            <img
-                              src={item.image ? (item.image.startsWith('http') ? item.image : `${API_BASE}${item.image}`) : '/assets/mansalay_hero_bg.jpg'}
-                              alt={item.name}
-                              className="w-12 h-12 rounded-xl object-cover border border-gray-100 flex-shrink-0"
-                              onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
-                            />
-                            <div className="min-w-0">
-                              <h4 className="text-xs font-bold text-gray-900 truncate">{item.name}</h4>
-                              <p className="text-[11px] text-pink-600 font-extrabold truncate">₱{item.price}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                            {!showArchivedOnly ? (
-                              <>
-                                <button
-                                  onClick={() => handleArchiveSelected([item.id])}
-                                  className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Archive product"
-                                >
-                                  <Archive className="h-4 w-4" />
-                                  <span className="hidden sm:inline">Archive</span>
-                                </button>
-                                <button
-                                  onClick={() => handleDeletePost(item.id, 'product')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Permanently delete product"
-                                >
-                                  <Trash2 className="h-4 w-4 text-rose-500" />
-                                  <span className="hidden sm:inline text-rose-600">Delete</span>
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => handleUnarchiveSelected([item.id])}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Restore product"
-                                >
-                                  <ArchiveRestore className="h-4 w-4" />
-                                  <span className="hidden sm:inline">Restore</span>
-                                </button>
-                                <button
-                                  onClick={() => handleDeletePost(item.id, 'product')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Permanently delete product"
-                                >
-                                  <Trash2 className="h-4 w-4 text-rose-500" />
-                                  <span className="hidden sm:inline text-rose-600">Delete</span>
-                                </button>
-                              </>
-                            )}
-                            <button onClick={() => { setActiveTab('product'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors cursor-pointer"><Pencil className="h-4 w-4" /></button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* 3. ATTRACTION POSTS SECTION */}
-              <div className="bg-white rounded-3xl border border-gray-100/90 shadow-2xs p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Compass className="h-5 w-5 text-emerald-600" />
-                    <h3 className="text-base font-extrabold text-gray-900">Attraction Posts</h3>
-                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">
-                      {visibleAttractions.length}
-                    </span>
-                  </div>
-
-                  {visibleAttractions.length > 0 && (
-                    <button
-                      onClick={() => toggleSelectAllList(visibleAttractions)}
-                      className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
-                    >
-                      {areAllAttractionsSelected ? <CheckSquare className="h-4 w-4 text-emerald-600" /> : <Square className="h-4 w-4 text-emerald-400" />}
-                      <span>{areAllAttractionsSelected ? 'Deselect All Attractions' : 'Select All Attractions'}</span>
-                    </button>
-                  )}
-                </div>
-
-                {visibleAttractions.length === 0 ? (
-                  <div className="py-12 text-center">
-                    <p className="text-sm text-gray-400 font-medium">
-                      {showArchivedOnly ? 'No archived attraction posts.' : 'No attraction posts yet.'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {visibleAttractions.map((item) => {
-                      const isSelected = selectedPostIds.includes(item.id);
-                      return (
-                        <div
-                          key={item.id}
-                          onClick={() => toggleSelectPost(item.id)}
-                          className={`p-3.5 border rounded-2xl flex items-center justify-between bg-white transition-all cursor-pointer shadow-2xs ${
-                            isSelected ? 'border-emerald-500 bg-emerald-50/20 ring-1 ring-emerald-500' : 'border-gray-100 hover:border-pink-200'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <input
-                              type="checkbox"
-                              checked={selectedPostIds.includes(item.id)}
-                              onChange={(e) => { e.stopPropagation(); toggleSelectPost(item.id); }}
-                              className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                            />
-                            <img
-                              src={item.image ? (item.image.startsWith('http') ? item.image : `${API_BASE}${item.image}`) : '/assets/mansalay_hero_bg.jpg'}
-                              alt={item.name}
-                              className="w-12 h-12 rounded-xl object-cover border border-gray-100 flex-shrink-0"
-                              onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
-                            />
-                            <div className="min-w-0">
-                              <h4 className="text-xs font-bold text-gray-900 truncate">{item.name}</h4>
-                              <p className="text-[11px] text-gray-400 font-medium truncate">{item.category || 'Landmark'}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                            {!showArchivedOnly ? (
-                              <>
-                                <button
-                                  onClick={() => handleArchiveSelected([item.id])}
-                                  className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Archive attraction"
-                                >
-                                  <Archive className="h-4 w-4" />
-                                  <span className="hidden sm:inline">Archive</span>
-                                </button>
-                                <button
-                                  onClick={() => handleDeletePost(item.id, 'attraction')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Permanently delete attraction"
-                                >
-                                  <Trash2 className="h-4 w-4 text-rose-500" />
-                                  <span className="hidden sm:inline text-rose-600">Delete</span>
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => handleUnarchiveSelected([item.id])}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Restore attraction"
-                                >
-                                  <ArchiveRestore className="h-4 w-4" />
-                                  <span className="hidden sm:inline">Restore</span>
-                                </button>
-                                <button
-                                  onClick={() => handleDeletePost(item.id, 'attraction')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Permanently delete attraction"
-                                >
-                                  <Trash2 className="h-4 w-4 text-rose-500" />
-                                  <span className="hidden sm:inline text-rose-600">Delete</span>
-                                </button>
-                              </>
-                            )}
-                            <button onClick={() => { setActiveTab('attraction'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors cursor-pointer"><Pencil className="h-4 w-4" /></button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* 4. EVENT POSTS SECTION */}
-              <div className="bg-white rounded-3xl border border-gray-100/90 shadow-2xs p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-purple-600" />
-                    <h3 className="text-base font-extrabold text-gray-900">Event Posts</h3>
-                    <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded-full">
-                      {visibleEvents.length}
-                    </span>
-                  </div>
-
-                  {visibleEvents.length > 0 && (
-                    <button
-                      onClick={() => toggleSelectAllList(visibleEvents)}
-                      className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
-                    >
-                      {areAllEventsSelected ? <CheckSquare className="h-4 w-4 text-purple-600" /> : <Square className="h-4 w-4 text-purple-400" />}
-                      <span>{areAllEventsSelected ? 'Deselect All Events' : 'Select All Events'}</span>
-                    </button>
-                  )}
-                </div>
-
-                {visibleEvents.length === 0 ? (
-                  <div className="py-12 text-center">
-                    <p className="text-sm text-gray-400 font-medium">
-                      {showArchivedOnly ? 'No archived event posts.' : 'No event posts yet.'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {visibleEvents.map((item) => {
-                      const isSelected = selectedPostIds.includes(item.id);
-                      return (
-                        <div
-                          key={item.id}
-                          onClick={() => toggleSelectPost(item.id)}
-                          className={`p-3.5 border rounded-2xl flex items-center justify-between bg-white transition-all cursor-pointer shadow-2xs ${
-                            isSelected ? 'border-purple-500 bg-purple-50/20 ring-1 ring-purple-500' : 'border-gray-100 hover:border-pink-200'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <input
-                              type="checkbox"
-                              checked={selectedPostIds.includes(item.id)}
-                              onChange={(e) => { e.stopPropagation(); toggleSelectPost(item.id); }}
-                              className="h-4 w-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
-                            />
-                            <img
-                              src={item.image ? (item.image.startsWith('http') ? item.image : `${API_BASE}${item.image}`) : '/assets/mansalay_hero_bg.jpg'}
-                              alt={item.name}
-                              className="w-12 h-12 rounded-xl object-cover border border-gray-100 flex-shrink-0"
-                              onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
-                            />
-                            <div className="min-w-0">
-                              <h4 className="text-xs font-bold text-gray-900 truncate">{item.name}</h4>
-                              <p className="text-[11px] text-gray-400 font-medium truncate">{item.date || 'Upcoming'}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                            {!showArchivedOnly ? (
-                              <>
-                                <button
-                                  onClick={() => handleArchiveSelected([item.id])}
-                                  className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Archive event"
-                                >
-                                  <Archive className="h-4 w-4" />
-                                  <span className="hidden sm:inline">Archive</span>
-                                </button>
-                                <button
-                                  onClick={() => handleDeletePost(item.id, 'event')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Permanently delete event"
-                                >
-                                  <Trash2 className="h-4 w-4 text-rose-500" />
-                                  <span className="hidden sm:inline text-rose-600">Delete</span>
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => handleUnarchiveSelected([item.id])}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Restore event"
-                                >
-                                  <ArchiveRestore className="h-4 w-4" />
-                                  <span className="hidden sm:inline">Restore</span>
-                                </button>
-                                <button
-                                  onClick={() => handleDeletePost(item.id, 'event')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Permanently delete event"
-                                >
-                                  <Trash2 className="h-4 w-4 text-rose-500" />
-                                  <span className="hidden sm:inline text-rose-600">Delete</span>
-                                </button>
-                              </>
-                            )}
-                            <button onClick={() => { setActiveTab('event'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors cursor-pointer"><Pencil className="h-4 w-4" /></button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* 5. ITINERARY POSTS SECTION */}
-              <div className="bg-white rounded-3xl border border-gray-100/90 shadow-2xs p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-5 w-5 text-rose-600" />
-                    <h3 className="text-base font-extrabold text-gray-900">Itinerary Posts</h3>
-                    <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-xs font-bold rounded-full">
-                      {visibleItineraries.length}
-                    </span>
-                  </div>
-
-                  {visibleItineraries.length > 0 && (
-                    <button
-                      onClick={() => toggleSelectAllList(visibleItineraries)}
-                      className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
-                    >
-                      {areAllItinerariesSelected ? <CheckSquare className="h-4 w-4 text-rose-600" /> : <Square className="h-4 w-4 text-rose-400" />}
-                      <span>{areAllItinerariesSelected ? 'Deselect All Itineraries' : 'Select All Itineraries'}</span>
-                    </button>
-                  )}
-                </div>
-
-                {visibleItineraries.length === 0 ? (
-                  <div className="py-12 text-center">
-                    <p className="text-sm text-gray-400 font-medium">
-                      {showArchivedOnly ? 'No archived itinerary posts.' : 'No itinerary posts yet.'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {visibleItineraries.map((item) => {
-                      const isSelected = selectedPostIds.includes(item.id);
-                      return (
-                        <div
-                          key={item.id}
-                          onClick={() => toggleSelectPost(item.id)}
-                          className={`p-3.5 border rounded-2xl flex items-center justify-between bg-white transition-all cursor-pointer shadow-2xs ${
-                            isSelected ? 'border-rose-500 bg-rose-50/20 ring-1 ring-rose-500' : 'border-gray-100 hover:border-pink-200'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <input
-                              type="checkbox"
-                              checked={selectedPostIds.includes(item.id)}
-                              onChange={(e) => { e.stopPropagation(); toggleSelectPost(item.id); }}
-                              className="h-4 w-4 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
-                            />
-                            <img
-                              src={item.image ? (item.image.startsWith('http') ? item.image : `${API_BASE}${item.image}`) : '/assets/mansalay_hero_bg.jpg'}
-                              alt={item.name}
-                              className="w-12 h-12 rounded-xl object-cover border border-gray-100 flex-shrink-0"
-                              onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
-                            />
-                            <div className="min-w-0">
-                              <h4 className="text-xs font-bold text-gray-900 truncate">{item.name}</h4>
-                              <p className="text-[11px] text-gray-400 font-medium truncate">{item.category || 'Curated Tour'}</p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                            {!showArchivedOnly ? (
-                              <>
-                                <button
-                                  onClick={() => handleArchiveSelected([item.id])}
-                                  className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Archive itinerary"
-                                >
-                                  <Archive className="h-4 w-4" />
-                                  <span className="hidden sm:inline">Archive</span>
-                                </button>
-                                <button
-                                  onClick={() => handleDeletePost(item.id, 'itinerary')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Permanently delete itinerary"
-                                >
-                                  <Trash2 className="h-4 w-4 text-rose-500" />
-                                  <span className="hidden sm:inline text-rose-600">Delete</span>
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => handleUnarchiveSelected([item.id])}
-                                  className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Restore itinerary"
-                                >
-                                  <ArchiveRestore className="h-4 w-4" />
-                                  <span className="hidden sm:inline">Restore</span>
-                                </button>
-                                <button
-                                  onClick={() => handleDeletePost(item.id, 'itinerary')}
-                                  className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-colors font-bold text-xs flex items-center gap-1 cursor-pointer"
-                                  title="Permanently delete itinerary"
-                                >
-                                  <Trash2 className="h-4 w-4 text-rose-500" />
-                                  <span className="hidden sm:inline text-rose-600">Delete</span>
-                                </button>
-                              </>
-                            )}
-                            <button onClick={() => { setActiveTab('itinerary'); handleEditPost(item); }} className="p-2 text-gray-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors cursor-pointer"><Pencil className="h-4 w-4" /></button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })()}
 
       </div>
     </div>

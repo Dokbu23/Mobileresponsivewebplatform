@@ -17,6 +17,8 @@ import { Attractions } from "./pages/tourist/Attractions";
 import { Events } from "./pages/tourist/Events";
 import { Products } from "./pages/tourist/Products";
 import { Accommodations } from "./pages/tourist/Accommodations";
+import { CultureArts } from "./pages/tourist/CultureArts";
+import { History } from "./pages/tourist/History";
 import { Settings } from "./pages/tourist/Settings";
 import { BusinessProfile } from "./pages/tourist/BusinessProfile";
 import { MapExplore } from "./pages/tourist/MapExplore";
@@ -25,6 +27,7 @@ import { Wishlist } from "./pages/tourist/Wishlist";
 
 import { AdminLogin } from "./pages/admin/AdminLogin";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
+import { ManagePosts } from "./pages/admin/ManagePosts";
 import { ManageListings } from "./pages/admin/ManageListings";
 import { ManageUsers } from "./pages/admin/ManageUsers";
 import { ManageSubscriptions } from "./pages/admin/ManageSubscriptions";
@@ -64,6 +67,7 @@ function SmartRedirect() {
 
 import { AdminContent } from "./pages/admin/AdminContent";
 import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
+import { GoogleAuthCallback } from "./pages/GoogleAuthCallback";
 
 export const router = createBrowserRouter([
   {
@@ -75,6 +79,7 @@ export const router = createBrowserRouter([
       { path: "dashboard", Component: Dashboard },
       { path: "login", Component: UnifiedLogin },
       { path: "register", Component: UnifiedRegister },
+      { path: "auth/google/callback", Component: GoogleAuthCallback },
       { path: "select-role", Component: RoleSelection },
       { path: "forgot-password", Component: ForgotPassword },
       { path: "reset-password", Component: ResetPassword },
@@ -86,6 +91,8 @@ export const router = createBrowserRouter([
       { path: "events", Component: Events },
       { path: "products", Component: Products },
       { path: "accommodations", Component: Accommodations },
+      { path: "culture-arts", Component: CultureArts },
+      { path: "history", Component: History },
       { path: "map", Component: MapExplore },
       { path: "itinerary", Component: Itinerary },
       { path: "settings", Component: Settings },
@@ -96,6 +103,7 @@ export const router = createBrowserRouter([
       { path: "business/:type/:userId", Component: BusinessProfile },
       { path: "admin/login", Component: AdminLogin },
       { path: "admin/dashboard", Component: AdminDashboard },
+      { path: "admin/posts", Component: ManagePosts },
       { path: "admin/publish", Component: AdminContent },
       { path: "admin/listings", Component: AdminContent },
       { path: "admin/events", Component: AdminContent },

@@ -30,6 +30,9 @@ use App\Http\Controllers\Api\LandmarkController;
 use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\SiteSettingController;
 use App\Http\Controllers\Api\VirtualTourController;
+use App\Http\Controllers\Api\GoogleAuthController;
+use App\Http\Controllers\Api\CultureArtController;
+use App\Http\Controllers\Api\HistoryController;
 
 use App\Models\User;
 
@@ -58,6 +61,18 @@ Route::group(['prefix' => 'public'], function () {
     Route::get('landmarks', [LandmarkController::class, 'index']);
     Route::post('landmarks', [LandmarkController::class, 'store']);
     Route::post('landmarks/{id}/photos', [LandmarkController::class, 'addPhotos']);
+
+    // Public Culture & Arts
+    Route::get('culture-arts', [CultureArtController::class, 'index']);
+    Route::get('culture-arts/{id}', [CultureArtController::class, 'show']);
+    Route::post('culture-arts/{id}/view', [CultureArtController::class, 'recordView']);
+
+    // Public History
+    Route::get('histories', [HistoryController::class, 'index']);
+    Route::get('histories/{id}', [HistoryController::class, 'show']);
+    Route::post('histories/{id}/view', [HistoryController::class, 'recordView']);
+    Route::get('history', [HistoryController::class, 'index']);
+    Route::get('history/{id}', [HistoryController::class, 'show']);
 
     // Public Wishlist & Likes API
     Route::post('wishlist/toggle', [WishlistController::class, 'toggle']);
@@ -162,6 +177,11 @@ Route::get('stats', [StatsController::class, 'getPlatformStats']);
 // Authentication routes
 Route::post('login', [AuthController::class, 'login']);
 Route::post('register', [AuthController::class, 'register']);
+
+// Google OAuth routes
+Route::get('auth/google/url', [GoogleAuthController::class, 'getAuthUrl']);
+Route::post('auth/google/callback', [GoogleAuthController::class, 'handleCallback']);
+Route::post('auth/google/token', [GoogleAuthController::class, 'handleToken']);
 
 // Email verification routes (no auth required)
 Route::post('email/send-code', [EmailVerificationController::class, 'sendCode']);
@@ -286,6 +306,14 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::post('admin/events/{id}', [EventController::class, 'update']);
         Route::put('admin/events/{id}', [EventController::class, 'update']);
         Route::delete('admin/events/{id}', [EventController::class, 'destroy']);
+        Route::post('admin/culture-arts', [CultureArtController::class, 'store']);
+        Route::post('admin/culture-arts/{id}', [CultureArtController::class, 'update']);
+        Route::put('admin/culture-arts/{id}', [CultureArtController::class, 'update']);
+        Route::delete('admin/culture-arts/{id}', [CultureArtController::class, 'destroy']);
+        Route::post('admin/histories', [HistoryController::class, 'store']);
+        Route::post('admin/histories/{id}', [HistoryController::class, 'update']);
+        Route::put('admin/histories/{id}', [HistoryController::class, 'update']);
+        Route::delete('admin/histories/{id}', [HistoryController::class, 'destroy']);
     });
 
     // Enterprise-only routes (admin allowed) - PROTECTED BY SUBSCRIPTION
@@ -606,6 +634,11 @@ Route::group(['middleware' => ['jwt.auth']], function () {
                 'qr_code' => $qrUrl ?? \Illuminate\Support\Facades\Cache::get('subscription_qr'),
             ]);
         });
+
+        // Admin Post Moderation
+        Route::get('admin/moderation/posts', [EnterprisePostController::class, 'adminModerationIndex']);
+        Route::post('admin/moderation/posts/{id}/approve', [EnterprisePostController::class, 'approve']);
+        Route::post('admin/moderation/posts/{id}/reject', [EnterprisePostController::class, 'reject']);
     });
 
     // Multi-role event management (admin, enterprise, resort)
@@ -681,4 +714,7 @@ Route::group(['prefix' => 'legacy', 'middleware' => ['api.rate:120,1']], functio
     Route::get('accommodations', [AccommodationController::class, 'index']);
     Route::get('orders', [OrderController::class, 'index']);
     Route::get('bookings', [BookingController::class, 'index']);
+    Route::get('culture-arts', [CultureArtController::class, 'index']);
+    Route::get('histories', [HistoryController::class, 'index']);
+    Route::get('history', [HistoryController::class, 'index']);
 });

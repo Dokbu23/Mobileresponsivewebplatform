@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router';
-import { Menu, X, MapPin, User, LogOut, Shield, Hotel, Store, Moon, Sun, Search, ChevronDown, Plus, LayoutDashboard, Calendar, CreditCard, Settings, Package, ShoppingBag, Bed } from 'lucide-react';
+import { Menu, X, MapPin, User, LogOut, Shield, Hotel, Store, Moon, Sun, Search, ChevronDown, Plus, LayoutDashboard, Calendar, CreditCard, Settings, Package, ShoppingBag, Bed, FileText } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
@@ -55,6 +55,8 @@ export function Navbar() {
     { path: '/events', label: 'Events' },
     { path: '/products', label: 'Products' },
     { path: '/accommodations', label: 'Stays' },
+    { path: '/culture-arts', label: 'Culture & Arts' },
+    { path: '/history', label: 'History' },
     { path: '/itinerary', label: 'Itinerary' },
     { path: '/map', label: 'Map' },
   ];
@@ -68,6 +70,7 @@ export function Navbar() {
     ],
     admin: [
       { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/admin/posts', label: 'Manage Posts', icon: FileText },
       { to: '/admin/users', label: 'Account Management', icon: User },
       { to: '/admin/subscriptions', label: 'Manage Subscriptions', icon: CreditCard },
       { to: '/admin/publish', label: 'Publish Content', icon: Plus },

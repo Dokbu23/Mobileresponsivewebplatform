@@ -29,17 +29,26 @@ class EnterprisePostController extends Controller
         $query = EnterprisePost::query()
             ->where('type', '!=', 'promotion')
             ->where('content', 'not like', '%JULY SALE%')
-            ->with('user:id,name,store_name,store_logo,resort_name,resort_images');
+            ->with(['user:id,name,role,store_name,store_logo,resort_name,resort_images', 'approver:id,name', 'rejecter:id,name']);
 
         if ($request->has('user_id')) {
-            $query->where('user_id', $request->input('user_id'));
-        } elseif ($user && ($user->role === 'enterprise' || $user->role === 'resort')) {
+            $targetUserId = (int) $request->input('user_id');
+            $query->where('user_id', $targetUserId);
+            // If viewer is NOT the owner and NOT an admin, only show approved posts
+            if (!$user || ((int)$user->id !== $targetUserId && $user->role !== 'admin')) {
+                $query->where('status', 'approved');
+            }
+        } elseif ($user && ($user->role === 'enterprise' || $user->role === 'resort') && !$request->has('public')) {
+            // Owner viewing their own dashboard posts
             $query->where('user_id', $user->id);
+        } else {
+            // Public feed for tourists or guests
+            $query->where('status', 'approved');
         }
 
         $posts = $query->orderBy('created_at', 'desc')->get();
 
-        // Clean tags and auto-sync products/rooms
+        // Clean tags and auto-sync products/rooms for approved posts
         try {
             foreach ($posts as $p) {
                 if (!empty($p->tags)) {
@@ -55,12 +64,14 @@ class EnterprisePostController extends Controller
                 }
             }
 
-            // Sync from oldest to newest so newest post takes precedence
+            // Sync from oldest to newest so newest post takes precedence (ONLY approved posts)
             foreach ($posts->reverse() as $p) {
-                if ($p->type === 'product' || !empty($p->product_name)) {
-                    self::syncProductFromPost($p, $p->user ?? $user);
-                } elseif ($p->type === 'rooms' || $p->type === 'room') {
-                    self::syncRoomFromPost($p, $p->user ?? $user);
+                if ($p->status === 'approved') {
+                    if ($p->type === 'product' || !empty($p->product_name)) {
+                        self::syncProductFromPost($p, $p->user ?? $user);
+                    } elseif ($p->type === 'rooms' || $p->type === 'room') {
+                        self::syncRoomFromPost($p, $p->user ?? $user);
+                    }
                 }
             }
         } catch (\Throwable $e) {
@@ -113,6 +124,10 @@ class EnterprisePostController extends Controller
      */
     public static function syncProductFromPost(EnterprisePost $post, $user = null)
     {
+        if ($post->status !== 'approved') {
+            return null;
+        }
+
         if (!$user && $post->user_id) {
             $user = \App\Models\User::find($post->user_id);
         }
@@ -217,6 +232,10 @@ class EnterprisePostController extends Controller
      */
     public static function syncRoomFromPost(EnterprisePost $post, $user = null)
     {
+        if ($post->status !== 'approved') {
+            return null;
+        }
+
         if (!$user && $post->user_id) {
             $user = \App\Models\User::find($post->user_id);
         }
@@ -385,24 +404,64 @@ class EnterprisePostController extends Controller
         }
 
         $data['user_id'] = $user ? $user->id : null;
-        $data['seller_name'] = $data['seller_name'] ?: ($user ? ($user->resort_name ?: ($user->store_name ?: $user->name)) : null);
+        $data['seller_name'] = (!empty($data['seller_name'])) ? $data['seller_name'] : ($user ? ($user->resort_name ?: ($user->store_name ?: $user->name)) : null);
         $data['likes'] = 0;
         $data['saves'] = 0;
 
+        // Admin posts can be auto-approved, Resort & Enterprise posts MUST be pending review
+        if ($user && $user->role === 'admin') {
+            $data['status'] = 'approved';
+            $data['approved_by'] = $user->id;
+            $data['approved_at'] = now();
+        } else {
+            $data['status'] = 'pending';
+        }
+
+        $data['moderation_history'] = [
+            [
+                'action'    => 'submitted',
+                'timestamp' => now()->toIso8601String(),
+                'user_id'   => $user ? $user->id : null,
+                'user_name' => $user ? $user->name : 'Owner',
+                'note'      => 'Post submitted for admin moderation'
+            ]
+        ];
+
         $post = EnterprisePost::create($data);
 
-        // If post type is product or has a product name, also create/sync a Product in products table
-        if (($data['type'] === 'product' || !empty($data['product_name'])) && $user) {
-            try {
-                self::syncProductFromPost($post, $user);
-            } catch (\Throwable $e) {
-                \Log::warning('Failed to sync Product record from EnterprisePost: ' . $e->getMessage());
+        // Only sync if approved immediately (e.g. by admin)
+        if ($post->status === 'approved') {
+            if (($data['type'] === 'product' || !empty($data['product_name'])) && $user) {
+                try {
+                    self::syncProductFromPost($post, $user);
+                } catch (\Throwable $e) {
+                    \Log::warning('Failed to sync Product record from EnterprisePost: ' . $e->getMessage());
+                }
+            } elseif (($data['type'] === 'rooms' || $data['type'] === 'room') && $user) {
+                try {
+                    self::syncRoomFromPost($post, $user);
+                } catch (\Throwable $e) {
+                    \Log::warning('Failed to sync ResortRoom record from EnterprisePost: ' . $e->getMessage());
+                }
             }
-        } elseif (($data['type'] === 'rooms' || $data['type'] === 'room') && $user) {
+        } else {
+            // Notify admins about new pending post
             try {
-                self::syncRoomFromPost($post, $user);
+                $adminUsers = \App\Models\User::where('role', 'admin')->get();
+                $ownerName = $user ? ($user->resort_name ?: ($user->store_name ?: $user->name)) : 'A partner';
+                $postTypeLabel = ucfirst($data['type']);
+                foreach ($adminUsers as $admin) {
+                    \App\Models\Notification::notify(
+                        $admin->id,
+                        'post_pending_review',
+                        'New Post Pending Review',
+                        "{$ownerName} submitted a new {$postTypeLabel} post for review.",
+                        ['post_id' => $post->id, 'owner_id' => $user ? $user->id : null, 'type' => $data['type']],
+                        '/admin/posts'
+                    );
+                }
             } catch (\Throwable $e) {
-                \Log::warning('Failed to sync ResortRoom record from EnterprisePost: ' . $e->getMessage());
+                \Log::warning('Failed to notify admins of pending post: ' . $e->getMessage());
             }
         }
 
@@ -437,18 +496,40 @@ class EnterprisePostController extends Controller
             'video_url'      => 'nullable|string',
         ]);
 
-        if ($request->hasFile('image')) {
-            $folder = ($user && $user->role === 'resort') ? 'resort/posts' : 'enterprise/posts';
+        $folder = ($user && $user->role === 'resort') ? 'resort/posts' : 'enterprise/posts';
+        $uploadedImages = [];
+
+        if ($request->hasFile('images')) {
+            $files = $request->file('images');
+            if (is_array($files)) {
+                foreach ($files as $file) {
+                    if ($file && $file->isValid()) {
+                        $path = $file->store($folder, 'public');
+                        $uploadedImages[] = '/storage/' . $path;
+                    }
+                }
+            } elseif ($files && $files->isValid()) {
+                $path = $files->store($folder, 'public');
+                $uploadedImages[] = '/storage/' . $path;
+            }
+        }
+
+        if ($request->hasFile('image') && empty($uploadedImages)) {
             $path = $request->file('image')->store($folder, 'public');
-            $data['image'] = '/storage/' . $path;
+            $uploadedImages[] = '/storage/' . $path;
+        }
+
+        if (!empty($uploadedImages)) {
+            $data['image'] = $uploadedImages[0];
+            $data['images'] = $uploadedImages;
         } elseif ($request->filled('image_url')) {
             $data['image'] = $request->input('image_url');
         }
 
         // Handle video file upload or video link
         if ($request->hasFile('video')) {
-            $folder = ($user && $user->role === 'resort') ? 'resort/videos' : 'enterprise/videos';
-            $path = $request->file('video')->store($folder, 'public');
+            $vFolder = ($user && $user->role === 'resort') ? 'resort/videos' : 'enterprise/videos';
+            $path = $request->file('video')->store($vFolder, 'public');
             $data['video'] = '/storage/' . $path;
         } elseif ($request->filled('video_url')) {
             $data['video'] = $request->input('video_url');
@@ -460,7 +541,71 @@ class EnterprisePostController extends Controller
             $data['tags'] = self::cleanTags($data['tags']);
         }
 
-        $post->update(array_filter($data, fn($v) => !is_null($v)));
+        // If resort/enterprise owner updates their post, reset to pending moderation
+        if ($user && $user->role !== 'admin') {
+            $data['status'] = 'pending';
+            $data['rejection_remarks'] = null;
+            $data['rejected_by'] = null;
+            $data['rejected_at'] = null;
+
+            $history = $post->moderation_history ?? [];
+            if (!is_array($history)) {
+                $history = [];
+            }
+            $history[] = [
+                'action'    => 'resubmitted',
+                'timestamp' => now()->toIso8601String(),
+                'user_id'   => $user->id,
+                'user_name' => $user->name,
+                'note'      => 'Post edited and resubmitted for admin review'
+            ];
+            $data['moderation_history'] = $history;
+
+            // Remove any previously synced live public product while pending re-review
+            try {
+                \App\Models\Product::where('post_id', $post->id)->delete();
+            } catch (\Throwable $e) {}
+
+            // Notify admins of resubmission
+            try {
+                $adminUsers = \App\Models\User::where('role', 'admin')->get();
+                $ownerName = $user->resort_name ?: ($user->store_name ?: $user->name);
+                foreach ($adminUsers as $admin) {
+                    \App\Models\Notification::notify(
+                        $admin->id,
+                        'post_resubmitted',
+                        'Post Resubmitted for Review',
+                        "{$ownerName} updated and resubmitted their post for review.",
+                        ['post_id' => $post->id, 'owner_id' => $user->id],
+                        '/admin/posts'
+                    );
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('Failed to notify admins of resubmitted post: ' . $e->getMessage());
+            }
+        }
+
+        $updateData = array_filter($data, fn($v) => !is_null($v));
+        $post->update($updateData);
+
+        if ($user && $user->role !== 'admin') {
+            $post->status = 'pending';
+            $post->rejection_remarks = null;
+            $post->rejected_by = null;
+            $post->rejected_at = null;
+            $post->save();
+        }
+
+        // If updated by admin directly to approved, re-sync
+        if ($post->status === 'approved') {
+            try {
+                if ($post->type === 'product' || !empty($post->product_name)) {
+                    self::syncProductFromPost($post, $post->user);
+                } elseif ($post->type === 'rooms' || $post->type === 'room') {
+                    self::syncRoomFromPost($post, $post->user);
+                }
+            } catch (\Throwable $e) {}
+        }
 
         return response()->json($post);
     }
@@ -477,9 +622,212 @@ class EnterprisePostController extends Controller
             return response()->json(['message' => 'Unauthorized to delete this post.'], 403);
         }
 
+        // Clean up any synced product
+        try {
+            \App\Models\Product::where('post_id', $post->id)->delete();
+        } catch (\Throwable $e) {}
+
         $post->delete();
 
         return response()->json(['message' => 'Post deleted successfully.']);
+    }
+
+    /**
+     * Admin: List posts with filter, search, and summary counts
+     */
+    public function adminModerationIndex(Request $request)
+    {
+        $user = $request->user();
+        if (!$user || $user->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized. Admin access required.'], 403);
+        }
+
+        $counts = [
+            'pending'  => EnterprisePost::where('status', 'pending')->count(),
+            'approved' => EnterprisePost::where('status', 'approved')->count(),
+            'rejected' => EnterprisePost::where('status', 'rejected')->count(),
+            'total'    => EnterprisePost::count(),
+        ];
+
+        $query = EnterprisePost::query()
+            ->with([
+                'user:id,name,email,role,store_name,store_logo,resort_name,resort_images',
+                'approver:id,name,email',
+                'rejecter:id,name,email'
+            ]);
+
+        // Status filter
+        $status = $request->input('status', 'all');
+        if (!empty($status) && in_array($status, ['pending', 'approved', 'rejected'])) {
+            $query->where('status', $status);
+        }
+
+        // Account type filter
+        $accountType = $request->input('account_type', 'all');
+        if (!empty($accountType) && in_array($accountType, ['resort', 'enterprise'])) {
+            $query->whereHas('user', function ($q) use ($accountType) {
+                $q->where('role', $accountType);
+            });
+        }
+
+        // Search
+        $search = trim($request->input('search', ''));
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('content', 'like', "%{$search}%")
+                  ->orWhere('title', 'like', "%{$search}%")
+                  ->orWhere('product_name', 'like', "%{$search}%")
+                  ->orWhere('category', 'like', "%{$search}%")
+                  ->orWhere('location', 'like', "%{$search}%")
+                  ->orWhereHas('user', function ($uq) use ($search) {
+                      $uq->where('name', 'like', "%{$search}%")
+                         ->orWhere('store_name', 'like', "%{$search}%")
+                         ->orWhere('resort_name', 'like', "%{$search}%")
+                         ->orWhere('email', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        $posts = $query->orderBy('created_at', 'desc')->get();
+
+        return response()->json([
+            'posts'  => $posts,
+            'counts' => $counts,
+        ]);
+    }
+
+    /**
+     * Admin: Approve a post
+     */
+    public function approve(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user || $user->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized. Admin access required.'], 403);
+        }
+
+        $post = EnterprisePost::with('user')->findOrFail($id);
+
+        $post->status = 'approved';
+        $post->approved_by = $user->id;
+        $post->approved_at = now();
+        $post->rejected_by = null;
+        $post->rejected_at = null;
+        $post->rejection_remarks = null;
+
+        $history = $post->moderation_history ?? [];
+        if (!is_array($history)) {
+            $history = [];
+        }
+        $history[] = [
+            'action'     => 'approved',
+            'timestamp'  => now()->toIso8601String(),
+            'admin_id'   => $user->id,
+            'admin_name' => $user->name,
+            'note'       => $request->input('note', 'Approved by admin'),
+        ];
+        $post->moderation_history = $history;
+        $post->save();
+
+        // Sync to Product or ResortRoom record
+        try {
+            if ($post->type === 'product' || !empty($post->product_name)) {
+                self::syncProductFromPost($post, $post->user);
+            } elseif ($post->type === 'rooms' || $post->type === 'room') {
+                self::syncRoomFromPost($post, $post->user);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Failed syncing approved post: ' . $e->getMessage());
+        }
+
+        // Notify post owner
+        if ($post->user_id) {
+            try {
+                $link = ($post->user && $post->user->role === 'resort') ? '/resort/dashboard' : '/enterprise/dashboard';
+                $titleSnippet = $post->product_name ?: (\Illuminate\Support\Str::limit($post->content, 35) ?: 'Your post');
+                \App\Models\Notification::notify(
+                    $post->user_id,
+                    'post_approved',
+                    'Post Approved!',
+                    "Your post \"{$titleSnippet}\" has been approved and is now publicly visible.",
+                    ['post_id' => $post->id, 'status' => 'approved'],
+                    $link
+                );
+            } catch (\Throwable $e) {
+                \Log::warning('Approval notification failed: ' . $e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'message' => 'Post approved successfully.',
+            'post'    => $post->fresh(['user:id,name,email,role,store_name,store_logo,resort_name,resort_images', 'approver:id,name']),
+        ]);
+    }
+
+    /**
+     * Admin: Reject a post with remarks
+     */
+    public function reject(Request $request, $id)
+    {
+        $user = $request->user();
+        if (!$user || $user->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized. Admin access required.'], 403);
+        }
+
+        $request->validate([
+            'remarks' => 'required|string|min:3|max:2000',
+        ]);
+
+        $post = EnterprisePost::with('user')->findOrFail($id);
+
+        $remarks = trim($request->input('remarks'));
+
+        $post->status = 'rejected';
+        $post->rejected_by = $user->id;
+        $post->rejected_at = now();
+        $post->rejection_remarks = $remarks;
+
+        $history = $post->moderation_history ?? [];
+        if (!is_array($history)) {
+            $history = [];
+        }
+        $history[] = [
+            'action'     => 'rejected',
+            'timestamp'  => now()->toIso8601String(),
+            'admin_id'   => $user->id,
+            'admin_name' => $user->name,
+            'remarks'    => $remarks,
+        ];
+        $post->moderation_history = $history;
+        $post->save();
+
+        // If product was previously synced, remove it
+        try {
+            \App\Models\Product::where('post_id', $post->id)->delete();
+        } catch (\Throwable $e) {}
+
+        // Notify post owner with remarks
+        if ($post->user_id) {
+            try {
+                $link = ($post->user && $post->user->role === 'resort') ? '/resort/dashboard' : '/enterprise/dashboard';
+                $titleSnippet = $post->product_name ?: (\Illuminate\Support\Str::limit($post->content, 35) ?: 'Your post');
+                \App\Models\Notification::notify(
+                    $post->user_id,
+                    'post_rejected',
+                    'Post Needs Revision',
+                    "Your post \"{$titleSnippet}\" was rejected by the admin. Reason: {$remarks}",
+                    ['post_id' => $post->id, 'status' => 'rejected', 'remarks' => $remarks],
+                    $link
+                );
+            } catch (\Throwable $e) {
+                \Log::warning('Rejection notification failed: ' . $e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'message' => 'Post rejected.',
+            'post'    => $post->fresh(['user:id,name,email,role,store_name,store_logo,resort_name,resort_images', 'rejecter:id,name']),
+        ]);
     }
 
     /**
