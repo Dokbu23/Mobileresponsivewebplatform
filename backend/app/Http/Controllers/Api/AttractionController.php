@@ -36,10 +36,12 @@ class AttractionController extends Controller
 
             // Exclude archived items for non-admin
             if (!$user || $user->role !== 'admin') {
-                $query->where(function($q) {
-                    $q->whereNull('status')
-                      ->orWhere('status', '!=', 'archived');
-                });
+                if (\Illuminate\Support\Facades\Schema::hasColumn('attractions', 'status')) {
+                    $query->where(function($q) {
+                        $q->whereNull('status')
+                          ->orWhere('status', '!=', 'archived');
+                    });
+                }
             }
 
             // Apply search filter (case-insensitive search on name and description)

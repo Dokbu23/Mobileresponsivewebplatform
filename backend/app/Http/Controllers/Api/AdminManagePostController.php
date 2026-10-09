@@ -14,6 +14,7 @@ use App\Models\EnterprisePost;
 use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class AdminManagePostController extends Controller
 {
@@ -65,353 +66,416 @@ class AdminManagePostController extends Controller
         $items = collect();
 
         // 1. Enterprise / Resort Posts (from enterprise_posts table)
-        if ($contentTypeFilter === 'all' || in_array($contentTypeFilter, ['resort', 'enterprise', 'product', 'accommodation'])) {
-            $postQuery = EnterprisePost::with([
-                'user:id,name,email,role,store_name,store_logo,resort_name,resort_images',
-                'approver:id,name',
-                'rejecter:id,name',
-            ]);
+        if (($contentTypeFilter === 'all' || in_array($contentTypeFilter, ['resort', 'enterprise', 'product', 'accommodation'])) && Schema::hasTable('enterprise_posts')) {
+            try {
+                $postQuery = EnterprisePost::with([
+                    'user:id,name,email,role,store_name,store_logo,resort_name,resort_images',
+                    'approver:id,name',
+                    'rejecter:id,name',
+                ]);
 
-            $posts = $postQuery->get()->map(function ($p) {
-                $ownerRole = $p->user ? $p->user->role : 'enterprise';
-                $cType = ($ownerRole === 'resort') ? 'Resort' : 'Enterprise';
-                if ($p->type === 'product' || !empty($p->product_name)) {
-                    $cType = 'Product';
-                } elseif (in_array($p->type, ['room', 'rooms', 'accommodation', 'stay'])) {
-                    $cType = 'Accommodation';
-                }
+                $posts = $postQuery->get()->map(function ($p) {
+                    $ownerRole = $p->user ? $p->user->role : 'enterprise';
+                    $cType = ($ownerRole === 'resort') ? 'Resort' : 'Enterprise';
+                    if ($p->type === 'product' || !empty($p->product_name)) {
+                        $cType = 'Product';
+                    } elseif (in_array($p->type, ['room', 'rooms', 'accommodation', 'stay'])) {
+                        $cType = 'Accommodation';
+                    }
 
-                $images = [];
-                if (is_array($p->images)) {
-                    $images = $p->images;
-                } elseif ($p->image) {
-                    $images = [$p->image];
-                }
+                    $images = [];
+                    if (is_array($p->images)) {
+                        $images = $p->images;
+                    } elseif ($p->image) {
+                        $images = [$p->image];
+                    }
 
-                $ownerData = [
-                    'id'          => $p->user_id,
-                    'name'        => $p->user ? $p->user->name : 'Unknown Partner',
-                    'role'        => $ownerRole,
-                    'email'       => $p->user ? $p->user->email : null,
-                    'store_name'  => $p->user ? ($p->user->store_name ?: $p->user->name) : null,
-                    'resort_name' => $p->user ? ($p->user->resort_name ?: $p->user->name) : null,
-                    'logo'        => $p->user ? ($p->user->store_logo ?: null) : null,
-                ];
+                    $ownerData = [
+                        'id'          => $p->user_id,
+                        'name'        => $p->user ? $p->user->name : 'Unknown Partner',
+                        'role'        => $ownerRole,
+                        'email'       => $p->user ? $p->user->email : null,
+                        'store_name'  => $p->user ? ($p->user->store_name ?: $p->user->name) : null,
+                        'resort_name' => $p->user ? ($p->user->resort_name ?: $p->user->name) : null,
+                        'logo'        => $p->user ? ($p->user->store_logo ?: null) : null,
+                    ];
 
-                return [
-                    'id'                => (int) $p->id,
-                    'source'            => 'post',
-                    'content_type'      => $cType,
-                    'account_type'      => $ownerRole,
-                    'title'             => $p->product_name ?: ($p->title ?: 'Post #' . $p->id),
-                    'name'              => $p->product_name ?: ($p->title ?: 'Post #' . $p->id),
-                    'content'           => $p->content,
-                    'description'       => $p->content,
-                    'full_description'  => $p->content,
-                    'category'          => $p->category ?: $cType,
-                    'price'             => $p->price,
-                    'location'          => $p->location,
-                    'status'            => $p->status ?: 'approved',
-                    'previous_status'   => $p->previous_status,
-                    'archived_at'       => $p->archived_at ? $p->archived_at->toIso8601String() : null,
-                    'created_at'        => $p->created_at ? $p->created_at->toIso8601String() : null,
-                    'updated_at'        => $p->updated_at ? $p->updated_at->toIso8601String() : null,
-                    'image'             => $p->image ?: ($images[0] ?? null),
-                    'images'            => $images,
-                    'video'             => $p->video,
-                    'rejection_remarks' => $p->rejection_remarks,
-                    'moderation_history'=> $p->moderation_history ?? [],
-                    'owner'             => $ownerData,
-                    'author'            => $ownerData,
-                ];
-            });
-            $items = $items->concat($posts);
+                    $archivedIso = null;
+                    if ($p->archived_at) {
+                        $archivedIso = $p->archived_at instanceof \Carbon\Carbon ? $p->archived_at->toIso8601String() : (string) $p->archived_at;
+                    }
+
+                    return [
+                        'id'                => (int) $p->id,
+                        'source'            => 'post',
+                        'content_type'      => $cType,
+                        'account_type'      => $ownerRole,
+                        'title'             => $p->product_name ?: ($p->title ?: 'Post #' . $p->id),
+                        'name'              => $p->product_name ?: ($p->title ?: 'Post #' . $p->id),
+                        'content'           => $p->content,
+                        'description'       => $p->content,
+                        'full_description'  => $p->content,
+                        'category'          => $p->category ?: $cType,
+                        'price'             => $p->price,
+                        'location'          => $p->location,
+                        'status'            => $p->status ?: 'approved',
+                        'previous_status'   => $p->previous_status,
+                        'archived_at'       => $archivedIso,
+                        'created_at'        => $p->created_at ? ($p->created_at instanceof \Carbon\Carbon ? $p->created_at->toIso8601String() : (string) $p->created_at) : null,
+                        'updated_at'        => $p->updated_at ? ($p->updated_at instanceof \Carbon\Carbon ? $p->updated_at->toIso8601String() : (string) $p->updated_at) : null,
+                        'image'             => $p->image ?: ($images[0] ?? null),
+                        'images'            => $images,
+                        'video'             => $p->video,
+                        'rejection_remarks' => $p->rejection_remarks,
+                        'moderation_history'=> $p->moderation_history ?? [],
+                        'owner'             => $ownerData,
+                        'author'            => $ownerData,
+                    ];
+                });
+                $items = $items->concat($posts);
+            } catch (\Throwable $e) {
+                Log::warning('AdminManagePostController enterprise_posts fetch error: ' . $e->getMessage());
+            }
         }
 
         // 2. Accommodations / Stays (from accommodations table)
-        if ($contentTypeFilter === 'all' || in_array($contentTypeFilter, ['resort', 'accommodation'])) {
-            $accQuery = Accommodation::with('owner:id,name,email,role,store_name,resort_name,resort_images');
-            $accs = $accQuery->get()->map(function ($a) {
-                $ownerRole = $a->owner ? $a->owner->role : 'admin';
-                $images = is_array($a->images) ? $a->images : ($a->image ? [$a->image] : []);
+        if (($contentTypeFilter === 'all' || in_array($contentTypeFilter, ['resort', 'accommodation'])) && Schema::hasTable('accommodations')) {
+            try {
+                $accQuery = Accommodation::with('owner:id,name,email,role,store_name,resort_name,resort_images');
+                $accs = $accQuery->get()->map(function ($a) {
+                    $ownerRole = $a->owner ? $a->owner->role : 'admin';
+                    $images = is_array($a->images) ? $a->images : ($a->image ? [$a->image] : []);
 
-                $ownerData = [
-                    'id'          => $a->user_id,
-                    'name'        => $a->owner ? $a->owner->name : 'Tourism Admin',
-                    'role'        => $ownerRole,
-                    'email'       => $a->owner ? $a->owner->email : null,
-                    'resort_name' => $a->owner ? ($a->owner->resort_name ?: $a->owner->name) : $a->name,
-                    'store_name'  => null,
-                    'logo'        => null,
-                ];
+                    $ownerData = [
+                        'id'          => $a->user_id,
+                        'name'        => $a->owner ? $a->owner->name : 'Tourism Admin',
+                        'role'        => $ownerRole,
+                        'email'       => $a->owner ? $a->owner->email : null,
+                        'resort_name' => $a->owner ? ($a->owner->resort_name ?: $a->owner->name) : $a->name,
+                        'store_name'  => null,
+                        'logo'        => null,
+                    ];
 
-                return [
-                    'id'                => (int) $a->id,
-                    'source'            => 'accommodation',
-                    'content_type'      => 'Accommodation',
-                    'account_type'      => $ownerRole,
-                    'title'             => $a->name,
-                    'name'              => $a->name,
-                    'content'           => $a->description,
-                    'description'       => $a->description,
-                    'full_description'  => $a->full_description ?: $a->description,
-                    'category'          => $a->category ?: 'Accommodation',
-                    'price'             => $a->price_per_night,
-                    'location'          => $a->location,
-                    'status'            => $a->status ?: 'approved',
-                    'previous_status'   => $a->previous_status,
-                    'archived_at'       => $a->archived_at ? $a->archived_at->toIso8601String() : null,
-                    'created_at'        => $a->created_at ? $a->created_at->toIso8601String() : null,
-                    'updated_at'        => $a->updated_at ? $a->updated_at->toIso8601String() : null,
-                    'image'             => $a->image ?: ($images[0] ?? null),
-                    'images'            => $images,
-                    'video'             => $a->video,
-                    'rejection_remarks' => null,
-                    'moderation_history'=> [],
-                    'owner'             => $ownerData,
-                    'author'            => $ownerData,
-                ];
-            });
-            $items = $items->concat($accs);
+                    $archivedIso = null;
+                    if ($a->archived_at) {
+                        $archivedIso = $a->archived_at instanceof \Carbon\Carbon ? $a->archived_at->toIso8601String() : (string) $a->archived_at;
+                    }
+
+                    return [
+                        'id'                => (int) $a->id,
+                        'source'            => 'accommodation',
+                        'content_type'      => 'Accommodation',
+                        'account_type'      => $ownerRole,
+                        'title'             => $a->name,
+                        'name'              => $a->name,
+                        'content'           => $a->description,
+                        'description'       => $a->description,
+                        'full_description'  => $a->full_description ?: $a->description,
+                        'category'          => $a->category ?: 'Accommodation',
+                        'price'             => $a->price_per_night,
+                        'location'          => $a->location,
+                        'status'            => $a->status ?: 'approved',
+                        'previous_status'   => $a->previous_status,
+                        'archived_at'       => $archivedIso,
+                        'created_at'        => $a->created_at ? ($a->created_at instanceof \Carbon\Carbon ? $a->created_at->toIso8601String() : (string) $a->created_at) : null,
+                        'updated_at'        => $a->updated_at ? ($a->updated_at instanceof \Carbon\Carbon ? $a->updated_at->toIso8601String() : (string) $a->updated_at) : null,
+                        'image'             => $a->image ?: ($images[0] ?? null),
+                        'images'            => $images,
+                        'video'             => $a->video,
+                        'rejection_remarks' => null,
+                        'moderation_history'=> [],
+                        'owner'             => $ownerData,
+                        'author'            => $ownerData,
+                    ];
+                });
+                $items = $items->concat($accs);
+            } catch (\Throwable $e) {
+                Log::warning('AdminManagePostController accommodations fetch error: ' . $e->getMessage());
+            }
         }
 
         // 3. Products (from products table)
-        if ($contentTypeFilter === 'all' || in_array($contentTypeFilter, ['enterprise', 'product'])) {
-            $prodQuery = Product::with('owner:id,name,email,role,store_name');
-            $prods = $prodQuery->get()->map(function ($pr) {
-                $ownerRole = $pr->owner ? $pr->owner->role : 'admin';
-                $images = is_array($pr->images) ? $pr->images : ($pr->image ? [$pr->image] : []);
+        if (($contentTypeFilter === 'all' || in_array($contentTypeFilter, ['enterprise', 'product'])) && Schema::hasTable('products')) {
+            try {
+                $prodQuery = Product::with('owner:id,name,email,role,store_name');
+                $prods = $prodQuery->get()->map(function ($pr) {
+                    $ownerRole = $pr->owner ? $pr->owner->role : 'admin';
+                    $images = is_array($pr->images) ? $pr->images : ($pr->image ? [$pr->image] : []);
 
-                $ownerData = [
-                    'id'          => $pr->user_id,
-                    'name'        => $pr->owner ? $pr->owner->name : 'Tourism Admin',
-                    'role'        => $ownerRole,
-                    'email'       => $pr->owner ? $pr->owner->email : null,
-                    'store_name'  => $pr->owner ? ($pr->owner->store_name ?: $pr->owner->name) : 'Official Enterprise',
-                    'resort_name' => null,
-                    'logo'        => null,
-                ];
+                    $ownerData = [
+                        'id'          => $pr->user_id,
+                        'name'        => $pr->owner ? $pr->owner->name : 'Tourism Admin',
+                        'role'        => $ownerRole,
+                        'email'       => $pr->owner ? $pr->owner->email : null,
+                        'store_name'  => $pr->owner ? ($pr->owner->store_name ?: $pr->owner->name) : 'Official Enterprise',
+                        'resort_name' => null,
+                        'logo'        => null,
+                    ];
 
-                return [
-                    'id'                => (int) $pr->id,
-                    'source'            => 'product',
-                    'content_type'      => 'Product',
-                    'account_type'      => $ownerRole,
-                    'title'             => $pr->name,
-                    'name'              => $pr->name,
-                    'content'           => $pr->description,
-                    'description'       => $pr->description,
-                    'full_description'  => $pr->description,
-                    'category'          => $pr->category ?: 'Local Product',
-                    'price'             => $pr->price,
-                    'location'          => 'Mansalay, Oriental Mindoro',
-                    'status'            => $pr->status ?: 'approved',
-                    'previous_status'   => $pr->previous_status,
-                    'archived_at'       => $pr->archived_at ? $pr->archived_at->toIso8601String() : null,
-                    'created_at'        => $pr->created_at ? $pr->created_at->toIso8601String() : null,
-                    'updated_at'        => $pr->updated_at ? $pr->updated_at->toIso8601String() : null,
-                    'image'             => $pr->image ?: ($images[0] ?? null),
-                    'images'            => $images,
-                    'video'             => null,
-                    'rejection_remarks' => null,
-                    'moderation_history'=> [],
-                    'owner'             => $ownerData,
-                    'author'            => $ownerData,
-                ];
-            });
-            $items = $items->concat($prods);
+                    $archivedIso = null;
+                    if ($pr->archived_at) {
+                        $archivedIso = $pr->archived_at instanceof \Carbon\Carbon ? $pr->archived_at->toIso8601String() : (string) $pr->archived_at;
+                    }
+
+                    return [
+                        'id'                => (int) $pr->id,
+                        'source'            => 'product',
+                        'content_type'      => 'Product',
+                        'account_type'      => $ownerRole,
+                        'title'             => $pr->name,
+                        'name'              => $pr->name,
+                        'content'           => $pr->description,
+                        'description'       => $pr->description,
+                        'full_description'  => $pr->description,
+                        'category'          => $pr->category ?: 'Local Product',
+                        'price'             => $pr->price,
+                        'location'          => 'Mansalay, Oriental Mindoro',
+                        'status'            => $pr->status ?: 'approved',
+                        'previous_status'   => $pr->previous_status,
+                        'archived_at'       => $archivedIso,
+                        'created_at'        => $pr->created_at ? ($pr->created_at instanceof \Carbon\Carbon ? $pr->created_at->toIso8601String() : (string) $pr->created_at) : null,
+                        'updated_at'        => $pr->updated_at ? ($pr->updated_at instanceof \Carbon\Carbon ? $pr->updated_at->toIso8601String() : (string) $pr->updated_at) : null,
+                        'image'             => $pr->image ?: ($images[0] ?? null),
+                        'images'            => $images,
+                        'video'             => null,
+                        'rejection_remarks' => null,
+                        'moderation_history'=> [],
+                        'owner'             => $ownerData,
+                        'author'            => $ownerData,
+                    ];
+                });
+                $items = $items->concat($prods);
+            } catch (\Throwable $e) {
+                Log::warning('AdminManagePostController products fetch error: ' . $e->getMessage());
+            }
         }
 
         // 4. Attractions & Itineraries (from attractions table)
-        if ($contentTypeFilter === 'all' || in_array($contentTypeFilter, ['attraction', 'itinerary'])) {
-            $attrQuery = Attraction::with('creator:id,name,email,role');
-            $attrs = $attrQuery->get()->map(function ($at) {
-                $isItinerary = ($at->category === 'Itinerary' || !empty($at->days_count) || !empty($at->schedule));
-                $cType = $isItinerary ? 'Itinerary' : 'Attraction';
-                $ownerRole = $at->creator ? $at->creator->role : 'admin';
-                $images = is_array($at->images) ? $at->images : ($at->image ? [$at->image] : []);
+        if (($contentTypeFilter === 'all' || in_array($contentTypeFilter, ['attraction', 'itinerary'])) && Schema::hasTable('attractions')) {
+            try {
+                $attrQuery = Attraction::with('creator:id,name,email,role');
+                $attrs = $attrQuery->get()->map(function ($at) {
+                    $isItinerary = ($at->category === 'Itinerary' || !empty($at->days_count) || !empty($at->schedule));
+                    $cType = $isItinerary ? 'Itinerary' : 'Attraction';
+                    $ownerRole = $at->creator ? $at->creator->role : 'admin';
+                    $images = is_array($at->images) ? $at->images : ($at->image ? [$at->image] : []);
 
-                $ownerData = [
-                    'id'          => $at->user_id,
-                    'name'        => $at->creator ? $at->creator->name : 'Tourism Admin',
-                    'role'        => $ownerRole,
-                    'email'       => $at->creator ? $at->creator->email : null,
-                    'store_name'  => null,
-                    'resort_name' => null,
-                    'logo'        => null,
-                ];
+                    $ownerData = [
+                        'id'          => $at->user_id,
+                        'name'        => $at->creator ? $at->creator->name : 'Tourism Admin',
+                        'role'        => $ownerRole,
+                        'email'       => $at->creator ? $at->creator->email : null,
+                        'store_name'  => null,
+                        'resort_name' => null,
+                        'logo'        => null,
+                    ];
 
-                return [
-                    'id'                => (int) $at->id,
-                    'source'            => $isItinerary ? 'itinerary' : 'attraction',
-                    'content_type'      => $cType,
-                    'account_type'      => $ownerRole,
-                    'title'             => $at->name,
-                    'name'              => $at->name,
-                    'content'           => $at->description,
-                    'description'       => $at->description,
-                    'full_description'  => $at->full_description ?: $at->description,
-                    'category'          => $at->category ?: $cType,
-                    'price'             => null,
-                    'location'          => $at->location,
-                    'status'            => $at->status ?: 'approved',
-                    'previous_status'   => $at->previous_status,
-                    'archived_at'       => $at->archived_at ? $at->archived_at->toIso8601String() : null,
-                    'created_at'        => $at->created_at ? $at->created_at->toIso8601String() : null,
-                    'updated_at'        => $at->updated_at ? $at->updated_at->toIso8601String() : null,
-                    'image'             => $at->image ?: ($images[0] ?? null),
-                    'images'            => $images,
-                    'video'             => $at->video,
-                    'rejection_remarks' => null,
-                    'moderation_history'=> [],
-                    'owner'             => $ownerData,
-                    'author'            => $ownerData,
-                ];
-            });
-            $items = $items->concat($attrs);
+                    $archivedIso = null;
+                    if ($at->archived_at) {
+                        $archivedIso = $at->archived_at instanceof \Carbon\Carbon ? $at->archived_at->toIso8601String() : (string) $at->archived_at;
+                    }
+
+                    return [
+                        'id'                => (int) $at->id,
+                        'source'            => $isItinerary ? 'itinerary' : 'attraction',
+                        'content_type'      => $cType,
+                        'account_type'      => $ownerRole,
+                        'title'             => $at->name,
+                        'name'              => $at->name,
+                        'content'           => $at->description,
+                        'description'       => $at->description,
+                        'full_description'  => $at->full_description ?: $at->description,
+                        'category'          => $at->category ?: $cType,
+                        'price'             => null,
+                        'location'          => $at->location,
+                        'status'            => $at->status ?: 'approved',
+                        'previous_status'   => $at->previous_status,
+                        'archived_at'       => $archivedIso,
+                        'created_at'        => $at->created_at ? ($at->created_at instanceof \Carbon\Carbon ? $at->created_at->toIso8601String() : (string) $at->created_at) : null,
+                        'updated_at'        => $at->updated_at ? ($at->updated_at instanceof \Carbon\Carbon ? $at->updated_at->toIso8601String() : (string) $at->updated_at) : null,
+                        'image'             => $at->image ?: ($images[0] ?? null),
+                        'images'            => $images,
+                        'video'             => $at->video,
+                        'rejection_remarks' => null,
+                        'moderation_history'=> [],
+                        'owner'             => $ownerData,
+                        'author'            => $ownerData,
+                    ];
+                });
+                $items = $items->concat($attrs);
+            } catch (\Throwable $e) {
+                Log::warning('AdminManagePostController attractions fetch error: ' . $e->getMessage());
+            }
         }
 
         // 5. Events (from events table)
-        if ($contentTypeFilter === 'all' || $contentTypeFilter === 'event') {
-            $evtQuery = Event::with('creator:id,name,email,role');
-            $evts = $evtQuery->get()->map(function ($ev) {
-                $ownerRole = $ev->creator ? $ev->creator->role : 'admin';
-                $images = is_array($ev->images) ? $ev->images : ($ev->image ? [$ev->image] : []);
+        if (($contentTypeFilter === 'all' || $contentTypeFilter === 'event') && Schema::hasTable('events')) {
+            try {
+                $evtQuery = Event::with('creator:id,name,email,role');
+                $evts = $evtQuery->get()->map(function ($ev) {
+                    $ownerRole = $ev->creator ? $ev->creator->role : 'admin';
+                    $images = is_array($ev->images) ? $ev->images : ($ev->image ? [$ev->image] : []);
 
-                $ownerData = [
-                    'id'          => $ev->user_id,
-                    'name'        => $ev->creator ? $ev->creator->name : 'Tourism Admin',
-                    'role'        => $ownerRole,
-                    'email'       => $ev->creator ? $ev->creator->email : null,
-                    'store_name'  => null,
-                    'resort_name' => null,
-                    'logo'        => null,
-                ];
+                    $ownerData = [
+                        'id'          => $ev->user_id,
+                        'name'        => $ev->creator ? $ev->creator->name : 'Tourism Admin',
+                        'role'        => $ownerRole,
+                        'email'       => $ev->creator ? $ev->creator->email : null,
+                        'store_name'  => null,
+                        'resort_name' => null,
+                        'logo'        => null,
+                    ];
 
-                return [
-                    'id'                => (int) $ev->id,
-                    'source'            => 'event',
-                    'content_type'      => 'Event',
-                    'account_type'      => $ownerRole,
-                    'title'             => $ev->name,
-                    'name'              => $ev->name,
-                    'content'           => $ev->description,
-                    'description'       => $ev->description,
-                    'full_description'  => $ev->full_description ?: $ev->description,
-                    'category'          => $ev->category ?: 'Festival & Event',
-                    'price'             => null,
-                    'location'          => $ev->location,
-                    'status'            => $ev->status ?: 'approved',
-                    'previous_status'   => $ev->previous_status,
-                    'archived_at'       => $ev->archived_at ? $ev->archived_at->toIso8601String() : null,
-                    'created_at'        => $ev->created_at ? $ev->created_at->toIso8601String() : null,
-                    'updated_at'        => $ev->updated_at ? $ev->updated_at->toIso8601String() : null,
-                    'image'             => $ev->image ?: ($images[0] ?? null),
-                    'images'            => $images,
-                    'video'             => null,
-                    'rejection_remarks' => null,
-                    'moderation_history'=> [],
-                    'owner'             => $ownerData,
-                    'author'            => $ownerData,
-                ];
-            });
-            $items = $items->concat($evts);
+                    $archivedIso = null;
+                    if ($ev->archived_at) {
+                        $archivedIso = $ev->archived_at instanceof \Carbon\Carbon ? $ev->archived_at->toIso8601String() : (string) $ev->archived_at;
+                    }
+
+                    return [
+                        'id'                => (int) $ev->id,
+                        'source'            => 'event',
+                        'content_type'      => 'Event',
+                        'account_type'      => $ownerRole,
+                        'title'             => $ev->name,
+                        'name'              => $ev->name,
+                        'content'           => $ev->description,
+                        'description'       => $ev->description,
+                        'full_description'  => $ev->full_description ?: $ev->description,
+                        'category'          => $ev->category ?: 'Festival & Event',
+                        'price'             => null,
+                        'location'          => $ev->location,
+                        'status'            => $ev->status ?: 'approved',
+                        'previous_status'   => $ev->previous_status,
+                        'archived_at'       => $archivedIso,
+                        'created_at'        => $ev->created_at ? ($ev->created_at instanceof \Carbon\Carbon ? $ev->created_at->toIso8601String() : (string) $ev->created_at) : null,
+                        'updated_at'        => $ev->updated_at ? ($ev->updated_at instanceof \Carbon\Carbon ? $ev->updated_at->toIso8601String() : (string) $ev->updated_at) : null,
+                        'image'             => $ev->image ?: ($images[0] ?? null),
+                        'images'            => $images,
+                        'video'             => null,
+                        'rejection_remarks' => null,
+                        'moderation_history'=> [],
+                        'owner'             => $ownerData,
+                        'author'            => $ownerData,
+                    ];
+                });
+                $items = $items->concat($evts);
+            } catch (\Throwable $e) {
+                Log::warning('AdminManagePostController events fetch error: ' . $e->getMessage());
+            }
         }
 
         // 6. Culture & Arts (from culture_arts table)
-        if ($contentTypeFilter === 'all' || in_array($contentTypeFilter, ['culture', 'culture & arts'])) {
-            $cultQuery = CultureArt::with('creator:id,name,email,role');
-            $cults = $cultQuery->get()->map(function ($cu) {
-                $ownerRole = $cu->creator ? $cu->creator->role : 'admin';
-                $images = is_array($cu->images) ? $cu->images : ($cu->image ? [$cu->image] : []);
-                $normalizedStatus = ($cu->status === 'published' || $cu->status === 'approved') ? 'approved' : $cu->status;
+        if (($contentTypeFilter === 'all' || in_array($contentTypeFilter, ['culture', 'culture & arts'])) && Schema::hasTable('culture_arts')) {
+            try {
+                $cultQuery = CultureArt::with('creator:id,name,email,role');
+                $cults = $cultQuery->get()->map(function ($cu) {
+                    $ownerRole = $cu->creator ? $cu->creator->role : 'admin';
+                    $images = is_array($cu->images) ? $cu->images : ($cu->image ? [$cu->image] : []);
+                    $normalizedStatus = ($cu->status === 'published' || $cu->status === 'approved') ? 'approved' : $cu->status;
 
-                $ownerData = [
-                    'id'          => $cu->user_id,
-                    'name'        => $cu->creator ? $cu->creator->name : 'Tourism Admin',
-                    'role'        => $ownerRole,
-                    'email'       => $cu->creator ? $cu->creator->email : null,
-                    'store_name'  => null,
-                    'resort_name' => null,
-                    'logo'        => null,
-                ];
+                    $ownerData = [
+                        'id'          => $cu->user_id,
+                        'name'        => $cu->creator ? $cu->creator->name : 'Tourism Admin',
+                        'role'        => $ownerRole,
+                        'email'       => $cu->creator ? $cu->creator->email : null,
+                        'store_name'  => null,
+                        'resort_name' => null,
+                        'logo'        => null,
+                    ];
 
-                return [
-                    'id'                => (int) $cu->id,
-                    'source'            => 'culture',
-                    'content_type'      => 'Culture & Arts',
-                    'account_type'      => $ownerRole,
-                    'title'             => $cu->name,
-                    'name'              => $cu->name,
-                    'content'           => $cu->description,
-                    'description'       => $cu->description,
-                    'full_description'  => $cu->full_description ?: $cu->description,
-                    'category'          => $cu->category ?: 'Culture & Arts',
-                    'price'             => null,
-                    'location'          => $cu->location ?: 'Mansalay',
-                    'status'            => $normalizedStatus,
-                    'previous_status'   => $cu->previous_status,
-                    'archived_at'       => $cu->archived_at ? $cu->archived_at->toIso8601String() : null,
-                    'created_at'        => $cu->created_at ? $cu->created_at->toIso8601String() : null,
-                    'updated_at'        => $cu->updated_at ? $cu->updated_at->toIso8601String() : null,
-                    'image'             => $cu->image ?: ($images[0] ?? null),
-                    'images'            => $images,
-                    'video'             => $cu->video,
-                    'rejection_remarks' => null,
-                    'moderation_history'=> [],
-                    'owner'             => $ownerData,
-                    'author'            => $ownerData,
-                ];
-            });
-            $items = $items->concat($cults);
+                    $archivedIso = null;
+                    if ($cu->archived_at) {
+                        $archivedIso = $cu->archived_at instanceof \Carbon\Carbon ? $cu->archived_at->toIso8601String() : (string) $cu->archived_at;
+                    }
+
+                    return [
+                        'id'                => (int) $cu->id,
+                        'source'            => 'culture',
+                        'content_type'      => 'Culture & Arts',
+                        'account_type'      => $ownerRole,
+                        'title'             => $cu->name,
+                        'name'              => $cu->name,
+                        'content'           => $cu->description,
+                        'description'       => $cu->description,
+                        'full_description'  => $cu->full_description ?: $cu->description,
+                        'category'          => $cu->category ?: 'Culture & Arts',
+                        'price'             => null,
+                        'location'          => $cu->location ?: 'Mansalay',
+                        'status'            => $normalizedStatus,
+                        'previous_status'   => $cu->previous_status,
+                        'archived_at'       => $archivedIso,
+                        'created_at'        => $cu->created_at ? ($cu->created_at instanceof \Carbon\Carbon ? $cu->created_at->toIso8601String() : (string) $cu->created_at) : null,
+                        'updated_at'        => $cu->updated_at ? ($cu->updated_at instanceof \Carbon\Carbon ? $cu->updated_at->toIso8601String() : (string) $cu->updated_at) : null,
+                        'image'             => $cu->image ?: ($images[0] ?? null),
+                        'images'            => $images,
+                        'video'             => $cu->video,
+                        'rejection_remarks' => null,
+                        'moderation_history'=> [],
+                        'owner'             => $ownerData,
+                        'author'            => $ownerData,
+                    ];
+                });
+                $items = $items->concat($cults);
+            } catch (\Throwable $e) {
+                Log::warning('AdminManagePostController culture_arts fetch error: ' . $e->getMessage());
+            }
         }
 
         // 7. History (from histories table)
-        if ($contentTypeFilter === 'all' || $contentTypeFilter === 'history') {
-            $histQuery = HistoryPost::with('creator:id,name,email,role');
-            $hists = $histQuery->get()->map(function ($hi) {
-                $ownerRole = $hi->creator ? $hi->creator->role : 'admin';
-                $images = is_array($hi->images) ? $hi->images : ($hi->image ? [$hi->image] : []);
-                $normalizedStatus = ($hi->status === 'published' || $hi->status === 'approved') ? 'approved' : $hi->status;
+        if (($contentTypeFilter === 'all' || $contentTypeFilter === 'history') && Schema::hasTable('histories')) {
+            try {
+                $histQuery = HistoryPost::with('creator:id,name,email,role');
+                $hists = $histQuery->get()->map(function ($hi) {
+                    $ownerRole = $hi->creator ? $hi->creator->role : 'admin';
+                    $images = is_array($hi->images) ? $hi->images : ($hi->image ? [$hi->image] : []);
+                    $normalizedStatus = ($hi->status === 'published' || $hi->status === 'approved') ? 'approved' : $hi->status;
 
-                $ownerData = [
-                    'id'          => $hi->user_id,
-                    'name'        => $hi->creator ? $hi->creator->name : 'Tourism Admin',
-                    'role'        => $ownerRole,
-                    'email'       => $hi->creator ? $hi->creator->email : null,
-                    'store_name'  => null,
-                    'resort_name' => null,
-                    'logo'        => null,
-                ];
+                    $ownerData = [
+                        'id'          => $hi->user_id,
+                        'name'        => $hi->creator ? $hi->creator->name : 'Tourism Admin',
+                        'role'        => $ownerRole,
+                        'email'       => $hi->creator ? $hi->creator->email : null,
+                        'store_name'  => null,
+                        'resort_name' => null,
+                        'logo'        => null,
+                    ];
 
-                return [
-                    'id'                => (int) $hi->id,
-                    'source'            => 'history',
-                    'content_type'      => 'History',
-                    'account_type'      => $ownerRole,
-                    'title'             => $hi->name,
-                    'name'              => $hi->name,
-                    'content'           => $hi->description,
-                    'description'       => $hi->description,
-                    'full_description'  => $hi->full_description ?: $hi->description,
-                    'category'          => $hi->category ?: 'Origins & History',
-                    'price'             => null,
-                    'location'          => $hi->location ?: 'Mansalay',
-                    'status'            => $normalizedStatus,
-                    'previous_status'   => $hi->previous_status,
-                    'archived_at'       => $hi->archived_at ? $hi->archived_at->toIso8601String() : null,
-                    'created_at'        => $hi->created_at ? $hi->created_at->toIso8601String() : null,
-                    'updated_at'        => $hi->updated_at ? $hi->updated_at->toIso8601String() : null,
-                    'image'             => $hi->image ?: ($images[0] ?? null),
-                    'images'            => $images,
-                    'video'             => $hi->video,
-                    'rejection_remarks' => null,
-                    'moderation_history'=> [],
-                    'owner'             => $ownerData,
-                    'author'            => $ownerData,
-                ];
-            });
-            $items = $items->concat($hists);
+                    $archivedIso = null;
+                    if ($hi->archived_at) {
+                        $archivedIso = $hi->archived_at instanceof \Carbon\Carbon ? $hi->archived_at->toIso8601String() : (string) $hi->archived_at;
+                    }
+
+                    return [
+                        'id'                => (int) $hi->id,
+                        'source'            => 'history',
+                        'content_type'      => 'History',
+                        'account_type'      => $ownerRole,
+                        'title'             => $hi->name,
+                        'name'              => $hi->name,
+                        'content'           => $hi->description,
+                        'description'       => $hi->description,
+                        'full_description'  => $hi->full_description ?: $hi->description,
+                        'category'          => $hi->category ?: 'Origins & History',
+                        'price'             => null,
+                        'location'          => $hi->location ?: 'Mansalay',
+                        'status'            => $normalizedStatus,
+                        'previous_status'   => $hi->previous_status,
+                        'archived_at'       => $archivedIso,
+                        'created_at'        => $hi->created_at ? ($hi->created_at instanceof \Carbon\Carbon ? $hi->created_at->toIso8601String() : (string) $hi->created_at) : null,
+                        'updated_at'        => $hi->updated_at ? ($hi->updated_at instanceof \Carbon\Carbon ? $hi->updated_at->toIso8601String() : (string) $hi->updated_at) : null,
+                        'image'             => $hi->image ?: ($images[0] ?? null),
+                        'images'            => $images,
+                        'video'             => $hi->video,
+                        'rejection_remarks' => null,
+                        'moderation_history'=> [],
+                        'owner'             => $ownerData,
+                        'author'            => $ownerData,
+                    ];
+                });
+                $items = $items->concat($hists);
+            } catch (\Throwable $e) {
+                Log::warning('AdminManagePostController histories fetch error: ' . $e->getMessage());
+            }
         }
 
         // Compute 5 Dynamic Summary Counts across all fetched records

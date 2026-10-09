@@ -38,6 +38,8 @@ class CorsMiddleware
             // Production URLs (.cyou — actual live domain)
             'https://discovermansalay.cyou',
             'https://www.discovermansalay.cyou',
+            'http://discovermansalay.cyou',
+            'http://www.discovermansalay.cyou',
 
             // Render URLs
             'https://discmansalay.onrender.com',
@@ -62,6 +64,11 @@ class CorsMiddleware
             return false;
         }
 
+        // Allow any discovermansalay domain (.cyou, .com, etc.)
+        if (preg_match('/^https?:\/\/(?:[a-z0-9-]+\.)?discovermansalay\.(?:cyou|com)(?::\d+)?$/i', $origin)) {
+            return true;
+        }
+
         // Allow any *.onrender.com origin (frontend/backend deployed on Render)
         if (preg_match('/^https:\/\/[a-z0-9-]+\.onrender\.com$/i', $origin)) {
             return true;
@@ -69,6 +76,11 @@ class CorsMiddleware
 
         // Allow any *.vercel.app origin (frontend deployed on Vercel)
         if (preg_match('/^https:\/\/[a-z0-9-]+\.vercel\.app$/i', $origin)) {
+            return true;
+        }
+
+        // Allow localhost / 127.0.0.1 with any port
+        if (preg_match('/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i', $origin)) {
             return true;
         }
 
@@ -87,6 +99,7 @@ class CorsMiddleware
     {
         // Get the origin from request header
         $origin = $request->header('Origin');
+        $requestHeaders = $request->header('Access-Control-Request-Headers') ?: 'Content-Type, Authorization, X-Requested-With, X-Auth-Token, Accept, Origin';
 
         // Handle preflight OPTIONS request
         if ($request->isMethod('OPTIONS')) {
@@ -97,7 +110,7 @@ class CorsMiddleware
                 $response
                     ->header('Access-Control-Allow-Origin', $origin)
                     ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-                    ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Auth-Token')
+                    ->header('Access-Control-Allow-Headers', $requestHeaders)
                     ->header('Access-Control-Allow-Credentials', 'true')
                     ->header('Access-Control-Max-Age', '86400'); // 24 hours
             }
@@ -105,16 +118,33 @@ class CorsMiddleware
             return $response;
         }
 
-        // Handle actual request
-        $response = $next($request);
+        // Handle actual request with catch-all for uncaught exceptions
+        try {
+            $response = $next($request);
+        } catch (\Throwable $e) {
+            try {
+                \Illuminate\Support\Facades\Log::error('Unhandled exception in API request: ' . $e->getMessage(), [
+                    'exception' => $e,
+                    'url' => $request->fullUrl(),
+                ]);
+            } catch (\Throwable $logEx) {
+                // Ignore logger permission failures
+            }
+
+            $response = response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error'   => $e->getMessage(),
+            ], 500);
+        }
 
         // SECURITY: Only add CORS headers if origin is allowed
         if ($this->isOriginAllowed($origin)) {
             $response->headers->set('Access-Control-Allow-Origin', $origin);
             $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-            $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Auth-Token');
+            $response->headers->set('Access-Control-Allow-Headers', $requestHeaders);
             $response->headers->set('Access-Control-Allow-Credentials', 'true');
-            $response->headers->set('Access-Control-Expose-Headers', 'Authorization');
+            $response->headers->set('Access-Control-Expose-Headers', 'Authorization, Content-Disposition');
         }
 
         // SECURITY: Add additional security headers (protect against common attacks)

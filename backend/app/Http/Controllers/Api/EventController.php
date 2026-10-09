@@ -33,10 +33,12 @@ class EventController extends Controller
 
             // Exclude archived events for non-admin
             if (!$user || $user->role !== 'admin') {
-                $query->where(function($q) {
-                    $q->whereNull('status')
-                      ->orWhere('status', '!=', 'archived');
-                });
+                if (\Illuminate\Support\Facades\Schema::hasColumn('events', 'status')) {
+                    $query->where(function($q) {
+                        $q->whereNull('status')
+                          ->orWhere('status', '!=', 'archived');
+                    });
+                }
             }
 
             if ($request->has('search') && $request->input('search') !== '') {

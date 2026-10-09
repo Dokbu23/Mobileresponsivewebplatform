@@ -37,10 +37,12 @@ class ProductController extends Controller
 
             // Exclude archived products for non-admin viewers
             if (!$user || $user->role !== 'admin') {
-                $query->where(function($q) {
-                    $q->whereNull('status')
-                      ->orWhere('status', '!=', 'archived');
-                });
+                if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'status')) {
+                    $query->where(function($q) {
+                        $q->whereNull('status')
+                          ->orWhere('status', '!=', 'archived');
+                    });
+                }
             }
 
             // Enterprise owner view: return their own products
