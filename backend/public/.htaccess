@@ -23,16 +23,3 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
-
-# Fallback headers for OPTIONS preflight at Apache level
-<IfModule mod_headers.c>
-    SetEnvIfNoCase Origin "^https?://(.*\.)?discovermansalay\.(cyou|com)(:\d+)?$" CORS_ALLOWED_ORIGIN=$0
-    SetEnvIfNoCase Origin "^https?://(localhost|127\.0\.0\.1)(:\d+)?$" CORS_ALLOWED_ORIGIN=$0
-    SetEnvIfNoCase Request_Method "^OPTIONS$" IS_PREFLIGHT_REQ=1
-
-    Header always set Access-Control-Allow-Origin "%{CORS_ALLOWED_ORIGIN}e" env=IS_PREFLIGHT_REQ
-    Header always set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS" env=IS_PREFLIGHT_REQ
-    Header always set Access-Control-Allow-Headers "Origin, Content-Type, Accept, Authorization, X-Requested-With, X-Auth-Token, Cache-Control, Pragma, X-CSRF-TOKEN" env=IS_PREFLIGHT_REQ
-    Header always set Access-Control-Allow-Credentials "true" env=IS_PREFLIGHT_REQ
-    Header always set Access-Control-Max-Age "86400" env=IS_PREFLIGHT_REQ
-</IfModule>
