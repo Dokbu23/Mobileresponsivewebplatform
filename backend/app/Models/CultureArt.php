@@ -24,6 +24,8 @@ class CultureArt extends Model
         'description',
         'full_description',
         'status',
+        'previous_status',
+        'archived_at',
         'is_featured',
         'view_count',
         'likes',
@@ -34,6 +36,7 @@ class CultureArt extends Model
         'is_featured' => 'boolean',
         'view_count'  => 'integer',
         'likes'       => 'integer',
+        'archived_at' => 'datetime',
     ];
 
     public function creator()

@@ -31,6 +31,14 @@ class EventController extends Controller
                 $query = \App\Models\Event::query();
             }
 
+            // Exclude archived events for non-admin
+            if (!$user || $user->role !== 'admin') {
+                $query->where(function($q) {
+                    $q->whereNull('status')
+                      ->orWhere('status', '!=', 'archived');
+                });
+            }
+
             if ($request->has('search') && $request->input('search') !== '') {
                 $search = $request->input('search');
                 $query->where(function($q) use ($search) {

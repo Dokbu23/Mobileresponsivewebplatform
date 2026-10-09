@@ -2,3 +2,138 @@
 @import './tailwind.css';
 @import './theme.css';
 @import 'leaflet/dist/leaflet.css';
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   OFFICIAL MONTHLY TOURISM REPORT PRINT LAYOUT
+   ───────────────────────────────────────────────────────────────────────────── */
+@media print {
+  /* Hide whole app background, sidebars, navigations, headers */
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 10pt !important;
+  }
+
+  /* Hide everything on the page except the printable report modal */
+  body > * {
+    visibility: hidden !important;
+  }
+
+  /* Make the printable container visible and occupy full page */
+  #report-preview-modal-backdrop,
+  #report-preview-modal-backdrop * {
+    visibility: visible !important;
+  }
+
+  #report-preview-modal-backdrop {
+    position: static !important;
+    inset: auto !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    display: block !important;
+    z-index: 99999 !important;
+  }
+
+  #report-preview-modal-container {
+    position: static !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  /* Elements to explicitly hide from print */
+  #report-preview-modal-backdrop .report-no-print,
+  #report-preview-modal-backdrop .report-no-print *,
+  #report-preview-modal-container .report-no-print,
+  #report-preview-modal-container .report-no-print *,
+  .report-no-print,
+  .report-no-print * {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+  }
+
+  /* Elements to explicitly show during print */
+  .report-print-only {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  /* Ensure tables render with borders, full width, and proper pagination */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+    margin-bottom: 14px !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  th {
+    background-color: #1e293b !important;
+    color: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    font-size: 8pt !important;
+    padding: 5px 6px !important;
+    border: 1px solid #94a3b8 !important;
+  }
+
+  td {
+    border: 1px solid #cbd5e1 !important;
+    padding: 4px 6px !important;
+    font-size: 8pt !important;
+    color: #0f172a !important;
+  }
+
+  /* Remove scrollbars and max-height limits */
+  .overflow-y-auto,
+  .overflow-x-auto,
+  .max-h-\[500px\],
+  .max-h-48,
+  .max-h-\[92vh\] {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+
+  /* Charts in print */
+  .recharts-responsive-container {
+    width: 100% !important;
+    max-height: 240px !important;
+    page-break-inside: avoid !important;
+  }
+
+  @page {
+    margin: 1.2cm;
+    size: auto;
+  }
+}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { Hotel, MapPin, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink, Footprints, Maximize2, FileText } from 'lucide-react';
+import { Hotel, MapPin, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink, Footprints, Maximize2, FileText, ArrowRight } from 'lucide-react';
 import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
 import { ACCOMMODATION_CATEGORIES, PLACEHOLDER_IMAGE } from '../../lib/constants';
 import { useApp } from '../../context/AppContext';
@@ -14,12 +14,15 @@ import { PushPinIcon } from '../../components/PushPinIcon';
 export interface RoomItem {
   id: string;
   room_id?: number | string;
+  post_id?: number | string;
   name: string;
+  title?: string;
   type?: string;
+  raw_type?: string;
   description?: string;
   full_description?: string;
   price_per_night?: number;
-  price?: number;
+  price?: number | string;
   capacity?: number;
   image: string;
   images?: string[];
@@ -27,6 +30,9 @@ export interface RoomItem {
   features?: string[];
   virtual_tour_scenes?: any[];
   likes?: number;
+  created_at?: string;
+  date?: string;
+  is_post?: boolean;
 }
 
 export interface AccommodationItem {
@@ -191,13 +197,12 @@ function groupAndNormalizeAccommodations(rawItems: any[]): AccommodationItem[] {
     if (d.likes) currentResort.likes = (currentResort.likes || 0) + Number(d.likes);
     if (d.view_count) currentResort.view_count = Math.max(currentResort.view_count || 0, Number(d.view_count));
 
-    // Add room if this record is an individual room
-    const isExplicitRoom = Boolean(d.is_room || d.room_id || rawId.startsWith('room-'));
-    if (isExplicitRoom) {
-      const roomId = String(d.room_id || d.id || `room-${currentResort.rooms.length + 1}`);
-      const rName = cleanName || 'Standard Room';
+    // 🛡️ Post-First Slide Addition: Posts from Resort Owner automatically become swipeable slides
+    if (d.is_post) {
+      const postId = String(d.post_id || d.id);
+      const postTitle = cleanName || d.title || 'Resort Highlight';
       const existingIdx = currentResort.rooms.findIndex(
-        r => r.id === roomId || (r.name && r.name.toLowerCase() === rName.toLowerCase())
+        r => r.id === postId || (r.post_id && String(r.post_id) === String(d.post_id)) || (r.name && r.name.toLowerCase() === postTitle.toLowerCase())
       );
 
       if (existingIdx >= 0) {
@@ -205,25 +210,65 @@ function groupAndNormalizeAccommodations(rawItems: any[]): AccommodationItem[] {
         const mergedImgs = Array.from(new Set([...(existing.images || []), ...parsedImages]));
         existing.images = mergedImgs;
         if (!existing.image && mergedImgs.length > 0) existing.image = mergedImgs[0];
+        if (d.description && !existing.description) existing.description = decodeHtml(d.description);
       } else {
         currentResort.rooms.push({
-          id: roomId,
-          room_id: d.room_id || d.id,
-          name: rName,
-          type: d.type || 'Room',
+          id: postId,
+          post_id: d.post_id || d.id,
+          name: postTitle,
+          title: postTitle,
+          type: d.type || 'Resort Update',
+          raw_type: d.raw_type || 'update',
           description: decodeHtml(d.description || d.full_description || ''),
           full_description: decodeHtml(d.full_description || d.description || ''),
-          price_per_night: Number(d.price_per_night ?? d.pricePerNight ?? d.price ?? 0),
-          price: Number(d.price_per_night ?? d.pricePerNight ?? d.price ?? 0),
-          capacity: d.capacity ? Number(d.capacity) : 2,
+          price_per_night: Number(d.price_per_night ?? d.price ?? 0),
+          price: d.price,
+          capacity: d.capacity ? Number(d.capacity) : undefined,
           image: mainImg || parsedImages[0] || '',
           images: parsedImages,
+          created_at: d.created_at,
           amenities: Array.isArray(d.amenities) && d.amenities.length > 0
             ? d.amenities
-            : (Array.isArray(d.resort_amenities) ? d.resort_amenities : []),
-          features: Array.isArray(d.features) ? d.features : [],
-          virtual_tour_scenes: d.virtual_tour_scenes || [],
+            : (Array.isArray(d.tags) && d.tags.length > 0 ? d.tags : (currentResort.resort_amenities || [])),
+          features: Array.isArray(d.tags) ? d.tags : [],
+          is_post: true,
         });
+      }
+    } else {
+      // Add room if this record is an individual room
+      const isExplicitRoom = Boolean(d.is_room || d.room_id || rawId.startsWith('room-'));
+      if (isExplicitRoom) {
+        const roomId = String(d.room_id || d.id || `room-${currentResort.rooms.length + 1}`);
+        const rName = cleanName || 'Standard Room';
+        const existingIdx = currentResort.rooms.findIndex(
+          r => r.id === roomId || (r.name && r.name.toLowerCase() === rName.toLowerCase())
+        );
+
+        if (existingIdx >= 0) {
+          const existing = currentResort.rooms[existingIdx];
+          const mergedImgs = Array.from(new Set([...(existing.images || []), ...parsedImages]));
+          existing.images = mergedImgs;
+          if (!existing.image && mergedImgs.length > 0) existing.image = mergedImgs[0];
+        } else {
+          currentResort.rooms.push({
+            id: roomId,
+            room_id: d.room_id || d.id,
+            name: rName,
+            type: d.type || 'Room',
+            description: decodeHtml(d.description || d.full_description || ''),
+            full_description: decodeHtml(d.full_description || d.description || ''),
+            price_per_night: Number(d.price_per_night ?? d.pricePerNight ?? d.price ?? 0),
+            price: Number(d.price_per_night ?? d.pricePerNight ?? d.price ?? 0),
+            capacity: d.capacity ? Number(d.capacity) : 2,
+            image: mainImg || parsedImages[0] || '',
+            images: parsedImages,
+            amenities: Array.isArray(d.amenities) && d.amenities.length > 0
+              ? d.amenities
+              : (Array.isArray(d.resort_amenities) ? d.resort_amenities : []),
+            features: Array.isArray(d.features) ? d.features : [],
+            virtual_tour_scenes: d.virtual_tour_scenes || [],
+          });
+        }
       }
     }
 
@@ -316,6 +361,7 @@ function AccommodationCardItem({
 }: AccommodationCardProps) {
   const { isInWishlist, getWishlistCount } = useApp();
   const [currentIdx, setCurrentIdx] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
 
@@ -343,6 +389,18 @@ function AccommodationCardItem({
   }, [acc, typeFilter]);
 
   const hasMultipleRooms = rooms.length > 1;
+
+  // 🔄 Smooth Auto-Slide Effect (Switches every 4 seconds, pauses on hover)
+  useEffect(() => {
+    if (!hasMultipleRooms || isHovered) return;
+
+    const timer = setInterval(() => {
+      setCurrentIdx((prev) => (prev >= rooms.length - 1 ? 0 : prev + 1));
+    }, 4000);
+
+    return () => clearInterval(timer);
+  }, [hasMultipleRooms, isHovered, rooms.length]);
+
   const currentRoomIdx = currentIdx < rooms.length ? currentIdx : 0;
   const currentRoom = rooms[currentRoomIdx] || rooms[0];
 
@@ -374,6 +432,7 @@ function AccommodationCardItem({
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    setIsHovered(true);
     touchStartX.current = e.targetTouches[0].clientX;
   };
 
@@ -382,6 +441,7 @@ function AccommodationCardItem({
   };
 
   const handleTouchEnd = () => {
+    setIsHovered(false);
     if (touchStartX.current === null || touchEndX.current === null) return;
     const distance = touchStartX.current - touchEndX.current;
     if (distance > 35 && hasMultipleRooms) {
@@ -406,30 +466,50 @@ function AccommodationCardItem({
   return (
     <div
       onClick={() => onCardClick(currentRoom)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col group cursor-pointer hover:border-pink-200 justify-between"
     >
-      {/* ── ROOM CAROUSEL IMAGE CONTAINER ── */}
+      {/* ── ROOM CAROUSEL IMAGE CONTAINER (SMOOTH HORIZONTAL SLIDER) ── */}
       <div
-        className="relative aspect-4/3 overflow-hidden bg-gray-100 select-none"
+        className="relative aspect-4/3 overflow-hidden bg-gray-900 select-none"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <img
-          src={currentRoomImage}
-          alt={`${currentRoom.name} - ${acc.resort_name || acc.name}`}
-          onClick={handleImageClick}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 cursor-zoom-in"
-          onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }}
-          loading="lazy"
-        />
+        {/* Continuous Smooth Horizontal Sliding Track */}
+        <div
+          className="flex w-full h-full transition-transform duration-700 ease-in-out"
+          style={{ transform: `translateX(-${currentRoomIdx * 100}%)` }}
+        >
+          {rooms.map((room, idx) => {
+            const roomImg = formatImageUrl(
+              room.image || (room.images && room.images[0]) || acc.image
+            ) || PLACEHOLDER_IMAGE;
+            return (
+              <div
+                key={room.id || idx}
+                className="w-full h-full shrink-0 relative overflow-hidden"
+              >
+                <img
+                  src={roomImg}
+                  alt={`${room.name} - ${acc.resort_name || acc.name}`}
+                  onClick={handleImageClick}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out cursor-zoom-in"
+                  onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }}
+                  loading="lazy"
+                />
+              </div>
+            );
+          })}
+        </div>
 
         {/* Top-Left Resort Name Badge */}
         <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 bg-pink-500 text-white text-[10px] font-bold rounded-full shadow-xs z-10 pointer-events-none max-w-[150px] truncate">
           {acc.resort_name || acc.name}
         </span>
 
-        {/* Room Carousel Counter Pill (Shows "Room X / Y") */}
+        {/* Slide Carousel Counter Pill (Shows "Slide X of Y") */}
         {hasMultipleRooms && (
           <button
             type="button"
@@ -438,19 +518,19 @@ function AccommodationCardItem({
             title="Click to view full screen gallery"
           >
             <Maximize2 className="h-2.5 w-2.5 opacity-80" />
-            <span>Room {currentRoomIdx + 1} / {rooms.length}</span>
+            <span>Slide {currentRoomIdx + 1} of {rooms.length}</span>
           </button>
         )}
 
-        {/* Carousel Arrow Controls (Switch Between Rooms) */}
+        {/* Carousel Arrow Controls (Switch Between Slides) */}
         {hasMultipleRooms && (
           <>
             <button
               type="button"
               onClick={handlePrev}
               className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/55 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-xs opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-all z-20 cursor-pointer shadow-md border border-white/20"
-              aria-label="Previous room"
-              title="Previous room"
+              aria-label="Previous slide"
+              title="Previous slide"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -458,14 +538,14 @@ function AccommodationCardItem({
               type="button"
               onClick={handleNext}
               className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/55 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-xs opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-all z-20 cursor-pointer shadow-md border border-white/20"
-              aria-label="Next room"
-              title="Next room"
+              aria-label="Next slide"
+              title="Next slide"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
 
-            {/* Room Indicator Dots */}
-            <div className="absolute bottom-2.5 right-3 flex items-center gap-1 z-10">
+            {/* Slide Indicator Dots ● ○ ○ ○ */}
+            <div className="absolute bottom-2.5 right-3 flex items-center gap-1 z-10 bg-black/40 backdrop-blur-xs px-2 py-1 rounded-full border border-white/10">
               {rooms.map((_, i) => (
                 <button
                   key={i}
@@ -477,7 +557,7 @@ function AccommodationCardItem({
                   className={`h-1.5 rounded-full transition-all cursor-pointer ${
                     i === currentRoomIdx ? 'w-4 bg-pink-500 shadow-xs' : 'w-1.5 bg-white/70 hover:bg-white'
                   }`}
-                  aria-label={`Go to room ${i + 1}`}
+                  aria-label={`Go to slide ${i + 1}`}
                 />
               ))}
             </div>
@@ -526,40 +606,49 @@ function AccommodationCardItem({
         </button>
       </div>
 
-      {/* ── DYNAMIC ROOM INFORMATION (UPDATES PER ROOM SLIDE) ── */}
+      {/* ── DYNAMIC SLIDE INFORMATION (UPDATES PER SWIPE/SLIDE) ── */}
       <div className="p-4 flex-1 flex flex-col justify-between">
-        <div>
-          {/* Room Type & Capacity */}
+        <div key={currentRoom.id || currentRoomIdx} className="transition-all duration-300 animate-in fade-in">
+          {/* Post/Room Type & Capacity / Date */}
           <div className="flex items-center justify-between gap-1">
-            <p className="text-[10px] uppercase font-bold text-gray-400">
-              {currentRoom.type || acc.type || 'Room'}
-            </p>
+            <span className="text-[10px] uppercase font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md border border-pink-100">
+              {currentRoom.type || acc.type || 'Stay'}
+            </span>
             {currentRoom.capacity ? (
               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1">
                 <Users className="h-3 w-3" /> Max {currentRoom.capacity}
               </span>
+            ) : currentRoom.created_at ? (
+              <span className="text-[10px] font-medium text-gray-400 flex items-center gap-1">
+                <Clock className="h-3 w-3 text-gray-400" />
+                {new Date(currentRoom.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
             ) : null}
           </div>
 
-          {/* Room Name */}
-          <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-0.5">
+          {/* Post/Room Name */}
+          <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-1.5">
             {currentRoom.name}
           </h3>
 
-          {/* Room Description */}
+          {/* Post/Room Description */}
           <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 min-h-[32px] text-justify" style={{ textAlign: 'justify' }}>
             {currentRoom.description || currentRoom.full_description || `${currentRoom.name} at ${acc.resort_name || acc.name}. Experience a comfortable and scenic stay.`}
           </p>
 
-          {/* Room Price */}
+          {/* Room Price or Post Rate */}
           {currentRoom.price_per_night && Number(currentRoom.price_per_night) > 0 ? (
             <div className="mt-2 text-pink-600 font-extrabold text-sm flex items-baseline gap-0.5">
               <span>₱{Number(currentRoom.price_per_night).toLocaleString()}</span>
               <span className="text-[10px] font-normal text-gray-400"> / night</span>
             </div>
+          ) : currentRoom.price && typeof currentRoom.price === 'string' && currentRoom.price.toLowerCase().includes('free') ? (
+            <div className="mt-2 text-emerald-600 font-bold text-xs flex items-center gap-1">
+              <span className="bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">Free for guests</span>
+            </div>
           ) : null}
 
-          {/* Room Amenities */}
+          {/* Slide Amenities / Tags */}
           {(() => {
             const rawAmenities = (currentRoom.amenities && currentRoom.amenities.length > 0)
               ? currentRoom.amenities
@@ -590,15 +679,31 @@ function AccommodationCardItem({
           })()}
         </div>
 
-        {/* Clickable Resort Host Link */}
-        <div
-          onClick={(e) => onResortClick(acc.resort_name || acc.name, acc.user_id, e)}
-          className="flex items-center gap-1.5 text-[11px] text-emerald-700 hover:text-emerald-800 font-semibold mt-4 pt-3 border-t border-gray-100 group/resort cursor-pointer transition-colors"
-          title={`Click to view resort profile of ${acc.resort_name || acc.name || 'this resort'}`}
-        >
-          <Hotel className="h-3.5 w-3.5 text-emerald-600 group-hover/resort:scale-110 transition-transform flex-shrink-0" />
-          <span className="truncate group-hover/resort:underline">{acc.resort_name || acc.name || 'Mansalay Beach Resort'}</span>
-          <ExternalLink className="h-2.5 w-2.5 opacity-60 ml-auto flex-shrink-0 group-hover/resort:opacity-100 text-emerald-600" />
+        {/* Action Button & Clickable Resort Host Link */}
+        <div>
+          <div className="mt-3.5 pt-3 border-t border-gray-100 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCardClick(currentRoom);
+              }}
+              className="w-full py-2 px-3 bg-pink-50 hover:bg-pink-100 active:scale-98 text-pink-700 border border-pink-200 rounded-xl text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs hover:border-pink-300"
+            >
+              <span>View Details</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          <div
+            onClick={(e) => onResortClick(acc.resort_name || acc.name, acc.user_id, e)}
+            className="flex items-center gap-1.5 text-[11px] text-emerald-700 hover:text-emerald-800 font-semibold mt-2 group/resort cursor-pointer transition-colors"
+            title={`Click to view resort profile of ${acc.resort_name || acc.name || 'this resort'}`}
+          >
+            <Hotel className="h-3.5 w-3.5 text-emerald-600 group-hover/resort:scale-110 transition-transform flex-shrink-0" />
+            <span className="truncate group-hover/resort:underline">{acc.resort_name || acc.name || 'Mansalay Beach Resort'}</span>
+            <ExternalLink className="h-2.5 w-2.5 opacity-60 ml-auto flex-shrink-0 group-hover/resort:opacity-100 text-emerald-600" />
+          </div>
         </div>
       </div>
     </div>
@@ -800,16 +905,74 @@ export function Accommodations() {
   const loadAccommodations = async () => {
     setLoading(true);
     try {
-      const [accRes, attrRes] = await Promise.all([
+      const [accRes, attrRes, postsRes] = await Promise.all([
         getPublicJSON('/accommodations').catch(() => []),
         getPublicJSON('/attractions').catch(() => []),
+        getPublicJSON('/enterprise-posts?role=resort').catch(() => getPublicJSON('/enterprise-posts').catch(() => [])),
       ]);
       const rawAcc = Array.isArray(accRes) ? accRes : accRes?.data ?? [];
       const rawAttr = Array.isArray(attrRes) ? attrRes : attrRes?.data ?? [];
+      const rawPosts = Array.isArray(postsRes) ? postsRes : postsRes?.data ?? [];
 
       const accAttractions = rawAttr.filter((a: any) =>
         a.category === 'Accommodation' || a.category === 'Accommodations' || a.type === 'Accommodation' || a.type === 'Accommodations'
       );
+
+      // 🛡️ Map approved resort timeline posts into stay items (using same database record, no duplicates)
+      const resortPosts = rawPosts.filter((p: any) => {
+        const userRole = p.user?.role;
+        const postType = (p.type || '').toLowerCase();
+        const isResortRole = userRole === 'resort';
+        const isResortType = ['rooms', 'room', 'amenities', 'activities', 'beach_views'].includes(postType);
+        return (isResortRole || isResortType) && userRole !== 'enterprise';
+      }).map((p: any) => {
+        let postTitle = p.product_name || p.title || '';
+        if (!postTitle && p.content) {
+          const firstLine = p.content.split(/\r?\n/)[0].slice(0, 50).trim();
+          postTitle = firstLine;
+        }
+        if (!postTitle) {
+          if (p.type === 'amenities') postTitle = 'Resort Amenity';
+          else if (p.type === 'beach_views') postTitle = 'Beachfront View';
+          else if (p.type === 'activities') postTitle = 'Resort Activity';
+          else if (p.type === 'rooms' || p.type === 'room') postTitle = 'Resort Room';
+          else postTitle = 'Resort Update';
+        }
+
+        const resortName = p.user?.resort_name || p.seller_name || p.resort_name || p.user?.name || 'Resort Stay';
+
+        let slideType = 'Resort Update';
+        if (p.type === 'rooms' || p.type === 'room') slideType = 'Room & Stay';
+        else if (p.type === 'amenities') slideType = 'Amenity';
+        else if (p.type === 'beach_views') slideType = 'Beachfront View';
+        else if (p.type === 'activities') slideType = 'Activity';
+
+        return {
+          id: `post-${p.id}`,
+          post_id: p.id,
+          name: postTitle,
+          title: postTitle,
+          resort_name: resortName,
+          user_id: p.user_id,
+          description: p.content,
+          full_description: p.content,
+          type: slideType,
+          raw_type: p.type,
+          price_per_night: p.price ? parseFloat(String(p.price).replace(/[^0-9.]/g, '')) || 0 : 0,
+          price: p.price,
+          capacity: p.stock ? parseInt(String(p.stock).replace(/[^0-9]/g, '')) || 2 : undefined,
+          image: p.image || (Array.isArray(p.images) && p.images[0]) || '',
+          images: Array.isArray(p.images) && p.images.length > 0 ? p.images : (p.image ? [p.image] : []),
+          location: p.location || (p.user?.barangay ? `${p.user.barangay}, Mansalay, Oriental Mindoro` : 'Mansalay, Oriental Mindoro'),
+          created_at: p.created_at,
+          likes: p.likes || 0,
+          saves: p.saves || 0,
+          tags: Array.isArray(p.tags) ? p.tags : [],
+          is_post: true,
+          is_registered: true,
+          owner: p.user,
+        };
+      });
 
       let customResorts: any[] = [];
       try {
@@ -840,7 +1003,7 @@ export function Accommodations() {
         if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
       } catch { }
 
-      const allRaw = [...rawAcc, ...accAttractions].filter(i => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
+      const allRaw = [...rawAcc, ...accAttractions, ...resortPosts].filter(i => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
       const existingIds = new Set(allRaw.map(r => String(r.id)));
       [...customResorts, ...customAttractions].forEach(cr => {
         if (!existingIds.has(String(cr.id)) && !deletedIds.has(String(cr.id)) && !archivedIds.has(String(cr.id))) {
@@ -1220,11 +1383,11 @@ export function Accommodations() {
                   <X className="h-4 w-4" />
                 </button>
 
-                {/* Top-Left Room Counter Badge */}
+                {/* Top-Left Slide Counter Badge */}
                 {hasMultipleModalRooms ? (
                   <div className="absolute top-4 left-4 px-3 py-1 bg-black/65 backdrop-blur-md text-white text-xs font-extrabold rounded-full shadow-md border border-white/20 z-20 flex items-center gap-1.5">
                     <Bed className="h-3.5 w-3.5 text-pink-400" />
-                    <span>Room {currentModalRoomIdx + 1} of {modalRooms.length}</span>
+                    <span>Slide {currentModalRoomIdx + 1} of {modalRooms.length}</span>
                   </div>
                 ) : (
                   <span className="absolute top-4 left-4 px-3 py-1 bg-pink-500 text-white text-xs font-bold rounded-full shadow-md z-20">
@@ -1239,8 +1402,8 @@ export function Accommodations() {
                       type="button"
                       onClick={handleModalPrevRoom}
                       className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/65 hover:bg-pink-600 active:scale-90 text-white flex items-center justify-center backdrop-blur-md transition-all z-20 cursor-pointer shadow-xl border border-white/30 hover:scale-105"
-                      aria-label="Previous room"
-                      title="Previous room"
+                      aria-label="Previous slide"
+                      title="Previous slide"
                     >
                       <ChevronLeft className="h-5 w-5" />
                     </button>
@@ -1248,8 +1411,8 @@ export function Accommodations() {
                       type="button"
                       onClick={handleModalNextRoom}
                       className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/65 hover:bg-pink-600 active:scale-90 text-white flex items-center justify-center backdrop-blur-md transition-all z-20 cursor-pointer shadow-xl border border-white/30 hover:scale-105"
-                      aria-label="Next room"
-                      title="Next room"
+                      aria-label="Next slide"
+                      title="Next slide"
                     >
                       <ChevronRight className="h-5 w-5" />
                     </button>
@@ -1267,7 +1430,7 @@ export function Accommodations() {
                           className={`h-2 rounded-full transition-all cursor-pointer ${
                             i === currentModalRoomIdx ? 'w-5 bg-pink-500 shadow-md' : 'w-2 bg-white/70 hover:bg-white'
                           }`}
-                          aria-label={`Go to room ${i + 1}`}
+                          aria-label={`Go to slide ${i + 1}`}
                         />
                       ))}
                     </div>
@@ -1280,13 +1443,19 @@ export function Accommodations() {
               <div className="p-6 overflow-y-auto space-y-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="px-3 py-1 bg-pink-100 text-pink-600 text-[11px] font-bold rounded-full uppercase">
-                        {currentRoom.type || selectedAcc.type || 'Room'}
+                        {currentRoom.type || selectedAcc.type || 'Stay'}
                       </span>
                       {currentRoom.capacity ? (
                         <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-full flex items-center gap-1">
                           <Users className="h-3 w-3" /> Max {currentRoom.capacity} Guests
+                        </span>
+                      ) : null}
+                      {currentRoom.created_at ? (
+                        <span className="text-[11px] text-gray-500 flex items-center gap-1 font-medium">
+                          <Clock className="h-3 w-3 text-pink-500" />
+                          Published {new Date(currentRoom.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                         </span>
                       ) : null}
                     </div>
@@ -1299,6 +1468,10 @@ export function Accommodations() {
                       <div className="text-pink-600 font-extrabold text-base mt-1 flex items-baseline gap-1">
                         <span>₱{Number(currentRoom.price_per_night).toLocaleString()}</span>
                         <span className="text-xs font-normal text-gray-400">/ night</span>
+                      </div>
+                    ) : currentRoom.price && typeof currentRoom.price === 'string' && currentRoom.price.toLowerCase().includes('free') ? (
+                      <div className="text-emerald-600 font-bold text-xs mt-1 flex items-center gap-1">
+                        <span className="bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md">Free for guests</span>
                       </div>
                     ) : null}
                   </div>

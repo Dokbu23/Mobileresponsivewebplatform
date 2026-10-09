@@ -22,8 +22,12 @@ class AccommodationController extends Controller
             $user = $request->user();
 
             $query = \App\Models\Accommodation::with('owner:id,name,email,phone,description,listing_status');
-            // Public / non-admin: only show accommodations from admin OR approved & paid resort accounts
+            // Public / non-admin: only show accommodations from admin OR approved & paid resort accounts (and not archived)
             if (!$user || $user->role !== 'admin') {
+                $query->where(function($q) {
+                    $q->whereNull('status')
+                      ->orWhere('status', '!=', 'archived');
+                });
                 $query->where(function($q) {
                     $q->whereNull('user_id')
                       ->orWhereHas('owner', function($userQuery) {

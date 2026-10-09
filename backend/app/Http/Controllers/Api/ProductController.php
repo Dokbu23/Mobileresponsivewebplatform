@@ -35,6 +35,14 @@ class ProductController extends Controller
                 // sync error ignored
             }
 
+            // Exclude archived products for non-admin viewers
+            if (!$user || $user->role !== 'admin') {
+                $query->where(function($q) {
+                    $q->whereNull('status')
+                      ->orWhere('status', '!=', 'archived');
+                });
+            }
+
             // Enterprise owner view: return their own products
             if ($user && $user->role === 'enterprise') {
                 $query->where('user_id', $user->id);

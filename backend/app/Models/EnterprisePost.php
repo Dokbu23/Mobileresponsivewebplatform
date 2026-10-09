@@ -30,6 +30,8 @@ class EnterprisePost extends Model
         'likes',
         'saves',
         'status',
+        'previous_status',
+        'archived_at',
         'approved_by',
         'approved_at',
         'rejected_by',
@@ -46,6 +48,7 @@ class EnterprisePost extends Model
         'moderation_history' => 'array',
         'approved_at' => 'datetime',
         'rejected_at' => 'datetime',
+        'archived_at' => 'datetime',
     ];
 
     public function user()

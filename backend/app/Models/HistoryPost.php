@@ -25,6 +25,8 @@ class HistoryPost extends Model
         'full_description',
         'source',
         'status',
+        'previous_status',
+        'archived_at',
         'is_featured',
         'view_count',
         'likes',
@@ -35,6 +37,7 @@ class HistoryPost extends Model
         'is_featured' => 'boolean',
         'view_count'  => 'integer',
         'likes'       => 'integer',
+        'archived_at' => 'datetime',
     ];
 
     public function creator()

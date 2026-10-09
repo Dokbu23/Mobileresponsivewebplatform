@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router';
-import { Menu, X, MapPin, User, LogOut, Shield, Hotel, Store, Moon, Sun, Search, ChevronDown, Plus, LayoutDashboard, Calendar, CreditCard, Settings, Package, ShoppingBag, Bed, FileText } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Menu, X, MapPin, User, LogOut, Shield, Hotel, Store, Moon, Sun, Search, ChevronDown, Plus, LayoutDashboard, Calendar, CreditCard, Settings, Package, ShoppingBag, Bed, FileText, Palette, Landmark, Compass, BarChart3 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
 
@@ -47,19 +47,75 @@ export function Navbar() {
 
   const toggleDark = () => setIsDark(prev => !prev);
 
+  const [showExploreMenu, setShowExploreMenu] = useState(false);
+  const [mobileExploreOpen, setMobileExploreOpen] = useState(false);
+  const exploreRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (exploreRef.current && !exploreRef.current.contains(event.target as Node)) {
+        setShowExploreMenu(false);
+      }
+    }
+    if (showExploreMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showExploreMenu]);
+
+  useEffect(() => {
+    setShowExploreMenu(false);
+    setShowUserMenu(false);
+    setIsOpen(false);
+  }, [location.pathname]);
+
   const isBusinessUser = userType === 'resort' || userType === 'enterprise';
 
-  const navLinks = [
+  const primaryNavLinks = [
     { path: '/dashboard', label: 'Home' },
     { path: '/attractions', label: 'Attractions' },
     { path: '/events', label: 'Events' },
     { path: '/products', label: 'Products' },
     { path: '/accommodations', label: 'Stays' },
-    { path: '/culture-arts', label: 'Culture & Arts' },
-    { path: '/history', label: 'History' },
-    { path: '/itinerary', label: 'Itinerary' },
-    { path: '/map', label: 'Map' },
   ];
+
+  const exploreLinks = [
+    {
+      path: '/culture-arts',
+      label: 'Culture & Arts',
+      desc: 'Mangyan heritage, traditions & local arts',
+      icon: Palette,
+      color: 'text-pink-500 bg-pink-50 dark:bg-pink-950/40 border border-pink-100 dark:border-pink-900/30',
+    },
+    {
+      path: '/history',
+      label: 'History',
+      desc: 'Chronicles, timeline & historical landmarks',
+      icon: Landmark,
+      color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40 border border-amber-100 dark:border-amber-900/30',
+    },
+    {
+      path: '/map',
+      label: 'Interactive Map',
+      desc: 'Navigate destinations, resorts & road routes',
+      icon: Compass,
+      color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/30',
+      protected: true,
+    },
+    {
+      path: '/itinerary',
+      label: 'Trip Itinerary',
+      desc: 'Curate & schedule your visit to Mansalay',
+      icon: Calendar,
+      color: 'text-sky-500 bg-sky-50 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900/30',
+      protected: true,
+      hideForAdmin: true,
+    },
+  ];
+
+  const isExploreActive = exploreLinks.some(link => location.pathname === link.path);
 
   const roleMenuItems: Record<RoleType, RoleMenuItem[]> = {
     tourist: [
@@ -70,11 +126,13 @@ export function Navbar() {
     ],
     admin: [
       { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/profile', label: 'My Profile', icon: User },
       { to: '/admin/posts', label: 'Manage Posts', icon: FileText },
-      { to: '/admin/users', label: 'Account Management', icon: User },
+      { to: '/admin/users', label: 'Account Management', icon: Shield },
       { to: '/admin/subscriptions', label: 'Manage Subscriptions', icon: CreditCard },
       { to: '/admin/publish', label: 'Publish Content', icon: Plus },
       { to: '/wishlist', label: 'Analytics & Saved', icon: PushPinNavIcon },
+      { to: '/admin/reports', label: 'Reports', icon: BarChart3 },
     ],
     resort: [
       { to: '/resort/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -164,21 +222,13 @@ export function Navbar() {
 
           {/* Desktop Navigation Links */}
           <div className="hidden lg:flex items-center gap-1 xl:gap-2">
-            {navLinks.filter(link => !(link.path === '/itinerary' && userType === 'admin')).map(link => {
+            {primaryNavLinks.map(link => {
               const isActive = location.pathname === link.path || (link.label === 'Home' && (location.pathname === '/' || location.pathname === '/dashboard'));
-              const isProtectedLink = (link.path === '/map' || link.path === '/itinerary');
 
               return (
                 <Link
                   key={link.path}
                   to={link.path}
-                  onClick={(e) => {
-                    if (isProtectedLink && !currentUser) {
-                      e.preventDefault();
-                      toast.error(`Please log in to access ${link.label}`);
-                      navigate('/login');
-                    }
-                  }}
                   className={`text-xs xl:text-sm font-semibold transition-all px-3 py-1.5 rounded-full relative ${
                     isActive
                       ? 'bg-pink-100/70 dark:bg-pink-500/20 text-pink-600 dark:text-pink-400 font-bold shadow-xs'
@@ -189,6 +239,85 @@ export function Navbar() {
                 </Link>
               );
             })}
+
+            {/* Smart "Explore" Dropdown */}
+            <div
+              ref={exploreRef}
+              className="relative"
+              onMouseEnter={() => setShowExploreMenu(true)}
+              onMouseLeave={() => setShowExploreMenu(false)}
+            >
+              <button
+                type="button"
+                onClick={() => setShowExploreMenu(prev => !prev)}
+                className={`flex items-center gap-1.5 text-xs xl:text-sm font-semibold transition-all px-3.5 py-1.5 rounded-full cursor-pointer select-none ${
+                  isExploreActive
+                    ? 'bg-pink-100/70 dark:bg-pink-500/20 text-pink-600 dark:text-pink-400 font-bold shadow-xs'
+                    : 'text-gray-600 dark:text-slate-300 hover:text-pink-600 dark:hover:text-pink-400 hover:bg-pink-50/50 dark:hover:bg-slate-800/60'
+                }`}
+                aria-expanded={showExploreMenu}
+              >
+                <span>Explore</span>
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${showExploreMenu ? 'rotate-180 text-pink-600 dark:text-pink-400' : 'text-gray-400'}`} />
+              </button>
+
+              {/* Rich Flyout Dropdown Card */}
+              {showExploreMenu && (
+                <div className="absolute left-1/2 -translate-x-1/2 top-full pt-1.5 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="w-72 bg-white dark:bg-slate-900 border border-pink-100/90 dark:border-slate-800 rounded-2xl shadow-xl overflow-hidden p-2 backdrop-blur-md">
+                    <div className="px-3 py-1.5 border-b border-gray-100 dark:border-slate-800/80 mb-1 flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500">
+                        Explore Mansalay
+                      </span>
+                      <span className="text-[9px] font-medium text-pink-500 bg-pink-50 dark:bg-pink-950/60 px-1.5 py-0.5 rounded-full">
+                        Heritage & Trips
+                      </span>
+                    </div>
+
+                    <div className="space-y-0.5">
+                      {exploreLinks.filter(item => !(item.hideForAdmin && userType === 'admin')).map((item) => {
+                        const isItemActive = location.pathname === item.path;
+                        const IconComp = item.icon;
+                        return (
+                          <Link
+                            key={item.path}
+                            to={item.path}
+                            onClick={(e) => {
+                              if (item.protected && !currentUser) {
+                                e.preventDefault();
+                                toast.error(`Please log in to access ${item.label}`);
+                                navigate('/login');
+                              }
+                              setShowExploreMenu(false);
+                            }}
+                            className={`flex items-start gap-3 p-2.5 rounded-xl transition-all group ${
+                              isItemActive
+                                ? 'bg-pink-50 dark:bg-slate-800/90 text-pink-600 dark:text-pink-400 font-bold'
+                                : 'text-gray-700 dark:text-slate-200 hover:bg-pink-50/60 dark:hover:bg-slate-800'
+                            }`}
+                          >
+                            <div className={`p-2 rounded-xl shrink-0 mt-0.5 transition-transform group-hover:scale-105 ${item.color}`}>
+                              <IconComp className="h-4 w-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold leading-tight truncate">{item.label}</span>
+                                {isItemActive && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-pink-500 shrink-0 ml-1.5" />
+                                )}
+                              </div>
+                              <p className="text-[10px] text-gray-500 dark:text-slate-400 line-clamp-1 mt-0.5 font-normal">
+                                {item.desc}
+                              </p>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Right Action Icons & Profile */}
@@ -237,7 +366,7 @@ export function Navbar() {
                       className="fixed inset-0 z-10" 
                       onClick={() => setShowUserMenu(false)}
                     />
-                    <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-pink-100/80 dark:border-slate-800 rounded-3xl shadow-xl overflow-hidden z-30 animate-in fade-in slide-in-from-top-2 duration-150 p-2 font-sans">
+                    <div className="absolute right-0 mt-2 w-64 max-h-[85vh] overflow-y-auto bg-white dark:bg-slate-900 border border-pink-100/80 dark:border-slate-800 rounded-3xl shadow-xl z-30 animate-in fade-in slide-in-from-top-2 duration-150 p-2 font-sans">
                       {/* Header Avatar Card */}
                       <div className="p-3 flex items-center gap-3">
                         {currentUser?.avatar ? (
@@ -265,19 +394,29 @@ export function Navbar() {
 
                       <div className="border-t border-pink-100/60 dark:border-slate-800 my-1" />
 
-                      {/* Main Menu Items with dynamic Icons */}
+                      {/* Main Menu Items with dynamic Icons & Active State */}
                       <div className="space-y-0.5">
                         {activeRoleItems.map((item) => {
                           const IconComp = item.icon;
+                          const isItemActive = location.pathname === item.to;
                           return (
                             <Link
                               key={item.to}
                               to={item.to}
                               onClick={() => setShowUserMenu(false)}
-                              className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-pink-50/60 dark:hover:bg-slate-800 rounded-2xl transition-colors text-xs font-semibold text-gray-700 dark:text-slate-200 hover:text-pink-600 dark:hover:text-pink-400"
+                              className={`flex items-center justify-between px-3.5 py-2.5 rounded-2xl transition-colors text-xs font-semibold ${
+                                isItemActive
+                                  ? 'bg-pink-50/90 dark:bg-pink-950/40 text-pink-600 dark:text-pink-400 font-bold'
+                                  : 'text-gray-700 dark:text-slate-200 hover:bg-pink-50/60 dark:hover:bg-slate-800 hover:text-pink-600 dark:hover:text-pink-400'
+                              }`}
                             >
-                              <IconComp className="h-4 w-4 text-pink-500 flex-shrink-0" />
-                              <span>{item.label}</span>
+                              <div className="flex items-center gap-3">
+                                <IconComp className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                                <span>{item.label}</span>
+                              </div>
+                              {isItemActive && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-pink-500 shrink-0" />
+                              )}
                             </Link>
                           );
                         })}
@@ -325,20 +464,13 @@ export function Navbar() {
         {/* Mobile Navigation */}
         {isOpen && (
           <div className="lg:hidden pb-4 pt-2 space-y-1.5 border-t border-gray-100 dark:border-slate-800">
-            {navLinks.filter(link => !(link.path === '/itinerary' && userType === 'admin')).map(link => (
+            {primaryNavLinks.map(link => (
               <Link
                 key={link.path}
                 to={link.path}
-                onClick={(e) => {
-                  setIsOpen(false);
-                  if ((link.path === '/map' || link.path === '/itinerary') && !currentUser) {
-                    e.preventDefault();
-                    toast.error(`Please log in to access ${link.label}`);
-                    navigate('/login');
-                  }
-                }}
+                onClick={() => setIsOpen(false)}
                 className={`block px-4 py-2.5 rounded-xl text-xs font-semibold ${
-                  location.pathname === link.path
+                  location.pathname === link.path || (link.label === 'Home' && (location.pathname === '/' || location.pathname === '/dashboard'))
                     ? 'bg-pink-100/70 text-pink-600 dark:bg-pink-500/20 dark:text-pink-400'
                     : 'text-gray-700 dark:text-slate-200 hover:bg-pink-50/50 dark:hover:bg-slate-800'
                 }`}
@@ -346,6 +478,61 @@ export function Navbar() {
                 {link.label}
               </Link>
             ))}
+
+            {/* Mobile Explore Group Accordion */}
+            <div className="pt-1 border-t border-gray-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setMobileExploreOpen(prev => !prev)}
+                className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
+                  isExploreActive
+                    ? 'bg-pink-100/70 text-pink-600 dark:bg-pink-500/20 dark:text-pink-400 font-bold'
+                    : 'text-gray-700 dark:text-slate-200 hover:bg-pink-50/50 dark:hover:bg-slate-800'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <Compass className="h-4 w-4 text-pink-500" />
+                  Explore Mansalay
+                </span>
+                <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${mobileExploreOpen ? 'rotate-180 text-pink-600' : 'text-gray-400'}`} />
+              </button>
+
+              {mobileExploreOpen && (
+                <div className="pl-4 pr-1 py-1 space-y-1">
+                  {exploreLinks.filter(item => !(item.hideForAdmin && userType === 'admin')).map((item) => {
+                    const isItemActive = location.pathname === item.path;
+                    const IconComp = item.icon;
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        onClick={(e) => {
+                          setIsOpen(false);
+                          if (item.protected && !currentUser) {
+                            e.preventDefault();
+                            toast.error(`Please log in to access ${item.label}`);
+                            navigate('/login');
+                          }
+                        }}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-xl text-xs ${
+                          isItemActive
+                            ? 'bg-pink-50 dark:bg-slate-800 text-pink-600 dark:text-pink-400 font-bold'
+                            : 'text-gray-600 dark:text-slate-300 hover:bg-pink-50/50 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className={`p-1.5 rounded-lg shrink-0 ${item.color}`}>
+                          <IconComp className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <span className="font-semibold block leading-tight">{item.label}</span>
+                          <span className="text-[10px] text-gray-400 block truncate">{item.desc}</span>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
             {userType ? (
               <>
@@ -371,15 +558,25 @@ export function Navbar() {
                   </div>
                   {activeRoleItems.map(item => {
                     const IconComp = item.icon;
+                    const isItemActive = location.pathname === item.to;
                     return (
                       <Link
                         key={item.to}
                         to={item.to}
                         onClick={closeMenus}
-                        className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-medium text-gray-600 dark:text-slate-300 hover:bg-pink-50/60 dark:hover:bg-slate-800"
+                        className={`flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
+                          isItemActive
+                            ? 'bg-pink-50 dark:bg-pink-950/40 text-pink-600 dark:text-pink-400 font-bold'
+                            : 'text-gray-600 dark:text-slate-300 hover:bg-pink-50/60 dark:hover:bg-slate-800'
+                        }`}
                       >
-                        <IconComp className="h-4 w-4 text-pink-500 flex-shrink-0" />
-                        <span>{item.label}</span>
+                        <div className="flex items-center gap-3">
+                          <IconComp className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                          <span>{item.label}</span>
+                        </div>
+                        {isItemActive && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-pink-500 shrink-0" />
+                        )}
                       </Link>
                     );
                   })}

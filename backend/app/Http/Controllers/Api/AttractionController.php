@@ -34,6 +34,14 @@ class AttractionController extends Controller
                 $query = \App\Models\Attraction::query();
             }
 
+            // Exclude archived items for non-admin
+            if (!$user || $user->role !== 'admin') {
+                $query->where(function($q) {
+                    $q->whereNull('status')
+                      ->orWhere('status', '!=', 'archived');
+                });
+            }
+
             // Apply search filter (case-insensitive search on name and description)
             if ($request->has('search') && $request->input('search') !== '') {
                 $search = $request->input('search');

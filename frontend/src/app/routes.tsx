@@ -27,6 +27,7 @@ import { Wishlist } from "./pages/tourist/Wishlist";
 
 import { AdminLogin } from "./pages/admin/AdminLogin";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
+import { AdminReports } from "./pages/admin/AdminReports";
 import { ManagePosts } from "./pages/admin/ManagePosts";
 import { ManageListings } from "./pages/admin/ManageListings";
 import { ManageUsers } from "./pages/admin/ManageUsers";
@@ -103,6 +104,7 @@ export const router = createBrowserRouter([
       { path: "business/:type/:userId", Component: BusinessProfile },
       { path: "admin/login", Component: AdminLogin },
       { path: "admin/dashboard", Component: AdminDashboard },
+      { path: "admin/reports", Component: AdminReports },
       { path: "admin/posts", Component: ManagePosts },
       { path: "admin/publish", Component: AdminContent },
       { path: "admin/listings", Component: AdminContent },

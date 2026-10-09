@@ -16,9 +16,10 @@ use Illuminate\Support\Facades\DB;
 class StatsController extends Controller
 {
     /**
-     * Get platform statistics for dashboards
+    /**
+     * Get platform statistics for dashboards (100% Real-Data Driven)
      */
-    public function getPlatformStats()
+    public function getPlatformStats(Request $request)
     {
         try {
             $now = \Carbon\Carbon::now();
@@ -26,7 +27,7 @@ class StatsController extends Controller
             $startOfLastMonth = $now->copy()->subMonth()->startOfMonth();
             $endOfLastMonth = $now->copy()->subMonth()->endOfMonth();
 
-            // Core counts
+            // Core entity counts
             $attractionsCount = Attraction::count();
             $attractionsThisMonth = Attraction::where('created_at', '>=', $startOfMonth)->count();
             $resortsCount     = Accommodation::count();
@@ -39,18 +40,10 @@ class StatsController extends Controller
             $eventsUpcoming = Event::where('date', '>=', $now->toDateString())->count();
             $eventsCount = $eventsThisMonth > 0 ? $eventsThisMonth : Event::count();
 
-            // Registered tourist count
-            $touristsCount = User::where('role', 'tourist')->count();
-            $allUsers      = User::count();
-            $touristsThisMonth = User::where('role', 'tourist')->where('created_at', '>=', $startOfMonth)->count();
-            $touristsLastMonth = User::where('role', 'tourist')->whereBetween('created_at', [$startOfLastMonth, $endOfLastMonth])->count();
-            
-            $visitorGrowthPct = 0;
-            if ($touristsLastMonth > 0) {
-                $visitorGrowthPct = round((($touristsThisMonth - $touristsLastMonth) / $touristsLastMonth) * 100, 1);
-            } elseif ($touristsThisMonth > 0) {
-                $visitorGrowthPct = round(($touristsThisMonth / max(1, $allUsers)) * 100, 1);
-            }
+            // Registered tourist counts (Unique visitors)
+            $touristQuery = User::where('role', 'tourist');
+            $lifetimeTourists = (clone $touristQuery)->count();
+            $allUsers         = User::count();
 
             // Active businesses (resorts & enterprises)
             $businessesCount = User::whereIn('role', ['resort', 'enterprise'])->count();
@@ -61,42 +54,143 @@ class StatsController extends Controller
                 ->where('created_at', '>=', $startOfMonth)
                 ->count();
 
-            // Orders
-            $totalOrders     = Order::count();
-            $completedOrders = Order::where('status', 'completed')->count();
-
-            // Bookings & Tourist Arrivals
-            $totalBookings    = Booking::count();
+            // Orders & Bookings
+            $totalOrders       = Order::count();
+            $completedOrders   = Order::where('status', 'completed')->count();
+            $totalBookings     = Booking::count();
             $completedBookings = Booking::whereIn('status', ['confirmed', 'completed', 'paid'])->count();
-            
-            // Total Attraction Views (cumulative real views from attractions table)
-            $totalViews = (int) Attraction::sum('view_count');
+            $ordersRevenue     = Order::where('status', 'completed')->sum('total');
+            $bookingsRevenue   = Booking::whereIn('status', ['confirmed', 'completed', 'paid'])->sum('total');
+            $totalRevenue      = (float) ($ordersRevenue + $bookingsRevenue);
 
-            // Visitor Count = Total registered tourists + Bookings + unique platform visits
-            $visitorCount = $touristsCount + $totalBookings;
-            if ($visitorCount === 0 && $totalViews > 0) {
-                $visitorCount = max(1, (int) round($totalViews * 0.4));
-            } elseif ($visitorCount === 0) {
-                $visitorCount = $allUsers;
+            // ── DYNAMIC DATE RANGE FILTERING FOR VISITOR ANALYTICS ──
+            $monthsCount = max(1, min(60, (int) $request->get('months', 6)));
+            if ($request->filled('start_date') && $request->filled('end_date')) {
+                $startDate = \Carbon\Carbon::parse($request->get('start_date'))->startOfDay();
+                $endDate   = \Carbon\Carbon::parse($request->get('end_date'))->endOfDay();
+            } else {
+                $endDate   = $now->copy()->endOfMonth();
+                $startDate = $now->copy()->subMonths($monthsCount - 1)->startOfMonth();
             }
 
-            // Top attractions sorted by real view_count
-            $topAttractions = Attraction::select('id', 'name', 'view_count', 'image', 'images', 'location')
-                ->orderByDesc('view_count')
-                ->limit(10)
-                ->get()
-                ->map(function($a) {
-                    $img = $a->image ?: ((is_array($a->images) && count($a->images) > 0) ? $a->images[0] : null);
-                    return [
-                        'id'       => $a->id,
-                        'name'     => html_entity_decode($a->name ?: '', ENT_QUOTES | ENT_HTML5, 'UTF-8'),
-                        'views'    => (int) ($a->view_count ?: 0),
-                        'image'    => $img,
-                        'location' => html_entity_decode($a->location ?: '', ENT_QUOTES | ENT_HTML5, 'UTF-8'),
-                    ];
-                });
+            // Real visitor trend grouped dynamically by YEAR + MONTH
+            $visitorTrend = [];
+            $cur = $startDate->copy()->startOfMonth();
+            $endCursor = $endDate->copy()->startOfMonth();
 
-            // Popular resorts
+            while ($cur->lte($endCursor)) {
+                $mStart = $cur->copy()->startOfMonth();
+                $mEnd   = $cur->copy()->endOfMonth();
+
+                $count = (clone $touristQuery)->whereBetween('created_at', [$mStart, $mEnd])->count();
+
+                $visitorTrend[] = [
+                    'year'     => (int) $cur->format('Y'),
+                    'month'    => $cur->format('M'),
+                    'label'    => $cur->format('M Y'),
+                    'period'   => $cur->format('Y-m'),
+                    'visitors' => $count,
+                ];
+
+                $cur->addMonth();
+            }
+
+            // Calculate Total Visitors within selected date range
+            $totalVisitorsInRange = (clone $touristQuery)->whereBetween('created_at', [$startDate, $endDate])->count();
+
+            // Highest & Lowest Month dynamically calculated
+            $highestMonth = null;
+            $lowestMonth  = null;
+            $totalTrendMonths = count($visitorTrend);
+            $averagePerMonth = $totalTrendMonths > 0 ? round($totalVisitorsInRange / $totalTrendMonths, 1) : 0;
+
+            if ($totalVisitorsInRange > 0 && !empty($visitorTrend)) {
+                $maxItem = null;
+                $minItem = null;
+
+                foreach ($visitorTrend as $item) {
+                    if ($maxItem === null || $item['visitors'] > $maxItem['visitors']) {
+                        $maxItem = $item;
+                    }
+                    if ($minItem === null || $item['visitors'] < $minItem['visitors']) {
+                        $minItem = $item;
+                    }
+                }
+
+                if ($maxItem && $maxItem['visitors'] > 0) {
+                    $highestMonth = [
+                        'month'    => $maxItem['label'],
+                        'visitors' => $maxItem['visitors'],
+                    ];
+                }
+
+                if ($minItem) {
+                    $lowestMonth = [
+                        'month'    => $minItem['label'],
+                        'visitors' => $minItem['visitors'],
+                    ];
+                }
+            }
+
+            // Percentage change compared to the preceding period of equal length
+            $periodDays = $startDate->diffInDays($endDate) + 1;
+            $prevEndDate = $startDate->copy()->subSecond();
+            $prevStartDate = $prevEndDate->copy()->subDays($periodDays)->startOfDay();
+
+            $prevVisitorsCount = (clone $touristQuery)->whereBetween('created_at', [$prevStartDate, $prevEndDate])->count();
+
+            $percentageChange = null;
+            if ($prevVisitorsCount > 0) {
+                $percentageChange = round((($totalVisitorsInRange - $prevVisitorsCount) / $prevVisitorsCount) * 100, 1);
+            }
+
+            // ── DYNAMIC DESTINATION ANALYTICS (PAGED VIEWS & CATEGORIES) ──
+            $selectedCategory = $request->get('category', 'all');
+
+            $destQuery = Attraction::query();
+            if ($selectedCategory && $selectedCategory !== 'all' && $selectedCategory !== 'All Destinations') {
+                $destQuery->where('category', $selectedCategory);
+            }
+
+            $destinationsRaw = $destQuery->select('id', 'name', 'category', 'view_count', 'image', 'images', 'location')
+                ->orderByDesc('view_count')
+                ->get()
+                ->map(function($d) {
+                    $img = $d->image ?: ((is_array($d->images) && count($d->images) > 0) ? $d->images[0] : null);
+                    return [
+                        'id'       => $d->id,
+                        'name'     => html_entity_decode($d->name ?: '', ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                        'category' => $d->category ?: 'Uncategorized',
+                        'views'    => (int) ($d->view_count ?: 0),
+                        'image'    => $img,
+                        'location' => html_entity_decode($d->location ?: '', ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                    ];
+                })
+                ->values();
+
+            $totalDestViews   = $destinationsRaw->sum('views');
+            $highestDestViews = $destinationsRaw->max('views') ?: 0;
+
+            $rankedDestinations = $destinationsRaw->map(function($d, $index) use ($totalDestViews, $highestDestViews) {
+                $views = $d['views'];
+                $sharePct = $totalDestViews > 0 ? round(($views / $totalDestViews) * 100, 1) : 0;
+                $progressPct = $highestDestViews > 0 ? round(($views / $highestDestViews) * 100, 1) : 0;
+
+                return array_merge($d, [
+                    'rank'         => $index + 1,
+                    'percentage'   => $sharePct,
+                    'progress_bar' => $progressPct,
+                ]);
+            });
+
+            // Dynamically query all distinct categories existing in the database
+            $availableCategories = Attraction::whereNotNull('category')
+                ->where('category', '<>', '')
+                ->distinct()
+                ->pluck('category')
+                ->values();
+
+            // Popular resorts (derived strictly from DB and cache views)
             $popularResorts = User::where('role', 'resort')
                 ->get()
                 ->map(function($r) {
@@ -154,19 +248,6 @@ class StatsController extends Controller
                 ->values()
                 ->take(5);
 
-            if ($popularEnterprises->isEmpty() && $productsCount > 0) {
-                $popularEnterprises = collect([
-                    [
-                        'id'             => 0,
-                        'name'           => 'Mansalay Artisan Co-op',
-                        'category'       => 'Local Handicrafts & Delicacies',
-                        'views'          => 0,
-                        'products_count' => $productsCount,
-                        'avatar'         => null
-                    ]
-                ]);
-            }
-
             // Most Wishlisted Items
             $mostWishlisted = Attraction::orderBy('view_count', 'desc')
                 ->take(5)
@@ -182,32 +263,6 @@ class StatsController extends Controller
                     ];
                 });
 
-            // Dynamic Visitor Trend (Past 7 Months calculated from real DB activity)
-            $effectiveVisitors = max($touristsCount, $allUsers, $totalViews, 24);
-            $visitorTrend = [];
-            $trendWeights = [0.30, 0.42, 0.55, 0.68, 0.80, 0.92, 1.0];
-
-            for ($i = 6; $i >= 0; $i--) {
-                $monthDate = $now->copy()->subMonths($i);
-                $mName = $monthDate->format('M');
-                $mStart = $monthDate->copy()->startOfMonth();
-                $mEnd = $monthDate->copy()->endOfMonth();
-                
-                $mUserCount = User::whereBetween('created_at', [$mStart, $mEnd])->count();
-                $mViewCount = (int) Attraction::whereBetween('updated_at', [$mStart, $mEnd])->sum('view_count');
-
-                $realCount = max($mUserCount, $mViewCount);
-                if ($realCount === 0 || $realCount < 2) {
-                    $weight = $trendWeights[6 - $i] ?? 1.0;
-                    $realCount = max(2, (int) round($effectiveVisitors * $weight));
-                }
-
-                $visitorTrend[] = [
-                    'month'    => $mName,
-                    'visitors' => $realCount,
-                ];
-            }
-
             return response()->json([
                 'status'  => 'success',
                 'success' => true,
@@ -218,22 +273,40 @@ class StatsController extends Controller
                     'products'              => $productsCount,
                     'events'                => $eventsCount,
                     'events_upcoming'       => $eventsUpcoming,
-                    'tourists'              => $touristsCount,
-                    'tourists_this_month'   => $touristsThisMonth,
-                    'tourists_growth_pct'   => $visitorGrowthPct,
-                    'tourist_arrivals'      => $visitorCount,
-                    'total_bookings'        => $totalBookings,
+                    'tourists'              => $lifetimeTourists,
+                    'total_visitors'        => $totalVisitorsInRange,
                     'users'                 => $allUsers,
                     'businesses'            => $businessesCount,
                     'businesses_this_month' => $businessesThisMonth,
                     'total_orders'          => $totalOrders,
                     'completed_orders'      => $completedOrders,
-                    'total_views'           => (int) $totalViews,
-                    'top_attractions'       => $topAttractions,
+                    'total_bookings'        => $totalBookings,
+                    'total_views'           => (int) Attraction::sum('view_count'),
+                    'total_revenue'         => $totalRevenue,
+
+                    // ── Real Visitor Analytics ──
+                    'visitor_trend'         => $visitorTrend,
+                    'highest_month'         => $highestMonth,
+                    'lowest_month'          => $lowestMonth,
+                    'average_per_month'     => $averagePerMonth,
+                    'percentage_change'     => $percentageChange,
+                    'date_range'            => [
+                        'months'     => $monthsCount,
+                        'start_date' => $startDate->toDateString(),
+                        'end_date'   => $endDate->toDateString(),
+                        'label'      => $startDate->format('M Y') . ' - ' . $endDate->format('M Y'),
+                    ],
+
+                    // ── Real Destination Analytics ──
+                    'top_attractions'       => $rankedDestinations,
+                    'destinations'          => $rankedDestinations,
+                    'destination_categories'=> $availableCategories,
+                    'selected_category'     => $selectedCategory,
+
+                    // Leaderboard Highlights
                     'popular_resorts'       => $popularResorts,
                     'popular_enterprises'   => $popularEnterprises,
                     'most_wishlisted'       => $mostWishlisted,
-                    'visitor_trend'         => $visitorTrend,
                 ]
             ]);
 
@@ -243,7 +316,7 @@ class StatsController extends Controller
                 'success' => false,
                 'message' => 'Failed to fetch platform statistics',
                 'error'   => $e->getMessage()
-            ], 200); // Return 200 so health checks pass even during initial DB warmup
+            ], 200);
         }
     }
 }

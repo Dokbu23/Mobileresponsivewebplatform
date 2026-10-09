@@ -33,6 +33,8 @@ use App\Http\Controllers\Api\VirtualTourController;
 use App\Http\Controllers\Api\GoogleAuthController;
 use App\Http\Controllers\Api\CultureArtController;
 use App\Http\Controllers\Api\HistoryController;
+use App\Http\Controllers\Api\AdminManagePostController;
+use App\Http\Controllers\Api\AdminReportController;
 
 use App\Models\User;
 
@@ -78,6 +80,7 @@ Route::group(['prefix' => 'public'], function () {
     Route::post('wishlist/toggle', [WishlistController::class, 'toggle']);
     Route::get('wishlist/counts', [WishlistController::class, 'counts']);
     Route::get('site-settings/home-background', [SiteSettingController::class, 'getHomeBackground']);
+    Route::get('site-settings/contact', [SiteSettingController::class, 'getContactSettings']);
 
     // Public resort rooms (for tourists when booking)
     Route::get('resort-rooms/{userId}', [ResortRoomController::class, 'publicIndex']);
@@ -173,6 +176,35 @@ Route::group(['prefix' => 'public'], function () {
 });
 
 Route::get('stats', [StatsController::class, 'getPlatformStats']);
+Route::get('site-settings/contact', [SiteSettingController::class, 'getContactSettings']);
+Route::get('site-settings/home-background', [SiteSettingController::class, 'getHomeBackground']);
+Route::post('views/increment', function(\Illuminate\Http\Request $request) {
+    $itemId = $request->input('item_id');
+    $itemType = $request->input('item_type', 'attraction');
+    if (!$itemId) return response()->json(['success' => false, 'message' => 'item_id required'], 400);
+    $cacheKey = "view_count_{$itemType}_{$itemId}";
+    $currentViews = (int) \Illuminate\Support\Facades\Cache::get($cacheKey, 0);
+    $newViews = $currentViews + 1;
+    \Illuminate\Support\Facades\Cache::forever($cacheKey, $newViews);
+    try {
+        if ($itemType === 'attraction' && class_exists('\App\Models\Attraction')) {
+            \App\Models\Attraction::where('id', $itemId)->increment('view_count');
+        } elseif ($itemType === 'accommodation' && class_exists('\App\Models\Accommodation')) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('accommodations', 'view_count')) {
+                \App\Models\Accommodation::where('id', $itemId)->increment('view_count');
+            }
+        } elseif ($itemType === 'product' && class_exists('\App\Models\Product')) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'view_count')) {
+                \App\Models\Product::where('id', $itemId)->increment('view_count');
+            }
+        } elseif (($itemType === 'resort' || $itemType === 'enterprise') && class_exists('\App\Models\User')) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'view_count')) {
+                \App\Models\User::where('id', $itemId)->increment('view_count');
+            }
+        }
+    } catch (\Throwable $t) {}
+    return response()->json(['success' => true, 'item_id' => $itemId, 'item_type' => $itemType, 'views' => $newViews]);
+});
 
 // Authentication routes
 Route::post('login', [AuthController::class, 'login']);
@@ -252,6 +284,11 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::put('payment-methods/{id}', [PaymentSettingsController::class, 'update']);
         Route::delete('payment-methods/{id}', [PaymentSettingsController::class, 'destroy']);
         Route::patch('payment-methods/{id}/toggle', [PaymentSettingsController::class, 'toggle']);
+
+        // Site Settings (root paths)
+        Route::post('site-settings/contact', [SiteSettingController::class, 'updateContactSettings']);
+        Route::post('site-settings/home-background', [SiteSettingController::class, 'updateHomeBackground']);
+        Route::delete('site-settings/home-background', [SiteSettingController::class, 'resetHomeBackground']);
     });
 
     Route::group(['prefix' => 'admin', 'middleware' => ['role:admin']], function () {
@@ -266,9 +303,10 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::delete('payment-methods/{id}', [PaymentSettingsController::class, 'destroy']);
         Route::patch('payment-methods/{id}/toggle', [PaymentSettingsController::class, 'toggle']);
 
-        // Site Settings / Homepage Background
+        // Site Settings / Homepage Background & Contact (admin-prefixed paths)
         Route::post('site-settings/home-background', [SiteSettingController::class, 'updateHomeBackground']);
         Route::delete('site-settings/home-background', [SiteSettingController::class, 'resetHomeBackground']);
+        Route::post('site-settings/contact', [SiteSettingController::class, 'updateContactSettings']);
     });
 
     // Tourist-only routes
@@ -314,6 +352,18 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::post('admin/histories/{id}', [HistoryController::class, 'update']);
         Route::put('admin/histories/{id}', [HistoryController::class, 'update']);
         Route::delete('admin/histories/{id}', [HistoryController::class, 'destroy']);
+
+        // Central Admin Manage Posts API (All 9 content types, unified status, archive & restore system)
+        Route::get('admin/manage-posts', [AdminManagePostController::class, 'index']);
+        Route::post('admin/manage-posts/{source}/{id}/archive', [AdminManagePostController::class, 'archive']);
+        Route::post('admin/manage-posts/{source}/{id}/restore', [AdminManagePostController::class, 'restore']);
+        Route::delete('admin/manage-posts/{source}/{id}', [AdminManagePostController::class, 'destroy']);
+        Route::post('admin/manage-posts/{source}/{id}/approve', [AdminManagePostController::class, 'approve']);
+        Route::post('admin/manage-posts/{source}/{id}/reject', [AdminManagePostController::class, 'reject']);
+        Route::put('admin/manage-posts/{source}/{id}', [AdminManagePostController::class, 'update']);
+
+        // Official DiscoverMansalay Monthly Tourism Report
+        Route::get('admin/monthly-report', [AdminReportController::class, 'getMonthlyReport']);
     });
 
     // Enterprise-only routes (admin allowed) - PROTECTED BY SUBSCRIPTION

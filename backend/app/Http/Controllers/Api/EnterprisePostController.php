@@ -26,10 +26,23 @@ class EnterprisePostController extends Controller
                 })->delete();
         }
 
+        $userFields = 'id,name,role,email,phone,store_name,store_logo,resort_name,resort_images,resort_description,resort_amenities,address,barangay,description';
+
         $query = EnterprisePost::query()
             ->where('type', '!=', 'promotion')
             ->where('content', 'not like', '%JULY SALE%')
-            ->with(['user:id,name,role,store_name,store_logo,resort_name,resort_images', 'approver:id,name', 'rejecter:id,name']);
+            ->with(["user:{$userFields}", 'approver:id,name', 'rejecter:id,name']);
+
+        if ($request->has('role')) {
+            $roleFilter = $request->input('role');
+            $query->whereHas('user', function($q) use ($roleFilter) {
+                $q->where('role', $roleFilter);
+            });
+        }
+
+        if ($request->has('type')) {
+            $query->where('type', $request->input('type'));
+        }
 
         if ($request->has('user_id')) {
             $targetUserId = (int) $request->input('user_id');
@@ -48,7 +61,7 @@ class EnterprisePostController extends Controller
 
         $posts = $query->orderBy('created_at', 'desc')->get();
 
-        // Clean tags and auto-sync products/rooms for approved posts
+        // Clean tags
         try {
             foreach ($posts as $p) {
                 if (!empty($p->tags)) {
@@ -63,19 +76,8 @@ class EnterprisePostController extends Controller
                     }
                 }
             }
-
-            // Sync from oldest to newest so newest post takes precedence (ONLY approved posts)
-            foreach ($posts->reverse() as $p) {
-                if ($p->status === 'approved') {
-                    if ($p->type === 'product' || !empty($p->product_name)) {
-                        self::syncProductFromPost($p, $p->user ?? $user);
-                    } elseif ($p->type === 'rooms' || $p->type === 'room') {
-                        self::syncRoomFromPost($p, $p->user ?? $user);
-                    }
-                }
-            }
         } catch (\Throwable $e) {
-            // sync error ignored
+            // ignore
         }
 
         return response()->json($posts);

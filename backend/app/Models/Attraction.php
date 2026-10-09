@@ -9,12 +9,13 @@ class Attraction extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id','name','location','latitude','longitude','category','image','images','video','description','full_description','view_count','likes'];
+    protected $fillable = ['user_id','name','location','latitude','longitude','category','image','images','video','description','full_description','view_count','likes','status','previous_status','archived_at'];
 
     protected $casts = [
-        'images'    => 'array',
-        'latitude'  => 'float',
-        'longitude' => 'float',
+        'images'      => 'array',
+        'latitude'    => 'float',
+        'longitude'   => 'float',
+        'archived_at' => 'datetime',
     ];
 
     public function creator()

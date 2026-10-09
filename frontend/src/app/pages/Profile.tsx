@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Mail, Phone, MapPin, Store, Hotel, Shield, Camera, Save, Lock, Eye, EyeOff, Loader2, Edit3 } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Store, Hotel, Shield, Camera, Save, Lock, Eye, EyeOff, Loader2, Edit3, Facebook, Instagram, Twitter } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getJSON, patchJSON, postJSON, API_BASE, getAuthToken, formatImageUrl } from '../lib/api';
 import { toast } from 'sonner';
@@ -27,6 +27,17 @@ export function Profile() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
+  // Tourism Contact Settings state (for Admin)
+  const [contactForm, setContactForm] = useState({
+    email: '',
+    phone: '',
+    address: '',
+    facebook: '',
+    instagram: '',
+    twitter: '',
+  });
+  const [savingContact, setSavingContact] = useState(false);
+
   // Change password state
   const [pwForm, setPwForm] = useState({ current_password: '', password: '', password_confirmation: '' });
   const [pwSaving, setPwSaving] = useState(false);
@@ -36,7 +47,51 @@ export function Profile() {
 
   useEffect(() => {
     fetchProfile();
-  }, []);
+    if (userType === 'admin') {
+      fetchContactSettings();
+    }
+  }, [userType]);
+
+  const fetchContactSettings = async () => {
+    try {
+      const data = await getJSON('/site-settings/contact');
+      if (data) {
+        setContactForm({
+          email: data.email || '',
+          phone: data.phone || '',
+          address: data.address || '',
+          facebook: data.facebook || '',
+          instagram: data.instagram || '',
+          twitter: data.twitter || '',
+        });
+      }
+    } catch {
+      // quiet fallback
+    }
+  };
+
+  const handleSaveContact = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingContact(true);
+    try {
+      const res = await postJSON('/site-settings/contact', contactForm);
+      const savedData = res?.settings || contactForm;
+
+      // Update localStorage immediately
+      try {
+        localStorage.setItem('discover-mansalay:site-contact', JSON.stringify(savedData));
+      } catch {}
+
+      // Dispatch global event so Footer updates instantly with NO REFRESH needed!
+      window.dispatchEvent(new CustomEvent('site-settings:contact-updated', { detail: savedData }));
+
+      await showSuccessAlert('Saved Successfully! 🎉', 'Official tourism contact and social links have been updated in the website footer.');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update contact settings');
+    } finally {
+      setSavingContact(false);
+    }
+  };
 
   const fetchProfile = async () => {
     try {
@@ -398,6 +453,435 @@ export function Profile() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
         <p className="text-muted-foreground">Loading profile...</p>
+      </div>
+    );
+  }
+
+  if (userType === 'admin') {
+    return (
+      <div className="min-h-screen bg-[#FFF8FA] py-10 px-4 sm:px-6 lg:px-8 font-sans">
+        <div className="max-w-6xl mx-auto space-y-8">
+          {/* PAGE TITLE & SUBTITLE */}
+          <div>
+            <h1 className="text-3xl font-extrabold text-[#1F2937] tracking-tight">
+              My Profile
+            </h1>
+            <p className="text-sm text-[#4B5563] mt-1 font-normal">
+              Manage your account information and website contact details.
+            </p>
+          </div>
+
+          {/* PROFILE SUMMARY CARD (Full-width at the top) */}
+          <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs p-6 sm:p-8">
+            <div className="flex flex-col sm:flex-row items-center sm:items-center gap-6">
+              {/* Large circular profile photo with overlapping camera button */}
+              <div className="relative shrink-0">
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-2 border-[#FFE8F0] bg-white flex items-center justify-center overflow-hidden shadow-xs">
+                  {getAvatarUrl() ? (
+                    <img
+                      src={getAvatarUrl()!}
+                      alt="Profile Avatar"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-[#FFE8F0]/50 flex items-center justify-center text-[#FF3D7F]">
+                      <User className="w-12 h-12 stroke-[1.5]" />
+                    </div>
+                  )}
+                </div>
+
+                {uploadingAvatar && (
+                  <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center text-white z-10">
+                    <Loader2 className="w-6 h-6 animate-spin text-white" />
+                  </div>
+                )}
+
+                <label
+                  className={`absolute bottom-0.5 right-0.5 bg-[#FF3D7F] hover:bg-[#E62E6E] text-white rounded-full p-2 cursor-pointer transition-colors shadow-sm z-20 ${
+                    uploadingAvatar ? 'pointer-events-none opacity-50' : ''
+                  }`}
+                  title="Upload profile picture"
+                >
+                  <Camera className="w-4 h-4" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarChange}
+                    disabled={uploadingAvatar}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {/* Admin name, role badge, email and description */}
+              <div className="text-center sm:text-left flex-1 min-w-0">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 mb-1.5">
+                  <h2 className="text-xl sm:text-2xl font-bold text-[#1F2937]">
+                    {profile?.name || 'Administrator'}
+                  </h2>
+                  <span className="inline-flex items-center px-3 py-0.5 rounded-full text-xs font-semibold bg-[#FFE8F0] text-[#FF3D7F]">
+                    Administrator
+                  </span>
+                </div>
+                <p className="text-sm text-[#4B5563] font-medium mb-1.5">
+                  {profile?.email || 'admin@discovermansalay.gov.ph'}
+                </p>
+                <p className="text-xs text-[#6B7280] leading-relaxed max-w-2xl">
+                  Manage municipal tourism management and website contact details.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* TWO-COLUMN LAYOUT UNDERNEATH */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+            {/* ── LEFT COLUMN: Personal Information & Change Password ── */}
+            <div className="space-y-8">
+              {/* PERSONAL INFORMATION CARD */}
+              <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs p-6 sm:p-7">
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold text-[#1F2937]">
+                    Personal Information
+                  </h3>
+                  <p className="text-xs text-[#6B7280] mt-0.5 font-normal">
+                    Update your personal account details.
+                  </p>
+                </div>
+
+                <form onSubmit={handleSave} className="space-y-4">
+                  {/* Full Name */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">
+                      Full Name
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FF3D7F]">
+                        <User className="w-4 h-4 stroke-[1.75]" />
+                      </div>
+                      <input
+                        type="text"
+                        value={form.name}
+                        onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="Enter your full name"
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:border-[#FF3D7F] focus:ring-2 focus:ring-[#FFE8F0] outline-none text-xs text-[#1F2937] placeholder:text-gray-400 transition-all bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Username */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">
+                      Username
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FF3D7F]">
+                        <User className="w-4 h-4 stroke-[1.75]" />
+                      </div>
+                      <input
+                        type="text"
+                        value={form.store_name}
+                        onChange={(e) => setForm(f => ({ ...f, store_name: e.target.value }))}
+                        placeholder="Enter username"
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:border-[#FF3D7F] focus:ring-2 focus:ring-[#FFE8F0] outline-none text-xs text-[#1F2937] placeholder:text-gray-400 transition-all bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Email Address */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">
+                      Email Address
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FF3D7F]">
+                        <Mail className="w-4 h-4 stroke-[1.75]" />
+                      </div>
+                      <input
+                        type="email"
+                        value={form.resort_name}
+                        onChange={(e) => setForm(f => ({ ...f, resort_name: e.target.value }))}
+                        placeholder="Enter email address"
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:border-[#FF3D7F] focus:ring-2 focus:ring-[#FFE8F0] outline-none text-xs text-[#1F2937] placeholder:text-gray-400 transition-all bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Role (Read-only / disabled) */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">
+                      Role
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FF3D7F]">
+                        <Shield className="w-4 h-4 stroke-[1.75]" />
+                      </div>
+                      <input
+                        type="text"
+                        value=""
+                        placeholder="Administrator"
+                        disabled
+                        readOnly
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50/80 text-gray-500 cursor-not-allowed outline-none text-xs placeholder:text-gray-500 font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Solid Pink Button */}
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      className="w-full py-3 bg-[#FF3D7F] hover:bg-[#E62E6E] text-white rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-50"
+                    >
+                      {saving ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      ) : (
+                        <Save className="w-4 h-4 stroke-[2]" />
+                      )}
+                      <span>Update Information</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* CHANGE PASSWORD CARD */}
+              <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs p-6 sm:p-7">
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold text-[#1F2937]">
+                    Change Password
+                  </h3>
+                  <p className="text-xs text-[#6B7280] mt-0.5 font-normal">
+                    Update your account password for better security.
+                  </p>
+                </div>
+
+                <form onSubmit={handleChangePassword} className="space-y-4">
+                  {/* Current Password */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">
+                      Current Password
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FF3D7F]">
+                        <Lock className="w-4 h-4 stroke-[1.75]" />
+                      </div>
+                      <input
+                        type={showCurrentPw ? 'text' : 'password'}
+                        value={pwForm.current_password}
+                        onChange={(e) => setPwForm(f => ({ ...f, current_password: e.target.value }))}
+                        placeholder="Enter current password"
+                        className="w-full pl-10 pr-10 py-2.5 border border-gray-200 rounded-xl focus:border-[#FF3D7F] focus:ring-2 focus:ring-[#FFE8F0] outline-none text-xs text-[#1F2937] placeholder:text-gray-400 transition-all bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPw(v => !v)}
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
+                      >
+                        {showCurrentPw ? <EyeOff className="w-4 h-4 stroke-[1.75]" /> : <Eye className="w-4 h-4 stroke-[1.75]" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* New Password */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FF3D7F]">
+                        <Lock className="w-4 h-4 stroke-[1.75]" />
+                      </div>
+                      <input
+                        type={showNewPw ? 'text' : 'password'}
+                        value={pwForm.password}
+                        onChange={(e) => setPwForm(f => ({ ...f, password: e.target.value }))}
+                        placeholder="Enter new password"
+                        className="w-full pl-10 pr-10 py-2.5 border border-gray-200 rounded-xl focus:border-[#FF3D7F] focus:ring-2 focus:ring-[#FFE8F0] outline-none text-xs text-[#1F2937] placeholder:text-gray-400 transition-all bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPw(v => !v)}
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
+                      >
+                        {showNewPw ? <EyeOff className="w-4 h-4 stroke-[1.75]" /> : <Eye className="w-4 h-4 stroke-[1.75]" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirm New Password */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">
+                      Confirm New Password
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FF3D7F]">
+                        <Lock className="w-4 h-4 stroke-[1.75]" />
+                      </div>
+                      <input
+                        type={showConfirmPw ? 'text' : 'password'}
+                        value={pwForm.password_confirmation}
+                        onChange={(e) => setPwForm(f => ({ ...f, password_confirmation: e.target.value }))}
+                        placeholder="Confirm new password"
+                        className="w-full pl-10 pr-10 py-2.5 border border-gray-200 rounded-xl focus:border-[#FF3D7F] focus:ring-2 focus:ring-[#FFE8F0] outline-none text-xs text-[#1F2937] placeholder:text-gray-400 transition-all bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPw(v => !v)}
+                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
+                      >
+                        {showConfirmPw ? <EyeOff className="w-4 h-4 stroke-[1.75]" /> : <Eye className="w-4 h-4 stroke-[1.75]" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Solid Pink Button */}
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={pwSaving}
+                      className="w-full py-3 bg-[#FF3D7F] hover:bg-[#E62E6E] text-white rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-50"
+                    >
+                      {pwSaving ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      ) : (
+                        <Lock className="w-4 h-4 stroke-[2]" />
+                      )}
+                      <span>Update Password</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            {/* ── RIGHT COLUMN: Public Contact & Social Links ── */}
+            <div className="space-y-8">
+              {/* PUBLIC CONTACT & SOCIAL LINKS CARD */}
+              <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs p-6 sm:p-7">
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold text-[#1F2937]">
+                    Public Contact & Social Links (Footer)
+                  </h3>
+                  <p className="text-xs text-[#6B7280] mt-0.5 font-normal">
+                    Update the official contact information and social media links that will appear in the website footer.
+                  </p>
+                </div>
+
+                <form onSubmit={handleSaveContact} className="space-y-4">
+                  {/* Official Contact Email */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">
+                      Official Contact Email
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FF3D7F]">
+                        <Mail className="w-4 h-4 stroke-[1.75]" />
+                      </div>
+                      <input
+                        type="email"
+                        value={contactForm.email}
+                        onChange={(e) => setContactForm(c => ({ ...c, email: e.target.value }))}
+                        placeholder="Enter official contact email"
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:border-[#FF3D7F] focus:ring-2 focus:ring-[#FFE8F0] outline-none text-xs text-[#1F2937] placeholder:text-gray-400 transition-all bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Official Contact / Hotline Number */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">
+                      Official Contact / Hotline Number
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FF3D7F]">
+                        <Phone className="w-4 h-4 stroke-[1.75]" />
+                      </div>
+                      <input
+                        type="text"
+                        value={contactForm.phone}
+                        onChange={(e) => setContactForm(c => ({ ...c, phone: e.target.value }))}
+                        placeholder="Enter official hotline number"
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:border-[#FF3D7F] focus:ring-2 focus:ring-[#FFE8F0] outline-none text-xs text-[#1F2937] placeholder:text-gray-400 transition-all bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Facebook Page Link */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">
+                      Facebook Page Link
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FF3D7F]">
+                        <Facebook className="w-4 h-4 stroke-[1.75]" />
+                      </div>
+                      <input
+                        type="text"
+                        value={contactForm.facebook}
+                        onChange={(e) => setContactForm(c => ({ ...c, facebook: e.target.value }))}
+                        placeholder="Enter Facebook page URL"
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:border-[#FF3D7F] focus:ring-2 focus:ring-[#FFE8F0] outline-none text-xs text-[#1F2937] placeholder:text-gray-400 transition-all bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Instagram Page Link */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">
+                      Instagram Page Link
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FF3D7F]">
+                        <Instagram className="w-4 h-4 stroke-[1.75]" />
+                      </div>
+                      <input
+                        type="text"
+                        value={contactForm.instagram}
+                        onChange={(e) => setContactForm(c => ({ ...c, instagram: e.target.value }))}
+                        placeholder="Enter Instagram page URL"
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:border-[#FF3D7F] focus:ring-2 focus:ring-[#FFE8F0] outline-none text-xs text-[#1F2937] placeholder:text-gray-400 transition-all bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Twitter / X Link */}
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1F2937] mb-1.5">
+                      Twitter / X Link
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#FF3D7F]">
+                        <Twitter className="w-4 h-4 stroke-[1.75]" />
+                      </div>
+                      <input
+                        type="text"
+                        value={contactForm.twitter}
+                        onChange={(e) => setContactForm(c => ({ ...c, twitter: e.target.value }))}
+                        placeholder="Enter Twitter / X page URL"
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:border-[#FF3D7F] focus:ring-2 focus:ring-[#FFE8F0] outline-none text-xs text-[#1F2937] placeholder:text-gray-400 transition-all bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Solid Pink Button */}
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={savingContact}
+                      className="w-full py-3 bg-[#FF3D7F] hover:bg-[#E62E6E] text-white rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-50"
+                    >
+                      {savingContact ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      ) : (
+                        <Save className="w-4 h-4 stroke-[2]" />
+                      )}
+                      <span>Update Contact Details</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

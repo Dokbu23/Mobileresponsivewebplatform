@@ -82,4 +82,58 @@ class SiteSettingController extends Controller
             'is_custom'        => false,
         ]);
     }
+
+    /**
+     * Get the public Tourism Contact & Social Media settings.
+     */
+    public function getContactSettings()
+    {
+        return response()->json([
+            'email'     => SiteSetting::get('contact_email') ?: 'info@discovermansalay.com',
+            'phone'     => SiteSetting::get('contact_phone') ?: '+63 123 456 7890',
+            'address'   => SiteSetting::get('contact_address') ?: 'Mansalay Municipal Hall, Oriental Mindoro',
+            'facebook'  => SiteSetting::get('contact_facebook') ?: 'https://facebook.com',
+            'instagram' => SiteSetting::get('contact_instagram') ?: 'https://instagram.com',
+            'twitter'   => SiteSetting::get('contact_twitter') ?: 'https://twitter.com',
+        ]);
+    }
+
+    /**
+     * Update the public Tourism Contact & Social Media settings (Admin only).
+     */
+    public function updateContactSettings(Request $request)
+    {
+        $user = $request->user();
+        if (!$user || $user->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized. Only admin can modify site settings.'], 403);
+        }
+
+        $validated = $request->validate([
+            'email'     => 'nullable|email|max:255',
+            'phone'     => 'nullable|string|max:50',
+            'address'   => 'nullable|string|max:255',
+            'facebook'  => 'nullable|string|max:255',
+            'instagram' => 'nullable|string|max:255',
+            'twitter'   => 'nullable|string|max:255',
+        ]);
+
+        if (array_key_exists('email', $validated))     SiteSetting::set('contact_email', $validated['email'] ?? '');
+        if (array_key_exists('phone', $validated))     SiteSetting::set('contact_phone', $validated['phone'] ?? '');
+        if (array_key_exists('address', $validated))   SiteSetting::set('contact_address', $validated['address'] ?? '');
+        if (array_key_exists('facebook', $validated))  SiteSetting::set('contact_facebook', $validated['facebook'] ?? '');
+        if (array_key_exists('instagram', $validated)) SiteSetting::set('contact_instagram', $validated['instagram'] ?? '');
+        if (array_key_exists('twitter', $validated))   SiteSetting::set('contact_twitter', $validated['twitter'] ?? '');
+
+        return response()->json([
+            'message'  => 'Official contact details updated successfully!',
+            'settings' => [
+                'email'     => SiteSetting::get('contact_email') ?: 'info@discovermansalay.com',
+                'phone'     => SiteSetting::get('contact_phone') ?: '+63 123 456 7890',
+                'address'   => SiteSetting::get('contact_address') ?: 'Mansalay Municipal Hall, Oriental Mindoro',
+                'facebook'  => SiteSetting::get('contact_facebook') ?: 'https://facebook.com',
+                'instagram' => SiteSetting::get('contact_instagram') ?: 'https://instagram.com',
+                'twitter'   => SiteSetting::get('contact_twitter') ?: 'https://twitter.com',
+            ],
+        ]);
+    }
 }
