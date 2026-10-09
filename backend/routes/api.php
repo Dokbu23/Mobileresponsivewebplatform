@@ -768,3 +768,8 @@ Route::group(['prefix' => 'legacy', 'middleware' => ['api.rate:120,1']], functio
     Route::get('histories', [HistoryController::class, 'index']);
     Route::get('history', [HistoryController::class, 'index']);
 });
+
+// Global CORS preflight handler for API routes
+Route::options('{any}', function () {
+    return response('', 204);
+})->where('any', '.*');

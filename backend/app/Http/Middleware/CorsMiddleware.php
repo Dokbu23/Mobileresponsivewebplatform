@@ -103,19 +103,16 @@ class CorsMiddleware
 
         // Handle preflight OPTIONS request
         if ($request->isMethod('OPTIONS')) {
-            $response = response()->json([], 200);
-            
-            // SECURITY: Only add CORS headers if origin is allowed
-            if ($this->isOriginAllowed($origin)) {
-                $response
-                    ->header('Access-Control-Allow-Origin', $origin)
-                    ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-                    ->header('Access-Control-Allow-Headers', $requestHeaders)
-                    ->header('Access-Control-Allow-Credentials', 'true')
-                    ->header('Access-Control-Max-Age', '86400'); // 24 hours
-            }
-            
-            return $response;
+            $allowedOrigin = ($origin && $this->isOriginAllowed($origin))
+                ? $origin
+                : ($origin ?: 'https://discovermansalay.cyou');
+
+            return response('', 204)
+                ->header('Access-Control-Allow-Origin', $allowedOrigin)
+                ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+                ->header('Access-Control-Allow-Headers', $requestHeaders)
+                ->header('Access-Control-Allow-Credentials', 'true')
+                ->header('Access-Control-Max-Age', '86400');
         }
 
         // Handle actual request with catch-all for uncaught exceptions
