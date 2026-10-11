@@ -633,17 +633,19 @@ export function ManagePosts() {
     }
   };
 
-  const getStatusBadge = (status: ContentStatus) => {
+  const getStatusBadge = (status: ContentStatus | string | undefined | null) => {
     switch (status) {
+      case 'published':
       case 'approved':
         return {
-          label: 'Approved',
+          label: status === 'published' ? 'Published' : 'Approved',
           icon: CheckCircle2,
           class: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
         };
+      case 'draft':
       case 'pending':
         return {
-          label: 'Pending Review',
+          label: status === 'draft' ? 'Draft' : 'Pending Review',
           icon: Clock,
           class: 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 dark:border-amber-800',
         };
@@ -658,6 +660,12 @@ export function ManagePosts() {
           label: 'Archived',
           icon: Archive,
           class: 'bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-300 border-slate-300 dark:border-slate-700',
+        };
+      default:
+        return {
+          label: String(status || 'Approved'),
+          icon: CheckCircle2,
+          class: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
         };
     }
   };
@@ -981,10 +989,13 @@ export function ManagePosts() {
                   {paginatedPosts.map((post) => {
                     const postKey = makeKey(post);
                     const isLoading = actionLoadingKey === postKey;
-                    const typeBadge = getContentTypeBadge(post.content_type);
-                    const TypeIcon = typeBadge.icon;
+                    const typeBadge = getContentTypeBadge(post.content_type) || {
+                      icon: FileText,
+                      color: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+                    };
+                    const TypeIcon = typeBadge.icon || FileText;
                     const statusBadge = getStatusBadge(post.status);
-                    const StatusIcon = statusBadge.icon;
+                    const StatusIcon = statusBadge?.icon || CheckCircle2;
 
                     const displayImg = post.image || (post.images && post.images[0]);
                     const postTitle = post.title || post.name || 'Untitled Post';
@@ -1118,6 +1129,19 @@ export function ManagePosts() {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
+
+                            {/* VIEW ON PUBLIC ITINERARY PAGE (If Itinerary) */}
+                            {post.content_type === 'Itinerary' && (
+                              <Link
+                                to={`/itinerary?id=${post.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Open on public Trip Itinerary page"
+                                className="p-1.5 text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-950/50 rounded-lg transition-colors border border-transparent hover:border-pink-200 dark:hover:border-pink-800"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </Link>
+                            )}
 
                             {/* ---------------------------------------------------- */}
                             {/* ACTIVE POST ACTIONS (Pending / Approved / Rejected)   */}
@@ -1516,6 +1540,18 @@ export function ManagePosts() {
                       <Archive className="w-3.5 h-3.5" />
                       Archive Content
                     </button>
+
+                    {selectedPost.content_type === 'Itinerary' && selectedPost.status === 'approved' && (
+                      <Link
+                        to={`/itinerary?id=${selectedPost.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 text-xs font-semibold text-pink-700 dark:text-pink-300 bg-pink-50 dark:bg-pink-950/60 hover:bg-pink-100 dark:hover:bg-pink-900/60 rounded-lg border border-pink-200 dark:border-pink-800 flex items-center gap-1.5"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        View on Itinerary Page
+                      </Link>
+                    )}
                   </>
                 ) : (
                   <>

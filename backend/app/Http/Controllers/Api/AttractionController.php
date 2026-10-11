@@ -34,12 +34,13 @@ class AttractionController extends Controller
                 $query = \App\Models\Attraction::query();
             }
 
-            // Exclude archived items for non-admin
+            // Strictly enforce publication status for non-admin/public tourists:
+            // Only 'approved' or 'published' items are publicly visible (or null for legacy records)
             if (!$user || $user->role !== 'admin') {
                 if (\Illuminate\Support\Facades\Schema::hasColumn('attractions', 'status')) {
                     $query->where(function($q) {
-                        $q->whereNull('status')
-                          ->orWhere('status', '!=', 'archived');
+                        $q->whereIn('status', ['approved', 'published'])
+                          ->orWhereNull('status');
                     });
                 }
             }
@@ -105,6 +106,7 @@ class AttractionController extends Controller
             'video_url' => 'nullable|string',
             'description' => 'nullable|string',
             'full_description' => 'nullable|string',
+            'status' => 'nullable|string|in:published,draft,archived,approved',
         ]);
 
         // Handle string video link / URL if provided
@@ -199,6 +201,7 @@ class AttractionController extends Controller
             'video_url' => 'sometimes|nullable|string',
             'description' => 'sometimes|nullable|string',
             'full_description' => 'sometimes|nullable|string',
+            'status' => 'sometimes|nullable|string|in:published,draft,archived,approved',
         ]);
 
         // Handle string video link / URL if provided

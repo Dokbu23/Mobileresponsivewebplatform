@@ -7,13 +7,10 @@ use App\Http\Controllers\Api\AttractionController;
 use App\Http\Controllers\Api\EventController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\AccommodationController;
-use App\Http\Controllers\Api\OrderController;
-use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\PaymentReceiptController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\SubscriptionController;
-use App\Http\Controllers\Api\ShippingAddressController;
 use App\Http\Controllers\Api\EmailVerificationController;
 use App\Http\Controllers\Api\PaymentSettingsController;
 use App\Http\Controllers\Api\ChatController;
@@ -23,7 +20,6 @@ use App\Http\Controllers\Api\MessageController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ResortRoomController;
 use App\Http\Controllers\Api\ResortAvailabilityController;
-use App\Http\Controllers\Api\PromoCodeController;
 use App\Http\Controllers\Api\EnterpriseProfileController;
 use App\Http\Controllers\Api\EnterprisePostController;
 use App\Http\Controllers\Api\LandmarkController;
@@ -35,6 +31,7 @@ use App\Http\Controllers\Api\CultureArtController;
 use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\AdminManagePostController;
 use App\Http\Controllers\Api\AdminReportController;
+use App\Http\Controllers\Api\AdminItineraryController;
 
 use App\Models\User;
 
@@ -63,6 +60,10 @@ Route::group(['prefix' => 'public'], function () {
     Route::get('landmarks', [LandmarkController::class, 'index']);
     Route::post('landmarks', [LandmarkController::class, 'store']);
     Route::post('landmarks/{id}/photos', [LandmarkController::class, 'addPhotos']);
+ 
+    // Public Itineraries
+    Route::get('itineraries', [AdminItineraryController::class, 'publicIndex']);
+    Route::get('itineraries/{id}', [AdminItineraryController::class, 'publicShow']);
 
     // Public Culture & Arts
     Route::get('culture-arts', [CultureArtController::class, 'index']);
@@ -91,6 +92,27 @@ Route::group(['prefix' => 'public'], function () {
     // Public business profile routes (resort & enterprise)
     Route::get('business/resort/{userId}', [AccommodationController::class, 'businessProfile']);
     Route::get('business/enterprise/{userId}', [EnterpriseProfileController::class, 'publicProfile']);
+
+    // Public enterprises & resorts directory
+    Route::get('enterprises', function () {
+        return response()->json(\App\Models\User::where('role', 'enterprise')
+            ->where(function ($q) {
+                $q->where('listing_status', 'approved')
+                  ->orWhereNull('listing_status');
+            })
+            ->select('id', 'name', 'store_name', 'email', 'role', 'store_logo', 'address', 'barangay')
+            ->get());
+    });
+
+    Route::get('resorts', function () {
+        return response()->json(\App\Models\User::where('role', 'resort')
+            ->where(function ($q) {
+                $q->where('listing_status', 'approved')
+                  ->orWhereNull('listing_status');
+            })
+            ->select('id', 'name', 'resort_name', 'email', 'role', 'resort_images', 'address', 'barangay')
+            ->get());
+    });
 
     // Platform statistics
     Route::get('stats', [StatsController::class, 'getPlatformStats']);
@@ -247,9 +269,6 @@ Route::group(['middleware' => ['jwt.auth']], function () {
     Route::post('notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
     Route::delete('notifications/{id}', [NotificationController::class, 'destroy']);
 
-    // Promo code apply (tourist) — validate without redeeming
-    Route::post('promo-codes/apply', [PromoCodeController::class, 'apply']);
-    Route::post('promo-codes/redeem', [PromoCodeController::class, 'redeem']);
     Route::post('landmarks', [LandmarkController::class, 'store']);
     Route::post('profile/avatar', [UserController::class, 'uploadAvatar']);
     Route::post('profile/change-email/send-code', [UserController::class, 'sendChangeEmailCode']);
@@ -311,15 +330,15 @@ Route::group(['middleware' => ['jwt.auth']], function () {
 
     // Tourist-only routes
     Route::group(['middleware' => ['role:tourist']], function () {
-        Route::post('orders', [OrderController::class, 'store']);
-        Route::post('orders/{id}/cancel', [OrderController::class, 'cancel']);
-        Route::post('bookings', [BookingController::class, 'store']);
-        Route::post('bookings/{id}/cancel', [BookingController::class, 'cancel']);
-        Route::get('shipping-addresses', [ShippingAddressController::class, 'index']);
-        Route::post('shipping-addresses', [ShippingAddressController::class, 'store']);
-        Route::patch('shipping-addresses/{id}', [ShippingAddressController::class, 'update']);
-        Route::delete('shipping-addresses/{id}', [ShippingAddressController::class, 'destroy']);
-        Route::patch('shipping-addresses/{id}/default', [ShippingAddressController::class, 'setDefault']);
+        Route::post('orders', function () { return response()->json(['message' => 'Orders are processed via direct contact.'], 200); });
+        Route::post('orders/{id}/cancel', function () { return response()->json(['success' => true]); });
+        Route::post('bookings', function () { return response()->json(['message' => 'Bookings are processed via direct contact.'], 200); });
+        Route::post('bookings/{id}/cancel', function () { return response()->json(['success' => true]); });
+        Route::get('shipping-addresses', function () { return response()->json([]); });
+        Route::post('shipping-addresses', function () { return response()->json(['success' => true]); });
+        Route::patch('shipping-addresses/{id}', function () { return response()->json(['success' => true]); });
+        Route::delete('shipping-addresses/{id}', function () { return response()->json(['success' => true]); });
+        Route::patch('shipping-addresses/{id}/default', function () { return response()->json(['success' => true]); });
         
         // Review routes
         Route::post('reviews', [ReviewController::class, 'store']);
@@ -364,6 +383,15 @@ Route::group(['middleware' => ['jwt.auth']], function () {
 
         // Official DiscoverMansalay Monthly Tourism Report
         Route::get('admin/monthly-report', [AdminReportController::class, 'getMonthlyReport']);
+
+        // Official Tourism Itineraries Management (Admin)
+        Route::get('admin/itineraries', [AdminItineraryController::class, 'index']);
+        Route::post('admin/itineraries', [AdminItineraryController::class, 'store']);
+        Route::get('admin/itineraries/{id}', [AdminItineraryController::class, 'show']);
+        Route::post('admin/itineraries/{id}', [AdminItineraryController::class, 'update']);
+        Route::put('admin/itineraries/{id}', [AdminItineraryController::class, 'update']);
+        Route::delete('admin/itineraries/{id}', [AdminItineraryController::class, 'destroy']);
+        Route::patch('admin/itineraries/{id}/status', [AdminItineraryController::class, 'updateStatus']);
     });
 
     // Enterprise-only routes (admin allowed) - PROTECTED BY SUBSCRIPTION
@@ -549,20 +577,38 @@ Route::group(['middleware' => ['jwt.auth']], function () {
 
     // Booking management - resort owners and admin (NO subscription gate - owners must always see bookings)
     Route::group(['middleware' => ['role:resort,admin']], function () {
-        Route::get('bookings', [BookingController::class, 'index']);
-        Route::patch('bookings/{id}', [BookingController::class, 'update']);
+        Route::get('bookings', function () {
+            return response()->json(\App\Models\Booking::orderBy('created_at', 'desc')->get());
+        });
+        Route::patch('bookings/{id}', function (Request $request, $id) {
+            $booking = \App\Models\Booking::find($id);
+            if ($booking && $request->has('status')) {
+                $booking->status = $request->status;
+                $booking->save();
+            }
+            return response()->json($booking ?: ['success' => true]);
+        });
     });
 
     // Enterprise-only routes for order management - PROTECTED BY SUBSCRIPTION
     Route::group(['middleware' => ['role:enterprise', 'check.subscription']], function () {
-        Route::patch('orders/{id}', [OrderController::class, 'update']);
+        Route::patch('orders/{id}', function (Request $request, $id) {
+            $order = \App\Models\Order::find($id);
+            if ($order && $request->has('status')) {
+                $order->status = $request->status;
+                $order->save();
+            }
+            return response()->json($order ?: ['success' => true]);
+        });
     });
 
     // Admin-only routes
     Route::group(['middleware' => ['role:admin']], function () {
         // Note: Attraction routes are now in the multi-role group below
         // Note: Event routes are now in the multi-role group above
-        Route::get('orders', [OrderController::class, 'index']);
+        Route::get('orders', function () {
+            return response()->json(\App\Models\Order::with(['customer', 'businessOwner'])->orderBy('created_at', 'desc')->get());
+        });
         Route::get('users', function () {
             return response()->json(\App\Models\User::all());
         });
@@ -711,8 +757,22 @@ Route::group(['middleware' => ['jwt.auth']], function () {
 
     // Multi-role routes (admin + business owners + tourists)
     Route::group(['middleware' => ['role:admin,enterprise,resort,tourist']], function () {
-        Route::get('orders/my', [OrderController::class, 'index']);
-        Route::get('bookings/my', [BookingController::class, 'index']);
+        Route::get('orders/my', function (Request $request) {
+            $user = $request->user();
+            if (!$user) return response()->json([]);
+            if ($user->role === 'enterprise') {
+                return response()->json(\App\Models\Order::where('business_owner_id', $user->id)->orderBy('created_at', 'desc')->get());
+            }
+            return response()->json(\App\Models\Order::where('user_id', $user->id)->orderBy('created_at', 'desc')->get());
+        });
+        Route::get('bookings/my', function (Request $request) {
+            $user = $request->user();
+            if (!$user) return response()->json([]);
+            if ($user->role === 'resort') {
+                return response()->json(\App\Models\Booking::where('resort_id', $user->id)->orderBy('created_at', 'desc')->get());
+            }
+            return response()->json(\App\Models\Booking::where('user_id', $user->id)->orderBy('created_at', 'desc')->get());
+        });
         // Chat (FAQ-based) - available to authenticated roles: admin, enterprise, resort, tourist
         Route::get('chat/history', [ChatController::class, 'index']);
         Route::post('chat/send', [ChatController::class, 'send']);
@@ -741,13 +801,6 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         
         // Get business user details by ID (for fetching business payment details)
         Route::get('business-users/{id}', [UserController::class, 'show']);
-
-        // Promo code management (business owners)
-        Route::get('promo-codes', [PromoCodeController::class, 'index']);
-        Route::post('promo-codes', [PromoCodeController::class, 'store']);
-        Route::put('promo-codes/{id}', [PromoCodeController::class, 'update']);
-        Route::patch('promo-codes/{id}', [PromoCodeController::class, 'update']);
-        Route::delete('promo-codes/{id}', [PromoCodeController::class, 'destroy']);
     });
     
     // Tourist routes for fetching business payment details
@@ -762,8 +815,6 @@ Route::group(['prefix' => 'legacy', 'middleware' => ['api.rate:120,1']], functio
     Route::get('events', [EventController::class, 'index']);
     Route::get('products', [ProductController::class, 'index']);
     Route::get('accommodations', [AccommodationController::class, 'index']);
-    Route::get('orders', [OrderController::class, 'index']);
-    Route::get('bookings', [BookingController::class, 'index']);
     Route::get('culture-arts', [CultureArtController::class, 'index']);
     Route::get('histories', [HistoryController::class, 'index']);
     Route::get('history', [HistoryController::class, 'index']);

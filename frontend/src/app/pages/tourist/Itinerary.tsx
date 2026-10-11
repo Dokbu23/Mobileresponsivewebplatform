@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams, Link } from 'react-router';
 import {
   Calendar,
   CheckCircle2,
@@ -65,8 +65,27 @@ const getUserTripStorageKey = (user: any) => {
   return 'discover-mansalay:custom-trips:anonymous';
 };
 
+/**
+ * Universal detector for itinerary records across attractions & itineraries sources
+ */
+export const isItineraryRecord = (item: any): boolean => {
+  if (!item) return false;
+  if (item.category === 'Itinerary') return true;
+  if (item.type === 'Itinerary' || item.content_type === 'Itinerary') return true;
+  if (item.days_count || item.schedule) return true;
+  if (typeof item.name === 'string' && item.name.toLowerCase().includes('(itinerary)')) return true;
+  if (typeof item.title === 'string' && item.title.toLowerCase().includes('(itinerary)')) return true;
+  if (item.full_description) {
+    if (typeof item.full_description === 'object' && item.full_description?.days?.length > 0) return true;
+    if (typeof item.full_description === 'string' && item.full_description.includes('"days":')) return true;
+  }
+  return false;
+};
+
 export function Itinerary() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const targetId = searchParams.get('id') || searchParams.get('itinerary');
   const { currentUser, userType } = useApp();
 
   const isAdmin =
@@ -86,7 +105,7 @@ export function Itinerary() {
     currentUser?.role === 'resort' ||
     currentUser?.role === 'enterprise') && !isAdmin;
 
-  const canAccessBuilders = !isBusiness;
+  const canAccessBuilders = !isAdmin && !isBusiness;
 
   const [myCustomTrips, setMyCustomTrips] = useState<ItineraryCard[]>([]);
 
@@ -137,15 +156,29 @@ export function Itinerary() {
     setLoadingOfficial(true);
     try {
       let apiItems: any[] = [];
+
+      // 1. Fetch from public itineraries API
+      try {
+        const itinData = await getPublicJSON('/itineraries');
+        if (Array.isArray(itinData) && itinData.length > 0) {
+          apiItems = [...itinData];
+        }
+      } catch (err) {
+        console.warn('Public itineraries endpoint notice:', err);
+      }
+
+      // 2. Also query public attractions to capture all official itineraries
       try {
         const data = await getPublicJSON('/attractions');
         if (Array.isArray(data)) {
-          apiItems = data.filter((a: any) => 
-            a.category === 'Itinerary' || 
-            a.days_count || 
-            a.schedule || 
-            (typeof a.name === 'string' && a.name.includes('(Itinerary)'))
-          );
+          const matched = data.filter((a: any) => isItineraryRecord(a));
+          const existingIds = new Set(apiItems.map((x: any) => String(x.id)));
+          for (const item of matched) {
+            if (!existingIds.has(String(item.id))) {
+              apiItems.push(item);
+              existingIds.add(String(item.id));
+            }
+          }
         }
       } catch (err) {
         console.warn('API fetch notice:', err);
@@ -171,9 +204,45 @@ export function Itinerary() {
         if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
       } catch {}
 
-      const combinedRaw = [...localItins, ...apiItems].filter((item: any) => {
+      // Authoritative database synchronization:
+      // If records are verified in the database as approved/published, prune them
+      // from stale localStorage deleted/archived sets so old client storage doesn't hide them!
+      const activeDbIds = new Set(apiItems.map((x: any) => String(x.id)));
+      let prunedDeleted = false;
+      let prunedArchived = false;
+      activeDbIds.forEach((dbId) => {
+        if (deletedIds.has(dbId)) {
+          deletedIds.delete(dbId);
+          prunedDeleted = true;
+        }
+        if (archivedIds.has(dbId)) {
+          archivedIds.delete(dbId);
+          prunedArchived = true;
+        }
+      });
+      if (prunedDeleted) {
+        try { localStorage.setItem('discover-mansalay:deleted_posts', JSON.stringify(Array.from(deletedIds))); } catch {}
+      }
+      if (prunedArchived) {
+        try { localStorage.setItem('discover-mansalay:archived_posts', JSON.stringify(Array.from(archivedIds))); } catch {}
+      }
+
+      // API items take precedence over local storage items
+      const combinedRaw = [...apiItems, ...localItins].filter((item: any) => {
         const sId = String(item.id);
-        return !deletedIds.has(sId) && !archivedIds.has(sId);
+        const status = item.status ? String(item.status).toLowerCase() : 'approved';
+        
+        // Strict publication rules: Draft, pending, rejected, and archived records must remain hidden publicly
+        if (status === 'draft' || status === 'rejected' || status === 'archived' || status === 'pending') {
+          return false;
+        }
+
+        // For local storage fallback items, exclude if marked deleted or archived
+        if (!activeDbIds.has(sId)) {
+          if (deletedIds.has(sId) || archivedIds.has(sId)) return false;
+        }
+
+        return status === 'approved' || status === 'published';
       });
 
       const seenIds = new Set<string>();
@@ -262,6 +331,14 @@ export function Itinerary() {
       });
 
       setOfficialItineraries(mapped);
+
+      // Auto-open requested itinerary if matching query param exists
+      if (targetId) {
+        const found = mapped.find(m => String(m.id) === String(targetId));
+        if (found) {
+          setSelectedItinerary(found);
+        }
+      }
     } catch (e) {
       console.error('Error loading official itineraries:', e);
     } finally {
@@ -772,7 +849,7 @@ export function Itinerary() {
               </h2>
               <p className="text-xs text-gray-400 mt-0.5">Handcrafted recommended itineraries created by the Mansalay Tourism Office</p>
             </div>
-            {isAdmin && (
+            {!isAdmin && canAccessBuilders && (
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
@@ -852,8 +929,8 @@ export function Itinerary() {
                       </span>
                     </div>
 
-                    {/* Top-Right Pin Button */}
-                    {(() => {
+                    {/* Top-Right Pin Button (Tourists Only) */}
+                    {!isAdmin && (() => {
                       const isSaved = myCustomTrips.some(t => t.id === `saved-${trip.id}` || t.title === trip.title);
                       return (
                         <button
@@ -927,7 +1004,7 @@ export function Itinerary() {
                           <Trash2 className="h-4 w-4" />
                         </button>
                       )}
-                      {(() => {
+                      {!isAdmin && (() => {
                         const isSaved = myCustomTrips.some(t => t.id === `saved-${trip.id}` || t.title === trip.title);
                         return (
                           <button
@@ -952,8 +1029,8 @@ export function Itinerary() {
           )}
         </section>
 
-        {/* ── MY TRIPS & SAVED ITINERARIES ── */}
-        {(canAccessBuilders || myCustomTrips.length > 0) && (
+        {/* ── MY TRIPS & SAVED ITINERARIES (Tourists Only) ── */}
+        {!isAdmin && canAccessBuilders && (
           <section className="mb-16">
             <div className="flex items-center gap-2 text-pink-500 text-xs font-bold uppercase tracking-wider mb-1">
               <BookmarkCheck className="h-4 w-4" />
@@ -1046,7 +1123,7 @@ export function Itinerary() {
         )}
 
         {/* ── 3. DYNAMIC TRIP GENERATOR & BUILDER CALLOUT (Tourists Only) ── */}
-        {canAccessBuilders && (
+        {!isAdmin && canAccessBuilders && (
           <section className="bg-gradient-to-r from-pink-50/70 via-rose-50/50 to-pink-50/70 border border-pink-100 rounded-3xl p-6 sm:p-10 text-center">
             <div className="flex items-center justify-center gap-1.5 text-pink-500 text-xs font-bold uppercase tracking-wider mb-1">
               <Sparkles className="h-4 w-4" />
@@ -1199,12 +1276,14 @@ export function Itinerary() {
                           <Trash2 className="h-3.5 w-3.5" /> Delete Route
                         </button>
                       )}
-                      <button
-                        onClick={(e) => handleSaveOfficialToMyTrips(selectedItinerary, e)}
-                        className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold rounded-full shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <BookmarkPlus className="h-3.5 w-3.5" /> Save to My Trips
-                      </button>
+                      {!isAdmin && (
+                        <button
+                          onClick={(e) => handleSaveOfficialToMyTrips(selectedItinerary, e)}
+                          className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold rounded-full shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <BookmarkPlus className="h-3.5 w-3.5" /> Save to My Trips
+                        </button>
+                      )}
                     </>
                   )}
                 </div>

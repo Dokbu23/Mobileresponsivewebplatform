@@ -255,7 +255,13 @@ class AdminManagePostController extends Controller
             try {
                 $attrQuery = Attraction::with('creator:id,name,email,role');
                 $attrs = $attrQuery->get()->map(function ($at) {
-                    $isItinerary = ($at->category === 'Itinerary' || !empty($at->days_count) || !empty($at->schedule));
+                    $isItinerary = (
+                        $at->category === 'Itinerary' ||
+                        !empty($at->days_count) ||
+                        !empty($at->schedule) ||
+                        (is_string($at->full_description) && str_contains($at->full_description, '"days":')) ||
+                        (is_string($at->name) && stripos($at->name, '(itinerary)') !== false)
+                    );
                     $cType = $isItinerary ? 'Itinerary' : 'Attraction';
                     $ownerRole = $at->creator ? $at->creator->role : 'admin';
                     $images = is_array($at->images) ? $at->images : ($at->image ? [$at->image] : []);
@@ -275,6 +281,9 @@ class AdminManagePostController extends Controller
                         $archivedIso = $at->archived_at instanceof \Carbon\Carbon ? $at->archived_at->toIso8601String() : (string) $at->archived_at;
                     }
 
+                    $rawStatus = $at->status ?: 'approved';
+                    $normalizedStatus = ($rawStatus === 'published' || $rawStatus === 'approved') ? 'approved' : ($rawStatus === 'draft' ? 'pending' : $rawStatus);
+
                     return [
                         'id'                => (int) $at->id,
                         'source'            => $isItinerary ? 'itinerary' : 'attraction',
@@ -288,7 +297,7 @@ class AdminManagePostController extends Controller
                         'category'          => $at->category ?: $cType,
                         'price'             => null,
                         'location'          => $at->location,
-                        'status'            => $at->status ?: 'approved',
+                        'status'            => $normalizedStatus,
                         'previous_status'   => $at->previous_status,
                         'archived_at'       => $archivedIso,
                         'created_at'        => $at->created_at ? ($at->created_at instanceof \Carbon\Carbon ? $at->created_at->toIso8601String() : (string) $at->created_at) : null,

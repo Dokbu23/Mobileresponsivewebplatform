@@ -111,7 +111,6 @@ export function Navbar() {
       icon: Calendar,
       color: 'text-sky-500 bg-sky-50 dark:bg-sky-950/40 border border-sky-100 dark:border-sky-900/30',
       protected: true,
-      hideForAdmin: true,
     },
   ];
 
@@ -275,7 +274,7 @@ export function Navbar() {
                     </div>
 
                     <div className="space-y-0.5">
-                      {exploreLinks.filter(item => !(item.hideForAdmin && userType === 'admin')).map((item) => {
+                      {exploreLinks.map((item) => {
                         const isItemActive = location.pathname === item.path;
                         const IconComp = item.icon;
                         return (
@@ -499,7 +498,7 @@ export function Navbar() {
 
               {mobileExploreOpen && (
                 <div className="pl-4 pr-1 py-1 space-y-1">
-                  {exploreLinks.filter(item => !(item.hideForAdmin && userType === 'admin')).map((item) => {
+                  {exploreLinks.map((item) => {
                     const isItemActive = location.pathname === item.path;
                     const IconComp = item.icon;
                     return (
