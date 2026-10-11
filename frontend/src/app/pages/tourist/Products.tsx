@@ -120,11 +120,6 @@ export function Products() {
           });
       } catch {}
 
-      let customProducts: any[] = [];
-      try {
-        const stored = localStorage.getItem('discover-mansalay:custom_products');
-        if (stored) customProducts = JSON.parse(stored);
-      } catch {}
 
       let deletedIds = new Set<string>();
       try {
@@ -138,20 +133,13 @@ export function Products() {
         if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
       } catch {}
 
-      // Only filter out items that are posts (ep_ prefix) matching deleted/archived post IDs
       const allRaw = [...raw].filter((i: any) => {
         const idStr = String(i.id);
-        if (idStr.startsWith('ep_')) {
-          const postId = idStr.replace('ep_', '');
-          return !deletedIds.has(postId) && !archivedIds.has(postId);
-        }
+        const bareId = idStr.replace(/^ep_/, '');
+        const postId = i.post_id ? String(i.post_id) : '';
+        if (deletedIds.has(idStr) || deletedIds.has(bareId) || (postId && deletedIds.has(postId))) return false;
+        if (archivedIds.has(idStr) || archivedIds.has(bareId) || (postId && archivedIds.has(postId))) return false;
         return true;
-      });
-      const existingIds = new Set(allRaw.map((r: any) => String(r.id)));
-      customProducts.forEach((cp: any) => {
-        if (!existingIds.has(String(cp.id))) {
-          allRaw.unshift(cp);
-        }
       });
 
       const mapped = allRaw.map((p: any, idx: number) => {

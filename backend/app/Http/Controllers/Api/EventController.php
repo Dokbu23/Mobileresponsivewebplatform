@@ -31,12 +31,12 @@ class EventController extends Controller
                 $query = \App\Models\Event::query();
             }
 
-            // Exclude archived events for non-admin
+            // Exclude non-published events for non-admin
             if (!$user || $user->role !== 'admin') {
                 if (\Illuminate\Support\Facades\Schema::hasColumn('events', 'status')) {
                     $query->where(function($q) {
-                        $q->whereNull('status')
-                          ->orWhere('status', '!=', 'archived');
+                        $q->whereIn('status', ['approved', 'published'])
+                          ->orWhereNull('status');
                     });
                 }
             }

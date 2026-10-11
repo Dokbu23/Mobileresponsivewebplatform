@@ -86,22 +86,10 @@ export function Dashboard() {
         setStats(statsRes.stats);
       }
 
-      let customAttractions: any[] = [];
-      let customResorts: any[] = [];
-      let customEvents: any[] = [];
-      let customProducts: any[] = [];
       let deletedIds = new Set<string>();
       let archivedIds = new Set<string>();
 
       try {
-        const a = localStorage.getItem('discover-mansalay:custom_attractions');
-        if (a) customAttractions = JSON.parse(a);
-        const r = localStorage.getItem('discover-mansalay:custom_resorts');
-        if (r) customResorts = JSON.parse(r);
-        const e = localStorage.getItem('discover-mansalay:custom_events');
-        if (e) customEvents = JSON.parse(e);
-        const p = localStorage.getItem('discover-mansalay:custom_products');
-        if (p) customProducts = JSON.parse(p);
         const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
         if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
         const archStr = localStorage.getItem('discover-mansalay:archived_posts');
@@ -113,14 +101,14 @@ export function Dashboard() {
       const rawAcc = Array.isArray(accommodationsRes) ? accommodationsRes : accommodationsRes?.data ?? [];
       const rawEvt = Array.isArray(eventsRes) ? eventsRes : eventsRes?.data ?? [];
 
-      const mergeSection = (apiList: any[], customList: any[]) => {
-        const combined = [...apiList];
-        const existingIds = new Set(combined.map(i => String(i.id)));
-        customList.forEach(c => {
-          if (!existingIds.has(String(c.id))) combined.unshift(c);
-        });
-        return combined
-          .filter(i => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)))
+      const sanitizeSection = (apiList: any[]) => {
+        return (apiList || [])
+          .filter(i => {
+            const strId = String(i.id);
+            const postId = i.post_id ? String(i.post_id) : '';
+            return !deletedIds.has(strId) && !archivedIds.has(strId) &&
+                   (!postId || (!deletedIds.has(postId) && !archivedIds.has(postId)));
+          })
           .map(i => ({
             ...i,
             name: i.name ? cleanItineraryTitle(i.name) : i.name,
@@ -130,10 +118,10 @@ export function Dashboard() {
           }));
       };
 
-      setAttractions(mergeSection(rawAttr, customAttractions));
-      setProducts(mergeSection(rawProd, customProducts));
-      setAccommodations(mergeSection(rawAcc, customResorts));
-      setEvents(mergeSection(rawEvt, customEvents));
+      setAttractions(sanitizeSection(rawAttr));
+      setProducts(sanitizeSection(rawProd));
+      setAccommodations(sanitizeSection(rawAcc));
+      setEvents(sanitizeSection(rawEvt));
 
       if (heroVideoRes?.video) {
         setHeroVideo(heroVideoRes.video);

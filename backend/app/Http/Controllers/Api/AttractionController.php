@@ -152,6 +152,15 @@ class AttractionController extends Controller
     public function show($id)
     {
         $item = \App\Models\Attraction::findOrFail($id);
+
+        // Strict publication check: non-admin cannot view archived or draft items
+        if ($item->status && in_array(strtolower($item->status), ['archived', 'draft', 'rejected'])) {
+            $user = request()->user();
+            if (!$user || $user->role !== 'admin') {
+                abort(404, 'Attraction not found or not published.');
+            }
+        }
+
         // Increment view count atomically
         $item->increment('view_count');
         return response()->json($item->fresh());

@@ -48,31 +48,15 @@ export function Wishlist() {
         if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
       } catch {}
 
-      // Custom local items
-      let customAttractions: any[] = [];
-      let customResorts: any[] = [];
-      let customProducts: any[] = [];
-      let customEvents: any[] = [];
-      try {
-        const a = localStorage.getItem('discover-mansalay:custom_attractions');
-        if (a) customAttractions = JSON.parse(a);
-        const r = localStorage.getItem('discover-mansalay:custom_resorts');
-        if (r) customResorts = JSON.parse(r);
-        const p = localStorage.getItem('discover-mansalay:custom_products');
-        if (p) customProducts = JSON.parse(p);
-        const e = localStorage.getItem('discover-mansalay:custom_events');
-        if (e) customEvents = JSON.parse(e);
-      } catch {}
-
-      const mergeSection = (apiList: any, customList: any[]) => {
+      const sanitizeSection = (apiList: any) => {
         const raw = Array.isArray(apiList) ? apiList : (apiList && typeof apiList === 'object' && 'data' in apiList ? (apiList as any).data : []);
-        const combined = [...(Array.isArray(raw) ? raw : [])];
-        const existingIds = new Set(combined.map((i: any) => String(i.id)));
-        customList.forEach((c: any) => {
-          if (!existingIds.has(String(c.id))) combined.unshift(c);
-        });
-        return combined
-          .filter((i: any) => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)))
+        return (Array.isArray(raw) ? raw : [])
+          .filter((i: any) => {
+            const strId = String(i.id);
+            const postId = i.post_id ? String(i.post_id) : '';
+            return !deletedIds.has(strId) && !archivedIds.has(strId) &&
+                   (!postId || (!deletedIds.has(postId) && !archivedIds.has(postId)));
+          })
           .map((i: any) => ({
             ...i,
             name: i.name ? cleanItineraryTitle(i.name) : i.name,
@@ -80,10 +64,10 @@ export function Wishlist() {
           }));
       };
 
-      const activeAttractions = mergeSection(attrRes, customAttractions);
-      const activeResorts = mergeSection(accRes, customResorts);
-      const activeProducts = mergeSection(prodRes, customProducts);
-      const activeEvents = mergeSection(evtRes, customEvents);
+      const activeAttractions = sanitizeSection(attrRes);
+      const activeResorts = sanitizeSection(accRes);
+      const activeProducts = sanitizeSection(prodRes);
+      const activeEvents = sanitizeSection(evtRes);
 
       setRawAttractions(activeAttractions);
       setRawResorts(activeResorts);

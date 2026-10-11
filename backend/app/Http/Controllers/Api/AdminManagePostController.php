@@ -595,6 +595,13 @@ class AdminManagePostController extends Controller
 
         $record->save();
 
+        // Cascade archive to synced product if this is an enterprise post
+        if ($source === 'post') {
+            try {
+                Product::where('post_id', $id)->update(['status' => 'archived']);
+            } catch (\Throwable $e) {}
+        }
+
         // Send owner notification if owned by business user
         if (!empty($record->user_id)) {
             try {
@@ -662,6 +669,13 @@ class AdminManagePostController extends Controller
 
         $record->save();
 
+        // Cascade restore to synced product if enterprise post
+        if ($source === 'post') {
+            try {
+                Product::where('post_id', $id)->update(['status' => $restoredStatus]);
+            } catch (\Throwable $e) {}
+        }
+
         // Send owner notification
         if (!empty($record->user_id)) {
             try {
@@ -688,9 +702,8 @@ class AdminManagePostController extends Controller
 
     /**
      * DELETE /api/admin/manage-posts/{source}/{id}
-     * PERMANENT DELETE SAFETY GUARD:
-     * MUST verify that the post is currently 'archived' before permanent deletion!
-     * Deletes ONLY this specific single record.
+     * PERMANENT DELETE:
+     * Permanently deletes the record from the database and cascades any linked child records.
      */
     public function destroy(Request $request, $source, $id)
     {
@@ -702,17 +715,23 @@ class AdminManagePostController extends Controller
         $modelClass = $this->resolveModel($source);
         $record = $modelClass::findOrFail($id);
 
-        // 🛡️ CRITICAL SECURITY CHECK: Post MUST be archived first!
-        if ($record->status !== 'archived') {
-            return response()->json([
-                'success' => false,
-                'error'   => 'Security Violation',
-                'message' => 'Cannot permanently delete an active post. The post MUST be archived first before deletion.'
-            ], 422);
-        }
+        \Illuminate\Support\Facades\DB::transaction(function () use ($source, $id, $record) {
+            // If enterprise post, cascade delete any linked products & variations
+            if ($source === 'post') {
+                $linkedProducts = Product::where('post_id', $id)->get();
+                foreach ($linkedProducts as $lp) {
+                    \App\Models\ProductVariation::where('product_id', $lp->id)->delete();
+                    \App\Models\Review::where('product_id', $lp->id)->delete();
+                    $lp->delete();
+                }
+            } elseif ($source === 'product') {
+                \App\Models\ProductVariation::where('product_id', $id)->delete();
+                \App\Models\Review::where('product_id', $id)->delete();
+            }
 
-        // Delete ONLY this specific resolved model instance
-        $record->delete();
+            // Permanently delete the resolved database record
+            $record->delete();
+        });
 
         return response()->json([
             'success' => true,
@@ -754,6 +773,13 @@ class AdminManagePostController extends Controller
         }
 
         $record->save();
+
+        // Cascade approve to linked product if enterprise post
+        if ($source === 'post') {
+            try {
+                Product::where('post_id', $id)->update(['status' => 'approved']);
+            } catch (\Throwable $e) {}
+        }
 
         if (!empty($record->user_id)) {
             try {
@@ -814,6 +840,13 @@ class AdminManagePostController extends Controller
         }
 
         $record->save();
+
+        // Cascade reject to linked product if enterprise post
+        if ($source === 'post') {
+            try {
+                Product::where('post_id', $id)->update(['status' => 'rejected']);
+            } catch (\Throwable $e) {}
+        }
 
         if (!empty($record->user_id)) {
             try {

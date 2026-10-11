@@ -182,9 +182,98 @@ export function sanitizeStoredItineraryTitles() {
   } catch {}
 }
 
+/**
+ * Purge legacy mock/custom localStorage caches so deleted/ghost items
+ * (such as "Sunset Weekend") never resurrect on public pages.
+ */
+export function purgeLegacyMockAndDeletedCaches() {
+  if (typeof window === 'undefined') return;
+  const legacyMockKeys = [
+    'discover-mansalay:published_itineraries',
+    'discover-mansalay:custom_itinerarys',
+    'discover-mansalay:custom_attractions',
+    'discover-mansalay:custom_resorts',
+    'discover-mansalay:custom_products',
+    'discover-mansalay:custom_events',
+    'discover-mansalay:custom_cultures',
+    'discover-mansalay:custom_histories',
+  ];
+
+  legacyMockKeys.forEach(key => {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+  });
+}
+
+/**
+ * Synchronize deleted / archived / restored records across all active UI views and local state.
+ */
+export function purgeClientRecord(
+  id: string | number,
+  action: 'deleted' | 'archived' | 'restored',
+  source?: string
+) {
+  if (typeof window === 'undefined') return;
+  const strId = String(id);
+  const possibleIds = new Set<string>([strId, `ep_${strId}`, `post-${strId}`]);
+
+  try {
+    let deletedList: string[] = [];
+    const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
+    if (delStr) deletedList = JSON.parse(delStr);
+
+    let archivedList: string[] = [];
+    const archStr = localStorage.getItem('discover-mansalay:archived_posts');
+    if (archStr) archivedList = JSON.parse(archStr);
+
+    if (action === 'deleted') {
+      possibleIds.forEach(pid => {
+        if (!deletedList.includes(pid)) deletedList.push(pid);
+        archivedList = archivedList.filter(x => x !== pid);
+      });
+    } else if (action === 'archived') {
+      possibleIds.forEach(pid => {
+        if (!archivedList.includes(pid)) archivedList.push(pid);
+        deletedList = deletedList.filter(x => x !== pid);
+      });
+    } else if (action === 'restored') {
+      possibleIds.forEach(pid => {
+        deletedList = deletedList.filter(x => x !== pid);
+        archivedList = archivedList.filter(x => x !== pid);
+      });
+    }
+
+    localStorage.setItem('discover-mansalay:deleted_posts', JSON.stringify(deletedList));
+    localStorage.setItem('discover-mansalay:archived_posts', JSON.stringify(archivedList));
+
+    // Also scrub from wishlist or saved places if deleted/archived
+    if (action === 'deleted' || action === 'archived') {
+      const wishStr = localStorage.getItem('discover-mansalay:wishlist');
+      if (wishStr) {
+        try {
+          const wish = JSON.parse(wishStr);
+          if (Array.isArray(wish)) {
+            const filtered = wish.filter((w: any) => !possibleIds.has(String(w?.id || w)));
+            localStorage.setItem('discover-mansalay:wishlist', JSON.stringify(filtered));
+          }
+        } catch {}
+      }
+    }
+
+    // Broadcast across windows and components
+    window.dispatchEvent(new Event('contentUpdated'));
+    window.dispatchEvent(new Event('storage'));
+    window.dispatchEvent(new Event('itineraryUpdated'));
+  } catch (err) {
+    console.error('Error synchronizing client record purge:', err);
+  }
+}
+
 if (typeof window !== 'undefined') {
   try {
     sanitizeStoredItineraryTitles();
+    purgeLegacyMockAndDeletedCaches();
   } catch {}
 }
 

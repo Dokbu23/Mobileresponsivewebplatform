@@ -41,7 +41,7 @@ import {
   Palette,
   BookOpen
 } from 'lucide-react';
-import { getPublicJSON, postJSON, deleteJSON, API_BASE, cleanItineraryTitle } from '../../lib/api';
+import { getPublicJSON, postJSON, deleteJSON, API_BASE, cleanItineraryTitle, purgeClientRecord } from '../../lib/api';
 import {
   MANSALAY_BARANGAYS,
   ATTRACTION_CATEGORIES,
@@ -1345,6 +1345,7 @@ export function AdminContent() {
     });
 
     // 6. Broadcast global events so other pages auto-refresh immediately
+    purgeClientRecord(id, 'deleted');
     window.dispatchEvent(new Event('contentUpdated'));
     window.dispatchEvent(new Event('storage'));
 

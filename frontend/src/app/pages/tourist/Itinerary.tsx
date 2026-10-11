@@ -184,51 +184,17 @@ export function Itinerary() {
         console.warn('API fetch notice:', err);
       }
 
-      let localItins: any[] = [];
-      try {
-        const p1 = localStorage.getItem('discover-mansalay:published_itineraries');
-        const p2 = localStorage.getItem('discover-mansalay:custom_itinerarys');
-        if (p1) localItins = [...localItins, ...JSON.parse(p1)];
-        if (p2) localItins = [...localItins, ...JSON.parse(p2)];
-      } catch {}
-
       let deletedIds = new Set<string>();
+      let archivedIds = new Set<string>();
       try {
         const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
         if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
-      } catch {}
-
-      let archivedIds = new Set<string>();
-      try {
         const archStr = localStorage.getItem('discover-mansalay:archived_posts');
         if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
       } catch {}
 
-      // Authoritative database synchronization:
-      // If records are verified in the database as approved/published, prune them
-      // from stale localStorage deleted/archived sets so old client storage doesn't hide them!
-      const activeDbIds = new Set(apiItems.map((x: any) => String(x.id)));
-      let prunedDeleted = false;
-      let prunedArchived = false;
-      activeDbIds.forEach((dbId) => {
-        if (deletedIds.has(dbId)) {
-          deletedIds.delete(dbId);
-          prunedDeleted = true;
-        }
-        if (archivedIds.has(dbId)) {
-          archivedIds.delete(dbId);
-          prunedArchived = true;
-        }
-      });
-      if (prunedDeleted) {
-        try { localStorage.setItem('discover-mansalay:deleted_posts', JSON.stringify(Array.from(deletedIds))); } catch {}
-      }
-      if (prunedArchived) {
-        try { localStorage.setItem('discover-mansalay:archived_posts', JSON.stringify(Array.from(archivedIds))); } catch {}
-      }
-
-      // API items take precedence over local storage items
-      const combinedRaw = [...apiItems, ...localItins].filter((item: any) => {
+      // Authoritative database API items only - never merge stale local storage or mock items
+      const combinedRaw = apiItems.filter((item: any) => {
         const sId = String(item.id);
         const status = item.status ? String(item.status).toLowerCase() : 'approved';
         
@@ -237,9 +203,9 @@ export function Itinerary() {
           return false;
         }
 
-        // For local storage fallback items, exclude if marked deleted or archived
-        if (!activeDbIds.has(sId)) {
-          if (deletedIds.has(sId) || archivedIds.has(sId)) return false;
+        // Exclude if marked deleted or archived
+        if (deletedIds.has(sId) || archivedIds.has(sId)) {
+          return false;
         }
 
         return status === 'approved' || status === 'published';

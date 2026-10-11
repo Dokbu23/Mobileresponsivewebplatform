@@ -69,25 +69,16 @@ export function History() {
       const data = await getPublicJSON('/histories');
       const raw = Array.isArray(data) ? data : [];
 
-      let customList: any[] = [];
-      try {
-        const stored = localStorage.getItem('discover-mansalay:custom_histories');
-        if (stored) customList = JSON.parse(stored);
-      } catch {}
-
       let deletedIds = new Set<string>();
+      let archivedIds = new Set<string>();
       try {
         const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
         if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
+        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
+        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
       } catch {}
 
-      const allRaw = [...raw].filter((i) => !deletedIds.has(String(i.id)));
-      const existingIds = new Set(allRaw.map((r) => String(r.id)));
-      customList.forEach((ci) => {
-        if (!existingIds.has(String(ci.id)) && !deletedIds.has(String(ci.id))) {
-          allRaw.unshift(ci);
-        }
-      });
+      const allRaw = [...raw].filter((i) => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
 
       const mapped: HistoryItem[] = allRaw.map((item: any) => {
         let parsedImages: string[] = [];

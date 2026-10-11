@@ -44,7 +44,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router';
-import { getJSON, postJSON, putJSON, deleteJSON, formatImageUrl, API_BASE } from '../../lib/api';
+import { getJSON, postJSON, putJSON, deleteJSON, formatImageUrl, API_BASE, purgeClientRecord } from '../../lib/api';
 
 export type UnifiedSource =
   | 'enterprise_post'
@@ -364,6 +364,9 @@ export function ManagePosts() {
       setActionLoadingKey(makeKey(post));
       await postJSON(`/admin/manage-posts/${post.source}/${post.id}/archive`, {});
 
+      // Synchronize client cache and hide from public views immediately
+      purgeClientRecord(post.id, 'archived', post.source);
+
       toast.success(`"${postTitle}" moved to Archive.`);
       fetchPosts();
       if (selectedPost && selectedPost.id === post.id && selectedPost.source === post.source) {
@@ -414,6 +417,9 @@ export function ManagePosts() {
       setActionLoadingKey(makeKey(post));
       await postJSON(`/admin/manage-posts/${post.source}/${post.id}/restore`, {});
 
+      // Restore client cache and broadcast update
+      purgeClientRecord(post.id, 'restored', post.source);
+
       toast.success(`"${postTitle}" restored to ${targetStatus}.`);
       fetchPosts();
       if (selectedPost && selectedPost.id === post.id && selectedPost.source === post.source) {
@@ -433,25 +439,15 @@ export function ManagePosts() {
   };
 
   // ==========================================
-  // ACTION: PERMANENT DELETE (Only for archived)
+  // ACTION: PERMANENT DELETE
   // ==========================================
   const handlePermanentDelete = async (post: UnifiedPost) => {
-    if (post.status !== 'archived') {
-      Swal.fire({
-        icon: 'error',
-        title: 'Action Blocked',
-        text: 'Security Policy: Active posts cannot be deleted directly. You must archive it first.',
-        confirmButtonColor: '#ef4444',
-      });
-      return;
-    }
-
     const postTitle = post.title || post.name || 'Untitled Content';
     const result = await Swal.fire({
       title: 'Permanently Delete?',
       html: `
         <div class="text-left text-sm text-slate-700 dark:text-slate-300 space-y-3">
-          <p>You are about to <strong>permanently purge</strong> the following record:</p>
+          <p>You are about to <strong>permanently purge</strong> the following record from the system:</p>
           <div class="p-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-lg text-red-700 dark:text-red-300">
             <p class="font-bold text-sm mb-1">${postTitle}</p>
             <p class="text-xs">Type: <span class="font-medium">${post.content_type}</span> | Source: <span class="font-mono text-xs">${post.source} #${post.id}</span></p>
@@ -477,6 +473,9 @@ export function ManagePosts() {
     try {
       setActionLoadingKey(makeKey(post));
       await deleteJSON(`/admin/manage-posts/${post.source}/${post.id}`);
+
+      // Scrub ID from all client caches immediately
+      purgeClientRecord(post.id, 'deleted', post.source);
 
       Swal.fire({
         icon: 'success',
@@ -1180,7 +1179,7 @@ export function ManagePosts() {
                                   <Edit3 className="w-4 h-4" />
                                 </button>
 
-                                {/* ARCHIVE (Safely hides post - NO direct delete) */}
+                                {/* ARCHIVE (Safely hides post) */}
                                 <button
                                   onClick={() => handleArchive(post)}
                                   disabled={isLoading}
@@ -1190,8 +1189,15 @@ export function ManagePosts() {
                                   <Archive className="w-4 h-4" />
                                 </button>
 
-                                {/* NOTE: NO DELETE BUTTON IS RENDERED HERE! */}
-                                {/* Active posts MUST be archived first before deletion. */}
+                                {/* DELETE PERMANENTLY */}
+                                <button
+                                  onClick={() => handlePermanentDelete(post)}
+                                  disabled={isLoading}
+                                  title="Permanently Delete (Purges from database)"
+                                  className="p-1.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors border border-transparent hover:border-rose-200 dark:hover:border-rose-800"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
                               </>
                             )}
 
@@ -1539,6 +1545,15 @@ export function ManagePosts() {
                     >
                       <Archive className="w-3.5 h-3.5" />
                       Archive Content
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePermanentDelete(selectedPost)}
+                      className="px-4 py-2 text-xs font-semibold text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 rounded-lg border border-rose-200 dark:border-rose-800 flex items-center gap-1.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete Permanently
                     </button>
 
                     {selectedPost.content_type === 'Itinerary' && selectedPost.status === 'approved' && (

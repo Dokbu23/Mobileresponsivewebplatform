@@ -51,31 +51,16 @@ export function Attractions() {
       const data = await getPublicJSON('/attractions');
       const raw = Array.isArray(data) ? data : [];
 
-      let customAttractions: any[] = [];
-      try {
-        const stored = localStorage.getItem('discover-mansalay:custom_attractions');
-        if (stored) customAttractions = JSON.parse(stored);
-      } catch {}
-
       let deletedIds = new Set<string>();
+      let archivedIds = new Set<string>();
       try {
         const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
         if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
-      } catch {}
-
-      let archivedIds = new Set<string>();
-      try {
         const archStr = localStorage.getItem('discover-mansalay:archived_posts');
         if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
       } catch {}
 
       const allRaw = [...raw].filter(i => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
-      const existingIds = new Set(allRaw.map(r => String(r.id)));
-      customAttractions.forEach(ca => {
-        if (!existingIds.has(String(ca.id)) && !deletedIds.has(String(ca.id)) && !archivedIds.has(String(ca.id))) {
-          allRaw.unshift(ca);
-        }
-      });
 
       const mapped = allRaw.map((d: any) => {
         let parsedImages: string[] = [];
@@ -139,31 +124,8 @@ export function Attractions() {
       setCurrentImageIndices(indices);
     } catch (e: any) {
       console.error('Error fetching attractions:', e);
-      let customAttractions: any[] = [];
-      try {
-        const stored = localStorage.getItem('discover-mansalay:custom_attractions');
-        if (stored) customAttractions = JSON.parse(stored);
-      } catch {}
-      let deletedIds = new Set<string>();
-      try {
-        const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
-        if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
-      } catch {}
-      const mapped = customAttractions.filter(d => !deletedIds.has(String(d.id))).map((d: any) => ({
-        id: String(d.id),
-        name: cleanItineraryTitle(d.name),
-        description: d.description,
-        fullDescription: d.full_description ?? d.description,
-        image: d.image || '/assets/default-attraction.jpg',
-        images: d.image ? [d.image] : [],
-        video: d.video,
-        location: d.location,
-        category: d.category || 'General',
-        view_count: 0,
-        rating: 4.8,
-        likes: 0,
-      }));
-      setItems(mapped);
+      setItems([]);
+      setAllAttractions([]);
     }
   };
 

@@ -974,41 +974,20 @@ export function Accommodations() {
         };
       });
 
-      let customResorts: any[] = [];
-      try {
-        const stored = localStorage.getItem('discover-mansalay:custom_resorts');
-        if (stored) customResorts = JSON.parse(stored);
-      } catch { }
-
-      let customAttractions: any[] = [];
-      try {
-        const stored = localStorage.getItem('discover-mansalay:custom_attractions');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          customAttractions = parsed.filter((a: any) =>
-            a.category === 'Accommodation' || a.category === 'Accommodations' || a.type === 'Accommodation' || a.type === 'Accommodations'
-          );
-        }
-      } catch { }
-
       let deletedIds = new Set<string>();
+      let archivedIds = new Set<string>();
       try {
         const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
         if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
-      } catch { }
-
-      let archivedIds = new Set<string>();
-      try {
         const archStr = localStorage.getItem('discover-mansalay:archived_posts');
         if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
       } catch { }
 
-      const allRaw = [...rawAcc, ...accAttractions, ...resortPosts].filter(i => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
-      const existingIds = new Set(allRaw.map(r => String(r.id)));
-      [...customResorts, ...customAttractions].forEach(cr => {
-        if (!existingIds.has(String(cr.id)) && !deletedIds.has(String(cr.id)) && !archivedIds.has(String(cr.id))) {
-          allRaw.unshift(cr);
-        }
+      const allRaw = [...rawAcc, ...accAttractions, ...resortPosts].filter(i => {
+        const sId = String(i.id);
+        const pId = i.post_id ? String(i.post_id) : '';
+        return !deletedIds.has(sId) && !archivedIds.has(sId) &&
+               (!pId || (!deletedIds.has(pId) && !archivedIds.has(pId)));
       });
 
       // Apply grouping and normalization: 1 Room = 1 Card
@@ -1016,23 +995,7 @@ export function Accommodations() {
       setItems(normalizedList);
     } catch (err) {
       console.error('Error fetching real accommodations:', err);
-      let customResorts: any[] = [];
-      try {
-        const stored = localStorage.getItem('discover-mansalay:custom_resorts');
-        if (stored) customResorts = JSON.parse(stored);
-      } catch { }
-      let customAttractions: any[] = [];
-      try {
-        const stored = localStorage.getItem('discover-mansalay:custom_attractions');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          customAttractions = parsed.filter((a: any) =>
-            a.category === 'Accommodation' || a.category === 'Accommodations' || a.type === 'Accommodation' || a.type === 'Accommodations'
-          );
-        }
-      } catch { }
-      const fallbackList = groupAndNormalizeAccommodations([...customResorts, ...customAttractions]);
-      setItems(fallbackList);
+      setItems([]);
     } finally {
       setLoading(false);
     }

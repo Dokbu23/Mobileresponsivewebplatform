@@ -47,12 +47,6 @@ export function Events() {
       const data = await getPublicJSON('/events');
       const raw = Array.isArray(data) ? data : data?.data ?? [];
 
-      let customEvents: any[] = [];
-      try {
-        const stored = localStorage.getItem('discover-mansalay:custom_events');
-        if (stored) customEvents = JSON.parse(stored);
-      } catch {}
-
       let deletedIds = new Set<string>();
       let archivedIds = new Set<string>();
       try {
@@ -62,12 +56,11 @@ export function Events() {
         if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
       } catch {}
 
-      const allRaw = [...raw].filter((i: any) => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
-      const existingIds = new Set(allRaw.map((r: any) => String(r.id)));
-      customEvents.forEach((ce: any) => {
-        if (!existingIds.has(String(ce.id)) && !deletedIds.has(String(ce.id)) && !archivedIds.has(String(ce.id))) {
-          allRaw.unshift(ce);
-        }
+      const allRaw = [...raw].filter((i: any) => {
+        const sId = String(i.id);
+        const pId = i.post_id ? String(i.post_id) : '';
+        return !deletedIds.has(sId) && !archivedIds.has(sId) &&
+               (!pId || (!deletedIds.has(pId) && !archivedIds.has(pId)));
       });
 
       const mapped = allRaw.map((d: any) => {

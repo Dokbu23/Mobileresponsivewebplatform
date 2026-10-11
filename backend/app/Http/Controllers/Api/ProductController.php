@@ -22,12 +22,12 @@ class ProductController extends Controller
                 ->with('owner:id,name,email,phone,store_name,resort_name')
                 ->with('variations');
 
-            // Auto-sync enterprise posts of type product to products table so they immediately appear in directory & my products
+            // Auto-sync approved enterprise posts of type product to products table so they immediately appear in directory & my products
             try {
                 $productPosts = \App\Models\EnterprisePost::where(function($q) {
                     $q->where('type', 'product')
                       ->orWhereNotNull('product_name');
-                })->whereNotNull('user_id')->orderBy('created_at', 'asc')->get();
+                })->where('status', 'approved')->whereNotNull('user_id')->orderBy('created_at', 'asc')->get();
                 foreach ($productPosts as $pPost) {
                     \App\Http\Controllers\Api\EnterprisePostController::syncProductFromPost($pPost);
                 }
@@ -35,12 +35,12 @@ class ProductController extends Controller
                 // sync error ignored
             }
 
-            // Exclude archived products for non-admin viewers
+            // Exclude non-published products for non-admin viewers
             if (!$user || $user->role !== 'admin') {
                 if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'status')) {
                     $query->where(function($q) {
-                        $q->whereNull('status')
-                          ->orWhere('status', '!=', 'archived');
+                        $q->whereIn('status', ['approved', 'published'])
+                          ->orWhereNull('status');
                     });
                 }
             }

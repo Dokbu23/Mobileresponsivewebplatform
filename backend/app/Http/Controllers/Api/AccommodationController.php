@@ -26,8 +26,8 @@ class AccommodationController extends Controller
             if (!$user || $user->role !== 'admin') {
                 if (\Illuminate\Support\Facades\Schema::hasColumn('accommodations', 'status')) {
                     $query->where(function($q) {
-                        $q->whereNull('status')
-                          ->orWhere('status', '!=', 'archived');
+                        $q->whereIn('status', ['approved', 'published'])
+                          ->orWhereNull('status');
                     });
                 }
                 $query->where(function($q) {

@@ -10,4 +10,5 @@ backend/.env.local
 backend/vendor
 backend/node_modules
 *.log
-
+SYSTEM_ARCHITECTURE_DOCUMENTATION.md
+scratch/
