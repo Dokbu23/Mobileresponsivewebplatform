@@ -1105,9 +1105,15 @@ export function MapExplore() {
 
       {/* ── ADD LANDMARK MODAL (GEOFENCED WITHIN MANSALAY) ── */}
       {showAddLandmarkModal && clickedCoords && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 border border-pink-100">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-pink-500 to-rose-600 text-white">
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto"
+          onClick={() => setShowAddLandmarkModal(false)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-lg w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-pink-100 my-auto animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 sm:p-6 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-pink-500 to-rose-600 text-white shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-white/20 rounded-2xl backdrop-blur-md">
                   <MapPin className="h-6 w-6 text-white" />
@@ -1118,14 +1124,15 @@ export function MapExplore() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setShowAddLandmarkModal(false)}
-                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+                className="p-2 hover:bg-white/20 rounded-full transition-colors cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveLandmark} className="p-6 space-y-5">
+            <form onSubmit={handleSaveLandmark} className="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1 overscroll-contain">
               {/* Coordinates Badge */}
               <div className="bg-pink-50 border border-pink-200 rounded-2xl p-3 flex items-center justify-between text-xs text-pink-800">
                 <span className="font-semibold">✅ Geofence Verified: Inside Mansalay</span>
@@ -1298,19 +1305,19 @@ export function MapExplore() {
                 </span>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-4 border-t border-gray-100">
+              {/* Action Buttons (Sticky at bottom so always visible & reachable) */}
+              <div className="flex gap-3 pt-4 border-t border-gray-100 sticky bottom-0 bg-white/95 backdrop-blur-xs z-10 pb-1">
                 <button
                   type="submit"
                   disabled={isSubmittingLandmark}
-                  className="flex-1 py-3.5 bg-gradient-to-r from-pink-500 to-rose-600 text-white font-extrabold rounded-2xl hover:opacity-95 transition-all shadow-lg shadow-pink-500/25 disabled:opacity-50 text-xs"
+                  className="flex-1 py-3.5 bg-gradient-to-r from-pink-500 to-rose-600 text-white font-extrabold rounded-2xl hover:opacity-95 transition-all shadow-lg shadow-pink-500/25 disabled:opacity-50 text-xs cursor-pointer"
                 >
                   {isSubmittingLandmark ? 'Saving...' : 'SAVE & Publish Marker'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowAddLandmarkModal(false)}
-                  className="px-6 py-3.5 bg-gray-100 text-gray-700 font-bold rounded-2xl hover:bg-gray-200 transition-colors text-xs"
+                  className="px-6 py-3.5 bg-gray-100 text-gray-700 font-bold rounded-2xl hover:bg-gray-200 transition-colors text-xs cursor-pointer"
                 >
                   Cancel
                 </button>

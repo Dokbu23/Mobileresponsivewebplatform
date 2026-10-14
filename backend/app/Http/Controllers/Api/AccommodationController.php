@@ -70,6 +70,14 @@ class AccommodationController extends Controller
             $roomsQuery = \App\Models\ResortRoom::with('owner')
                 ->where('is_available', true);
 
+            if (!$user || $user->role !== 'admin') {
+                $roomsQuery->whereHas('owner', function($userQuery) {
+                    $userQuery->where('role', 'resort')
+                              ->where('listing_status', 'approved')
+                              ->whereIn('subscription_status', ['paid', 'active']);
+                });
+            }
+
             if ($search !== null && $search !== '') {
                 $roomsQuery->where(function($q) use ($search) {
                     $q->where('name', 'LIKE', "%{$search}%")

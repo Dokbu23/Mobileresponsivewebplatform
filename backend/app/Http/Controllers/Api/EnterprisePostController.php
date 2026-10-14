@@ -624,9 +624,15 @@ class EnterprisePostController extends Controller
             return response()->json(['message' => 'Unauthorized to delete this post.'], 403);
         }
 
-        // Clean up any synced product
+        // Clean up any synced product or resort room
         try {
             \App\Models\Product::where('post_id', $post->id)->delete();
+            $roomName = $post->product_name ?: ($post->title ?: null);
+            if ($post->user_id && $roomName) {
+                \App\Models\ResortRoom::where('user_id', $post->user_id)
+                    ->where('name', $roomName)
+                    ->delete();
+            }
         } catch (\Throwable $e) {}
 
         $post->delete();

@@ -11,6 +11,7 @@ use App\Models\Event;
 use App\Models\CultureArt;
 use App\Models\HistoryPost;
 use App\Models\EnterprisePost;
+use App\Models\ResortRoom;
 use App\Models\Notification;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
@@ -32,6 +33,8 @@ class AdminManagePostController extends Controller
         'culture'       => CultureArt::class,
         'history'       => HistoryPost::class,
         'post'          => EnterprisePost::class,
+        'room'          => ResortRoom::class,
+        'resort_room'   => ResortRoom::class,
     ];
 
     /**
@@ -716,13 +719,21 @@ class AdminManagePostController extends Controller
         $record = $modelClass::findOrFail($id);
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($source, $id, $record) {
-            // If enterprise post, cascade delete any linked products & variations
+            // If enterprise post, cascade delete any linked products & variations and resort rooms
             if ($source === 'post') {
                 $linkedProducts = Product::where('post_id', $id)->get();
                 foreach ($linkedProducts as $lp) {
                     \App\Models\ProductVariation::where('product_id', $lp->id)->delete();
                     \App\Models\Review::where('product_id', $lp->id)->delete();
                     $lp->delete();
+                }
+                if ($record->user_id) {
+                    $roomName = $record->product_name ?: ($record->title ?: null);
+                    if ($roomName) {
+                        \App\Models\ResortRoom::where('user_id', $record->user_id)
+                            ->where('name', $roomName)
+                            ->delete();
+                    }
                 }
             } elseif ($source === 'product') {
                 \App\Models\ProductVariation::where('product_id', $id)->delete();

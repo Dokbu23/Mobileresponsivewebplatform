@@ -192,7 +192,11 @@ class ResortRoomController extends Controller
     public function destroy(Request $request, int $id)
     {
         $user = $request->user();
-        $room = ResortRoom::where('id', $id)->where('user_id', $user->id)->firstOrFail();
+        $query = ResortRoom::where('id', $id);
+        if ($user && $user->role !== 'admin') {
+            $query->where('user_id', $user->id);
+        }
+        $room = $query->firstOrFail();
 
         $allImages = is_array($room->images) ? $room->images : [];
         if ($room->image && !in_array($room->image, $allImages)) {

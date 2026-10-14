@@ -1,24 +1,23 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  BookOpen,
+  Landmark,
   MapPin,
   X,
   Search,
+  Filter,
+  ChevronDown,
   Calendar,
   Clock,
   Share2,
   ChevronLeft,
   ChevronRight,
   Eye,
-  FileText,
-  Landmark,
+  Video,
   ArrowRight,
-  RefreshCw,
-  Compass,
-  Scroll,
+  BookOpen,
 } from 'lucide-react';
-import { getPublicJSON, formatImageUrl, recordView } from '../../lib/api';
+import { getPublicJSON, formatImageUrl, API_BASE, recordView } from '../../lib/api';
 import { HISTORY_CATEGORIES, PLACEHOLDER_IMAGE } from '../../lib/constants';
 import { ShareModal } from '../../components/ShareModal';
 import { useApp } from '../../context/AppContext';
@@ -60,6 +59,12 @@ export function History() {
 
   useEffect(() => {
     loadHistories();
+    window.addEventListener('contentUpdated', loadHistories);
+    window.addEventListener('storage', loadHistories);
+    return () => {
+      window.removeEventListener('contentUpdated', loadHistories);
+      window.removeEventListener('storage', loadHistories);
+    };
   }, []);
 
   const loadHistories = async () => {
@@ -135,12 +140,12 @@ export function History() {
     } catch {}
   };
 
-  // Category filter list
-  const categoryFilters = useMemo(() => {
-    return ['All', ...HISTORY_CATEGORIES];
-  }, []);
+  const categoriesList = useMemo(() => {
+    const defaultCats = HISTORY_CATEGORIES;
+    const dynamicCats = Array.from(new Set(items.map((i) => i.category).filter((c): c is string => Boolean(c))));
+    return Array.from(new Set([...defaultCats, ...dynamicCats]));
+  }, [items]);
 
-  // Filtered stories
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       const matchesCategory =
@@ -162,7 +167,6 @@ export function History() {
     });
   }, [items, activeCategory, searchQuery]);
 
-  // Modal images
   const detailImages: string[] = useMemo(() => {
     if (!selectedItem) return [];
     if (Array.isArray(selectedItem.images) && selectedItem.images.length > 0) {
@@ -172,535 +176,242 @@ export function History() {
     return [];
   }, [selectedItem]);
 
-  // Related history stories (up to 3 items)
-  const relatedStories = useMemo(() => {
-    if (!selectedItem) return [];
-    return items
-      .filter((i) => String(i.id) !== String(selectedItem.id))
-      .filter(
-        (i) =>
-          !selectedItem.category ||
-          i.category?.toLowerCase() === selectedItem.category?.toLowerCase()
-      )
-      .slice(0, 3);
-  }, [items, selectedItem]);
-
-  // Gallery items for "Mansalay Through the Years"
-  const galleryItems = useMemo(() => {
-    const list: { image: string; title: string; period?: string; location?: string }[] = [];
-    items.forEach((item) => {
-      if (item.image) {
-        list.push({
-          image: item.image,
-          title: item.name,
-          period: item.period || item.date,
-          location: item.location,
-        });
-      }
-      if (Array.isArray(item.images)) {
-        item.images.slice(1).forEach((img) => {
-          list.push({
-            image: img,
-            title: item.name,
-            period: item.period || item.date,
-            location: item.location,
-          });
-        });
-      }
-    });
-    return list.slice(0, 5);
-  }, [items]);
-
-  const scrollToSection = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-[#FFF9FB] text-[#3A2430] font-sans antialiased pb-20">
-      
-      {/* ── SECTION 1: HISTORY HERO (White & Pink Aesthetic) ── */}
-      <section className="relative overflow-hidden bg-gradient-to-r from-[#FFF1F7] via-[#FCE4EC]/50 to-[#FFF1F7] border-b border-[#F8BBD0]/40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20 lg:py-24 relative z-10">
-          <div className="max-w-3xl space-y-4 sm:space-y-6 text-left">
-            
-            {/* Archival Label */}
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-[#F8BBD0] shadow-xs">
-              <Landmark className="h-3.5 w-3.5 text-[#E91E63]" />
-              <span className="text-xs sm:text-sm font-extrabold uppercase tracking-widest text-[#E91E63]">
-                HISTORY OF MANSALAY
-              </span>
-            </div>
+    <div className="min-h-screen bg-gray-50/40 pb-16 font-sans">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
 
-            {/* Main Heading - Matching Culture & Arts Serif Italic Style */}
-            <div className="relative">
-              <h1 className="text-3xl sm:text-5xl lg:text-[3.5rem] font-serif italic font-extrabold text-[#E91E63] leading-[1.15] tracking-tight">
-                Discover the Story of Mansalay
+        {/* ── HEADER TITLE & SEARCH ── */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-8 bg-pink-500 rounded-full" />
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight">
+                History
               </h1>
-              {/* Decorative Pink Underline Brush */}
-              <div className="w-48 sm:w-64 h-1.5 bg-gradient-to-r from-[#E91E63] via-[#EC407A] to-transparent rounded-full mt-3" />
             </div>
-
-            {/* Supporting Text */}
-            <p className="text-sm sm:text-base text-[#6B5260] font-normal leading-relaxed max-w-2xl">
-              Journey through the history, people, places, and events that shaped Mansalay.
-            </p>
-
-            {/* Search Bar matching the White & Pink theme */}
-            <div className="pt-2 max-w-xl">
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#EC407A]" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search historical events, eras, people, milestones..."
-                  className="w-full pl-12 pr-10 py-3.5 rounded-full bg-white text-sm font-medium text-[#3A2430] placeholder-[#A08293] shadow-sm border border-[#F8BBD0] focus:outline-none focus:border-[#E91E63] focus:ring-2 focus:ring-[#E91E63]/20 transition-all"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
-                    aria-label="Clear search"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-      {/* ── SECTION 2: INTRODUCTION ── */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
-        <div className="max-w-4xl mx-auto text-center space-y-5">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FFF1F7] border border-[#F8BBD0] text-[#E91E63] text-xs font-bold uppercase tracking-wider">
-            <Scroll className="h-3.5 w-3.5" />
-            <span>HISTORICAL FOUNDATION</span>
-          </div>
-
-          <h2 className="text-2xl sm:text-4xl font-serif italic font-extrabold text-[#3A2430] tracking-tight">
-            The Story Behind Mansalay
-          </h2>
-
-          {/* Small decorative pink line */}
-          <div className="w-16 h-1 bg-[#E91E63] rounded-full mx-auto" />
-
-          <p className="text-sm sm:text-base text-[#6B5260] font-normal leading-relaxed max-w-2xl mx-auto">
-            Explore the rich history of Mansalay through stories, important events, communities, places, and milestones that helped shape the municipality we know today.
-          </p>
-
-          <p className="text-sm sm:text-base text-[#6B5260] font-normal leading-relaxed max-w-2xl mx-auto">
-            From the ancestral traditions of indigenous Mangyan communities to pivotal colonial encounters and municipal progress, each era represents a foundational pillar in Mansalay&apos;s proud identity.
-          </p>
-
-          <div className="pt-4">
-            <button
-              onClick={() => scrollToSection('timeline-section')}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#E91E63] hover:bg-[#D81B60] text-white text-sm font-semibold shadow-md shadow-pink-500/20 transition-all hover:scale-102"
-            >
-              <span>Explore the Timeline</span>
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* ── SECTION 3: HISTORICAL TIMELINE ── */}
-      <section id="timeline-section" className="bg-[#FFF1F7]/50 py-16 sm:py-24 border-y border-[#F8BBD0]/40">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          
-          <div className="text-center max-w-2xl mx-auto mb-12 sm:mb-16 space-y-2">
-            <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#E91E63]">
-              CHRONOLOGY
-            </span>
-            <h2 className="text-2xl sm:text-4xl font-serif italic font-extrabold text-[#3A2430] tracking-tight">
-              Historical Timeline
-            </h2>
-            <p className="text-sm sm:text-base text-[#6B5260] font-normal">
-              A chronological journey across key eras and turning points in Mansalay.
+            <p className="text-xs sm:text-sm text-gray-500 mt-1 font-medium pl-4.5">
+              Explore the historical milestones, archives, and stories of Mansalay
             </p>
           </div>
 
-          {loading ? (
-            <div className="space-y-8">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex gap-4 sm:gap-6 animate-pulse">
-                  <div className="w-10 flex flex-col items-center">
-                    <div className="w-6 h-6 rounded-full bg-pink-200" />
-                    <div className="w-0.5 flex-1 bg-pink-100 mt-2" />
-                  </div>
-                  <div className="flex-1 bg-white p-6 rounded-2xl border border-pink-100">
-                    <div className="h-4 bg-pink-100 rounded-md w-1/4 mb-3" />
-                    <div className="h-6 bg-pink-50 rounded-md w-3/4 mb-2" />
-                    <div className="h-4 bg-pink-50 rounded-md w-full" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : items.length === 0 ? (
-            <div className="text-center py-12 px-6 bg-white rounded-3xl border border-[#F8BBD0]/60 max-w-lg mx-auto shadow-sm">
-              <Compass className="h-10 w-10 text-[#E91E63] mx-auto mb-3" />
-              <h3 className="text-base font-bold text-[#3A2430]">Timeline records will appear here</h3>
-              <p className="text-xs sm:text-sm text-[#6B5260] mt-1">
-                Historical milestones published by the Tourism Office will automatically populate this chronological timeline.
-              </p>
-            </div>
-          ) : (
-            <div className="relative">
-              {/* Vertical timeline spine */}
-              <div className="absolute left-4 sm:left-1/2 top-4 bottom-4 w-0.5 bg-[#F48FB1] -translate-x-1/2" />
-
-              <div className="space-y-8 sm:space-y-12">
-                {items.map((item, idx) => {
-                  const isEven = idx % 2 === 0;
-                  return (
-                    <div
-                      key={item.id}
-                      className={`relative flex flex-col sm:flex-row items-start ${
-                        isEven ? 'sm:flex-row-reverse' : ''
-                      } gap-6 sm:gap-12`}
-                    >
-                      {/* Timeline Center Marker */}
-                      <div className="absolute left-4 sm:left-1/2 top-1.5 -translate-x-1/2 w-7 h-7 rounded-full bg-white border-4 border-[#E91E63] flex items-center justify-center shadow-md z-10">
-                        <div className="w-2 h-2 rounded-full bg-[#E91E63]" />
-                      </div>
-
-                      {/* Content Card */}
-                      <div className="ml-12 sm:ml-0 sm:w-1/2">
-                        <div
-                          onClick={() => handleOpenDetail(item)}
-                          className="group cursor-pointer bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 border border-[#F8BBD0]/60 shadow-xs hover:shadow-lg transition-all duration-300 hover:border-[#E91E63]/50"
-                        >
-                          {/* Era or Date Badge */}
-                          {(item.date || item.period) && (
-                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFF1F7] text-[#E91E63] border border-pink-200 text-xs font-semibold mb-3">
-                              <Calendar className="h-3 w-3" />
-                              <span>{item.date || item.period}</span>
-                            </div>
-                          )}
-
-                          <h3 className="text-base sm:text-lg font-serif italic font-bold text-[#3A2430] group-hover:text-[#E91E63] transition-colors">
-                            {item.name}
-                          </h3>
-
-                          {item.image && (
-                            <div className="mt-3 rounded-xl overflow-hidden aspect-[16/9] bg-pink-50/50">
-                              <img
-                                src={formatImageUrl(item.image)}
-                                alt={item.name}
-                                className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
-                                loading="lazy"
-                              />
-                            </div>
-                          )}
-
-                          <p className="text-xs sm:text-sm text-[#6B5260] mt-3 line-clamp-3 leading-relaxed font-normal">
-                            {item.description}
-                          </p>
-
-                          <div className="mt-4 pt-3 border-t border-pink-100 flex items-center justify-between">
-                            <span className="text-xs text-[#8C6D80] font-medium truncate max-w-[150px]">
-                              {item.category}
-                            </span>
-                            <span className="text-xs font-semibold text-[#E91E63] group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                              <span>Read Story</span>
-                              <ArrowRight className="h-3 w-3" />
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Spacer for desktop symmetry */}
-                      <div className="hidden sm:block sm:w-1/2" />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-        </div>
-      </section>
-
-      {/* ── SECTION 4 & 5: STORIES OF MANSALAY & CATEGORY FILTERS ── */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
-        
-        {/* Section Header */}
-        <div className="max-w-3xl mb-8 space-y-2 text-left">
-          <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#E91E63]">
-            HISTORICAL ARCHIVES
-          </span>
-          <h2 className="text-2xl sm:text-4xl font-serif italic font-extrabold text-[#3A2430] tracking-tight">
-            Stories of Mansalay
-          </h2>
-          <p className="text-sm sm:text-base text-[#6B5260] font-normal">
-            Browse through detailed articles, community narratives, and foundational milestones.
-          </p>
-        </div>
-
-        {/* SECTION 5: Category Filters */}
-        <div className="mb-8 overflow-x-auto pb-2 scrollbar-none">
-          <div className="flex items-center gap-2">
-            {categoryFilters.map((cat) => {
-              const isActive = activeCategory === cat;
-              return (
+          {/* Search Input & Filter Dropdowns */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search history, eras, or milestones..."
+                className="w-full pl-10 pr-10 py-2.5 bg-white border border-pink-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-full text-xs font-medium placeholder:text-gray-400 shadow-2xs outline-none transition-all"
+              />
+              {searchQuery && (
                 <button
-                  key={cat}
-                  onClick={() => setActiveCategory(cat)}
-                  className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all border ${
-                    isActive
-                      ? 'bg-[#E91E63] text-white border-[#E91E63] shadow-md shadow-pink-500/20 scale-102'
-                      : 'bg-white text-[#6B5260] border-[#F8BBD0] hover:border-[#E91E63] hover:text-[#E91E63] hover:bg-[#FFF1F7]/50'
-                  }`}
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                  title="Clear search"
                 >
-                  {cat}
+                  <X className="h-3.5 w-3.5" />
                 </button>
-              );
-            })}
+              )}
+            </div>
+
+            <div className="relative w-full sm:w-48">
+              <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-pink-500 pointer-events-none" />
+              <select
+                value={activeCategory}
+                onChange={(e) => setActiveCategory(e.target.value)}
+                className="w-full pl-9 pr-8 py-2.5 bg-white border border-pink-200 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 rounded-full text-xs font-semibold text-gray-700 shadow-2xs outline-none transition-all cursor-pointer appearance-none"
+              >
+                <option value="All">All Categories</option>
+                {categoriesList.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            </div>
           </div>
         </div>
 
-        {/* Stories Listing */}
+        {/* ── RESULT COUNT ── */}
+        <p className="text-xs font-semibold text-gray-400 mb-4">
+          Showing <span className="text-gray-900 font-bold">{filteredItems.length}</span> historical records
+          {searchQuery && (
+            <span> for "<span className="text-gray-900 font-bold">{searchQuery}</span>"</span>
+          )}
+        </p>
+
+        {/* ── HISTORY CARDS GRID (4 COLUMNS) ── */}
         {loading ? (
-          /* Loading State: White/Pink Skeletons */
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((idx) => (
               <div
-                key={i}
-                className="bg-white rounded-3xl border border-pink-100 p-5 animate-pulse space-y-4"
+                key={idx}
+                className="bg-white rounded-3xl overflow-hidden border border-gray-100 p-4 space-y-3 animate-pulse shadow-xs"
               >
-                <div className="aspect-[16/10] bg-pink-100/70 rounded-2xl" />
-                <div className="h-4 bg-pink-100 rounded-md w-1/3" />
-                <div className="h-5 bg-pink-50 rounded-md w-4/5" />
-                <div className="h-3 bg-pink-50 rounded-md w-full" />
-                <div className="h-3 bg-pink-50 rounded-md w-2/3" />
+                <div className="h-56 bg-gray-100 rounded-2xl" />
+                <div className="h-4 bg-gray-100 rounded w-3/4" />
+                <div className="h-3 bg-gray-50 rounded w-full" />
+                <div className="h-3 bg-gray-50 rounded w-2/3" />
               </div>
             ))}
           </div>
-        ) : error ? (
-          /* Error State */
-          <div className="text-center py-16 px-4 bg-white rounded-3xl border border-pink-200 shadow-sm max-w-lg mx-auto">
-            <p className="text-base font-bold text-[#3A2430]">{error}</p>
-            <button
-              onClick={loadHistories}
-              className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#E91E63] text-white text-xs font-semibold hover:bg-[#D81B60] transition-all"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              <span>Try Again</span>
-            </button>
-          </div>
-        ) : filteredItems.length === 0 ? (
-          /* Empty State: Zero fake data */
-          <div className="text-center py-20 px-4 bg-white rounded-3xl border border-[#F8BBD0]/60 shadow-sm max-w-xl mx-auto">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-[#FFF1F7] text-[#E91E63] flex items-center justify-center">
-              <BookOpen className="h-8 w-8" />
-            </div>
-            <h3 className="text-lg font-bold text-[#3A2430]">
-              No History content available yet.
-            </h3>
-            <p className="text-xs sm:text-sm text-[#6B5260] mt-2 max-w-md mx-auto">
-              {searchQuery
-                ? `No historical records matched "${searchQuery}". Please check your search term or select another category.`
-                : 'Official historical archives and community records will appear here once published by the Mansalay Tourism Office.'}
-            </p>
-            {userType === 'admin' && (
-              <button
-                onClick={() => navigate('/admin/content')}
-                className="mt-6 inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#E91E63] hover:bg-[#D81B60] text-white text-xs font-semibold shadow-md shadow-pink-500/20 transition-all"
-              >
-                <span>+ Publish History Content</span>
-              </button>
-            )}
-          </div>
-        ) : (
-          /* Real Dynamic Cards Grid: Desktop 3 cols, Tablet 2 cols, Mobile 1 col */
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+        ) : filteredItems.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {filteredItems.map((item) => (
-              <article
+              <div
                 key={item.id}
                 onClick={() => handleOpenDetail(item)}
-                className="group cursor-pointer bg-white rounded-3xl border border-[#F8BBD0]/60 shadow-xs hover:shadow-xl transition-all duration-300 overflow-hidden flex flex-col hover:border-[#E91E63]/50"
+                className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-xs hover:shadow-xl transition-all cursor-pointer group flex flex-col justify-between"
               >
-                {/* Historical Image */}
-                <div className="relative aspect-[16/10] overflow-hidden bg-pink-50/50">
+                {/* Top Image Box */}
+                <div className="relative h-64 bg-gray-900 overflow-hidden">
                   <img
                     src={item.image ? formatImageUrl(item.image) : PLACEHOLDER_IMAGE}
                     alt={item.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.src = PLACEHOLDER_IMAGE;
+                    }}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
-                  {/* Period/Date Badge */}
-                  {(item.period || item.date) && (
-                    <div className="absolute top-3 left-3">
-                      <span className="px-3 py-1 rounded-full bg-black/60 backdrop-blur-md text-white text-[11px] font-semibold shadow-xs flex items-center gap-1 border border-white/20">
-                        <Clock className="h-3 w-3 text-pink-300" />
+                  {/* Top Left Stacked Badges */}
+                  <div className="absolute top-3 left-3 flex flex-col gap-1.5 items-start">
+                    {item.category && (
+                      <span className="px-3 py-0.5 bg-pink-500 text-white text-[10px] font-extrabold rounded-full shadow-xs uppercase">
+                        {item.category}
+                      </span>
+                    )}
+                    {(item.period || item.date) && (
+                      <span className="px-2.5 py-0.5 bg-black/60 backdrop-blur-md text-white text-[10px] font-semibold rounded-full border border-white/20 flex items-center gap-1">
+                        <Clock className="h-2.5 w-2.5 text-pink-300" />
                         <span>{item.period || item.date}</span>
                       </span>
-                    </div>
-                  )}
-
-                  {/* Category Badge matching Culture & Arts pill */}
-                  <div className="absolute bottom-3 left-3">
-                    <span className="inline-block px-3 py-1 rounded-full bg-white/95 backdrop-blur-md text-[11px] font-bold text-[#E91E63] border border-pink-100 shadow-sm">
-                      {item.category}
-                    </span>
+                    )}
                   </div>
 
-                  {/* Views */}
-                  <div className="absolute bottom-3 right-3 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/60 backdrop-blur-md text-[11px] font-medium text-white">
-                    <Eye className="h-3 w-3 text-pink-300" />
-                    <span>{item.view_count || 0}</span>
-                  </div>
-                </div>
+                  {/* Top Right Share Button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShareData({
+                        title: item.name,
+                        description: item.description,
+                        image: item.image,
+                        category: item.category || 'History',
+                      });
+                    }}
+                    className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 hover:bg-black/75 text-white flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95"
+                    title="Share"
+                  >
+                    <Share2 className="h-4 w-4" />
+                  </button>
 
-                {/* Card Body */}
-                <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
-                  <div>
-                    <h3 className="text-base sm:text-lg font-serif italic font-bold text-[#3A2430] group-hover:text-[#E91E63] transition-colors line-clamp-2 leading-snug">
+                  {/* Dark Bottom Overlay with Title */}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-gray-950/90 via-gray-950/50 to-transparent p-4">
+                    <h3 className="text-sm font-bold text-white leading-tight line-clamp-1">
                       {item.name}
                     </h3>
-
-                    <p className="text-xs sm:text-sm text-[#6B5260] mt-2 line-clamp-3 leading-relaxed font-normal">
-                      {item.description}
-                    </p>
+                    {item.source && (
+                      <p className="text-[11px] text-pink-300 font-medium line-clamp-1 mt-0.5">
+                        Source: {item.source}
+                      </p>
+                    )}
                   </div>
+                </div>
 
-                  <div className="pt-4 border-t border-pink-50 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1 text-[#6B5260] font-medium truncate max-w-[160px]">
-                      <MapPin className="h-3.5 w-3.5 text-[#E91E63] shrink-0" />
-                      <span className="truncate">{item.location}</span>
+                {/* Bottom Info Section */}
+                <div className="p-4 flex-1 flex flex-col justify-between">
+                  <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed mb-3">
+                    {item.description}
+                  </p>
+
+                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1 text-gray-400 truncate max-w-[170px]">
+                      <MapPin className="h-3 w-3 text-pink-500 shrink-0" />
+                      <span className="truncate">{item.location || 'Mansalay, Oriental Mindoro'}</span>
                     </div>
-
-                    <span className="font-semibold text-[#E91E63] group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                      <span>Read Story</span>
-                      <ArrowRight className="h-3 w-3" />
+                    <span className="text-pink-500 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                      Explore <ArrowRight className="h-3 w-3" />
                     </span>
                   </div>
                 </div>
-              </article>
+              </div>
             ))}
+          </div>
+        ) : null}
+
+        {/* ── EMPTY STATE ── */}
+        {filteredItems.length === 0 && !loading && (
+          <div className="bg-white rounded-3xl border border-gray-100 p-12 text-center my-8 shadow-xs">
+            <Landmark className="h-12 w-12 mx-auto text-pink-300 mb-3" />
+            <h3 className="text-base font-bold text-gray-900">No history found</h3>
+            <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1 mb-4">
+              {searchQuery
+                ? `We couldn't find any historical records matching "${searchQuery}". Try searching with different keywords or clearing your filters.`
+                : 'No historical records match the selected category.'}
+            </p>
+            <div className="flex justify-center gap-2">
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="px-4 py-2 bg-pink-50 text-pink-600 hover:bg-pink-100 font-bold text-xs rounded-full transition-colors border border-pink-200"
+                >
+                  Clear Search
+                </button>
+              )}
+              {activeCategory !== 'All' && (
+                <button
+                  type="button"
+                  onClick={() => setActiveCategory('All')}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 font-bold text-xs rounded-full transition-colors"
+                >
+                  Reset Filters
+                </button>
+              )}
+            </div>
+
+            {userType === 'admin' && (
+              <div className="mt-6">
+                <button
+                  onClick={() => navigate('/admin/publish')}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold shadow-md shadow-pink-500/20 transition-all"
+                >
+                  <span>+ Publish History Content</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
-      </section>
+      </div>
 
-      {/* ── SECTION 6: HISTORICAL PHOTO / ARCHIVE FEATURE ── */}
-      {galleryItems.length > 0 && (
-        <section className="bg-[#FFF1F7]/50 py-16 sm:py-20 border-y border-[#F8BBD0]/40">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="max-w-3xl mb-8 space-y-2 text-left">
-              <span className="text-xs sm:text-sm font-bold uppercase tracking-wider text-[#E91E63]">
-                VISUAL ARCHIVE
-              </span>
-              <h2 className="text-2xl sm:text-4xl font-serif italic font-extrabold text-[#3A2430] tracking-tight">
-                Mansalay Through the Years
-              </h2>
-              <p className="text-sm sm:text-base text-[#6B5260] font-normal">
-                Photographic glimpses into historical landmarks, community gatherings, and heritage sites.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Featured Large Historical Photo */}
-              <div className="lg:col-span-7 rounded-3xl overflow-hidden bg-white border border-[#F8BBD0]/60 shadow-md relative aspect-[16/10]">
-                <img
-                  src={formatImageUrl(galleryItems[0].image)}
-                  alt={galleryItems[0].title}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-6 text-white">
-                  {galleryItems[0].period && (
-                    <span className="text-xs font-semibold text-pink-200 uppercase tracking-wider">
-                      {galleryItems[0].period}
-                    </span>
-                  )}
-                  <h3 className="text-lg sm:text-xl font-serif italic font-bold">{galleryItems[0].title}</h3>
-                  {galleryItems[0].location && (
-                    <p className="text-xs text-pink-100 mt-1 flex items-center gap-1 font-normal">
-                      <MapPin className="h-3 w-3 text-pink-400" />
-                      <span>{galleryItems[0].location}</span>
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Smaller Supporting Archive Photos */}
-              <div className="lg:col-span-5 grid grid-cols-2 gap-4">
-                {galleryItems.slice(1).map((gItem, idx) => (
-                  <div
-                    key={idx}
-                    className="rounded-2xl overflow-hidden bg-white border border-[#F8BBD0]/60 shadow-xs relative aspect-square group"
-                  >
-                    <img
-                      src={formatImageUrl(gItem.image)}
-                      alt={gItem.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex flex-col justify-end p-3 text-white">
-                      <p className="text-xs font-serif italic font-bold line-clamp-1">{gItem.title}</p>
-                      {gItem.period && (
-                        <p className="text-[10px] text-pink-200 font-normal">{gItem.period}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* ── SECTION 7: FEATURED HERITAGE CALLOUT (Solid Vibrant Pink Gradient) ── */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
-        <div className="relative rounded-3xl overflow-hidden bg-gradient-to-r from-[#D81B60] via-[#E91E63] to-[#EC407A] text-white p-8 sm:p-12 lg:p-16 shadow-xl">
-          <div className="relative z-10 max-w-2xl space-y-4">
-            <span className="text-xs sm:text-sm font-extrabold uppercase tracking-widest text-pink-100">
-              COMMUNITY HERITAGE
-            </span>
-            <h2 className="text-2xl sm:text-4xl font-serif italic font-extrabold text-white tracking-tight leading-snug">
-              Preserving the Story of Mansalay
-            </h2>
-            <p className="text-sm sm:text-base text-rose-100 font-normal leading-relaxed">
-              Every place has a story. Discover the people, traditions, and events that continue to shape Mansalay&apos;s identity.
-            </p>
-            <div className="pt-2">
-              <button
-                onClick={() => {
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-white text-[#E91E63] hover:bg-pink-50 text-sm font-semibold shadow-md transition-all hover:scale-102"
-              >
-                <span>Explore History →</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── SECTION 8 & 9: HISTORY DETAILS MODAL & RELATED STORIES ── */}
+      {/* ── DETAIL MODAL ── */}
       {selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-pink-100 relative text-[#3A2430]">
-            
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setSelectedItem(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100 relative animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Close Button */}
             <button
               onClick={() => setSelectedItem(null)}
-              className="absolute top-4 right-4 z-20 p-2.5 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-md transition-all shadow-md"
-              aria-label="Close details"
+              className="absolute top-4 right-4 z-20 p-2 rounded-full bg-black/50 hover:bg-black/75 text-white backdrop-blur-md transition-all shadow-md"
             >
               <X className="h-5 w-5" />
             </button>
 
             {/* Media Gallery / Carousel */}
             {detailImages.length > 0 && (
-              <div className="relative aspect-[16/9] w-full bg-black rounded-t-3xl overflow-hidden">
+              <div className="relative aspect-[16/10] w-full bg-black rounded-t-3xl overflow-hidden">
                 <img
                   src={formatImageUrl(detailImages[modalImageIndex])}
                   alt={selectedItem.name}
@@ -712,29 +423,23 @@ export function History() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setModalImageIndex((prev) =>
-                          prev > 0 ? prev - 1 : detailImages.length - 1
-                        );
+                        setModalImageIndex((prev) => (prev > 0 ? prev - 1 : detailImages.length - 1));
                       }}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 text-white hover:bg-black/90 transition-all"
-                      aria-label="Previous image"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/80 transition-all"
                     >
                       <ChevronLeft className="h-5 w-5" />
                     </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setModalImageIndex((prev) =>
-                          prev < detailImages.length - 1 ? prev + 1 : 0
-                        );
+                        setModalImageIndex((prev) => (prev < detailImages.length - 1 ? prev + 1 : 0));
                       }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 text-white hover:bg-black/90 transition-all"
-                      aria-label="Next image"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white hover:bg-black/80 transition-all"
                     >
                       <ChevronRight className="h-5 w-5" />
                     </button>
 
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/70 text-white text-xs font-semibold">
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-black/60 text-white text-[11px] font-bold">
                       {modalImageIndex + 1} / {detailImages.length}
                     </div>
                   </>
@@ -744,127 +449,117 @@ export function History() {
 
             {/* Modal Body */}
             <div className="p-6 sm:p-8 space-y-6">
-              
-              {/* Header Meta */}
-              <div>
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="px-3 py-1 rounded-full bg-[#E91E63] text-white text-xs font-semibold">
-                    {selectedItem.category}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-3.5 py-1 rounded-full bg-pink-50 text-pink-600 text-xs font-bold border border-pink-100">
+                    {selectedItem.category || 'History'}
                   </span>
                   {(selectedItem.period || selectedItem.date) && (
-                    <span className="px-3 py-1 rounded-full bg-[#FFF1F7] text-[#E91E63] border border-pink-200 text-xs font-semibold flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
+                    <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-semibold flex items-center gap-1">
+                      <Clock className="h-3 w-3 text-pink-500" />
                       <span>{selectedItem.period || selectedItem.date}</span>
-                    </span>
-                  )}
-                  {selectedItem.location && (
-                    <span className="px-3 py-1 rounded-full bg-white border border-[#F8BBD0] text-[#6B5260] text-xs font-medium flex items-center gap-1">
-                      <MapPin className="h-3 w-3 text-[#E91E63]" />
-                      <span>{selectedItem.location}</span>
                     </span>
                   )}
                 </div>
 
-                <h2 className="text-2xl sm:text-3xl font-serif italic font-extrabold text-[#3A2430] leading-tight">
+                <button
+                  onClick={() =>
+                    setShareData({
+                      title: selectedItem.name,
+                      description: selectedItem.description,
+                      image: selectedItem.image,
+                      category: selectedItem.category,
+                    })
+                  }
+                  className="p-2 rounded-full bg-pink-50 text-pink-600 hover:bg-pink-100 transition-colors"
+                  title="Share"
+                >
+                  <Share2 className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-900">
                   {selectedItem.name}
                 </h2>
 
                 {selectedItem.source && (
-                  <p className="text-xs font-medium text-[#6B5260] mt-2 flex items-center gap-1.5">
-                    <FileText className="h-3.5 w-3.5 text-[#E91E63]" />
+                  <p className="text-xs sm:text-sm font-bold text-pink-600 mt-2 flex items-center gap-1.5">
+                    <BookOpen className="h-4 w-4 text-pink-500" />
                     <span>Archival Source: {selectedItem.source}</span>
+                  </p>
+                )}
+
+                {selectedItem.location && (
+                  <p className="text-xs font-medium text-gray-500 mt-1 flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-pink-500" />
+                    <span>{selectedItem.location}</span>
                   </p>
                 )}
               </div>
 
-              {/* Full Historical Content */}
-              <div className="prose prose-sm max-w-none text-[#3A2430] leading-relaxed font-normal whitespace-pre-line bg-[#FFF9FB] p-6 rounded-2xl border border-pink-100">
-                {selectedItem.full_description || selectedItem.description}
+              {/* Full Historical Story */}
+              <div className="text-xs sm:text-sm text-gray-600 leading-relaxed space-y-4">
+                <p className="font-semibold text-gray-700">
+                  {selectedItem.description}
+                </p>
+
+                {selectedItem.full_description && selectedItem.full_description !== selectedItem.description && (
+                  <div className="pt-3 border-t border-gray-100 whitespace-pre-line text-gray-600">
+                    {selectedItem.full_description}
+                  </div>
+                )}
               </div>
 
-              {/* Video Embed if Available */}
+              {/* Video Player if available */}
               {selectedItem.video && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-serif italic font-bold text-[#3A2430] flex items-center gap-2">
-                    <Landmark className="h-4 w-4 text-[#E91E63]" />
-                    <span>Historical Documentary / Footage</span>
+                <div className="pt-4 border-t border-gray-100">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-pink-600 mb-2 flex items-center gap-2">
+                    <Video className="h-4 w-4 text-pink-600" />
+                    <span>Historical Video Archive</span>
                   </h4>
-                  <div className="aspect-[16/9] w-full rounded-2xl overflow-hidden bg-black shadow-md">
-                    {selectedItem.video.includes('youtube') || selectedItem.video.includes('youtu.be') ? (
+                  <div className="rounded-2xl overflow-hidden bg-black aspect-video">
+                    {selectedItem.video.includes('youtube.com') || selectedItem.video.includes('youtu.be') ? (
                       <iframe
-                        src={selectedItem.video.replace('watch?v=', 'embed/')}
-                        title={selectedItem.name}
+                        src={
+                          selectedItem.video.includes('watch?v=')
+                            ? `https://www.youtube.com/embed/${selectedItem.video.split('v=')[1]?.split('&')[0]}`
+                            : selectedItem.video.includes('youtu.be/')
+                            ? `https://www.youtube.com/embed/${selectedItem.video.split('youtu.be/')[1]?.split('?')[0]}`
+                            : selectedItem.video
+                        }
+                        title={`Video - ${selectedItem.name}`}
                         className="w-full h-full border-0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                         allowFullScreen
                       />
                     ) : (
                       <video
-                        src={formatImageUrl(selectedItem.video)}
+                        src={selectedItem.video.startsWith('http') ? selectedItem.video : `${API_BASE}${selectedItem.video}`}
                         controls
-                        className="w-full h-full"
+                        playsInline
+                        className="w-full h-full object-cover"
                       />
                     )}
                   </div>
                 </div>
               )}
 
-              {/* SECTION 9: Related History Stories */}
-              {relatedStories.length > 0 && (
-                <div className="pt-6 border-t border-pink-100 space-y-4">
-                  <h4 className="text-base font-serif italic font-extrabold text-[#3A2430]">Related Stories</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    {relatedStories.map((rel) => (
-                      <div
-                        key={rel.id}
-                        onClick={() => handleOpenDetail(rel)}
-                        className="group cursor-pointer bg-white p-3 rounded-2xl border border-pink-100 hover:border-[#E91E63]/40 transition-all shadow-xs"
-                      >
-                        <div className="aspect-[16/10] rounded-xl overflow-hidden bg-pink-50/50 mb-2">
-                          <img
-                            src={rel.image ? formatImageUrl(rel.image) : PLACEHOLDER_IMAGE}
-                            alt={rel.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                          />
-                        </div>
-                        <p className="text-xs font-serif italic font-bold text-[#3A2430] line-clamp-1 group-hover:text-[#E91E63]">
-                          {rel.name}
-                        </p>
-                        <p className="text-[11px] text-[#8C6D80] mt-0.5 font-normal">
-                          {rel.period || rel.date || rel.category}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Action Bar */}
-              <div className="pt-4 border-t border-pink-100 flex items-center justify-between">
-                <button
-                  onClick={() =>
-                    setShareData({
-                      title: selectedItem.name,
-                      description: selectedItem.description,
-                      image: selectedItem.image ? formatImageUrl(selectedItem.image) : undefined,
-                      category: selectedItem.category,
-                    })
-                  }
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#F8BBD0] text-[#E91E63] hover:bg-[#FFF1F7] text-xs font-semibold transition-all"
-                >
-                  <Share2 className="h-3.5 w-3.5" />
-                  <span>Share Story</span>
-                </button>
+              {/* Modal Footer */}
+              <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
+                <span className="text-xs text-gray-400 flex items-center gap-1">
+                  <Eye className="h-3.5 w-3.5 text-pink-500" />
+                  <span>{selectedItem.view_count || 0} views</span>
+                </span>
 
                 <button
                   onClick={() => setSelectedItem(null)}
-                  className="px-5 py-2 rounded-full bg-[#E91E63] hover:bg-[#D81B60] text-white text-xs font-semibold shadow-xs transition-all"
+                  className="px-6 py-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold transition-all"
                 >
-                  Back to History
+                  Close
                 </button>
               </div>
-
             </div>
-
           </div>
         </div>
       )}
@@ -872,7 +567,7 @@ export function History() {
       {/* Share Modal */}
       {shareData && (
         <ShareModal
-          isOpen={true}
+          isOpen={!!shareData}
           onClose={() => setShareData(null)}
           title={shareData.title}
           description={shareData.description}
@@ -880,7 +575,6 @@ export function History() {
           category={shareData.category}
         />
       )}
-
     </div>
   );
 }
