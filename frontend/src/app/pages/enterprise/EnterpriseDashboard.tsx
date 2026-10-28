@@ -33,7 +33,7 @@ import {
   Edit
 } from 'lucide-react';
 import { Link } from 'react-router';
-import { getJSON, getPublicJSON, postJSON, deleteJSON, getStorageUrl } from '../../lib/api';
+import { getJSON, getPublicJSON, postJSON, deleteJSON, getStorageUrl, VIDEO_UPLOAD_LIMIT_BYTES } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { SubscriptionPaymentModal } from '../../components/SubscriptionPaymentModal';
 import Swal from 'sweetalert2';
@@ -41,9 +41,8 @@ import { toast } from 'sonner';
 import { cleanTags } from '../tourist/BusinessProfile';
 
 // 🛡️ Video Upload Validation & Utilities (Matching Admin Content)
-const ALLOWED_VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogv', '.mov'];
-const ALLOWED_VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
-const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024; // 500MB Limit
+const ALLOWED_VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogv', '.mov', '.mpeg', '.mpg', '.mkv'];
+const ALLOWED_VIDEO_MIME_TYPES = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/mpeg', 'video/x-matroska'];
 
 function validateSecureVideoFile(file: File): { valid: boolean; error?: string } {
   const fileName = file.name.toLowerCase();
@@ -60,11 +59,8 @@ function validateSecureVideoFile(file: File): { valid: boolean; error?: string }
       error: `Unsupported video MIME type (${file.type}). Only MP4, WebM, OGG, or MOV videos are allowed.`,
     };
   }
-  if (file.size > MAX_VIDEO_SIZE_BYTES) {
-    return {
-      valid: false,
-      error: `Video file size exceeds 500MB limit (${(file.size / (1024 * 1024)).toFixed(1)} MB).`,
-    };
+  if (file.size > VIDEO_UPLOAD_LIMIT_BYTES) {
+    return { valid: false, error: 'Video file exceeds the 2 GB upload limit.' };
   }
   return { valid: true };
 }

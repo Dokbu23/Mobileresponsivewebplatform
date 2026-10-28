@@ -399,10 +399,6 @@ export function ManageItineraries() {
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image size must be 5MB or less');
-        return;
-      }
       setFormImageFile(file);
       setFormImagePreview(URL.createObjectURL(file));
     }
@@ -1101,7 +1097,7 @@ export function ManageItineraries() {
                         <Upload className="h-3.5 w-3.5" />
                         <span>Choose Photo</span>
                       </button>
-                      <span className="text-[11px] text-gray-400">PNG, JPG up to 5MB</span>
+                      <span className="text-[11px] text-gray-400">High-resolution PNG, JPEG, and compatible image formats (configured server limit)</span>
                     </div>
                     <input
                       type="text"

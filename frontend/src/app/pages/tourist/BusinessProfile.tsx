@@ -12,7 +12,7 @@ import {
   ChevronDown, ChevronUp, Users, Film, CheckCircle2, Trash2,
   Navigation, Facebook, ChevronLeft, ChevronRight, Maximize2
 } from 'lucide-react';
-import { getPublicJSON, getAuthToken, API_BASE, recordView, formatImageUrl } from '../../lib/api';
+import { getPublicJSON, getAuthToken, API_BASE, recordView, formatImageUrl, VIDEO_UPLOAD_LIMIT_BYTES, sendMediaFormData } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
 import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
@@ -22,7 +22,7 @@ import { VirtualTourModal, Tour360Scene } from '../../components/VirtualTourModa
 import { InlineVirtualTourViewer } from '../../components/InlineVirtualTourViewer';
 import { PushPinIcon } from '../../components/PushPinIcon';
 import { MANSALAY_BARANGAYS, PLACEHOLDER_IMAGE } from '../../lib/constants';
-import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
+import { AutoSwipeCarousel, uniqueImageUrls } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
 
 export function cleanTags(rawTags: any): string[] {
@@ -453,7 +453,7 @@ export function BusinessProfile() {
   const { type, userId } = useParams<{ type: 'resort' | 'enterprise'; userId: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { userType, currentUser, setCurrentUser, isInWishlist, removeFromWishlist, addToWishlist, getWishlistCount } = useApp();
+  const { userType, currentUser, setCurrentUser, isInWishlist, removeFromWishlist, addToWishlist, getWishlistCount, canPin } = useApp();
   const [data, setData] = useState<BusinessProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -685,7 +685,7 @@ export function BusinessProfile() {
             : 10;
 
           // Find if this post is already represented in list by post_id, id, or identical image
-          const targetProd = list.find((p: any) => 
+          const targetProd = list.find((p: any) =>
             (p.post_id && String(p.post_id) === String(post.id)) ||
             String(p.id) === String(post.id) ||
             String(p.id) === `post_prod_${post.id}` ||
@@ -1017,8 +1017,8 @@ export function BusinessProfile() {
   const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 500 * 1024 * 1024) {
-        toast.error('Video file size exceeds the 500MB limit');
+      if (file.size > VIDEO_UPLOAD_LIMIT_BYTES) {
+        toast.error('Video file exceeds the 2 GB upload limit.');
         return;
       }
       setVideoFile(file);
@@ -1077,13 +1077,11 @@ export function BusinessProfile() {
         }
         formData.append('_method', 'PUT');
 
-        const res = await fetch(`${API_BASE}/api/resort-profile`, {
-          method: 'POST',
+        const res = await sendMediaFormData(`${API_BASE}/api/resort-profile`, formData, {
           headers: {
             'Accept': 'application/json',
             'Authorization': `Bearer ${token}`,
           },
-          body: formData,
         });
 
         if (!res.ok) {
@@ -1170,13 +1168,11 @@ export function BusinessProfile() {
         }
         formData.append('_method', 'PUT');
 
-        const res = await fetch(`${API_BASE}/api/enterprise-profile`, {
-          method: 'POST',
+        const res = await sendMediaFormData(`${API_BASE}/api/enterprise-profile`, formData, {
           headers: {
             'Accept': 'application/json',
             'Authorization': `Bearer ${token}`,
           },
-          body: formData,
         });
 
         if (!res.ok) {
@@ -1734,14 +1730,14 @@ export function BusinessProfile() {
                   <h2 className="text-sm font-bold text-gray-800 tracking-widest flex items-center gap-2">
                     {isResort ? <Bed className="h-4 w-4 text-pink-500" /> : <Package className="h-4 w-4 text-pink-500" />}
                     <span>
-                      {selectedCategory === 'all' 
+                      {selectedCategory === 'all'
                         ? (isResort ? 'BOOKABLE ROOMS & COTTAGES' : 'ALL PRODUCTS')
                         : selectedCategory.toUpperCase()}
                     </span>
                   </h2>
                   <p className="text-[11px] text-gray-400 mt-0.5">
-                    {isResort 
-                      ? 'Official room rates, capacities, and amenities. Click any room to view full photos and details.' 
+                    {isResort
+                      ? 'Official room rates, capacities, and amenities. Click any room to view full photos and details.'
                       : 'Browse our catalog of native products and delicacies. Click to view details.'}
                   </p>
                 </div>
@@ -1784,8 +1780,8 @@ export function BusinessProfile() {
                     <div className="py-16 text-center">
                       <Package className="h-16 w-16 mx-auto text-gray-300 mb-3" />
                       <p className="text-gray-500 font-medium mb-4">
-                        {searchQuery || selectedCategory !== 'all' 
-                          ? 'No products match your search' 
+                        {searchQuery || selectedCategory !== 'all'
+                          ? 'No products match your search'
                           : 'No products available'}
                       </p>
                       {isOwner && (
@@ -1876,8 +1872,8 @@ export function BusinessProfile() {
                 </div>
                 <h3 className="text-lg font-bold text-gray-900 mb-1">No Posts Yet</h3>
                 <p className="text-xs text-gray-500 max-w-lg mx-auto mb-5">
-                  {isOwner 
-                    ? 'You have not created any posts or updates yet. Create announcements, room highlights, or product updates from your dashboard.' 
+                  {isOwner
+                    ? 'You have not created any posts or updates yet. Create announcements, room highlights, or product updates from your dashboard.'
                     : 'This host has not published any posts or updates yet.'}
                 </p>
                 {isOwner && (
@@ -2351,11 +2347,11 @@ export function BusinessProfile() {
 
       {/* ── 🛏️ MODAL: ROOM & COTTAGE DETAILS VIEWER ── */}
       {viewingRoom && (
-        <div 
+        <div
           className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200"
           onClick={() => setViewingRoom(null)}
         >
-          <div 
+          <div
             className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-200"
             onClick={e => e.stopPropagation()}
           >
@@ -2395,9 +2391,13 @@ export function BusinessProfile() {
             <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-5">
               {/* Room Image & Gallery */}
               {(() => {
-                const roomImages = Array.isArray(viewingRoom.images) && viewingRoom.images.length > 0
-                  ? viewingRoom.images
-                  : [viewingRoom.image || (shopBanner ? getImageUrl(shopBanner) : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80')];
+                const roomImages = getCleanAccommodationImages({
+                  image: viewingRoom.image || (shopBanner ? getImageUrl(shopBanner) : ''),
+                  images: viewingRoom.images,
+                });
+                if (roomImages.length === 0) {
+                  roomImages.push('https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80');
+                }
                 const activeImg = roomImages[activeRoomImageIdx] || roomImages[0];
                 const activeImgSrc = activeImg.startsWith('http') ? activeImg : `${API_BASE}${activeImg}`;
 
@@ -2564,6 +2564,7 @@ export function BusinessProfile() {
                     : [formatImageUrl(viewingProduct.image) || viewingProduct.image].filter(Boolean)
                 }
                 alt={viewingProduct.name}
+                presentation="modal"
                 className="w-full h-full"
                 intervalMs={3000}
                 showDots={true}
@@ -2604,6 +2605,7 @@ export function BusinessProfile() {
                   </button>
                   {/* Save/Wishlist Button */}
                   <button
+                    disabled={!canPin}
                     onClick={async (e) => {
                       e.stopPropagation();
                       if (!getAuthToken()) {
@@ -2880,7 +2882,7 @@ export function BusinessProfile() {
                       >
                         <Film className="h-5 w-5 text-indigo-500 mb-1 group-hover:scale-110 transition-transform" />
                         <span className="text-xs font-bold text-gray-800">Upload Video File</span>
-                        <span className="text-[10px] text-gray-400 font-medium">MP4, WebM (hanggang 500MB)</span>
+                        <span className="text-[10px] text-gray-400 font-medium">MP4, WebM, MOV (configured server limit)</span>
                         {videoFile && (
                           <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-[10px] font-bold">
                             <CheckCircle2 className="h-3 w-3 text-emerald-600" />
@@ -3151,7 +3153,7 @@ export function BusinessProfile() {
 
 // Clean Product Card
 function ProductCard({ product, onSelect }: any) {
-  const { isInWishlist, addToWishlist, removeFromWishlist, getWishlistCount, userType } = useApp();
+  const { isInWishlist, addToWishlist, removeFromWishlist, getWishlistCount, userType, canPin } = useApp();
   const rawImage = product.image || (Array.isArray(product.images) && product.images[0]);
   const imageUrl = rawImage
     ? (rawImage.startsWith('http') ? rawImage : `${API_BASE}${rawImage}`)
@@ -3199,6 +3201,7 @@ function ProductCard({ product, onSelect }: any) {
           </div>
         )}
         <button
+          disabled={!canPin}
           onClick={toggleSave}
           className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer z-10 ${
             isSaved
@@ -3247,27 +3250,35 @@ function ProductCard({ product, onSelect }: any) {
 }
 
 // Clean Accommodation Card with multi-image carousel, touch swipe, and click-to-view
+function getCleanAccommodationImages(item: { image?: string | null; images?: unknown }): string[] {
+  let gallery: unknown = item.images;
+  if (typeof gallery === 'string') {
+    try {
+      gallery = JSON.parse(gallery);
+    } catch {
+      gallery = [];
+    }
+  }
+
+  const validGallery = (Array.isArray(gallery) ? gallery : [])
+    .filter((image): image is string => typeof image === 'string' && Boolean(image.trim()))
+    .map((image) => formatImageUrl(image.trim()) || image.trim())
+    .filter(Boolean);
+  const slideSource = validGallery.length > 0
+    ? validGallery
+    : (item.image ? [formatImageUrl(item.image) || item.image] : []);
+
+  return uniqueImageUrls(slideSource);
+}
+
 function AccommodationCard({ accommodation, onSelect }: any) {
-  const { isInWishlist, addToWishlist, removeFromWishlist, getWishlistCount, userType } = useApp();
+  const { isInWishlist, addToWishlist, removeFromWishlist, getWishlistCount, userType, canPin } = useApp();
   const [currentIdx, setCurrentIdx] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
 
   const images: string[] = useMemo(() => {
-    let list: any[] = [];
-    if (Array.isArray(accommodation.images) && accommodation.images.length > 0) {
-      list = accommodation.images;
-    } else if (typeof accommodation.images === 'string' && accommodation.images.trim()) {
-      try {
-        const parsed = JSON.parse(accommodation.images);
-        if (Array.isArray(parsed)) list = parsed;
-      } catch {}
-    }
-    const formatted = list.map((img: any) => formatImageUrl(img) || img).filter(Boolean);
-    const mainImg = formatImageUrl(accommodation.image) || accommodation.image;
-    if (mainImg && !formatted.includes(mainImg)) {
-      formatted.unshift(mainImg);
-    }
+    const formatted = getCleanAccommodationImages(accommodation);
     return formatted.length > 0
       ? formatted
       : ['https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80'];
@@ -3362,6 +3373,7 @@ function AccommodationCard({ accommodation, onSelect }: any) {
         {hasMultiple && (
           <>
             <button
+              disabled={!canPin}
               type="button"
               onClick={handlePrev}
               className="absolute left-1.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black/55 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer shadow-md"

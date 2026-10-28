@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { X, MapPin, Calendar, Clock, Users, Hotel, Star, Navigation, Package, ExternalLink, Phone, Mail, Play } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { X, MapPin, Calendar, Clock, Users, Hotel, Star, Navigation, Package, ExternalLink, Phone, Mail, Play, Camera, Tag } from 'lucide-react';
 import { Link } from 'react-router';
 import { VirtualTourModal } from './VirtualTourModal';
+import { AutoSwipeCarousel, uniqueImageUrls } from './AutoSwipeCarousel';
 
 export type DetailModalType = 'attraction' | 'event' | 'product' | 'accommodation';
 
@@ -10,6 +11,7 @@ export interface DetailModalItem {
   type: DetailModalType;
   name: string;
   image?: string;
+  images?: string[];
   description?: string;
   fullDescription?: string;
   category?: string;
@@ -24,6 +26,7 @@ export interface DetailModalItem {
   video?: string;
   video_url?: string;
   virtual_tour_video?: string;
+  virtual_tour_url?: string | null;
   virtual_tour_scenes?: any[];
   latitude?: number | string;
   lat?: number | string;
@@ -57,7 +60,21 @@ function isPastEvent(dateStr?: string): boolean {
 export function DetailModal({ item, onClose }: DetailModalProps) {
   const [isVirtualTourOpen, setIsVirtualTourOpen] = useState(false);
 
+  useEffect(() => {
+    if (!item) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [item, onClose]);
+
   if (!item) return null;
+
+  const carouselImages = uniqueImageUrls(
+    (item.images && item.images.length > 0 ? item.images : (item.image ? [item.image] : []))
+      .filter(Boolean)
+  );
 
   return (
     <div
@@ -69,18 +86,21 @@ export function DetailModal({ item, onClose }: DetailModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Image Header ── */}
-        <div className="relative">
-          {item.image ? (
-            <img
-              src={item.image}
+        <div className="relative h-80 sm:h-96 max-h-[60vh] bg-white overflow-hidden flex-shrink-0 rounded-t-2xl">
+          {carouselImages.length > 0 ? (
+            <AutoSwipeCarousel
+              key={item.id}
+              images={carouselImages}
               alt={item.name}
-              className="w-full h-72 object-cover"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = 'none';
-              }}
+              presentation="modal"
+              className="w-full h-full"
+              imageClassName="w-full h-full"
+              intervalMs={3500}
+              showDots={true}
+              showArrows={true}
             />
           ) : (
-            <div className="w-full h-72 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+            <div className="w-full h-full min-h-56 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
               <Package className="h-20 w-20 text-primary/30" />
             </div>
           )}
@@ -89,6 +109,12 @@ export function DetailModal({ item, onClose }: DetailModalProps) {
           {item.type === 'event' && isPastEvent(item.date) && (
             <div className="absolute top-3 left-3 bg-gray-800 text-white px-3 py-1 rounded-full text-xs font-medium">
               Past Event
+            </div>
+          )}
+
+          {item.category && (
+            <div className="absolute top-4 left-4 bg-pink-500 text-white text-xs font-semibold px-3.5 py-1 rounded-full shadow-md z-10 uppercase">
+              {item.category}
             </div>
           )}
 
@@ -101,8 +127,9 @@ export function DetailModal({ item, onClose }: DetailModalProps) {
 
           {/* Close button */}
           <button
+            type="button"
             onClick={onClose}
-            className="absolute top-3 right-3 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
+            className="absolute top-3 right-3 z-50 p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors cursor-pointer pointer-events-auto"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -121,6 +148,32 @@ export function DetailModal({ item, onClose }: DetailModalProps) {
               </span>
             )}
           </div>
+
+          {item.type === 'attraction' && (
+            <>
+              <div className="flex items-center justify-between bg-gray-50 p-3 rounded-2xl border border-gray-100">
+                <div className="flex items-center gap-2 text-xs font-bold text-gray-800 min-w-0">
+                  <MapPin className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                  <span className="truncate">{item.location || 'Mansalay, Oriental Mindoro'}</span>
+                </div>
+                <button
+                  onClick={() => alert(`Navigating to ${item.location || 'Mansalay, Oriental Mindoro'}`)}
+                  className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full text-xs font-bold transition-colors flex items-center gap-1 flex-shrink-0"
+                >
+                  <Navigation className="h-3 w-3" />
+                  <span>Directions</span>
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {[item.category || 'Culture', 'History', 'Heritage'].map((tag, index) => (
+                  <span key={`${tag}-${index}`} className="inline-flex items-center gap-1 bg-pink-50 text-pink-500 border border-pink-100/80 px-3 py-1 rounded-full text-xs font-medium">
+                    <Tag className="h-3 w-3" />
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
 
           {/* ── ATTRACTION info ── */}
           {item.type === 'attraction' && (
@@ -293,37 +346,42 @@ export function DetailModal({ item, onClose }: DetailModalProps) {
                 return url && !url.includes(PLACEHOLDER);
               });
             const hasVirtualTour =
-              !!(item.video || item.video_url || item.virtual_tour_video) ||
+              !!(item.video || item.video_url || item.virtual_tour_video || item.virtual_tour_url) ||
               hasRealScenes;
-            return hasVirtualTour ? (
-              <div className="bg-pink-50/50 dark:bg-slate-800/60 p-4 rounded-2xl border border-pink-100 dark:border-slate-700/60 text-center space-y-2.5 my-3">
-                <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-pink-600 dark:text-pink-400">
-                  <Play className="h-4 w-4 fill-pink-500 text-pink-500" />
-                  <span>Virtual Tour Available</span>
+            return (
+              <div className="bg-gradient-to-br from-indigo-50/70 via-white to-pink-50/40 border border-indigo-100 rounded-2xl p-4 sm:p-5 my-2 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-extrabold text-gray-900 text-sm">
+                    <Camera className="h-4 w-4 text-indigo-600" />
+                    <span>{hasVirtualTour ? 'Virtual Tour Available' : 'Virtual Tour'}</span>
+                  </div>
+                  {!hasVirtualTour && (
+                    <span className="text-[10px] font-bold bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                      Not Available
+                    </span>
+                  )}
                 </div>
-                <button
-                  onClick={() => setIsVirtualTourOpen(true)}
-                  className="w-full py-3.5 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 active:scale-95 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider shadow-lg shadow-pink-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Play className="h-4 w-4 fill-white" />
-                  <span>Virtual Tour</span>
-                </button>
-              </div>
-            ) : (
-              <div className="bg-gray-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-dashed border-gray-200 dark:border-slate-700/40 text-center space-y-2 my-3 opacity-70">
-                <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-gray-400 dark:text-slate-500">
-                  <Play className="h-4 w-4 text-gray-300" />
-                  <span>Virtual Tour</span>
-                </div>
-                <p className="text-[11px] text-gray-400 dark:text-slate-500 font-medium">No virtual tour has been posted yet</p>
-                <button
-                  disabled
-                  className="w-full py-3 bg-gray-100 dark:bg-slate-700/50 text-gray-400 dark:text-slate-500 border border-gray-200 dark:border-slate-600 font-extrabold rounded-2xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-not-allowed select-none"
-                  title="No virtual tour has been posted for this listing"
-                >
-                  <Play className="h-4 w-4 text-gray-300" />
-                  <span>Unavailable</span>
-                </button>
+                {hasVirtualTour ? (
+                  <button
+                    onClick={() => setIsVirtualTourOpen(true)}
+                    className="w-full py-2.5 bg-pink-500 hover:bg-pink-600 active:bg-pink-700 text-white font-bold rounded-xl text-xs shadow-md shadow-pink-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Play className="h-3.5 w-3.5 fill-white" />
+                    <span>Open Fullscreen Virtual Tour</span>
+                  </button>
+                ) : (
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] text-center text-gray-400 font-medium">No virtual tour posted for this event yet</p>
+                    <button
+                      disabled
+                      className="w-full py-2.5 bg-gray-100 text-gray-400 border border-dashed border-gray-200 font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-not-allowed select-none opacity-60"
+                      title="No virtual tour has been set up for this event"
+                    >
+                      <Play className="h-3.5 w-3.5 text-gray-300" />
+                      <span>Virtual Tour — Unavailable</span>
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -415,7 +473,7 @@ export function DetailModal({ item, onClose }: DetailModalProps) {
           attractionName={item.name}
           category={item.category || 'Virtual Tour'}
           mainImage={item.image}
-          videoUrl={item.video || (item as any).video_url || (item as any).virtual_tour_video}
+          videoUrl={item.video || (item as any).video_url || (item as any).virtual_tour_video || item.virtual_tour_url || undefined}
           phone={item.contact_number || item.phone}
           facebook={item.facebook_link || item.facebook}
           instagram={item.instagram_link || item.instagram}

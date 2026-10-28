@@ -59,14 +59,9 @@ export function ResortProfileSetup() {
 
     const nextFiles: File[] = [];
     let invalidType = 0;
-    let invalidSize = 0;
     Array.from(files).forEach((file) => {
       if (!file.type.startsWith('image/')) {
         invalidType += 1;
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        invalidSize += 1;
         return;
       }
       nextFiles.push(file);
@@ -75,10 +70,6 @@ export function ResortProfileSetup() {
     if (invalidType > 0) {
       toast.error('Only image files are allowed');
     }
-    if (invalidSize > 0) {
-      toast.error('Some images exceed the 5MB limit');
-    }
-
     const combined = [...images, ...nextFiles].slice(0, 10);
     setImages(combined);
     setImagePreviews(combined.map((file) => URL.createObjectURL(file)));
@@ -255,7 +246,7 @@ export function ResortProfileSetup() {
                 <Upload className="h-4 w-4" />
                 Add Photos
               </label>
-              <p className="text-xs text-muted-foreground mt-2">JPEG, PNG, WebP up to 5MB each.</p>
+              <p className="text-xs text-muted-foreground mt-2">JPEG, PNG, WebP, AVIF, HEIC, or HEIF originals (configured server limit).</p>
             </div>
             {imagePreviews.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

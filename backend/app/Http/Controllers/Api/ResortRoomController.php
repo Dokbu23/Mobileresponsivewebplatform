@@ -17,7 +17,8 @@ class ResortRoomController extends Controller
         $user = $request->user();
         $rooms = ResortRoom::where('user_id', $user->id)
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->get()
+            ->map(fn ($room) => $this->sanitizeRoomImagePayload($room));
 
         return response()->json($rooms);
     }
@@ -30,7 +31,8 @@ class ResortRoomController extends Controller
         $rooms = ResortRoom::where('user_id', $userId)
             ->where('is_available', true)
             ->orderBy('price_per_night', 'asc')
-            ->get();
+            ->get()
+            ->map(fn ($room) => $this->sanitizeRoomImagePayload($room));
 
         return response()->json($rooms);
     }
@@ -70,9 +72,6 @@ class ResortRoomController extends Controller
             $image = $request->file('image');
             $path = $image->store('resort-rooms', 'public');
             $singlePath = '/storage/' . $path;
-            if (!in_array($singlePath, $imagePaths)) {
-                array_unshift($imagePaths, $singlePath);
-            }
             $data['image'] = $singlePath;
         } elseif (!empty($imagePaths)) {
             $data['image'] = $imagePaths[0];
@@ -89,7 +88,7 @@ class ResortRoomController extends Controller
 
         $room = ResortRoom::create($data);
 
-        return response()->json($room, 201);
+        return response()->json($this->sanitizeRoomImagePayload($room), 201);
     }
 
     /**
@@ -168,9 +167,6 @@ class ResortRoomController extends Controller
         if (!$hasNewFileUpload && $request->filled('image') && is_string($request->input('image'))) {
             $cleanImg = preg_replace('#^https?://[^/]+#', '', $request->input('image'));
             $data['image'] = $cleanImg;
-            if (!in_array($cleanImg, $imagePaths)) {
-                array_unshift($imagePaths, $cleanImg);
-            }
         }
 
         if (!empty($imagePaths)) {
@@ -183,7 +179,7 @@ class ResortRoomController extends Controller
 
         $room->update($data);
 
-        return response()->json($room);
+        return response()->json($this->sanitizeRoomImagePayload($room));
     }
 
     /**
@@ -214,5 +210,47 @@ class ResortRoomController extends Controller
         $room->delete();
 
         return response()->json(['message' => 'Room deleted']);
+    }
+
+    private function sanitizeRoomImagePayload(ResortRoom $room): array
+    {
+        $payload = $room->toArray();
+        $cover = $payload['image'] ?? null;
+        $gallery = $payload['images'] ?? [];
+
+        if (is_string($gallery)) {
+            $decoded = json_decode($gallery, true);
+            $gallery = is_array($decoded) ? $decoded : [];
+        }
+
+        $uniqueImages = [];
+        $seenBasenames = [];
+        $galleryImages = is_array($gallery) ? $gallery : [];
+        $candidates = count($galleryImages) > 0 ? $galleryImages : [$cover];
+        foreach ($candidates as $image) {
+            if (!is_string($image) || trim($image) === '') {
+                continue;
+            }
+
+            $image = trim($image);
+            $path = parse_url($image, PHP_URL_PATH);
+            $path = is_string($path) ? $path : $image;
+            $basename = strtolower(urldecode(pathinfo($path, PATHINFO_BASENAME)));
+            if ($basename === '' || isset($seenBasenames[$basename])) {
+                continue;
+            }
+
+            $seenBasenames[$basename] = true;
+            $uniqueImages[] = $image;
+        }
+
+        if (!$uniqueImages && is_string($cover) && trim($cover) !== '') {
+            $uniqueImages[] = trim($cover);
+        }
+
+        $payload['image'] = $uniqueImages[0] ?? $cover;
+        $payload['images'] = array_values($uniqueImages);
+
+        return $payload;
     }
 }

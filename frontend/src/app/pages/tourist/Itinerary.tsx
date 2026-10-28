@@ -86,7 +86,7 @@ export function Itinerary() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const targetId = searchParams.get('id') || searchParams.get('itinerary');
-  const { currentUser, userType } = useApp();
+  const { currentUser, userType, canPin } = useApp();
 
   const isAdmin =
     currentUser?.role === 'admin' ||
@@ -184,15 +184,6 @@ export function Itinerary() {
         console.warn('API fetch notice:', err);
       }
 
-      let deletedIds = new Set<string>();
-      let archivedIds = new Set<string>();
-      try {
-        const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
-        if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
-        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
-        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
-      } catch {}
-
       // Authoritative database API items only - never merge stale local storage or mock items
       const combinedRaw = apiItems.filter((item: any) => {
         const sId = String(item.id);
@@ -200,11 +191,6 @@ export function Itinerary() {
         
         // Strict publication rules: Draft, pending, rejected, and archived records must remain hidden publicly
         if (status === 'draft' || status === 'rejected' || status === 'archived' || status === 'pending') {
-          return false;
-        }
-
-        // Exclude if marked deleted or archived
-        if (deletedIds.has(sId) || archivedIds.has(sId)) {
           return false;
         }
 
@@ -901,6 +887,7 @@ export function Itinerary() {
                       return (
                         <button
                           type="button"
+                          disabled={!canPin}
                           onClick={(e) => handleToggleOfficialTripPin(trip, e)}
                           className={`absolute top-3 right-3 w-8 h-8 rounded-full shadow-sm flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 cursor-pointer z-10 ${
                             isSaved
@@ -975,6 +962,7 @@ export function Itinerary() {
                         return (
                           <button
                             type="button"
+                            disabled={!canPin}
                             onClick={(e) => handleToggleOfficialTripPin(trip, e)}
                             className={`p-2.5 rounded-full border transition-colors flex-shrink-0 cursor-pointer ${
                               isSaved
@@ -1244,6 +1232,7 @@ export function Itinerary() {
                       )}
                       {!isAdmin && (
                         <button
+                          disabled={!canPin}
                           onClick={(e) => handleSaveOfficialToMyTrips(selectedItinerary, e)}
                           className="px-3.5 py-1.5 bg-pink-500 hover:bg-pink-600 text-white text-xs font-bold rounded-full shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
                         >
@@ -1329,6 +1318,7 @@ export function Itinerary() {
                 return (
                   <button
                     type="button"
+                    disabled={!canPin}
                     onClick={(e) => handleToggleOfficialTripPin(selectedItinerary, e)}
                     className={`px-4 py-2 border rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer ${
                       isSaved

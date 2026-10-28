@@ -9,7 +9,7 @@ class Event extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id','name','location','category','image','images','date','time','capacity','description','full_description','likes','status','previous_status','archived_at'];
+    protected $fillable = ['user_id','name','location','category','image','images','video','date','time','capacity','description','full_description','virtual_tour_url','likes','status','previous_status','archived_at'];
 
     protected $casts = [
         'images' => 'array',

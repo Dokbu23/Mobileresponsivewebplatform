@@ -3,7 +3,7 @@ import { Store, Plus, Edit, Trash2, Package, TrendingUp, BarChart3, ChevronDown,
 import { toast } from 'sonner';
 import { Link } from 'react-router';
 import { useApp } from '../../context/AppContext';
-import { getAuthToken, getJSON, getPublicJSON, postJSON, putJSON, patchJSON, deleteJSON, API_BASE, getStorageUrl } from '../../lib/api';
+import { getAuthToken, getJSON, getPublicJSON, postJSON, putJSON, patchJSON, deleteJSON, API_BASE, getStorageUrl, sendMediaFormData } from '../../lib/api';
 import { showPaymentMethodSuccess, showProductSuccess, showStatusUpdateSuccess } from '../../lib/sweetAlert';
 
 import { ResortVirtualTourManager } from '../../components/ResortVirtualTourManager';
@@ -91,7 +91,7 @@ export function EnterpriseProfile() {
 
   // Product variations (Shopee-style) — optional. Each row has name/value/price/stock.
   const [variations, setVariations] = useState<ProductVariationForm[]>([]);
-  
+
   // Payment details state
   const [paymentDetails, setPaymentDetails] = useState<any[]>([]);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -187,10 +187,8 @@ export function EnterpriseProfile() {
       }
       formData.append('_method', 'PUT');
 
-      const res = await fetch(`${API_BASE}/api/enterprise-profile`, {
-        method: 'POST',
+      const res = await sendMediaFormData(`${API_BASE}/api/enterprise-profile`, formData, {
         headers: { Authorization: `Bearer ${token}` },
-        body: formData,
       });
 
       if (!res.ok) {
@@ -332,8 +330,8 @@ export function EnterpriseProfile() {
   ];
 
   const handleAddProduct = async () => {
-    const finalCategory = newProduct.category === 'Other' 
-      ? (customCategory.trim() || 'Other') 
+    const finalCategory = newProduct.category === 'Other'
+      ? (customCategory.trim() || 'Other')
       : newProduct.category;
 
     if (!newProduct.name || !newProduct.price || !newProduct.stock || !finalCategory) {
@@ -393,7 +391,7 @@ export function EnterpriseProfile() {
       const url = editingProductId ? `${API_BASE}/api/products/${editingProductId}` : `${API_BASE}/api/products`;
       const token = getAuthToken();
       const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-      const res = await fetch(url, { method: 'POST', headers, body: form });
+      const res = await sendMediaFormData(url, form, { headers });
       const contentType = res.headers.get('content-type');
       let errorMsg = `HTTP ${res.status}`;
 
@@ -413,7 +411,7 @@ export function EnterpriseProfile() {
       }
 
       await showProductSuccess(editingProductId ? 'updated' : 'added', newProduct.name);
-      
+
       // Refresh product list to show updated images
       await fetchData();
 
@@ -536,7 +534,7 @@ export function EnterpriseProfile() {
     try {
       const updatedPayments = [...paymentDetails, { ...newPayment }];
       await patchJSON('/payment-details', { payment_details: updatedPayments });
-      
+
       setPaymentDetails(updatedPayments);
       setNewPayment({ type: 'gcash', name: '', account_number: '', account_name: '' });
       setShowPaymentForm(false);
@@ -581,7 +579,7 @@ export function EnterpriseProfile() {
   useEffect(() => {
     fetchPaymentDetails();
     fetchReceipts();
-    
+
     // Test authentication
     testAuth();
   }, []);
@@ -1264,8 +1262,8 @@ export function EnterpriseProfile() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={`px-3 py-1 rounded-full text-sm ${
-                            receipt.status === 'verified' 
-                              ? 'bg-green-100 text-green-700' 
+                            receipt.status === 'verified'
+                              ? 'bg-green-100 text-green-700'
                               : receipt.status === 'rejected'
                               ? 'bg-red-100 text-red-700'
                               : 'bg-yellow-100 text-yellow-700'
@@ -1274,10 +1272,10 @@ export function EnterpriseProfile() {
                           </span>
                         </div>
                       </div>
-                      
+
                       {receipt.receipt_image && (
                         <div className="mb-4">
-                          <img 
+                          <img
                             src={`${API_BASE}${receipt.receipt_image}`}
                             alt="Payment Receipt"
                             className="max-w-xs h-auto border rounded"

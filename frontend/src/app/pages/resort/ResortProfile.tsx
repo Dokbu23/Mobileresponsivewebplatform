@@ -171,7 +171,7 @@ export function ResortProfile() {
       description: room.description || '',
       is_available: room.is_available !== false,
     });
-    
+
     let existingImgs: string[] = [];
     if (Array.isArray(room.images) && room.images.length > 0) {
       existingImgs = room.images.map((img: string) => String(img).startsWith('http') ? img : `${API_BASE}${img}`);
@@ -611,10 +611,6 @@ export function ResortProfile() {
                           toast.error('Only image files are allowed');
                           return;
                         }
-                        if (file && file.size > 5 * 1024 * 1024) {
-                          toast.error('Image must not exceed 5MB');
-                          return;
-                        }
                         setAttractionImageFile(file);
                         setAttractionImagePreview(file ? URL.createObjectURL(file) : null);
                     }}
@@ -853,17 +849,13 @@ export function ResortProfile() {
                         onChange={e => {
                           const files = Array.from(e.target.files ?? []);
                           if (files.length === 0) return;
-                          
+
                           const validFiles: File[] = [];
                           const validPreviews: string[] = [];
 
                           files.forEach(f => {
-                            if (f.size > 5 * 1024 * 1024) {
-                              toast.error(`"${f.name}" is over 5MB`);
-                            } else {
-                              validFiles.push(f);
-                              validPreviews.push(URL.createObjectURL(f));
-                            }
+                            validFiles.push(f);
+                            validPreviews.push(URL.createObjectURL(f));
                           });
 
                           setRoomImageFiles(prev => [...prev, ...validFiles]);

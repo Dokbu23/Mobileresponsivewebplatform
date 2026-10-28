@@ -185,6 +185,10 @@ class EnterprisePostController extends Controller
             'post_id'       => $post->id,
         ];
 
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'shop_name')) {
+            $prodData['shop_name'] = $user->store_name ?: ($user->resort_name ?: $user->name);
+        }
+
         if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'images')) {
             $prodData['images'] = !empty($post->image) ? [$post->image] : [];
         }
@@ -213,6 +217,9 @@ class EnterprisePostController extends Controller
                 'stock'       => $numericStock,
                 'post_id'     => $post->id,
             ];
+            if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'shop_name')) {
+                $updateData['shop_name'] = $user->store_name ?: ($user->resort_name ?: $user->name);
+            }
             if (!empty($category)) {
                 $updateData['category'] = $category;
             }

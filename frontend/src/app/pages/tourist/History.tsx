@@ -74,16 +74,8 @@ export function History() {
       const data = await getPublicJSON('/histories');
       const raw = Array.isArray(data) ? data : [];
 
-      let deletedIds = new Set<string>();
-      let archivedIds = new Set<string>();
-      try {
-        const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
-        if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
-        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
-        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
-      } catch {}
-
-      const allRaw = [...raw].filter((i) => !deletedIds.has(String(i.id)) && !archivedIds.has(String(i.id)));
+      // The API is authoritative for publication and archive status.
+      const allRaw = raw;
 
       const mapped: HistoryItem[] = allRaw.map((item: any) => {
         let parsedImages: string[] = [];

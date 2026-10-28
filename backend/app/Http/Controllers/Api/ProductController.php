@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class ProductController extends Controller
 {
@@ -27,7 +28,10 @@ class ProductController extends Controller
                 $productPosts = \App\Models\EnterprisePost::where(function($q) {
                     $q->where('type', 'product')
                       ->orWhereNotNull('product_name');
-                })->where('status', 'approved')->whereNotNull('user_id')->orderBy('created_at', 'asc')->get();
+                })->whereIn('status', ['approved', 'published'])
+                  ->whereNotNull('user_id')
+                  ->orderBy('created_at', 'asc')
+                  ->get();
                 foreach ($productPosts as $pPost) {
                     \App\Http\Controllers\Api\EnterprisePostController::syncProductFromPost($pPost);
                 }
@@ -66,7 +70,20 @@ class ProductController extends Controller
                 });
             }
 
-            return response()->json($query->get());
+            $products = $query->get();
+            $products->each(function ($product) {
+                $this->normalizeImages($product);
+                $product->setAttribute(
+                    'shop_name',
+                    $product->shop_name
+                        ?: ($product->enterprise_store
+                            ?: ($product->store_name
+                                ?: ($product->owner?->store_name
+                                    ?: ($product->owner?->resort_name ?: $product->owner?->name))))
+                );
+            });
+
+            return response()->json($products);
         } catch (\Throwable $e) {
             \Log::error('Product index error: ' . $e->getMessage());
             return response()->json([], 200);
@@ -88,6 +105,8 @@ class ProductController extends Controller
             'image'       => 'nullable',
             'images'      => 'nullable',
             'category'    => 'nullable|string|max:255',
+            'shop_name'   => 'nullable|string|max:255',
+            'enterprise_store' => 'nullable|string|max:255',
             'user_id'     => 'nullable|integer',
         ]);
 
@@ -130,6 +149,13 @@ class ProductController extends Controller
             }
         }
 
+        if (!$request->hasFile('images') && is_array($request->input('images'))) {
+            $storedImages = array_merge($storedImages, array_map(
+                fn ($image) => is_string($image) ? preg_replace('#^https?://[^/]+#', '', $image) : $image,
+                $request->input('images')
+            ));
+        }
+
         // Merge any existing or string images provided in request
         if ($request->has('existing_images')) {
             $existing = $request->input('existing_images');
@@ -160,10 +186,17 @@ class ProductController extends Controller
                 $data['image'] = $storedImages[0];
             }
         }
+        \App\Services\MediaUploadService::assertOwnedImageReferences(
+            array_merge([$data['image'] ?? null], $storedImages),
+            $user ? (int) $user->id : null
+        );
 
         // Enterprise owner creates a registered listing; admin creates a static listing
         $data['user_id']       = ($user && $user->role === 'enterprise') ? $user->id : ($data['user_id'] ?? null);
         $data['is_registered'] = ($user && $user->role === 'enterprise');
+        if (Schema::hasColumn('products', 'shop_name')) {
+            $data['shop_name'] = trim((string) ($request->input('shop_name') ?: $request->input('enterprise_store') ?: ($user?->store_name ?: '')));
+        }
 
         $product = \App\Models\Product::create($data);
 
@@ -194,7 +227,10 @@ class ProductController extends Controller
             }
         }
 
-        return response()->json($product->load('variations'), 201);
+        $product = $product->load('variations');
+        $this->normalizeImages($product);
+
+        return response()->json($product, 201);
     }
 
     /**
@@ -206,6 +242,8 @@ class ProductController extends Controller
     public function show($id)
     {
         $item = \App\Models\Product::with('variations')->findOrFail($id);
+        $this->normalizeImages($item);
+
         return response()->json($item);
     }
 
@@ -227,7 +265,13 @@ class ProductController extends Controller
             'image' => 'sometimes|nullable',
             'images' => 'sometimes|nullable',
             'category' => 'sometimes|nullable|string|max:255',
+            'shop_name' => 'sometimes|nullable|string|max:255',
+            'enterprise_store' => 'sometimes|nullable|string|max:255',
         ]);
+
+        if (Schema::hasColumn('products', 'shop_name') && ($request->has('shop_name') || $request->has('enterprise_store'))) {
+            $data['shop_name'] = trim((string) ($request->input('shop_name') ?: $request->input('enterprise_store') ?: ''));
+        }
 
         $storedImages = [];
         $hasNewFileUpload = false;
@@ -259,6 +303,14 @@ class ProductController extends Controller
             if (empty($data['image']) && !empty($storedImages)) {
                 $data['image'] = $storedImages[0];
             }
+        }
+
+        if (!$request->hasFile('images') && is_array($request->input('images'))) {
+            $storedImages = array_merge($storedImages, array_map(
+                fn ($image) => is_string($image) ? preg_replace('#^https?://[^/]+#', '', $image) : $image,
+                $request->input('images')
+            ));
+            $hasNewFileUpload = !empty($request->input('images'));
         }
 
         // 3. Handle existing retained images
@@ -309,6 +361,14 @@ class ProductController extends Controller
         }
 
         $product = \App\Models\Product::findOrFail($id);
+        \App\Services\MediaUploadService::assertOwnedImageReferences(
+            array_merge([$data['image'] ?? null], $storedImages),
+            $request->user() ? (int) $request->user()->id : null,
+            array_merge(
+                [$product->image],
+                is_array($product->images) ? $product->images : []
+            )
+        );
         $product->update($data);
 
         // Handle optional variations payload (delete & re-create)
@@ -346,7 +406,51 @@ class ProductController extends Controller
 
         \Log::info('Product updated', ['id' => $id, 'image' => $product->image]);
 
-        return response()->json($product->load('variations'));
+        $product = $product->load('variations');
+        $this->normalizeImages($product);
+
+        return response()->json($product);
+    }
+
+    private function normalizeImages(\App\Models\Product $product): void
+    {
+        $cover = is_string($product->image) ? $product->image : '';
+        $images = $product->images;
+        if (is_string($images)) {
+            $images = json_decode($images, true);
+        }
+        $images = is_array($images) ? $images : [];
+        $images = array_values(array_filter($images, fn ($image) => is_string($image) && trim($image) !== ''));
+        if (empty($images) && is_string($product->image) && trim($product->image) !== '') {
+            $images[] = $product->image;
+        }
+        $product->setAttribute('images', $this->filterGalleryAgainstCover($images, $cover));
+    }
+
+    private function filterGalleryAgainstCover(array $images, string $cover): array
+    {
+        $coverFilename = $this->imageFilename($cover);
+        $seen = [];
+
+        return array_values(array_filter($images, function ($image) use ($coverFilename, &$seen) {
+            $filename = $this->imageFilename($image);
+            if ($filename === '' || $filename === $coverFilename || isset($seen[$filename])) {
+                return false;
+            }
+            $seen[$filename] = true;
+            return true;
+        }));
+    }
+
+    private function imageFilename(?string $image): string
+    {
+        if (!is_string($image) || trim($image) === '') {
+            return '';
+        }
+
+        $path = parse_url(trim($image), PHP_URL_PATH);
+        $path = is_string($path) ? $path : trim($image);
+        return strtolower(urldecode(basename(str_replace('\\', '/', $path))));
     }
 
     /**

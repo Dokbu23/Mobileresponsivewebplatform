@@ -20,7 +20,8 @@ class HistoryController extends Controller
             if ($user && $user->role === 'admin') {
                 $query = HistoryPost::with('creator:id,name,role');
             } else {
-                $query = HistoryPost::where('status', 'published');
+                // Both statuses represent content approved for public display.
+                $query = HistoryPost::whereIn('status', ['approved', 'published']);
             }
 
             if ($request->filled('search')) {
@@ -111,6 +112,10 @@ class HistoryController extends Controller
         } elseif ($request->filled('images') && is_array($request->input('images'))) {
             $data['images'] = $request->input('images');
         }
+        \App\Services\MediaUploadService::assertOwnedImageReferences(
+            array_merge([$data['image'] ?? null], $data['images'] ?? []),
+            $request->user() ? (int) $request->user()->id : null
+        );
 
         // Video file upload
         if ($request->hasFile('video')) {
@@ -122,6 +127,10 @@ class HistoryController extends Controller
                 return response()->json(['error' => 'Failed to store video: ' . $e->getMessage()], 400);
             }
         }
+        \App\Services\MediaUploadService::assertOwnedVideoReferences(
+            [$data['video'] ?? null],
+            $request->user() ? (int) $request->user()->id : null
+        );
 
         $item = HistoryPost::create(array_merge($data, [
             'user_id' => $request->user() ? $request->user()->id : null,
@@ -200,12 +209,25 @@ class HistoryController extends Controller
         } elseif ($request->filled('images') && is_array($request->input('images'))) {
             $data['images'] = $request->input('images');
         }
+        \App\Services\MediaUploadService::assertOwnedImageReferences(
+            array_merge([$data['image'] ?? null], $data['images'] ?? []),
+            $request->user() ? (int) $request->user()->id : null,
+            array_merge(
+                [$item->image],
+                is_array($item->images) ? $item->images : []
+            )
+        );
 
         if ($request->hasFile('video')) {
             $file = $request->file('video');
             $path = $file->store('histories/videos', 'public');
             $data['video'] = '/storage/' . $path;
         }
+        \App\Services\MediaUploadService::assertOwnedVideoReferences(
+            [$data['video'] ?? null],
+            $request->user() ? (int) $request->user()->id : null,
+            [$item->video]
+        );
 
         $item->update($data);
 

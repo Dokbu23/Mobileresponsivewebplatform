@@ -12,7 +12,7 @@ import { getPublicJSON, getJSON, API_BASE, decodeHtml, formatImageUrl, cleanItin
 
 export function Wishlist() {
   const navigate = useNavigate();
-  const { wishlist, removeFromWishlist, isInWishlist, userType, isAdmin, currentUser, wishlistCounts, getWishlistCount } = useApp();
+  const { wishlist, removeFromWishlist, isInWishlist, userType, isAdmin, currentUser, wishlistCounts, getWishlistCount, canPin } = useApp();
   const [stats, setStats] = useState<any>(null);
   const [activeCategoryTab, setActiveCategoryTab] = useState<'all' | 'attraction' | 'accommodation' | 'product' | 'event'>('all');
   
@@ -39,24 +39,9 @@ export function Wishlist() {
         getPublicJSON('/events').catch(() => []),
       ]);
 
-      let deletedIds = new Set<string>();
-      let archivedIds = new Set<string>();
-      try {
-        const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
-        if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
-        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
-        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
-      } catch {}
-
       const sanitizeSection = (apiList: any) => {
         const raw = Array.isArray(apiList) ? apiList : (apiList && typeof apiList === 'object' && 'data' in apiList ? (apiList as any).data : []);
         return (Array.isArray(raw) ? raw : [])
-          .filter((i: any) => {
-            const strId = String(i.id);
-            const postId = i.post_id ? String(i.post_id) : '';
-            return !deletedIds.has(strId) && !archivedIds.has(strId) &&
-                   (!postId || (!deletedIds.has(postId) && !archivedIds.has(postId)));
-          })
           .map((i: any) => ({
             ...i,
             name: i.name ? cleanItineraryTitle(i.name) : i.name,
@@ -1204,6 +1189,7 @@ export function Wishlist() {
                             {item.type}
                           </span>
                           <button
+                            disabled={!canPin}
                             onClick={() => removeFromWishlist(item.id, item.type)}
                             className="absolute top-3 right-3 w-8 h-8 bg-white/95 backdrop-blur-xs rounded-full flex items-center justify-center shadow-2xs border border-gray-200 hover:bg-rose-50 transition-colors text-gray-600 hover:text-rose-600 cursor-pointer"
                             title="Remove from saved places"

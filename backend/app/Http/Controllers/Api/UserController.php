@@ -117,7 +117,7 @@ class UserController extends Controller
         $user = $request->user();
 
         $request->validate([
-            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:8192',
+            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif,webp,avif,heic,heif|max:' . config('uploads.max_image_size_kb'),
         ]);
 
         if ($request->hasFile('avatar')) {

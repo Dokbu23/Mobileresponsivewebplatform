@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Hotel, Store, Check, X, Clock, Package, Search, Filter, Plus, Pencil, Trash2, MapPin } from 'lucide-react';
-import { getJSON, patchJSON, deleteJSON, getLegacyJSON, API_BASE } from '../../lib/api';
+import { getJSON, patchJSON, deleteJSON, getLegacyJSON, API_BASE, sendMediaFormData } from '../../lib/api';
 import { showSuccessAlert, showConfirmDialog } from '../../lib/sweetAlert';
 
 interface Product {
@@ -205,18 +205,14 @@ export function ManageListings() {
 
       if (editingAttraction) {
         formData.append('_method', 'PUT');
-        const res = await fetch(`${API_BASE}/api/attractions/${editingAttraction.id}`, {
-          method: 'POST',
+        const res = await sendMediaFormData(`${API_BASE}/api/attractions/${editingAttraction.id}`, formData, {
           headers: { Authorization: `Bearer ${token}` },
-          body: formData,
         });
         if (!res.ok) throw new Error('Failed to update attraction');
         await showSuccessAlert('Attraction Updated!', `${attractionForm.name} has been updated.`);
       } else {
-        const res = await fetch(`${API_BASE}/api/attractions`, {
-          method: 'POST',
+        const res = await sendMediaFormData(`${API_BASE}/api/attractions`, formData, {
           headers: { Authorization: `Bearer ${token}` },
-          body: formData,
         });
         if (!res.ok) throw new Error('Failed to create attraction');
         await showSuccessAlert('Attraction Added!', `${attractionForm.name} has been added.`);
@@ -286,17 +282,13 @@ export function ManageListings() {
 
       if (editingProduct) {
         formData.append('_method', 'PUT');
-        await fetch(`${API_BASE}/api/admin/products/${editingProduct.id}`, {
-          method: 'POST',
+        await sendMediaFormData(`${API_BASE}/api/admin/products/${editingProduct.id}`, formData, {
           headers: { Authorization: `Bearer ${token}` },
-          body: formData,
         }).then(r => { if (!r.ok) throw new Error('Failed to update product'); });
         await showSuccessAlert('Product Updated!', `${productForm.name} has been updated.`);
       } else {
-        await fetch(`${API_BASE}/api/admin/products`, {
-          method: 'POST',
+        await sendMediaFormData(`${API_BASE}/api/admin/products`, formData, {
           headers: { Authorization: `Bearer ${token}` },
-          body: formData,
         }).then(r => { if (!r.ok) throw new Error('Failed to create product'); });
         await showSuccessAlert('Product Added!', `${productForm.name} has been added.`);
       }
@@ -361,17 +353,13 @@ export function ManageListings() {
 
       if (editingAccommodation) {
         formData.append('_method', 'PUT');
-        await fetch(`${API_BASE}/api/admin/accommodations/${editingAccommodation.id}`, {
-          method: 'POST',
+        await sendMediaFormData(`${API_BASE}/api/admin/accommodations/${editingAccommodation.id}`, formData, {
           headers: { Authorization: `Bearer ${token}` },
-          body: formData,
         }).then(r => { if (!r.ok) throw new Error('Failed to update accommodation'); });
         await showSuccessAlert('Accommodation Updated!', `${accommodationForm.name} has been updated.`);
       } else {
-        await fetch(`${API_BASE}/api/admin/accommodations`, {
-          method: 'POST',
+        await sendMediaFormData(`${API_BASE}/api/admin/accommodations`, formData, {
           headers: { Authorization: `Bearer ${token}` },
-          body: formData,
         }).then(r => { if (!r.ok) throw new Error('Failed to create accommodation'); });
         await showSuccessAlert('Accommodation Added!', `${accommodationForm.name} has been added.`);
       }
@@ -1103,7 +1091,7 @@ export function ManageListings() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  OR Upload Video File <span className="text-muted-foreground text-xs">(MP4, WebM up to 500MB - Optional)</span>
+                  OR Upload Video File <span className="text-muted-foreground text-xs">(MP4, WebM, MOV - configured server limit)</span>
                 </label>
                 <input
                   type="file"

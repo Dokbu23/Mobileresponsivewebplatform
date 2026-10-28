@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User, Mail, Phone, MapPin, Store, Hotel, Shield, Camera, Save, Lock, Eye, EyeOff, Loader2, Edit3, Facebook, Instagram, Twitter } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { getJSON, patchJSON, postJSON, API_BASE, getAuthToken, formatImageUrl } from '../lib/api';
+import { getJSON, patchJSON, postJSON, sendMediaFormData, API_BASE, getAuthToken, formatImageUrl } from '../lib/api';
 import { toast } from 'sonner';
 import { showSuccessAlert } from '../lib/sweetAlert';
 import Swal from 'sweetalert2';
@@ -146,13 +146,11 @@ export function Profile() {
       const formData = new FormData();
       formData.append('avatar', file);
 
-      const res = await fetch(`${API_BASE}/api/profile/avatar`, {
-        method: 'POST',
+      const res = await sendMediaFormData(`${API_BASE}/api/profile/avatar`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
         },
-        body: formData,
       });
 
       const data = await res.json();
@@ -214,10 +212,8 @@ export function Profile() {
         formData.append('avatar', avatarFile);
         formData.append('_method', 'PATCH');
 
-        const res = await fetch(`${API_BASE}/api/profile`, {
-          method: 'POST',
+        const res = await sendMediaFormData(`${API_BASE}/api/profile`, formData, {
           headers: { Authorization: `Bearer ${token}` },
-          body: formData,
         });
         if (!res.ok) throw new Error('Failed to update profile');
       } else {
@@ -922,7 +918,7 @@ export function Profile() {
                 </div>
               )}
 
-              <label 
+              <label
                 className={`absolute bottom-0 right-0 bg-primary text-white rounded-full p-1.5 cursor-pointer hover:bg-primary/90 transition-colors shadow z-20 ${
                   uploadingAvatar ? 'pointer-events-none opacity-50' : ''
                 }`}

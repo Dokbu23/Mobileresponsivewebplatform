@@ -114,6 +114,7 @@ interface AppContextType {
   isAdmin: boolean;
   setIsAdmin: (value: boolean) => void;
   userType: 'tourist' | 'admin' | 'resort' | 'enterprise' | 'pending' | null;
+  canPin: boolean;
   setUserType: (type: 'tourist' | 'admin' | 'resort' | 'enterprise' | 'pending' | null) => void;
   currentUser: CurrentUser | null;
   setCurrentUser: (user: CurrentUser | null) => void;
@@ -192,7 +193,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return null;
     }
   });
-  
+
   const [cart, setCart] = useState<CartItem[]>(() => readStoredCart(userType));
   const [orders, setOrders] = useState<Order[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -204,6 +205,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     return window.localStorage.getItem(IS_ADMIN_STORAGE_KEY) === 'true';
   });
+  const canPin = (currentUser?.role ?? userType) === 'tourist';
 
   // Clean up legacy unscoped wishlist key
   useEffect(() => {
@@ -230,7 +232,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (userType) {
       window.localStorage.setItem(USER_TYPE_STORAGE_KEY, userType);
-      
+
       // Clear cart when switching to business accounts (enterprise/resort)
       if (userType === 'enterprise' || userType === 'resort') {
         setCart([]);
@@ -345,7 +347,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (userType !== 'tourist') {
       return;
     }
-    
+
     setCart(prev => prev.filter(item => item.id !== productId));
   };
 
@@ -354,7 +356,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (userType !== 'tourist') {
       return;
     }
-    
+
     setCart(prev =>
       prev.map(item =>
         item.id === productId ? { ...item, quantity: Math.max(0, Math.min(quantity, item.stock)) } : item
@@ -439,6 +441,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const addToWishlist = (item: WishlistItem) => {
+    if (!canPin) return;
+
     setWishlist(prev => {
       const sId = String(item.id);
       const cleanId = sId.replace(/^(room-|acc-|resort-)/, '');
@@ -513,6 +517,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const removeFromWishlist = (id: string | number, type: string, title?: string) => {
+    if (!canPin) return;
 
     const sId = String(id);
     const cleanId = sId.replace(/^(room-|acc-|resort-)/, '');
@@ -623,6 +628,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setIsAdmin,
         userType,
         setUserType,
+        canPin,
         currentUser,
         setCurrentUser,
         wishlist,

@@ -20,6 +20,7 @@ class AccommodationController extends Controller
     {
         try {
             $user = $request->user();
+            $createdMediaPaths = [];
 
             $query = \App\Models\Accommodation::with('owner:id,name,email,phone,description,listing_status');
             // Public / non-admin: only show accommodations from admin OR approved & paid resort accounts (and not archived)
@@ -63,6 +64,10 @@ class AccommodationController extends Controller
                 $item->view_count = max($dbViews, $cachedViews);
                 $item->views = $item->view_count;
                 $item->type = 'static';
+                $item->setAttribute(
+                    'images',
+                    $this->filterGalleryAgainstCover($item->images ?? [], $item->image)
+                );
                 return $item;
             });
 
@@ -108,17 +113,17 @@ class AccommodationController extends Controller
                 if (!is_array($roomImages)) {
                     $roomImages = [];
                 }
-                if ($room->image && !in_array($room->image, $roomImages)) {
-                    array_unshift($roomImages, $room->image);
-                }
-
-                $cleanRoomImages = array_values(array_unique(array_filter($roomImages)));
+                $roomCover = $room->image ?: ($primaryOwnerImage ?: '');
+                $cleanRoomImages = $this->filterGalleryAgainstCover($roomImages, $roomCover);
                 $groupKey = $room->user_id . '_' . strtolower(trim($room->name));
 
                 if (isset($roomGroups[$groupKey])) {
                     // Merge images into existing room group to prevent duplicate cards
                     $existing = $roomGroups[$groupKey];
-                    $mergedImages = array_values(array_unique(array_filter(array_merge($existing['images'], $cleanRoomImages))));
+                    $mergedImages = $this->filterGalleryAgainstCover(
+                        array_merge($existing['images'], $cleanRoomImages),
+                        $existing['image'] ?? $roomCover
+                    );
                     $existing['images'] = $mergedImages;
                     if (empty($existing['image']) && count($mergedImages) > 0) {
                         $existing['image'] = $mergedImages[0];
@@ -163,8 +168,8 @@ class AccommodationController extends Controller
                     'full_description' => $room->description ?: ($owner ? ($owner->resort_description ?? '') : ''),
                     'price_per_night'  => (float) $room->price_per_night,
                     'price'            => (float) $room->price_per_night,
-                    'image'            => $room->image ?: ($primaryOwnerImage ?: (count($cleanRoomImages) > 0 ? $cleanRoomImages[0] : '')),
-                    'images'           => count($cleanRoomImages) > 0 ? $cleanRoomImages : ($room->image ? [$room->image] : $ownerImages),
+                    'image'            => $roomCover ?: (count($cleanRoomImages) > 0 ? $cleanRoomImages[0] : ''),
+                    'images'           => $cleanRoomImages,
                     'resort_amenities' => $owner ? ($owner->resort_amenities ?? []) : [],
                     'user_id'          => $room->user_id,
                     'is_registered'    => true,
@@ -212,8 +217,13 @@ class AccommodationController extends Controller
             $resortsWithoutRooms = $resortQuery->get();
 
             foreach ($resortsWithoutRooms as $resortOwner) {
-                $images = $resortOwner->resort_images ?? [];
-                $primaryImage = is_array($images) && count($images) > 0 ? $images[0] : '';
+                $rawImages = $resortOwner->resort_images ?? [];
+                if (is_string($rawImages)) {
+                    $decodedImages = json_decode($rawImages, true);
+                    $rawImages = is_array($decodedImages) ? $decodedImages : [$rawImages];
+                }
+                $primaryImage = is_array($rawImages) && count($rawImages) > 0 ? $rawImages[0] : '';
+                $images = $this->filterGalleryAgainstCover($rawImages, $primaryImage);
                 // Views: check cache keys for this resort owner
                 $resortCachedViews = (int) Cache::get("view_count_resort_{$resortOwner->id}", 0);
                 $resortAccViews = (int) Cache::get("view_count_accommodation_{$resortOwner->id}", 0);
@@ -226,7 +236,8 @@ class AccommodationController extends Controller
                             ->where('item_type', 'accommodation')
                             ->count();
                     }
-                } catch (\Throwable $e) {}
+
+                                } catch (\Throwable $e) {}
 
                 $individualRooms->push([
                     'id'               => $resortOwner->id,
@@ -267,7 +278,9 @@ class AccommodationController extends Controller
                 ->concat($individualRooms)
                 ->values();
 
-            return response()->json($merged);
+            return response()->json($merged->map(
+                fn ($item) => $this->sanitizeAccommodationImagePayload($item)
+            )->values());
         } catch (\Throwable $e) {
             \Log::error('Accommodation index error: ' . $e->getMessage());
             return response()->json([], 200);
@@ -296,6 +309,7 @@ class AccommodationController extends Controller
             'price_per_night' => 'nullable|numeric',
             'price'           => 'nullable|numeric',
             'image'           => 'nullable',
+            'images'          => 'nullable',
             'video'           => 'nullable',
             'availability'    => 'nullable',
         ]);
@@ -322,6 +336,11 @@ class AccommodationController extends Controller
             foreach ((array) $request->file('images') as $file) {
                 if ($file) {
                     $path = $file->store('accommodations', 'public');
+                    if (!$path) {
+                        app(\App\Services\MediaUploadService::class)->cleanupNewlyCreatedFiles($createdMediaPaths);
+                        throw new \RuntimeException('The uploaded image could not be stored.');
+                    }
+                    $createdMediaPaths[] = $path;
                     $imagePaths[] = '/storage/' . $path;
                 }
             }
@@ -329,10 +348,12 @@ class AccommodationController extends Controller
         if ($request->hasFile('image')) {
             $image = $request->file('image');
             $path = $image->store('accommodations', 'public');
-            $singlePath = '/storage/' . $path;
-            if (!in_array($singlePath, $imagePaths)) {
-                array_unshift($imagePaths, $singlePath);
+            if (!$path) {
+                app(\App\Services\MediaUploadService::class)->cleanupNewlyCreatedFiles($createdMediaPaths);
+                throw new \RuntimeException('The uploaded image could not be stored.');
             }
+            $createdMediaPaths[] = $path;
+            $singlePath = '/storage/' . $path;
             $data['image'] = $singlePath;
         } elseif (!empty($imagePaths)) {
             $data['image'] = $imagePaths[0];
@@ -340,27 +361,74 @@ class AccommodationController extends Controller
             $data['image'] = preg_replace('#^https?://[^/]+#', '', $request->input('image'));
         }
 
+        if (!$request->hasFile('images') && is_array($request->input('images'))) {
+            $imagePaths = array_values(array_filter(
+                $request->input('images'),
+                fn ($image) => is_string($image) && trim($image) !== ''
+            ));
+            if (empty($data['image']) && !empty($imagePaths)) {
+                $data['image'] = $imagePaths[0];
+            }
+        }
+
         if (!empty($imagePaths)) {
             $data['images'] = array_values(array_unique(array_filter($imagePaths)));
+        }
+        try {
+            \App\Services\MediaUploadService::assertOwnedImageReferences(
+                array_merge([$data['image'] ?? null], $data['images'] ?? []),
+                $user ? (int) $user->id : null
+            );
+        } catch (\Throwable $exception) {
+            app(\App\Services\MediaUploadService::class)->cleanupNewlyCreatedFiles($createdMediaPaths);
+            throw $exception;
         }
 
         // Handle video upload
         if ($request->hasFile('video')) {
             $video = $request->file('video');
-            $videoName = time() . '_' . $video->getClientOriginalName();
-            $video->storeAs('public/accommodations/videos', $videoName);
+            $videoName = (string) \Illuminate\Support\Str::uuid() . '.' . ($video->extension() ?: 'mp4');
+            $storedPath = $video->storeAs('accommodations/videos', $videoName, 'public');
+            if (!$storedPath) {
+                app(\App\Services\MediaUploadService::class)->cleanupNewlyCreatedFiles($createdMediaPaths);
+                throw new \RuntimeException('The uploaded video could not be stored.');
+            }
+            $createdMediaPaths[] = $storedPath;
             $data['video'] = '/storage/accommodations/videos/' . $videoName;
         } elseif (is_string($request->input('video'))) {
             $data['video'] = $request->input('video');
+        }
+        try {
+            \App\Services\MediaUploadService::assertOwnedVideoReferences(
+                [$data['video'] ?? null],
+                $user ? (int) $user->id : null
+            );
+        } catch (\Throwable $exception) {
+            app(\App\Services\MediaUploadService::class)->cleanupNewlyCreatedFiles($createdMediaPaths);
+            throw $exception;
         }
 
         // Resort owner creates a registered listing; admin creates a static listing
         $data['user_id']       = ($user && $user->role === 'resort') ? $user->id : null;
         $data['is_registered'] = ($user && $user->role === 'resort');
 
-        $accommodation = \App\Models\Accommodation::create($data);
+        try {
+            $accommodation = \Illuminate\Support\Facades\DB::transaction(function () use ($data) {
+                return \App\Models\Accommodation::create($data);
+            });
+        } catch (\Throwable $exception) {
+            app(\App\Services\MediaUploadService::class)->cleanupNewlyCreatedFiles($createdMediaPaths);
+            $operationKey = $request->input('operation_key');
+            if (is_string($operationKey) && \Illuminate\Support\Str::isUuid($operationKey)) {
+                app(\App\Services\MediaUploadService::class)->cleanupOperationUploads(
+                    (int) $request->user()->id,
+                    $operationKey
+                );
+            }
+            throw $exception;
+        }
 
-        return response()->json($accommodation, 201);
+        return response()->json($this->sanitizeAccommodationImagePayload($accommodation), 201);
     }
 
     /**
@@ -370,7 +438,7 @@ class AccommodationController extends Controller
     {
         $item = \App\Models\Accommodation::with('owner:id,name,email,phone,description,listing_status,payment_details')
             ->findOrFail($id);
-        return response()->json($item);
+        return response()->json($this->sanitizeAccommodationImagePayload($item));
     }
 
     /**
@@ -413,20 +481,39 @@ class AccommodationController extends Controller
 
         $imagePaths = [];
         $hasNewFileUpload = false;
+        $createdMediaPaths = [];
 
         if ($request->hasFile('images')) {
             foreach ((array) $request->file('images') as $file) {
                 if ($file) {
                     $path = $file->store('accommodations', 'public');
+                    if (!$path) {
+                        app(\App\Services\MediaUploadService::class)->cleanupNewlyCreatedFiles($createdMediaPaths);
+                        throw new \RuntimeException('The uploaded image could not be stored.');
+                    }
+                    $createdMediaPaths[] = $path;
                     $imagePaths[] = '/storage/' . $path;
                     $hasNewFileUpload = true;
                 }
             }
         }
 
+        if (!$request->hasFile('images') && is_array($request->input('images'))) {
+            $imagePaths = array_values(array_filter(
+                $request->input('images'),
+                fn ($image) => is_string($image) && trim($image) !== ''
+            ));
+            $hasNewFileUpload = !empty($imagePaths);
+        }
+
         if ($request->hasFile('image')) {
             $image = $request->file('image');
             $path = $image->store('accommodations', 'public');
+            if (!$path) {
+                app(\App\Services\MediaUploadService::class)->cleanupNewlyCreatedFiles($createdMediaPaths);
+                throw new \RuntimeException('The uploaded image could not be stored.');
+            }
+            $createdMediaPaths[] = $path;
             $singlePath = '/storage/' . $path;
             $imagePaths[] = $singlePath;
             $data['image'] = $singlePath;
@@ -463,9 +550,6 @@ class AccommodationController extends Controller
         if (!$hasNewFileUpload && $request->filled('image') && is_string($request->input('image'))) {
             $cleanImg = preg_replace('#^https?://[^/]+#', '', $request->input('image'));
             $data['image'] = $cleanImg;
-            if (!in_array($cleanImg, $imagePaths)) {
-                array_unshift($imagePaths, $cleanImg);
-            }
         }
 
         if (!empty($imagePaths)) {
@@ -475,18 +559,60 @@ class AccommodationController extends Controller
                 $data['image'] = $imagePaths[0];
             }
         }
+        try {
+            \App\Services\MediaUploadService::assertOwnedImageReferences(
+                array_merge([$data['image'] ?? null], $data['images'] ?? []),
+                $request->user() ? (int) $request->user()->id : null,
+                array_merge(
+                    [$accommodation->image],
+                    is_array($accommodation->images) ? $accommodation->images : []
+                )
+            );
+        } catch (\Throwable $exception) {
+            app(\App\Services\MediaUploadService::class)->cleanupNewlyCreatedFiles($createdMediaPaths);
+            throw $exception;
+        }
 
         if ($request->hasFile('video')) {
             $video = $request->file('video');
             $path = $video->store('accommodations/videos', 'public');
+            if (!$path) {
+                app(\App\Services\MediaUploadService::class)->cleanupNewlyCreatedFiles($createdMediaPaths);
+                throw new \RuntimeException('The uploaded video could not be stored.');
+            }
+            $createdMediaPaths[] = $path;
             $data['video'] = '/storage/' . $path;
         } elseif ($request->filled('video') && is_string($request->input('video'))) {
             $data['video'] = $request->input('video');
         }
+        try {
+            \App\Services\MediaUploadService::assertOwnedVideoReferences(
+                [$data['video'] ?? null],
+                $request->user() ? (int) $request->user()->id : null,
+                [$accommodation->video]
+            );
+        } catch (\Throwable $exception) {
+            app(\App\Services\MediaUploadService::class)->cleanupNewlyCreatedFiles($createdMediaPaths);
+            throw $exception;
+        }
 
-        $accommodation->update($data);
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($accommodation, $data) {
+                $accommodation->update($data);
+            });
+        } catch (\Throwable $exception) {
+            app(\App\Services\MediaUploadService::class)->cleanupNewlyCreatedFiles($createdMediaPaths);
+            $operationKey = $request->input('operation_key');
+            if (is_string($operationKey) && \Illuminate\Support\Str::isUuid($operationKey)) {
+                app(\App\Services\MediaUploadService::class)->cleanupOperationUploads(
+                    (int) $request->user()->id,
+                    $operationKey
+                );
+            }
+            throw $exception;
+        }
 
-        return response()->json($accommodation);
+        return response()->json($this->sanitizeAccommodationImagePayload($accommodation));
     }
 
     /**
@@ -594,7 +720,7 @@ class AccommodationController extends Controller
                     'price'           => (float) $r->price_per_night,
                     'capacity'        => (int) $r->capacity,
                     'image'           => $r->image,
-                    'images'          => $r->images ?? [],
+                    'images'          => $this->filterGalleryAgainstCover($r->images ?? [], $r->image),
                     'is_available'    => (bool) $r->is_available,
                 ];
             });
@@ -610,16 +736,19 @@ class AccommodationController extends Controller
                         'name'            => $acc->name,
                         'type'            => $acc->type ?: 'Room',
                         'description'     => $acc->description,
-                        'price_per_night' => (float) ($acc->price_per_night ?: $acc->price ?: 1500),
-                        'price'           => (float) ($acc->price_per_night ?: $acc->price ?: 1500),
+                        'price_per_night' => (float) ($acc->price_per_night ?: $acc->price ?: 0),
+                        'price'           => (float) ($acc->price_per_night ?: $acc->price ?: 0),
                         'capacity'        => 2,
                         'image'           => $acc->image,
-                        'images'          => is_array($acc->images) ? $acc->images : (!empty($acc->image) ? [$acc->image] : []),
+                        'images'          => $this->filterGalleryAgainstCover($acc->images ?? [], $acc->image),
                         'is_available'    => true,
                     ]);
                 }
             }
         }
+        $rooms = $rooms->map(
+            fn ($room) => $this->sanitizeAccommodationImagePayload($room)
+        )->values();
 
         $images = $owner->resort_images ?? [];
         $primaryImage = is_array($images) && count($images) > 0 ? $images[0] : '';
@@ -670,5 +799,83 @@ class AccommodationController extends Controller
             'rooms'          => $rooms,
             'is_registered'  => true,
         ]);
+    }
+
+    private function filterGalleryAgainstCover($images, ?string $cover): array
+    {
+        if (is_string($images)) {
+            $decoded = json_decode($images, true);
+            $images = is_array($decoded) ? $decoded : [$images];
+        }
+
+        $coverFilename = $this->imageFilename($cover);
+        $seen = [];
+        return array_values(array_filter((array) $images, function ($image) use ($coverFilename, &$seen) {
+            $filename = $this->imageFilename($image);
+            if ($filename === '' || $filename === $coverFilename || isset($seen[$filename])) {
+                return false;
+            }
+            $seen[$filename] = true;
+            return true;
+        }));
+    }
+
+    private function sanitizeAccommodationImagePayload($item): array
+    {
+        $payload = is_array($item) ? $item : $item->toArray();
+        $images = $this->sanitizeImageList(
+            $payload['image'] ?? null,
+            $payload['images'] ?? []
+        );
+
+        $payload['image'] = $payload['image'] ?? ($images[0] ?? null);
+        $payload['images'] = array_values($images);
+
+        return $payload;
+    }
+
+    private function sanitizeImageList(?string $cover, $gallery): array
+    {
+        if (is_string($gallery)) {
+            $decoded = json_decode($gallery, true);
+            $gallery = is_array($decoded) ? $decoded : [];
+        }
+
+        $seen = [];
+        $unique = [];
+        $candidates = is_array($gallery) && count($gallery) > 0
+            ? $gallery
+            : [$cover];
+        foreach ($candidates as $image) {
+            if (!is_string($image) || trim($image) === '') {
+                continue;
+            }
+
+            $image = trim($image);
+            $filename = $this->imageFilename($image);
+            if ($filename === '' || isset($seen[$filename])) {
+                continue;
+            }
+
+            $seen[$filename] = true;
+            $unique[] = $image;
+        }
+
+        if (!$unique && is_string($cover) && trim($cover) !== '') {
+            $unique[] = trim($cover);
+        }
+
+        return $unique;
+    }
+
+    private function imageFilename(?string $image): string
+    {
+        if (!is_string($image) || trim($image) === '') {
+            return '';
+        }
+
+        $path = parse_url(trim($image), PHP_URL_PATH);
+        $path = is_string($path) ? $path : trim($image);
+        return strtolower(urldecode(basename(str_replace('\\', '/', $path))));
     }
 }

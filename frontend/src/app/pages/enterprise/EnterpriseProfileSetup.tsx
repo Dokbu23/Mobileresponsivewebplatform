@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Store, Upload, Clock } from 'lucide-react';
-import { API_BASE, getAuthToken } from '../../lib/api';
+import { API_BASE, getAuthToken, sendMediaFormData } from '../../lib/api';
 import { toast } from 'sonner';
 import { showSuccessAlert } from '../../lib/sweetAlert';
 import { TIME_OPTIONS } from '../tourist/BusinessProfile';
@@ -53,10 +53,8 @@ export function EnterpriseProfileSetup() {
       if (logoFile) formData.append('logo', logoFile);
       if (bannerFile) formData.append('banner', bannerFile);
 
-      const res = await fetch(`${API_BASE}/api/enterprise-profile/setup`, {
-        method: 'POST',
+      const res = await sendMediaFormData(`${API_BASE}/api/enterprise-profile/setup`, formData, {
         headers: { Authorization: `Bearer ${token}` },
-        body: formData,
       });
 
       if (!res.ok) {
@@ -151,11 +149,11 @@ export function EnterpriseProfileSetup() {
             <div className="flex-1">
               <input
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/*"
                 onChange={handleLogoChange}
                 className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
               />
-              <p className="text-xs text-muted-foreground mt-1">JPG, PNG, or WebP. Max 5MB.</p>
+              <p className="text-xs text-muted-foreground mt-1">JPEG, PNG, WebP, AVIF, HEIC, or HEIF originals (configured server limit).</p>
             </div>
           </div>
         </div>
@@ -175,7 +173,7 @@ export function EnterpriseProfileSetup() {
           )}
           <input
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/*"
             onChange={handleBannerChange}
             className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
           />

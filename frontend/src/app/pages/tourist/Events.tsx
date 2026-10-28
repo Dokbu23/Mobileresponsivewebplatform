@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Calendar, MapPin, Clock, X, Star, Share2, Search, ChevronLeft, ChevronRight, Navigation, Filter, ChevronDown } from 'lucide-react';
-import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken } from '../../lib/api';
+import { Calendar, MapPin, Clock, X, Star, Share2, Search, ChevronLeft, ChevronRight, Navigation, Filter, ChevronDown, Camera, Play } from 'lucide-react';
+import { getPublicJSON, formatImageUrl, parseImageGallery, getAuthToken } from '../../lib/api';
 import { ShareModal } from '../../components/ShareModal';
-import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
+import { AutoSwipeCarousel, uniqueImageUrls } from '../../components/AutoSwipeCarousel';
+import { VirtualTourModal } from '../../components/VirtualTourModal';
 import { useApp } from '../../context/AppContext';
 import { toast } from 'sonner';
 import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
@@ -25,12 +26,14 @@ interface EventType {
   likes?: number;
   badges?: string[];
   tags?: string[];
+  virtual_tour_url?: string | null;
 }
 
 export function Events() {
   const navigate = useNavigate();
-  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist, getWishlistCount } = useApp();
+  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist, getWishlistCount, canPin } = useApp();
   const [selectedEvent, setSelectedEvent] = useState<EventType | null>(null);
+  const [isVirtualTourOpen, setIsVirtualTourOpen] = useState(false);
   const [items, setItems] = useState<EventType[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -47,27 +50,12 @@ export function Events() {
       const data = await getPublicJSON('/events');
       const raw = Array.isArray(data) ? data : data?.data ?? [];
 
-      let deletedIds = new Set<string>();
-      let archivedIds = new Set<string>();
-      try {
-        const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
-        if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
-        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
-        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
-      } catch {}
-
-      const allRaw = [...raw].filter((i: any) => {
-        const sId = String(i.id);
-        const pId = i.post_id ? String(i.post_id) : '';
-        return !deletedIds.has(sId) && !archivedIds.has(sId) &&
-               (!pId || (!deletedIds.has(pId) && !archivedIds.has(pId)));
-      });
+      // The API is authoritative for publication and archive status.
+      const allRaw = raw;
 
       const mapped = allRaw.map((d: any) => {
-        const mainImg = formatImageUrl(d.image) || '/assets/mansalay_hero_bg.jpg';
-        const imgList = Array.isArray(d.images) && d.images.length > 0
-          ? d.images.map((img: any) => formatImageUrl(img)).filter(Boolean)
-          : [mainImg];
+        const cleanImages = uniqueImageUrls(parseImageGallery(d.images, null));
+        const mainImg = formatImageUrl(d.image) || cleanImages[0] || '/assets/mansalay_hero_bg.jpg';
 
         return {
           ...d,
@@ -81,9 +69,10 @@ export function Events() {
           description: d.description || '',
           fullDescription: d.full_description ?? d.fullDescription ?? d.description ?? '',
           image: mainImg,
-          images: imgList,
+          images: cleanImages.length > 0 ? cleanImages : (mainImg ? [mainImg] : []),
           badges: d.category ? ['Upcoming', d.category] : ['Upcoming', 'Event'],
-          tags: [d.category || 'Event', 'Mansalay', 'Community']
+          tags: [d.category || 'Event', 'Mansalay', 'Community'],
+          virtual_tour_url: typeof d.virtual_tour_url === 'string' ? d.virtual_tour_url.trim() || null : null,
         };
       });
       setItems(mapped);
@@ -172,6 +161,11 @@ export function Events() {
     return matchesSearch && matchesCategory && matchesStatus;
   });
 
+  const eventCarouselImages = selectedEvent?.images && selectedEvent.images.length > 0
+    ? selectedEvent.images
+    : (selectedEvent?.image ? [selectedEvent.image] : []);
+  console.log('FINAL CAROUSEL IMAGES:', eventCarouselImages);
+
   return (
     <div className="min-h-screen bg-gray-50/40 pb-16 font-sans">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
@@ -253,7 +247,6 @@ export function Events() {
         {/* ── EVENT CARDS GRID (4 COLUMNS) ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {filteredEvents.map(event => {
-            const isSaved = savedEventIds.includes(event.id);
             return (
               <div
                 key={event.id}
@@ -262,11 +255,12 @@ export function Events() {
               >
                 {/* Top Image Box */}
                 <div className="relative h-64 bg-gray-900 overflow-hidden">
-                  <img
-                    src={event.image || '/assets/mansalay_hero_bg.jpg'}
+                  <AutoSwipeCarousel
+                    images={event.images && event.images.length > 0 ? event.images : [event.image || '/assets/mansalay_hero_bg.jpg']}
                     alt={event.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    onError={(e) => { e.currentTarget.src = '/assets/mansalay_hero_bg.jpg'; }}
+                    className="w-full h-full"
+                    imageClassName="w-full h-full transition-transform duration-500"
+                    showDots={false}
                   />
 
                   {/* Top Left Stacked Badges */}
@@ -294,6 +288,7 @@ export function Events() {
 
                   {/* Top Right Pin Button */}
                   <button
+                    disabled={!canPin}
                     onClick={(e) => toggleSaveEvent(event, e)}
                     title={isInWishlist(event.id, 'event') ? 'Remove from saved items' : 'Pin to saved items'}
                     className={`absolute top-3 right-3 w-8 h-8 rounded-full shadow-sm flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 cursor-pointer ${
@@ -404,11 +399,13 @@ export function Events() {
             onClick={e => e.stopPropagation()}
           >
             {/* Top Carousel Image Box */}
-            <div className="relative h-72 bg-gray-900 overflow-hidden flex-shrink-0">
+            <div className="relative h-72 bg-white overflow-hidden flex-shrink-0">
               <AutoSwipeCarousel
-                images={selectedEvent.images && selectedEvent.images.length > 0 ? selectedEvent.images : [selectedEvent.image || '/assets/mansalay_hero_bg.jpg']}
+                images={eventCarouselImages}
                 alt={selectedEvent.name}
+                presentation="modal"
                 className="w-full h-full"
+                imageClassName="w-full h-full"
                 intervalMs={3500}
                 showDots={true}
                 showArrows={true}
@@ -501,9 +498,53 @@ export function Events() {
                 ))}
               </div>
 
+              {/* Virtual Tour & Video Player Box */}
+              {(() => {
+                const virtualTourUrl = selectedEvent.virtual_tour_url?.trim() || null;
+                const hasVirtualTour = Boolean(virtualTourUrl);
+                return (
+                  <div className="bg-gradient-to-br from-indigo-50/70 via-white to-pink-50/40 border border-indigo-100 rounded-2xl p-4 sm:p-5 my-2 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-extrabold text-gray-900 text-sm">
+                        <Camera className="h-4 w-4 text-indigo-600" />
+                        <span>{hasVirtualTour ? 'Virtual Tour Available' : 'Virtual Tour'}</span>
+                      </div>
+                      {!hasVirtualTour && (
+                        <span className="text-[10px] font-bold bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          Not Available
+                        </span>
+                      )}
+                    </div>
+
+                    {hasVirtualTour ? (
+                      <button
+                        onClick={() => setIsVirtualTourOpen(true)}
+                        className="w-full py-2.5 bg-pink-500 hover:bg-pink-600 active:bg-pink-700 text-white font-bold rounded-xl text-xs shadow-md shadow-pink-500/20 transition-all flex items-center justify-center gap-2 group cursor-pointer"
+                      >
+                        <Play className="h-3.5 w-3.5 fill-white" />
+                        <span>Open Fullscreen Virtual Tour</span>
+                      </button>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] text-center text-gray-400 font-medium">No virtual tour posted for this event yet</p>
+                        <button
+                          disabled
+                          className="w-full py-2.5 bg-gray-100 text-gray-400 border border-dashed border-gray-200 font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-not-allowed select-none opacity-60"
+                          title="No virtual tour has been set up for this event"
+                        >
+                          <Play className="h-3.5 w-3.5 text-gray-300" />
+                          <span>Virtual Tour — Unavailable</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Bottom Action Buttons */}
               <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
                 <button
+                  disabled={!canPin}
                   onClick={() => toggleSaveEvent(selectedEvent)}
                   className={`flex-1 py-2.5 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-2 border cursor-pointer hover:scale-[1.02] active:scale-98 ${
                     isInWishlist(selectedEvent.id, 'event')
@@ -537,6 +578,17 @@ export function Events() {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedEvent && (
+        <VirtualTourModal
+          isOpen={isVirtualTourOpen}
+          onClose={() => setIsVirtualTourOpen(false)}
+          attractionName={selectedEvent.name}
+          category={selectedEvent.category}
+          mainImage={selectedEvent.image}
+          videoUrl={selectedEvent.virtual_tour_url?.trim() || undefined}
+        />
       )}
 
       {/* ── SOCIAL SHARE MODAL ── */}

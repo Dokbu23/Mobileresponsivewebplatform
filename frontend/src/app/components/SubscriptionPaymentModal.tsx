@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Upload, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
-import { getAuthToken, getPublicPaymentSettings, API_BASE } from '../lib/api';
+import { getAuthToken, getPublicPaymentSettings, API_BASE, sendMediaFormData } from '../lib/api';
 
 interface SubscriptionPaymentModalProps {
   isOpen: boolean;
@@ -18,11 +18,11 @@ interface PaymentMethod {
   instructions: string | null;
 }
 
-export function SubscriptionPaymentModal({ 
-  isOpen, 
-  onClose, 
+export function SubscriptionPaymentModal({
+  isOpen,
+  onClose,
   onPaymentSubmitted,
-  userRole 
+  userRole
 }: SubscriptionPaymentModalProps) {
   const [amount, setAmount] = useState<number>(50); // Default ₱50, will be updated from API
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -48,7 +48,7 @@ export function SubscriptionPaymentModal({
       const settings = await getPublicPaymentSettings();
       setAmount(settings.subscription_amount);
       setPaymentMethods(settings.payment_methods);
-      
+
       // Auto-select first enabled method
       if (settings.payment_methods.length > 0) {
         setSelectedMethodId(settings.payment_methods[0].id);
@@ -100,12 +100,10 @@ export function SubscriptionPaymentModal({
       }
 
       const token = getAuthToken();
-      const response = await fetch(`${API_BASE}/api/subscription/payment`, {
-        method: 'POST',
+      const response = await sendMediaFormData(`${API_BASE}/api/subscription/payment`, formData, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
-        body: formData
       });
 
       if (!response.ok) {
@@ -148,7 +146,7 @@ export function SubscriptionPaymentModal({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            
+
             <h3 className="text-xl font-bold mb-2">Payment Under Review</h3>
             <p className="text-muted-foreground mb-6">
               Your payment is being reviewed by our admin team. Please wait until your payment is verified.
@@ -306,12 +304,12 @@ export function SubscriptionPaymentModal({
                         className="hidden"
                       />
                     </label>
-                    
+
                     {receiptPreview && (
                       <div className="relative w-full max-w-xs">
-                        <img 
-                          src={receiptPreview} 
-                          alt="Receipt preview" 
+                        <img
+                          src={receiptPreview}
+                          alt="Receipt preview"
                           className="w-full h-48 object-cover rounded-lg border-2 border-primary/20"
                         />
                       </div>

@@ -237,18 +237,9 @@ export function MapExplore() {
         getPublicLandmarks().catch(() => []),
       ]);
 
-      let deletedIds = new Set<string>();
-      let archivedIds = new Set<string>();
-      try {
-        const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
-        if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
-        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
-        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
-      } catch {}
-
-      const rawAttractions = (Array.isArray(attractions) ? attractions : []).filter((a: any) => !deletedIds.has(String(a.id)) && !archivedIds.has(String(a.id)));
-      const rawAccommodations = (Array.isArray(accommodations) ? accommodations : []).filter((a: any) => !deletedIds.has(String(a.id)) && !archivedIds.has(String(a.id)));
-      const rawLandmarks = (Array.isArray(landmarks) ? landmarks : []).filter((l: any) => !deletedIds.has(String(l.id)) && !archivedIds.has(String(l.id)));
+      const rawAttractions = Array.isArray(attractions) ? attractions : [];
+      const rawAccommodations = Array.isArray(accommodations) ? accommodations : [];
+      const rawLandmarks = Array.isArray(landmarks) ? landmarks : [];
 
       const attractionMarkers: MapMarker[] = rawAttractions.map((a: any) => ({
         id: `attraction-${a.id}`,
@@ -1238,11 +1229,11 @@ export function MapExplore() {
                       ? `${landmarkImageFiles.length} photo${landmarkImageFiles.length > 1 ? 's' : ''} selected — click to add more`
                       : 'Click to upload photos of your place'}
                   </span>
-                  <span className="text-[11px] text-gray-400">JPG, PNG, WEBP · Max 10MB each</span>
+                  <span className="text-[11px] text-gray-400">JPEG, PNG, WebP, AVIF, HEIC, or HEIF originals (configured server limit)</span>
                   <input
                     id="landmark-images"
                     type="file"
-                    accept="image/jpeg,image/jpg,image/png,image/webp,image/avif"
+                    accept="image/*"
                     multiple
                     className="hidden"
                     onChange={(e) => {

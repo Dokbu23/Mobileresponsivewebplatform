@@ -18,7 +18,7 @@ class PaymentReceiptController extends Controller
             'type' => 'required|in:order,booking',
             'reference_id' => 'required|integer',
             'business_id' => 'required|integer',
-            'receipt_image' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:10240', // 10MB max
+            'receipt_image' => 'required|image|mimes:jpeg,png,jpg,gif,webp,avif,heic,heif|max:' . config('uploads.max_image_size_kb'),
             'amount' => 'required|numeric|min:0',
             'payment_method' => 'required|string',
             'payment_reference' => 'nullable|string',
@@ -28,7 +28,7 @@ class PaymentReceiptController extends Controller
         // Handle image upload
         if ($request->hasFile('receipt_image')) {
             $image = $request->file('receipt_image');
-            $filename = time() . '_' . $image->getClientOriginalName();
+            $filename = (string) \Illuminate\Support\Str::uuid() . '.' . ($image->extension() ?: 'jpg');
             $path = $image->storeAs('receipts', $filename, 'public');
             $data['receipt_image'] = '/storage/' . $path;
         }

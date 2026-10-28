@@ -4,9 +4,9 @@ import { Store, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, Messa
 import { toast } from 'sonner';
 import { showUnsaveConfirmDialog } from '../../lib/sweetAlert';
 import { PushPinIcon } from '../../components/PushPinIcon';
-import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
+import { API_BASE, getPublicJSON, formatImageUrl, parseImageGallery, getAuthToken, decodeHtml, recordView } from '../../lib/api';
 import { useApp } from '../../context/AppContext';
-import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
+import { AutoSwipeCarousel, uniqueImageUrls } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
 
 interface ProductItem {
@@ -18,7 +18,6 @@ interface ProductItem {
   image: string;
   images?: string[];
   category: string;
-  badge?: string;
   rating?: number;
   likes?: number;
   sellerName?: string;
@@ -32,7 +31,7 @@ interface ProductItem {
 
 export function Products() {
   const navigate = useNavigate();
-  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist, getWishlistCount } = useApp();
+  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist, getWishlistCount, canPin } = useApp();
   const isLoggedIn = Boolean(userType && currentUser);
 
   const [items, setItems] = useState<ProductItem[]>([]);
@@ -85,10 +84,10 @@ export function Products() {
             if (existing) {
               existing.post_id = p.id;
               if (p.image) {
-                const currentImgs = Array.isArray(existing.images) ? [...existing.images] : (existing.image ? [existing.image] : []);
-                if (!currentImgs.includes(p.image)) currentImgs.unshift(p.image);
-                existing.images = currentImgs;
-                existing.image = p.image;
+                if (!Array.isArray(existing.images) || existing.images.length === 0) {
+                  existing.images = [p.image];
+                }
+                existing.image = existing.image || p.image;
               }
               if (p.price) {
                 const numPrice = typeof p.price === 'string' ? parseFloat(p.price.replace(/[^0-9.]/g, '')) || 0 : p.price;
@@ -110,54 +109,23 @@ export function Products() {
                 images: p.image ? [p.image] : [],
                 category: p.category || 'Handicraft',
                 sellerName: p.seller_name || p.user?.store_name || p.user?.name || '',
+                shop_name: p.shop_name || p.enterprise_store || p.store_name || p.user?.shop_name || p.user?.store_name || '',
                 productOwner: p.seller_name || p.user?.store_name || p.user?.name || '',
                 user_id: p.user_id,
                 is_registered: true,
                 likes: p.likes || 0,
-                badge: 'Partner Store',
               });
             }
           });
       } catch {}
 
 
-      let deletedIds = new Set<string>();
-      try {
-        const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
-        if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
-      } catch {}
+      // The API is authoritative for publication and archive status.
+      const allRaw = raw;
 
-      let archivedIds = new Set<string>();
-      try {
-        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
-        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
-      } catch {}
-
-      const allRaw = [...raw].filter((i: any) => {
-        const idStr = String(i.id);
-        const bareId = idStr.replace(/^ep_/, '');
-        const postId = i.post_id ? String(i.post_id) : '';
-        if (deletedIds.has(idStr) || deletedIds.has(bareId) || (postId && deletedIds.has(postId))) return false;
-        if (archivedIds.has(idStr) || archivedIds.has(bareId) || (postId && archivedIds.has(postId))) return false;
-        return true;
-      });
-
-      const mapped = allRaw.map((p: any, idx: number) => {
-        let parsedImages: string[] = [];
-        if (Array.isArray(p.images)) {
-          parsedImages = p.images.map((img: any) => formatImageUrl(img)).filter(Boolean);
-        } else if (typeof p.images === 'string' && p.images.trim()) {
-          try {
-            const arr = JSON.parse(p.images);
-            if (Array.isArray(arr)) {
-              parsedImages = arr.map((img: any) => formatImageUrl(img)).filter(Boolean);
-            }
-          } catch {}
-        }
-        const mainImg = formatImageUrl(p.image);
-        if (parsedImages.length === 0 && mainImg) {
-          parsedImages = [mainImg];
-        }
+      const mapped = allRaw.map((p: any) => {
+        const cleanImages = uniqueImageUrls(parseImageGallery(p.images, null));
+        const mainImg = formatImageUrl(p.image) || cleanImages[0] || '';
 
         return {
           id: String(p.id),
@@ -166,13 +134,12 @@ export function Products() {
           price: Number(p.price ?? 0),
           stock: Number(p.stock ?? 0),
           image: mainImg,
-          images: parsedImages,
+          images: cleanImages.length > 0 ? cleanImages : (mainImg ? [mainImg] : []),
           category: decodeHtml(p.category ?? 'General'),
-          badge: p.badge || (idx % 2 === 0 ? 'Best Seller' : 'Top Rated'),
           rating: p.rating || 4.8,
           likes: p.likes || 0,
-          sellerName: decodeHtml(p.shop_name || p.store_name || p.owner?.store_name || p.owner?.resort_name || p.seller_name || p.owner?.name || 'Mansalay Artisan Co-op'),
-          shopName: decodeHtml(p.shop_name || p.store_name || p.owner?.store_name || 'Mansalay Artisan Store'),
+          sellerName: decodeHtml(p.shop_name || p.enterprise_store || p.store_name || p.owner?.store_name || p.owner?.resort_name || p.seller_name || p.owner?.name || 'Mansalay Artisan Co-op'),
+          shopName: decodeHtml(p.shop_name || p.enterprise_store || p.store_name || p.owner?.shop_name || p.owner?.store_name || p.owner?.resort_name || p.user?.shop_name || p.user?.store_name || p.seller_name || 'Mansalay Artisan Store'),
           productOwner: decodeHtml(p.product_owner || p.owner_name || p.owner?.name || p.seller_name || ''),
           user_id: p.user_id,
           is_registered: p.is_registered,
@@ -268,14 +235,18 @@ export function Products() {
       (p.category && p.category.toLowerCase().includes(q)) ||
       (p.sellerName && p.sellerName.toLowerCase().includes(q)) ||
       (p.shopName && p.shopName.toLowerCase().includes(q)) ||
-      (p.productOwner && p.productOwner.toLowerCase().includes(q)) ||
-      (p.badge && p.badge.toLowerCase().includes(q));
+      (p.productOwner && p.productOwner.toLowerCase().includes(q));
 
     const matchesCategory = categoryFilter === 'All' || categoryFilter === 'All Categories' || categoryFilter === 'All Products' ||
       (p.category && p.category.toLowerCase().trim() === categoryFilter.toLowerCase().trim());
 
     return matchesStore && matchesSearch && matchesCategory;
   });
+
+  const productCarouselImages = selectedProduct?.images && selectedProduct.images.length > 0
+    ? selectedProduct.images
+    : (selectedProduct?.image ? [selectedProduct.image] : []);
+  console.log('FINAL CAROUSEL IMAGES:', productCarouselImages);
 
   return (
     <div className="min-h-screen bg-gray-50/40 pb-16 font-sans">
@@ -369,7 +340,6 @@ export function Products() {
         {/* ── PRODUCT CARDS GRID (4 COLUMNS) ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {filteredProducts.map(product => {
-            const isSaved = savedProductIds.includes(product.id);
             return (
               <div
                 key={product.id}
@@ -377,20 +347,14 @@ export function Products() {
                 className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-xs hover:shadow-xl transition-all cursor-pointer group flex flex-col justify-between"
               >
                 {/* Top Image Box */}
-                <div className="relative h-60 bg-gray-900 overflow-hidden">
+                <div className="relative h-64 bg-gray-900 overflow-hidden rounded-t-3xl">
                   <AutoSwipeCarousel
                     images={product.images && product.images.length > 0 ? product.images : [product.image]}
                     alt={product.name}
                     className="w-full h-full"
-                    intervalMs={3500}
+                    imageClassName="w-full h-full transition-transform duration-500"
+                    showDots={false}
                   />
-
-                  {/* Product Badge */}
-                  {product.badge && (
-                    <span className="absolute top-3 left-3 px-3 py-1 bg-pink-500 text-white text-[10px] font-bold rounded-full shadow-xs">
-                      {product.badge}
-                    </span>
-                  )}
 
                   {/* Top Right Wishlist & Share */}
                   <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20">
@@ -410,6 +374,7 @@ export function Products() {
                       <Share2 className="h-3.5 w-3.5" />
                     </button>
                     <button
+                      disabled={!canPin}
                       onClick={(e) => toggleSaveProduct(product, e)}
                       className={`w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all hover:scale-110 active:scale-95 shadow-xs cursor-pointer ${
                         isInWishlist(product.id, 'product')
@@ -432,6 +397,7 @@ export function Products() {
                       {product.category || 'Product'}
                     </span>
                     <button
+                      disabled={!canPin}
                       onClick={(e) => toggleSaveProduct(product, e)}
                       className="flex items-center gap-1.5 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 whitespace-nowrap"
                       title={isInWishlist(product.id, 'product') ? 'Saved in pins' : 'Click to pin product'}
@@ -538,11 +504,13 @@ export function Products() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
             {/* Modal Image Slider */}
-            <div className="relative h-64 sm:h-72 bg-gray-900">
+            <div className="relative h-64 sm:h-72 bg-white rounded-t-3xl overflow-hidden">
               <AutoSwipeCarousel
-                images={selectedProduct.images && selectedProduct.images.length > 0 ? selectedProduct.images : [selectedProduct.image]}
+                images={productCarouselImages}
                 alt={selectedProduct.name}
+                presentation="modal"
                 className="w-full h-full"
+                imageClassName="w-full h-full"
                 intervalMs={3000}
                 showDots={true}
                 showArrows={true}
@@ -582,6 +550,7 @@ export function Products() {
                     <Share2 className="h-4 w-4" />
                   </button>
                   <button
+                    disabled={!canPin}
                     onClick={() => toggleSaveProduct(selectedProduct)}
                     className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ${
                       isInWishlist(selectedProduct.id, 'product')

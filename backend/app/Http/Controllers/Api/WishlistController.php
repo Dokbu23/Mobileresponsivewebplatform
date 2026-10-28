@@ -79,6 +79,12 @@ class WishlistController extends Controller
             $user = null;
         }
 
+        if ($user && $user->role !== 'tourist') {
+            return response()->json([
+                'message' => 'Only tourism accounts can pin or unpin items.'
+            ], 403);
+        }
+
         // Clean ID and detect special item categories (e.g. room-12, post_room_5)
         $cleanId = $rawId;
         $isRoomId = false;

@@ -54,7 +54,7 @@ class SubscriptionController extends Controller
             'amount' => 'required|numeric',
             'payment_method' => 'required|string',
             'payment_reference' => 'nullable|string',
-            'receipt_image' => 'required|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
+            'receipt_image' => 'required|image|mimes:jpeg,png,jpg,webp,gif,avif,heic,heif|max:' . config('uploads.max_image_size_kb'),
             'notes' => 'nullable|string'
         ]);
 
@@ -63,7 +63,7 @@ class SubscriptionController extends Controller
         // Handle receipt image upload
         if ($request->hasFile('receipt_image')) {
             $image = $request->file('receipt_image');
-            $imageName = time() . '_' . $image->getClientOriginalName();
+            $imageName = (string) \Illuminate\Support\Str::uuid() . '.' . ($image->extension() ?: 'jpg');
             $path = $image->storeAs('subscription_receipts', $imageName, 'public');
             $data['receipt_image'] = '/storage/' . $path;
         }

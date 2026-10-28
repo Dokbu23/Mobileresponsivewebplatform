@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Calendar, Search, Filter, Plus, Edit2, Trash2, X, Upload, Image as ImageIcon } from 'lucide-react';
-import { getJSON, postJSON, deleteJSON, API_BASE } from '../../lib/api';
+import { getJSON, postJSON, deleteJSON, API_BASE, uploadMediaInChunks, IMAGE_UPLOAD_LIMIT_BYTES } from '../../lib/api';
+import { isImageCandidate, prepareMediaFiles } from '../../lib/mediaCompression';
+import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
 import { showSuccessAlert, showConfirmDialog } from '../../lib/sweetAlert';
 import { toast } from 'sonner';
 import { useApp } from '../../context/AppContext';
@@ -11,11 +13,13 @@ interface Event {
   location: string | null;
   category: string | null;
   image: string | null;
+  images?: string[] | null;
   date: string | null;
   time: string | null;
   capacity: string | null;
   description: string | null;
   full_description: string | null;
+  virtual_tour_url: string | null;
   user_id: number | null;
   created_at: string;
   updated_at: string;
@@ -50,9 +54,20 @@ export function ManageEvents() {
     capacity: '',
     description: '',
     full_description: '',
+    virtual_tour_url: '',
   });
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [originalImageSizes, setOriginalImageSizes] = useState<number[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [imageDimensions, setImageDimensions] = useState<Record<string, string>>({});
+  const [imagesPrepared, setImagesPrepared] = useState(false);
+  const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingFileName, setUploadingFileName] = useState('');
+  const uploadAbortController = useRef<AbortController | null>(null);
+  const selectedOriginalBytes = originalImageSizes.reduce((total, size) => total + size, 0);
+  const selectedCompressedBytes = imageFiles.reduce((total, file) => total + file.size, 0);
 
   useEffect(() => {
     fetchEvents();
@@ -71,34 +86,50 @@ export function ManageEvents() {
     }
   };
 
+  const handleImageFiles = (files: File[]) => {
+    if (files.length === 0) return;
+
+    const validFiles = files.filter(file => {
+      if (file.size > IMAGE_UPLOAD_LIMIT_BYTES) {
+        toast.error(`${file.name} exceeds the 50 MiB per-image limit.`);
+        return false;
+      }
+      if (!isImageCandidate(file)) {
+        toast.error(`${file.name} is not a supported image format`);
+        return false;
+      }
+      return true;
+    });
+
+    const available = Math.max(0, 10 - existingImages.length - imageFiles.length);
+    if (validFiles.length > available) {
+      toast.error(`You can add no more than ${available} more image${available === 1 ? '' : 's'} to this event.`);
+      return;
+    }
+    const selectedFiles = validFiles;
+    setImageFiles(previous => [...previous, ...selectedFiles]);
+    setOriginalImageSizes(previous => [...previous, ...selectedFiles.map(file => file.size)]);
+    setImagesPrepared(false);
+    setImagePreviews(previous => [
+      ...previous,
+      ...selectedFiles.map(file => URL.createObjectURL(file)),
+    ]);
+  };
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validate file size (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image size must be less than 5MB');
-      return;
-    }
-
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
-      toast.error('Invalid image format. Please use JPG, PNG, GIF, or WebP');
-      return;
-    }
-
-    setImageFile(file);
-
-    // Create preview
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setImagePreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    handleImageFiles(Array.from(e.target.files || []));
+    e.target.value = '';
   };
 
   const resetForm = () => {
+    imagePreviews.forEach(preview => {
+      if (preview.startsWith('blob:')) URL.revokeObjectURL(preview);
+    });
+    setImageDimensions({});
+    uploadAbortController.current?.abort();
+    uploadAbortController.current = null;
+    setIsUploadingImages(false);
+    setUploadProgress(0);
     setFormData({
       name: '',
       location: '',
@@ -108,9 +139,13 @@ export function ManageEvents() {
       capacity: '',
       description: '',
       full_description: '',
+      virtual_tour_url: '',
     });
-    setImageFile(null);
-    setImagePreview(null);
+    setImageFiles([]);
+    setOriginalImageSizes([]);
+    setImagePreviews([]);
+    setImagesPrepared(false);
+    setExistingImages([]);
     setEditingEventId(null);
     setShowAddForm(false);
   };
@@ -118,12 +153,61 @@ export function ManageEvents() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (isUploadingImages) return;
     if (!formData.name.trim()) {
       toast.error('Event name is required');
       return;
     }
 
+    const controller = new AbortController();
+    uploadAbortController.current = controller;
+    setIsUploadingImages(true);
+    setUploadProgress(0);
+
     try {
+      const preparedImages = await prepareMediaFiles(
+        imageFiles,
+        (file, phase, percent) => {
+          if (phase === 'compressing' && imageFiles.length > 0) {
+            const fileIndex = imageFiles.findIndex(candidate => candidate === file);
+            setUploadingFileName(`Compressing ${file.name} (${percent}%)`);
+            setUploadProgress(Math.floor(((Math.max(0, fileIndex) + percent / 100) / imageFiles.length) * 30));
+          }
+        },
+        controller.signal
+      );
+      const compressedFiles = preparedImages.map(media => media.file);
+      const existingPreviewCount = existingImages.length;
+      const compressedPreviews = compressedFiles.map(file => URL.createObjectURL(file));
+      setImagePreviews(previous => {
+        previous.slice(existingPreviewCount).forEach(preview => {
+          if (preview.startsWith('blob:')) URL.revokeObjectURL(preview);
+        });
+        return [...previous.slice(0, existingPreviewCount), ...compressedPreviews];
+      });
+      setImageFiles(compressedFiles);
+      setImagesPrepared(true);
+
+      const uploadedPaths: string[] = [];
+      const totalSize = compressedFiles.reduce((total, file) => total + file.size, 0);
+      let completedSize = 0;
+      for (const [index, file] of compressedFiles.entries()) {
+        setUploadingFileName(file.name);
+        const result = await uploadMediaInChunks(
+          file,
+          (uploadedBytes, fileSize) => {
+            setUploadProgress(totalSize
+              ? 30 + Math.floor(((completedSize + uploadedBytes) / totalSize) * 70)
+              : 0);
+            setUploadingFileName(`Uploading ${index + 1}/${compressedFiles.length}: ${file.name} (${(uploadedBytes / (1024 * 1024)).toFixed(1)} / ${(fileSize / (1024 * 1024)).toFixed(1)} MiB)`);
+          },
+          controller.signal,
+          { prepared: true }
+        );
+        uploadedPaths.push(result.url);
+        completedSize += file.size;
+      }
+
       const formDataToSend = new FormData();
       formDataToSend.append('name', formData.name);
       if (formData.location) formDataToSend.append('location', formData.location);
@@ -133,22 +217,36 @@ export function ManageEvents() {
       if (formData.capacity) formDataToSend.append('capacity', formData.capacity);
       if (formData.description) formDataToSend.append('description', formData.description);
       if (formData.full_description) formDataToSend.append('full_description', formData.full_description);
-      if (imageFile) formDataToSend.append('image', imageFile);
+      if (formData.virtual_tour_url) formDataToSend.append('virtual_tour_url', formData.virtual_tour_url);
+      if (uploadedPaths.length > 0) {
+        formDataToSend.append('image', uploadedPaths[0]);
+        uploadedPaths.forEach(path => formDataToSend.append('images[]', path));
+      }
+      if (editingEventId) {
+        formDataToSend.append('existing_images', JSON.stringify(existingImages));
+      }
 
       if (editingEventId) {
         // Update existing event
-        await postJSON(`/events/${editingEventId}`, formDataToSend, true);
+        await postJSON(`/admin/events/${editingEventId}`, formDataToSend, true);
         await showSuccessAlert('Event Updated!', `${formData.name} has been updated successfully.`);
       } else {
         // Create new event
-        await postJSON('/events', formDataToSend, true);
+        await postJSON('/admin/events', formDataToSend, true);
         await showSuccessAlert('Event Created!', `${formData.name} has been created successfully.`);
       }
 
       await fetchEvents();
       resetForm();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to save event');
+      if (error?.name === 'AbortError') {
+        toast.info('Upload cancelled. Submit the form again to resume.');
+      } else {
+        toast.error(error.message || 'Failed to save event');
+      }
+    } finally {
+      uploadAbortController.current = null;
+      setIsUploadingImages(false);
     }
   };
 
@@ -162,8 +260,16 @@ export function ManageEvents() {
       capacity: event.capacity || '',
       description: event.description || '',
       full_description: event.full_description || '',
+      virtual_tour_url: event.virtual_tour_url || '',
     });
-    setImagePreview(event.image ? getImageUrl(event.image) : null);
+    const gallery = Array.isArray(event.images) && event.images.length > 0
+      ? event.images
+      : event.image ? [event.image] : [];
+    setExistingImages(gallery);
+    setImageFiles([]);
+    setOriginalImageSizes([]);
+    setImagePreviews(gallery.map(image => getImageUrl(image) || '').filter(Boolean));
+    setImagesPrepared(false);
     setEditingEventId(event.id);
     setShowAddForm(true);
   };
@@ -178,7 +284,7 @@ export function ManageEvents() {
 
     if (confirmed) {
       try {
-        await deleteJSON(`/events/${event.id}`);
+        await deleteJSON(`/admin/events/${event.id}`);
         await showSuccessAlert('Event Deleted', `${event.name} has been deleted successfully.`);
         await fetchEvents();
       } catch (error: any) {
@@ -284,41 +390,101 @@ export function ManageEvents() {
               {/* Image Upload */}
               <div>
                 <label className="block text-sm mb-2">Event Image</label>
-                <div className="border-2 border-dashed border-primary/20 rounded-lg p-4">
-                  {imagePreview ? (
-                    <div className="relative">
-                      <img
-                        src={imagePreview}
-                        alt="Preview"
-                        className="w-full h-48 object-cover rounded-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setImageFile(null);
-                          setImagePreview(null);
-                        }}
-                        className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                <div
+                  className="border-2 border-dashed border-primary/20 rounded-lg p-4"
+                  onDragOver={event => event.preventDefault()}
+                  onDrop={event => {
+                    event.preventDefault();
+                    handleImageFiles(Array.from(event.dataTransfer.files));
+                  }}
+                >
+                  {imagePreviews.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {imagePreviews.map((preview, index) => (
+                        <div key={`${preview}-${index}`} className="relative">
+                          <img
+                            src={preview}
+                            alt={`Event preview ${index + 1}`}
+                            className="w-full h-28 object-cover rounded-lg"
+                            onLoad={event => setImageDimensions(previous => ({
+                              ...previous,
+                              [preview]: `${event.currentTarget.naturalWidth} × ${event.currentTarget.naturalHeight}`,
+                            }))}
+                          />
+                          {index >= existingImages.length && imageFiles[index - existingImages.length] && (
+                            <span className="block mt-1 text-[10px] text-muted-foreground truncate">
+                              {imageFiles[index - existingImages.length].name} · Original {((originalImageSizes[index - existingImages.length] || imageFiles[index - existingImages.length].size) / (1024 * 1024)).toFixed(1)} MiB
+                              {imagesPrepared ? ` · Compressed ${(imageFiles[index - existingImages.length].size / (1024 * 1024)).toFixed(1)} MiB` : ''}
+                              {imageDimensions[preview] ? ` · ${imageDimensions[preview]}` : ''}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const existingCount = existingImages.length;
+                              if (index < existingCount) {
+                                setExistingImages(images => images.filter((_, imageIndex) => imageIndex !== index));
+                              } else {
+                                const fileIndex = index - existingCount;
+                                const fileToRemove = imageFiles[fileIndex];
+                                if (fileToRemove && preview.startsWith('blob:')) URL.revokeObjectURL(preview);
+                                setImageFiles(files => files.filter((_, fileIndexToRemove) => fileIndexToRemove !== fileIndex));
+                                setOriginalImageSizes(sizes => sizes.filter((_, sizeIndex) => sizeIndex !== fileIndex));
+                                setImagesPrepared(false);
+                              }
+                              setImagePreviews(previews => previews.filter((_, previewIndex) => previewIndex !== index));
+                            }}
+                            className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                            aria-label={`Remove image ${index + 1}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                      <label className="min-h-28 border-2 border-dashed border-primary/20 rounded-lg flex flex-col items-center justify-center cursor-pointer">
+                        <Upload className="h-6 w-6 text-primary/50" />
+                        <span className="text-xs text-muted-foreground mt-1">Add photos</span>
+                        <input type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" />
+                      </label>
                     </div>
                   ) : (
                     <label className="flex flex-col items-center justify-center cursor-pointer">
                       <Upload className="h-12 w-12 text-primary/50 mb-2" />
                       <span className="text-sm text-muted-foreground mb-1">
-                        Click to upload image
+                        Click to upload photos
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        Max 5MB (JPG, PNG, GIF, WebP)
+                        Drop or choose JPEG, PNG, or WebP images. Images are compressed before upload; image metadata is removed.
                       </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageChange}
-                        className="hidden"
-                      />
+                      <input type="file" accept="image/*" multiple onChange={handleImageChange} className="hidden" />
                     </label>
+                  )}
+                  {imageFiles.length > 0 && (
+                    <p className="mt-3 text-xs text-muted-foreground" aria-live="polite">
+                      {imagesPrepared ? 'Compressed total' : 'Original selection total'}: {(imagesPrepared ? selectedCompressedBytes : selectedOriginalBytes) / (1024 * 1024) > 0
+                        ? `${((imagesPrepared ? selectedCompressedBytes : selectedOriginalBytes) / (1024 * 1024)).toFixed(2)} MiB`
+                        : '0 MiB'}
+                      {imagesPrepared && selectedOriginalBytes !== selectedCompressedBytes
+                        ? ` (original ${(selectedOriginalBytes / (1024 * 1024)).toFixed(2)} MiB)`
+                        : ''}
+                      {' · combined maximum 50 MiB'}
+                    </p>
+                  )}
+                  {isUploadingImages && (
+                    <div className="mt-3 space-y-2" role="status" aria-live="polite">
+                      <div className="flex justify-between text-xs">
+                        <span className="truncate pr-2">{uploadingFileName || 'Preparing upload'}</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <progress className="w-full" value={uploadProgress} max="100" />
+                      <button
+                        type="button"
+                        onClick={() => uploadAbortController.current?.abort()}
+                        className="text-xs text-red-600 underline"
+                      >
+                        Cancel upload
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -381,13 +547,26 @@ export function ManageEvents() {
                 />
               </div>
 
+              {/* Virtual Tour */}
+              <div>
+                <label className="block text-sm mb-2">Virtual Tour URL</label>
+                <input
+                  type="url"
+                  value={formData.virtual_tour_url}
+                  onChange={(e) => setFormData({ ...formData, virtual_tour_url: e.target.value })}
+                  className="w-full px-4 py-2 border-2 border-primary/20 rounded-lg focus:border-primary outline-none"
+                  placeholder="https://..."
+                />
+              </div>
+
               {/* Form Actions */}
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
+                  disabled={isUploadingImages}
                   className="flex-1 px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
                 >
-                  {editingEventId ? 'Update Event' : 'Create Event'}
+                  {isUploadingImages ? 'Uploading originals...' : editingEventId ? 'Update Event' : 'Create Event'}
                 </button>
                 <button
                   type="button"
@@ -470,14 +649,12 @@ export function ManageEvents() {
               key={event.id}
               className="bg-white border-2 border-primary/20 rounded-lg overflow-hidden hover:border-primary transition-all"
             >
-              {event.image ? (
-                <img
-                  src={getImageUrl(event.image) || ''}
+              {event.image || (event.images && event.images.length > 0) ? (
+                <AutoSwipeCarousel
+                  images={(event.images && event.images.length > 0 ? event.images : [event.image]).map(image => getImageUrl(image) || '').filter(Boolean)}
                   alt={event.name}
-                  className="w-full h-48 object-cover"
-                  onError={(e) => {
-                    e.currentTarget.src = 'https://via.placeholder.com/400x300?text=No+Image';
-                  }}
+                  className="w-full h-48"
+                  showDots={false}
                 />
               ) : (
                 <div className="w-full h-48 bg-primary/5 flex items-center justify-center">

@@ -84,13 +84,15 @@ class LandmarkController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-        $role = strtolower($user ? ($user->role ?? 'tourist') : ($request->input('role', 'tourist')));
+        if (!$user) {
+            return response()->json(['message' => 'Authentication required to create a landmark.'], 401);
+        }
+        $role = strtolower($user->role ?? 'tourist');
 
-        // 1. TOURISTS ARE STRICTLY FORBIDDEN FROM CREATING LANDMARKS
-        if ($role === 'tourist') {
+        if (!in_array($role, ['admin', 'resort', 'enterprise'], true)) {
             return response()->json([
                 'error'   => 'LANDMARK_CREATION_NOT_ALLOWED',
-                'message' => 'Tourists are not allowed to create landmarks.',
+                'message' => 'Only administrators, resorts, and enterprises can create landmarks.',
             ], 403);
         }
 
@@ -104,7 +106,7 @@ class LandmarkController extends Controller
             'longitude'           => 'required|numeric',
             'image'               => 'nullable|string|max:500',
             'images'              => 'nullable|array|max:10',
-            'images.*'            => 'nullable|file|mimes:jpg,jpeg,png,webp,avif|max:10240',
+            'images.*'            => 'nullable|file|mimes:jpg,jpeg,png,webp,avif,heic,heif|max:' . config('uploads.max_image_size_kb'),
             'virtual_tour_scenes' => 'nullable|array',
         ], [
             'type.in' => 'Only Resort and Enterprise landmarks are allowed.',
@@ -194,13 +196,17 @@ class LandmarkController extends Controller
         $landmark = Landmark::findOrFail($id);
         $user     = $request->user();
 
-        if ($user && ($user->role !== 'admin') && $landmark->user_id !== $user->id) {
+        if (!$user) {
+            return response()->json(['message' => 'Authentication required to add landmark photos.'], 401);
+        }
+
+        if (($user->role !== 'admin') && $landmark->user_id !== $user->id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
         $request->validate([
             'images'   => 'required|array|min:1|max:10',
-            'images.*' => 'required|file|mimes:jpg,jpeg,png,webp,avif|max:10240',
+            'images.*' => 'required|file|mimes:jpg,jpeg,png,webp,avif,heic,heif|max:' . config('uploads.max_image_size_kb'),
         ]);
 
         $existingImages = $landmark->images ?? [];

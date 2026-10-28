@@ -32,6 +32,8 @@ use App\Http\Controllers\Api\HistoryController;
 use App\Http\Controllers\Api\AdminManagePostController;
 use App\Http\Controllers\Api\AdminReportController;
 use App\Http\Controllers\Api\AdminItineraryController;
+use App\Http\Controllers\Api\MediaUploadController;
+use App\Http\Controllers\Api\LegacyResortMigrationController;
 
 use App\Models\User;
 
@@ -47,6 +49,11 @@ use App\Models\User;
 */
 
 // Public routes (no authentication required)
+// Keep the unprefixed endpoint as the canonical public events URL. Older
+// clients use /api/public/events, so both routes intentionally share the
+// same controller and remain GET-only.
+Route::get('events', [EventController::class, 'index']);
+
 Route::group(['prefix' => 'public'], function () {  
     Route::get('attractions', [AttractionController::class, 'index']);
     Route::get('attractions/{id}', [AttractionController::class, 'show']);
@@ -58,8 +65,10 @@ Route::group(['prefix' => 'public'], function () {
     Route::get('accommodations', [AccommodationController::class, 'index']);
     Route::get('accommodations/{id}', [AccommodationController::class, 'show']);
     Route::get('landmarks', [LandmarkController::class, 'index']);
-    Route::post('landmarks', [LandmarkController::class, 'store']);
-    Route::post('landmarks/{id}/photos', [LandmarkController::class, 'addPhotos']);
+    Route::post('landmarks', [LandmarkController::class, 'store'])
+        ->middleware(['jwt.auth', 'role:admin,resort,enterprise']);
+    Route::post('landmarks/{id}/photos', [LandmarkController::class, 'addPhotos'])
+        ->middleware(['jwt.auth', 'role:admin,resort,enterprise']);
  
     // Public Itineraries
     Route::get('itineraries', [AdminItineraryController::class, 'publicIndex']);
@@ -347,6 +356,10 @@ Route::group(['middleware' => ['jwt.auth']], function () {
 
     // Admin-only static listing management (no subscription required)
     Route::group(['middleware' => ['role:admin']], function () {
+        Route::post('admin/accommodations/legacy-migration', [LegacyResortMigrationController::class, 'migrate'])
+            ->middleware('throttle:30,1');
+        Route::post('media/uploads/cleanup-operation', [MediaUploadController::class, 'cleanupOperation'])
+            ->middleware('throttle:30,1');
         Route::post('admin/products', [ProductController::class, 'store']);
         Route::post('admin/products/{id}', [ProductController::class, 'update']);
         Route::put('admin/products/{id}', [ProductController::class, 'update']);
@@ -675,15 +688,29 @@ Route::group(['middleware' => ['jwt.auth']], function () {
 
         // Hero Video API (Admin POST upload / save)
         Route::post('hero-video', function (Request $request) {
+            $request->validate([
+                'video' => 'nullable|file|mimetypes:video/mp4,video/quicktime,video/webm,video/ogg,video/mpeg,video/x-matroska|max:' . config('uploads.max_video_size_kb'),
+                'video_url' => 'nullable|string|max:2048',
+                'title' => 'nullable|string|max:255',
+            ]);
+
             $url = null;
             if ($request->hasFile('video')) {
                 $file = $request->file('video');
-                $ext = $file->getClientOriginalExtension() ?: 'mp4';
-                $path = $file->storeAs('videos', 'hero_' . time() . '.' . $ext, 'public');
+                $path = $file->storeAs('videos', 'hero_' . \Illuminate\Support\Str::uuid() . '.' . ($file->extension() ?: 'mp4'), 'public');
                 $url = '/storage/' . $path;
                 \Illuminate\Support\Facades\Cache::forever('hero_video', $url);
             } elseif ($request->filled('video_url')) {
                 $url = $request->input('video_url');
+                if (strpos($url, '/storage/originals/') === 0) {
+                    $relativePath = substr($url, strlen('/storage/'));
+                    $ownedPrefix = 'originals/' . $request->user()->id . '/';
+                    if (strpos($relativePath, $ownedPrefix) !== 0
+                        || strpos($relativePath, '..') !== false
+                        || !\Illuminate\Support\Facades\Storage::disk('public')->exists($relativePath)) {
+                        return response()->json(['message' => 'The uploaded video is invalid or does not belong to this account.'], 422);
+                    }
+                }
                 \Illuminate\Support\Facades\Cache::forever('hero_video', $url);
             }
             if ($request->filled('title')) {
@@ -708,8 +735,11 @@ Route::group(['middleware' => ['jwt.auth']], function () {
             $qrUrl = null;
             if ($request->hasFile('qr_code')) {
                 $file = $request->file('qr_code');
-                $ext = $file->getClientOriginalExtension() ?: 'png';
-                $path = $file->storeAs('settings', 'qr_' . time() . '.' . $ext, 'public');
+                $request->validate([
+                    'qr_code' => 'image|mimes:jpeg,png,jpg,webp,avif,heic,heif|max:' . config('uploads.max_image_size_kb'),
+                ]);
+                $filename = 'qr_' . \Illuminate\Support\Str::uuid() . '.' . ($file->extension() ?: 'png');
+                $path = $file->storeAs('settings', $filename, 'public');
                 $qrUrl = '/storage/' . $path;
                 \Illuminate\Support\Facades\Cache::forever('subscription_qr', $qrUrl);
             }
@@ -737,8 +767,18 @@ Route::group(['middleware' => ['jwt.auth']], function () {
         Route::post('admin/moderation/posts/{id}/reject', [EnterprisePostController::class, 'reject']);
     });
 
-    // Multi-role event management (admin, enterprise, resort)
+    // Event management for Admin, Enterprise, and Resort accounts.
     Route::group(['middleware' => ['role:admin,enterprise,resort']], function () {
+        Route::post('media/uploads', [MediaUploadController::class, 'initiate'])->middleware('throttle:120,1');
+        Route::post('media/uploads/{uploadId}/chunks/{index}', [MediaUploadController::class, 'storeChunk'])
+            ->where(['uploadId' => '[0-9a-fA-F-]{36}', 'index' => '[0-9]+'])
+            ->middleware('throttle:600,1');
+        Route::post('media/uploads/{uploadId}/complete', [MediaUploadController::class, 'complete'])
+            ->where('uploadId', '[0-9a-fA-F-]{36}')
+            ->middleware('throttle:30,1');
+        Route::delete('media/uploads/{uploadId}', [MediaUploadController::class, 'cancel'])
+            ->where('uploadId', '[0-9a-fA-F-]{36}')
+            ->middleware('throttle:30,1');
         Route::get('events/my', [EventController::class, 'myEvents']); // Filtered by ownership - MUST be before events/{id}
         Route::post('events', [EventController::class, 'store']);
         Route::post('events/{id}', [EventController::class, 'update']); // FormData support

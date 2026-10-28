@@ -26,6 +26,9 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Copy ONLY the backend/ folder into /var/www/html
 # (Docker context is repo root, so we specify backend/ subdirectory)
 COPY backend/ .
+COPY backend/docker/php-upload.ini /usr/local/etc/php/conf.d/uploads.ini
+COPY backend/docker/apache-upload.conf /etc/apache2/conf-available/upload.conf
+RUN a2enconf upload
 
 # Remove Windows-built vendor (reinstall fresh for Linux)
 RUN rm -rf vendor/ node_modules/

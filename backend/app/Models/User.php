@@ -161,11 +161,11 @@ class User extends Authenticatable
         if ($isSetup) {
             // For initial setup, images are required
             $rules['images'] = 'required|array|min:1|max:10';
-            $rules['images.*'] = 'required|file|mimes:jpg,jpeg,png,webp,avif|max:5120'; // 5MB max
+            $rules['images.*'] = 'required|file|mimes:jpg,jpeg,png,webp,avif,heic,heif|max:' . config('uploads.max_image_size_kb');
         } else {
             // For updates, images are optional
             $rules['images'] = 'nullable|array|max:10';
-            $rules['images.*'] = 'nullable|file|mimes:jpg,jpeg,png,webp,avif|max:5120';
+            $rules['images.*'] = 'nullable|file|mimes:jpg,jpeg,png,webp,avif,heic,heif|max:' . config('uploads.max_image_size_kb');
         }
 
         return $rules;
@@ -187,9 +187,9 @@ class User extends Authenticatable
             'images.required' => 'At least one resort image is required',
             'images.min' => 'At least one resort image is required',
             'images.max' => 'You can upload a maximum of 10 images',
-            'images.*.image' => 'Image must be JPG, JPEG, PNG, WebP, or AVIF',
-            'images.*.mimes' => 'Image must be JPG, JPEG, PNG, WebP, or AVIF',
-            'images.*.max' => 'Image size must not exceed 5MB',
+            'images.*.image' => 'Image must be a supported JPEG, PNG, GIF, WebP, AVIF, HEIC, or HEIF file',
+            'images.*.mimes' => 'Image must be a supported JPEG, PNG, GIF, WebP, AVIF, HEIC, or HEIF file',
+            'images.*.max' => 'Image exceeds the configured maximum upload size',
         ];
     }
 }

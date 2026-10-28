@@ -41,7 +41,19 @@ import {
   Palette,
   BookOpen
 } from 'lucide-react';
-import { getPublicJSON, postJSON, deleteJSON, API_BASE, cleanItineraryTitle, purgeClientRecord } from '../../lib/api';
+import {
+  getPublicJSON,
+  postJSON,
+  deleteJSON,
+  API_BASE,
+  cleanItineraryTitle,
+  purgeClientRecord,
+  uploadMediaInChunks,
+  sendMediaFormData,
+  VIDEO_UPLOAD_LIMIT_BYTES,
+} from '../../lib/api';
+import { MAX_VIDEO_INPUT_BYTES } from '../../lib/mediaCompression';
+import { migrateLegacyResortRecord } from '../../lib/legacyResortMigration';
 import {
   MANSALAY_BARANGAYS,
   ATTRACTION_CATEGORIES,
@@ -60,10 +72,12 @@ const ALLOWED_VIDEO_MIME_TYPES = [
   'video/mp4',
   'video/webm',
   'video/ogg',
-  'video/quicktime'
+  'video/quicktime',
+  'video/mpeg',
+  'video/x-matroska'
 ];
-const ALLOWED_VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogv', '.mov'];
-const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024; // 500MB Limit
+const ALLOWED_VIDEO_EXTENSIONS = ['.mp4', '.webm', '.ogv', '.mov', '.mpeg', '.mpg', '.mkv'];
+const ALLOWED_VIDEO_MAX_SIZE_BYTES = Math.min(VIDEO_UPLOAD_LIMIT_BYTES, MAX_VIDEO_INPUT_BYTES);
 
 function validateSecureVideoFile(file: File): { valid: boolean; error?: string } {
   const fileName = file.name.toLowerCase();
@@ -78,14 +92,14 @@ function validateSecureVideoFile(file: File): { valid: boolean; error?: string }
   if (file.type && !ALLOWED_VIDEO_MIME_TYPES.includes(file.type)) {
     return {
       valid: false,
-      error: `Security Error: Unsupported video MIME type (${file.type}). Only MP4, WebM, OGG, or MOV videos are allowed.`
+      error: `Security Error: Unsupported video MIME type (${file.type}). Only MP4, WebM, OGG, MOV, MPEG, or MKV videos are allowed.`
     };
   }
 
-  if (file.size > MAX_VIDEO_SIZE_BYTES) {
+  if (file.size > ALLOWED_VIDEO_MAX_SIZE_BYTES) {
     return {
       valid: false,
-      error: `Security Error: Video file size exceeds 500MB limit (${(file.size / (1024 * 1024)).toFixed(1)} MB).`
+      error: `Video exceeds the ${Math.floor(ALLOWED_VIDEO_MAX_SIZE_BYTES / (1024 * 1024))} MB browser video-processing limit (${(file.size / (1024 * 1024)).toFixed(1)} MB selected).`
     };
   }
 
@@ -120,6 +134,38 @@ function sanitizeVideoUrl(url: string): { valid: boolean; error?: string; cleanU
   }
 
   return { valid: true, cleanUrl: trimmed };
+}
+
+function stripInlineMediaFromCache(items: any[]): any[] {
+  const strip = (value: any): any => {
+    if (typeof value === 'string' && /^data:(image|video)\//i.test(value)) return '';
+    if (Array.isArray(value)) return value.map(strip);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, strip(nested)]));
+    }
+    return value;
+  };
+  return items.map(strip);
+}
+
+function saveArrayCache(key: string, items: any[]): boolean {
+  const sanitizedItems = stripInlineMediaFromCache(items);
+  try {
+    localStorage.setItem(key, JSON.stringify(sanitizedItems));
+    return true;
+  } catch (error) {
+    if (!(error instanceof DOMException) || error.name !== 'QuotaExceededError') throw error;
+  }
+
+  for (let count = sanitizedItems.length - 1; count > 0; count--) {
+    try {
+      localStorage.setItem(key, JSON.stringify(sanitizedItems.slice(0, count)));
+      return false;
+    } catch (error) {
+      if (!(error instanceof DOMException) || error.name !== 'QuotaExceededError') throw error;
+    }
+  }
+  return false;
 }
 
 const OPEN_TIME_OPTIONS = [
@@ -193,6 +239,15 @@ export function AdminContent() {
   const [activeTab, setActiveTab] = useState<ContentTab>('resort');
   const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const publishingRef = useRef(false);
+  const [legacyResortCount, setLegacyResortCount] = useState(0);
+  const [legacyBackupExported, setLegacyBackupExported] = useState(false);
+  const [legacyMigrationRunning, setLegacyMigrationRunning] = useState(false);
+  const [legacyMigrationReport, setLegacyMigrationReport] = useState<{
+    migrated: string[];
+    skipped: string[];
+    failed: string[];
+  } | null>(null);
   const [editingId, setEditingId] = useState<number | string | null>(null);
 
   // 📊 UPLOADING PROGRESS OVERLAY STATE
@@ -200,6 +255,7 @@ export function AdminContent() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatusText, setUploadStatusText] = useState('');
   const [uploadFileName, setUploadFileName] = useState('');
+  const uploadAbortControllerRef = useRef<AbortController | null>(null);
 
   // Form states
   const [name, setName] = useState('');
@@ -313,6 +369,7 @@ export function AdminContent() {
   const [videoUrlInput, setVideoUrlInput] = useState('');
   const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const [videoMetadata, setVideoMetadata] = useState<{ duration: number; width: number; height: number } | null>(null);
   const [activeHeroVideo, setActiveHeroVideo] = useState<string | null>(() => {
     return localStorage.getItem('discover-mansalay:heroVideo');
   });
@@ -490,6 +547,165 @@ export function AdminContent() {
     };
   }, [mainMode, activeTab]);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('discover-mansalay:custom_resorts');
+      const records = raw ? JSON.parse(raw) : [];
+      setLegacyResortCount(Array.isArray(records) ? records.length : 0);
+    } catch (error) {
+      console.warn('Could not inspect the legacy resort cache:', error);
+    }
+  }, []);
+
+  const exportLegacyResortBackup = () => {
+    try {
+      const raw = localStorage.getItem('discover-mansalay:custom_resorts');
+      if (!raw) {
+        setLegacyResortCount(0);
+        toast.info('No legacy resort data was found in this browser.');
+        return;
+      }
+
+      const backup = new Blob([JSON.stringify({
+        version: 1,
+        exported_at: new Date().toISOString(),
+        storage_key: 'discover-mansalay:custom_resorts',
+        data: JSON.parse(raw),
+      }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(backup);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `discover-mansalay-legacy-resorts-v1-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setLegacyBackupExported(true);
+      toast.success('Legacy resort backup downloaded. The original browser data remains untouched.');
+    } catch (error) {
+      console.warn('Legacy resort backup export failed:', error);
+      toast.error('Could not export the legacy resort backup. No migration was started.');
+    }
+  };
+
+  const migrateLegacyResorts = async () => {
+    if (legacyMigrationRunning || !legacyBackupExported) return;
+    let records: any[];
+    try {
+      const raw = localStorage.getItem('discover-mansalay:custom_resorts');
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(parsed)) throw new Error('Legacy resort data is not an array.');
+      records = parsed;
+    } catch (error) {
+      console.warn('Legacy resort migration could not read the cache:', error);
+      toast.error('Could not read the legacy resort data. It has not been changed.');
+      return;
+    }
+
+    if (records.length === 0) {
+      toast.info('There are no legacy resort records to migrate.');
+      return;
+    }
+
+    setLegacyMigrationRunning(true);
+    setUploadModalOpen(true);
+    setUploadProgress(0);
+    const report = { migrated: [] as string[], skipped: [] as string[], failed: [] as string[] };
+    const reportId = (legacy: any, index: number) => {
+      if (Number.isSafeInteger(legacy?.id)) return String(legacy.id);
+      if (typeof legacy?.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(legacy.id)) return legacy.id;
+      return `row-${index + 1}`;
+    };
+    const progressKey = 'discover-mansalay:legacy_resort_migration_v1';
+    const readProgress = (): Record<string, string> => {
+      try {
+        const value = JSON.parse(localStorage.getItem(progressKey) || '{}');
+        return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+      } catch {
+        return {};
+      }
+    };
+    const saveProgress = (key: string) => {
+      try {
+        const progress = readProgress();
+        progress[key] = 'verified';
+        localStorage.setItem(progressKey, JSON.stringify(progress));
+      } catch {
+        toast.warning('Migration continues, but browser quota prevented saving its local progress marker. The server migration is idempotent; keep the backup file.');
+      }
+    };
+    let cancelled = false;
+    for (let recordIndex = 0; recordIndex < records.length; recordIndex++) {
+      const legacy = records[recordIndex];
+      if (!legacy || typeof legacy !== 'object' || Array.isArray(legacy) || !String(legacy.name || '').trim()) {
+        report.skipped.push(reportId(legacy, recordIndex));
+        continue;
+      }
+
+      const cancellation = new AbortController();
+      uploadAbortControllerRef.current = cancellation;
+      try {
+        setUploadStatusText(`Migrating legacy resort ${recordIndex + 1} of ${records.length}...`);
+        setUploadProgress(Math.floor((recordIndex / records.length) * 100));
+        const result = await migrateLegacyResortRecord(legacy, recordIndex, {
+          upload: async (file, operationKey, uploadId, onProgress) => uploadMediaInChunks(
+            file,
+            onProgress,
+            cancellation.signal,
+            { prepared: true, operationKey, uploadId }
+          ),
+          save: (migrationKey, record) => {
+            if (cancellation.signal.aborted) {
+              return Promise.reject(new DOMException('Migration cancelled.', 'AbortError'));
+            }
+            return postJSON('/admin/accommodations/legacy-migration', {
+              migration_key: migrationKey,
+              record,
+            });
+          },
+          cleanup: operationKey => postJSON('/media/uploads/cleanup-operation', {
+            operation_key: operationKey,
+          }),
+          onProgress: setUploadStatusText,
+          signal: cancellation.signal,
+        });
+        saveProgress(result.migrationKey);
+        report.migrated.push(reportId(legacy, recordIndex));
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          cancelled = true;
+          break;
+        }
+        report.failed.push(reportId(legacy, recordIndex));
+        console.warn('Legacy resort migration failed for one record:', {
+          record_id: reportId(legacy, recordIndex),
+          error: (error instanceof Error ? error.message : 'Unknown migration error')
+            .replace(/data:(image|video)\/[^,\s;]+;base64,[A-Za-z0-9+/=]+/gi, '[inline media omitted]')
+            .slice(0, 300),
+        });
+      } finally {
+        if (uploadAbortControllerRef.current === cancellation) {
+          uploadAbortControllerRef.current = null;
+        }
+      }
+      if (cancellation.signal.aborted) {
+        cancelled = true;
+        break;
+      }
+    }
+
+    setLegacyMigrationReport(report);
+    setLegacyMigrationRunning(false);
+    setLegacyBackupExported(false);
+    setUploadProgress(cancelled ? Math.floor((report.migrated.length / records.length) * 100) : 100);
+    setUploadStatusText(cancelled ? 'Legacy migration cancelled. The original data and backup remain available.' : 'Legacy migration finished.');
+    setUploadModalOpen(false);
+    await loadManagePosts();
+    window.dispatchEvent(new Event('contentUpdated'));
+    const reportMessage =
+      `Legacy migration ${cancelled ? 'cancelled' : 'finished'}: ${report.migrated.length} migrated, ${report.skipped.length} skipped, ${report.failed.length} failed.`;
+    if (cancelled) toast.info(reportMessage);
+    else toast[report.failed > 0 ? 'warning' : 'success'](reportMessage);
+  };
+
   const loadManagePosts = async () => {
     setLoading(true);
     try {
@@ -525,7 +741,7 @@ export function AdminContent() {
       };
 
       const [resorts, products, attractions, events, cultures, histories] = await Promise.all([
-        fetchSection('/accommodations', ['custom_resorts', 'custom_resort', 'custom_accommodations']),
+        fetchSection('/accommodations', []),
         fetchSection('/products', ['custom_products', 'custom_product']),
         fetchSection('/attractions', ['custom_attractions', 'custom_attraction']),
         fetchSection('/events', ['custom_events', 'custom_event']),
@@ -634,6 +850,7 @@ export function AdminContent() {
     }
 
     setSelectedVideoFile(file);
+    setVideoMetadata(null);
     const objectUrl = URL.createObjectURL(file);
     setVideoPreviewUrl(objectUrl);
     toast.success('Video ready to upload.');
@@ -690,11 +907,6 @@ export function AdminContent() {
       return;
     }
 
-    if (file.size > 15 * 1024 * 1024) {
-      toast.error('Image size exceeds 15MB limit.');
-      return;
-    }
-
     setBgImageFile(file);
     const previewUrl = URL.createObjectURL(file);
     setBgImagePreview(previewUrl);
@@ -724,13 +936,11 @@ export function AdminContent() {
         const formData = new FormData();
         formData.append('image', bgImageFile);
 
-        const response = await fetch(`${API_BASE}/api/admin/site-settings/home-background`, {
-          method: 'POST',
+        const response = await sendMediaFormData(`${API_BASE}/api/admin/site-settings/home-background`, formData, {
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
             Accept: 'application/json',
           },
-          body: formData,
         });
 
         if (!response.ok) {
@@ -798,9 +1008,11 @@ export function AdminContent() {
     e.preventDefault();
     let finalVideoUrl = '';
 
+    const abortController = new AbortController();
+    uploadAbortControllerRef.current = abortController;
     setUploadFileName(selectedVideoFile ? selectedVideoFile.name : 'Homepage Video');
     setUploadStatusText('Uploading...');
-    setUploadProgress(10);
+    setUploadProgress(0);
     setUploadModalOpen(true);
 
     try {
@@ -812,45 +1024,30 @@ export function AdminContent() {
           return;
         }
 
-        setUploadProgress(35);
-        await new Promise((res) => setTimeout(res, 150));
-
-        // Create persistent URL
-        const blobUrl = URL.createObjectURL(selectedVideoFile);
-        finalVideoUrl = blobUrl;
-
-        // Convert file to Data URL if <= 25MB for 100% permanent local storage
-        if (selectedVideoFile.size <= 25 * 1024 * 1024) {
-          try {
-            const reader = new FileReader();
-            reader.readAsDataURL(selectedVideoFile);
-            await new Promise((resolve) => {
-              reader.onloadend = () => {
-                if (reader.result) finalVideoUrl = reader.result as string;
-                resolve(null);
-              };
-            });
-          } catch {
-            finalVideoUrl = blobUrl;
+        setUploadStatusText('Compressing video on this device…');
+        const uploaded = await uploadMediaInChunks(
+          selectedVideoFile,
+          (uploadedBytes, totalBytes) => {
+            const percentage = totalBytes ? 20 + Math.floor((uploadedBytes / totalBytes) * 75) : 20;
+            setUploadProgress(percentage);
+            setUploadStatusText(`Uploading compressed MP4 (${(uploadedBytes / (1024 * 1024)).toFixed(1)} of ${(totalBytes / (1024 * 1024)).toFixed(1)} MiB; original ${(selectedVideoFile.size / (1024 * 1024)).toFixed(1)} MiB)`);
+          },
+          abortController.signal,
+          {
+            onProcessingProgress: (file, phase, percent) => {
+              if (phase === 'compressing') {
+                setUploadProgress(Math.floor(percent * 0.15));
+                setUploadStatusText(`Compressing ${file.name} on this device (${percent}%)`);
+              }
+            },
           }
-        }
-
-        setUploadProgress(75);
-        await new Promise((res) => setTimeout(res, 150));
-
-        // Post to backend database
-        try {
-          const formData = new FormData();
-          formData.append('video', selectedVideoFile);
-          if (videoTitle) formData.append('title', videoTitle);
-
-          const res = await postJSON('/hero-video', formData, true);
-          if (res?.video) {
-            finalVideoUrl = res.video;
-          }
-        } catch (backendErr) {
-          console.warn('Backend API save notice, using persistent media storage:', backendErr);
-        }
+        );
+        const res = await postJSON('/hero-video', {
+          video_url: uploaded.url,
+          title: videoTitle,
+        }, true);
+        if (!res?.video) throw new Error('The uploaded video was not published.');
+        finalVideoUrl = res.video;
       } else if (videoUrlInput.trim()) {
         const sanitized = sanitizeVideoUrl(videoUrlInput);
         if (!sanitized.valid) {
@@ -861,27 +1058,27 @@ export function AdminContent() {
         setUploadProgress(50);
         finalVideoUrl = sanitized.cleanUrl!;
 
-        try {
-          const res = await postJSON('/hero-video', {
-            video_url: sanitized.cleanUrl,
-            title: videoTitle
-          }, true);
-
-          if (res?.video) finalVideoUrl = res.video;
-        } catch {
-          // Use cleanUrl fallback
-        }
+        const res = await postJSON('/hero-video', {
+          video_url: sanitized.cleanUrl,
+          title: videoTitle
+        }, true);
+        if (!res?.video) throw new Error('The video URL could not be saved.');
+        finalVideoUrl = res.video;
       } else {
         toast.error('Please upload a video file or enter a valid video URL');
         setUploadModalOpen(false);
         return;
       }
-    } catch (err: any) {
-      console.warn('Video save error:', err);
-    }
-
-    if (!finalVideoUrl && videoPreviewUrl) {
-      finalVideoUrl = videoPreviewUrl;
+    } catch (err: unknown) {
+      setUploadModalOpen(false);
+      if (err instanceof Error && err.name === 'AbortError') {
+        toast.info('Upload cancelled. Select the same file to resume later.');
+      } else {
+        toast.error(err instanceof Error ? err.message : 'Failed to upload video.');
+      }
+      return;
+    } finally {
+      uploadAbortControllerRef.current = null;
     }
 
     if (finalVideoUrl) {
@@ -895,6 +1092,8 @@ export function AdminContent() {
       }
 
       setActiveHeroVideo(finalVideoUrl);
+      if (videoPreviewUrl?.startsWith('blob:')) URL.revokeObjectURL(videoPreviewUrl);
+      setVideoPreviewUrl(finalVideoUrl);
       window.dispatchEvent(new Event('heroVideoUpdated'));
       window.dispatchEvent(new Event('storage'));
     }
@@ -996,46 +1195,27 @@ export function AdminContent() {
   // 🛡️ PUBLISH HANDLER WITH ACCURATE DATABASE UPLOAD PROGRESS
   const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (publishingRef.current) return;
     if (!name.trim()) {
       toast.error('Please enter a title or name');
       return;
     }
 
+    publishingRef.current = true;
     setPublishing(true);
     setUploadFileName(name);
-    setUploadStatusText('Uploading...');
-    setUploadProgress(15);
+    setUploadStatusText(coverImageFiles.length > 0 ? 'Preparing images...' : 'Saving content...');
+    setUploadProgress(5);
     setUploadModalOpen(true);
+    const publishController = new AbortController();
+    uploadAbortControllerRef.current = publishController;
+    const publishOperationKey = crypto.randomUUID();
 
-    let finalImageUrl = coverImageUrl;
-    let finalImagesList: string[] = [];
+    const finalImageUrl = coverImageFiles.length > 0 ? '' : coverImageUrl;
+    const finalImagesList: string[] = finalImageUrl ? [finalImageUrl] : [];
 
-    if (coverImageFiles.length > 0) {
-      setUploadProgress(40);
-      for (const file of coverImageFiles) {
-        try {
-          const reader = new FileReader();
-          reader.readAsDataURL(file);
-          await new Promise((res) => {
-            reader.onloadend = () => {
-              if (reader.result) finalImagesList.push(reader.result as string);
-              res(null);
-            };
-          });
-        } catch {
-          finalImagesList.push(URL.createObjectURL(file));
-        }
-      }
-      if (finalImagesList.length > 0) {
-        finalImageUrl = finalImagesList[0];
-      }
-    }
-
-    setUploadProgress(75);
-    await new Promise((res) => setTimeout(res, 120));
-
-    const numPrice = Number(price || 150);
-    const resolvedVideo = videoPreviewUrl || videoUrlInput.trim() || undefined;
+    const numPrice = Number(price);
+    const resolvedVideo = selectedVideoFile ? undefined : (videoUrlInput.trim() || undefined);
     const newItemPayload: any = {
       id: editingId || Date.now(),
       name: cleanItineraryTitle(name),
@@ -1098,10 +1278,10 @@ export function AdminContent() {
     };
 
     try {
-      let endpoint = '/admin/accommodations';
+      let endpoint = activeTab === 'resort' ? '/accommodations' : '/admin/accommodations';
       if (activeTab === 'product') endpoint = '/admin/products';
       if (activeTab === 'attraction') endpoint = '/attractions';
-      if (activeTab === 'event') endpoint = '/events';
+      if (activeTab === 'event') endpoint = '/admin/events';
       if (activeTab === 'itinerary') endpoint = '/attractions';
       if (activeTab === 'culture') endpoint = '/admin/culture-arts';
       if (activeTab === 'history') endpoint = '/admin/histories';
@@ -1111,93 +1291,118 @@ export function AdminContent() {
       }
 
       let apiResult: any = null;
-      if (coverImageFiles.length > 0 || coverImageFile || selectedVideoFile || videoUrlInput.trim()) {
-        const formData = new FormData();
-        formData.append('name', newItemPayload.name);
-        formData.append('category', newItemPayload.category);
-        formData.append('type', newItemPayload.type);
-        formData.append('description', description);
-        
-        if (coverImageFiles.length > 0) {
-          coverImageFiles.forEach((file) => {
-            formData.append('images[]', file);
-          });
-          formData.append('image', coverImageFiles[0]);
-        } else if (coverImageFile) {
-          formData.append('image', coverImageFile);
-        }
+      const payload: any = {
+        ...newItemPayload,
+        shop_name: shopName.trim(),
+        store_name: shopName.trim(),
+        enterprise_store: shopName.trim(),
+        seller_name: productOwner.trim() || shopName.trim(),
+        product_owner: productOwner.trim(),
+        operation_key: publishOperationKey,
+      };
+      if (editingId) payload._method = 'PUT';
 
-        if (selectedVideoFile) {
-          formData.append('video', selectedVideoFile);
-        } else if (videoUrlInput.trim()) {
-          formData.append('video', videoUrlInput.trim());
-          formData.append('video_url', videoUrlInput.trim());
-        }
-        if (location) formData.append('location', location);
-        if (activeTab === 'attraction' && operatingHours) formData.append('operating_hours', operatingHours);
-        if (fullDescription) formData.append('full_description', fullDescription);
-        formData.append('price', String(numPrice));
-        formData.append('price_per_night', String(numPrice));
-        if (stock) formData.append('stock', stock);
-        if (eventDate) formData.append('date', eventDate);
-        if (eventTime) formData.append('time', eventTime);
-        if (facebook) formData.append('facebook', facebook);
-        if (instagram) formData.append('instagram', instagram);
-        if (contactNumber) {
-          formData.append('contact_number', contactNumber);
-          formData.append('phone', contactNumber);
-        }
-        if (email) formData.append('email', email);
-        if (website) formData.append('website', website);
-
-        if (activeTab === 'culture') {
-          if (artistName) formData.append('artist_name', artistName);
-          if (periodEra) formData.append('period_era', periodEra);
-        }
-        if (activeTab === 'history') {
-          if (historicalPeriod) {
-            formData.append('period', historicalPeriod);
-            formData.append('historical_period', historicalPeriod);
-          }
-          if (historyDate) formData.append('date', historyDate);
-          if (sourceAuthor) {
-            formData.append('source', sourceAuthor);
-            formData.append('author', sourceAuthor);
-          }
-        }
-
-        if (editingId) {
-          formData.append('_method', 'PUT');
-        }
-
-        try {
-          apiResult = await postJSON(endpoint, formData);
-        } catch (apiErr) {
-          if (activeTab === 'resort') {
-            apiResult = await postJSON(editingId ? `/accommodations/${editingId}` : '/accommodations', formData);
-          } else if (activeTab === 'product') {
-            apiResult = await postJSON(editingId ? `/products/${editingId}` : '/products', formData);
-          } else {
-            throw apiErr;
-          }
-        }
-      } else {
-        const payload: any = { ...newItemPayload };
-        if (editingId) {
-          payload._method = 'PUT';
-        }
-        try {
-          apiResult = await postJSON(endpoint, payload);
-        } catch (apiErr) {
-          if (activeTab === 'resort') {
-            apiResult = await postJSON(editingId ? `/accommodations/${editingId}` : '/accommodations', payload);
-          } else if (activeTab === 'product') {
-            apiResult = await postJSON(editingId ? `/products/${editingId}` : '/products', payload);
-          } else {
-            throw apiErr;
-          }
-        }
+      const selectedImages = coverImageFiles.length > 0
+        ? coverImageFiles
+        : coverImageFile
+          ? [coverImageFile]
+          : [];
+      if (selectedImages.length === 0 && /^data:image\//i.test(finalImageUrl)) {
+        selectedImages.push(await mediaDataUrlToFile(finalImageUrl, cleanItineraryTitle(name) || 'image'));
+        payload.image = '';
+        payload.images = [];
       }
+      const selectedVideos = selectedVideoFile ? [selectedVideoFile] : [];
+      if (!selectedVideoFile && /^data:video\//i.test(videoUrlInput.trim())) {
+        selectedVideos.push(await mediaDataUrlToFile(videoUrlInput.trim(), 'uploaded-video'));
+      }
+      const selectedMedia = [...selectedImages, ...selectedVideos];
+
+      if (selectedMedia.length > 0) {
+        const preparedMedia = await prepareMediaFiles(selectedMedia, (file, phase, percent) => {
+          setUploadStatusText(`${phase === 'checking' ? 'Preparing' : 'Compressing'} ${file.name} (${percent}%)`);
+          setUploadProgress(current => Math.max(current, Math.min(30, 5 + Math.round(percent * 0.25))));
+        }, publishController.signal, {}, selectedMedia.map(file =>
+          file.type.startsWith('image/') ? 'cover' : 'resort-gallery'
+        ));
+        const totalBytes = preparedMedia.reduce((sum, media) => sum + media.file.size, 0);
+        const originalBytes = preparedMedia.reduce((sum, media) => sum + media.originalSize, 0);
+        const formatMiB = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+        const savedPercent = originalBytes > 0
+          ? Math.max(0, Math.round(((originalBytes - totalBytes) / originalBytes) * 100))
+          : 0;
+        const mediaSummary = preparedMedia.slice(0, 3).map((media) => {
+          const reduction = media.originalSize > 0
+            ? Math.max(0, Math.round(((media.originalSize - media.compressedSize) / media.originalSize) * 100))
+            : 0;
+          return `${media.file.name}: ${formatMiB(media.originalSize)} → ${formatMiB(media.compressedSize)} (${reduction}% smaller)`;
+        });
+        const additionalFiles = preparedMedia.length > mediaSummary.length
+          ? `; +${preparedMedia.length - mediaSummary.length} more file(s)`
+          : '';
+        setUploadStatusText(
+          `Prepared ${preparedMedia.length} file(s), ${savedPercent}% smaller overall (${formatMiB(originalBytes)} → ${formatMiB(totalBytes)}): ${mediaSummary.join('; ')}${additionalFiles}. Uploading...`
+        );
+
+        const uploadedBytesByFile = preparedMedia.map(() => 0);
+        const uploadedMedia: Array<{ kind: 'image' | 'video'; url: string } | undefined> =
+          new Array(preparedMedia.length);
+        let nextMediaIndex = 0;
+        let uploadFailure: unknown;
+        const uploadWorker = async () => {
+          while (nextMediaIndex < preparedMedia.length && !uploadFailure) {
+            const mediaIndex = nextMediaIndex++;
+            const media = preparedMedia[mediaIndex];
+            try {
+              const uploaded = await uploadMediaInChunks(
+                media.file,
+                (fileUploadedBytes) => {
+                  uploadedBytesByFile[mediaIndex] = fileUploadedBytes;
+                  const completedBytes = uploadedBytesByFile.reduce((sum, bytes) => sum + bytes, 0);
+                  const percent = totalBytes > 0
+                    ? Math.floor((completedBytes / totalBytes) * 100)
+                    : 100;
+                  setUploadStatusText(`Uploading ${media.file.name} (${percent}% overall)...`);
+                  setUploadProgress(Math.max(30, 30 + Math.round(Math.min(percent, 100) * 0.55)));
+                },
+                publishController.signal,
+                { prepared: true, operationKey: publishOperationKey },
+              );
+              uploadedMedia[mediaIndex] = { kind: media.kind, url: uploaded.url };
+            } catch (error) {
+              if (!uploadFailure) uploadFailure = error;
+              publishController.abort();
+            }
+          }
+        };
+
+        await Promise.all(
+          Array.from({ length: Math.min(3, preparedMedia.length) }, () => uploadWorker())
+        );
+        if (uploadFailure) throw uploadFailure;
+        const completedUploads = uploadedMedia.filter(
+          (media): media is { kind: 'image' | 'video'; url: string } => media !== undefined
+        );
+        if (completedUploads.length !== preparedMedia.length) {
+          throw new Error('One or more media files were not uploaded.');
+        }
+
+        const uploadedImages = completedUploads
+          .filter(media => media.kind === 'image')
+          .map(media => media.url);
+        const uploadedVideo = completedUploads.find(media => media.kind === 'video');
+        if (uploadedImages.length > 0) {
+          payload.image = uploadedImages[0];
+          payload.images = uploadedImages;
+        }
+        if (uploadedVideo) payload.video = uploadedVideo.url;
+      } else if (videoUrlInput.trim()) {
+        payload.video = videoUrlInput.trim();
+        payload.video_url = videoUrlInput.trim();
+      }
+
+      uploadAbortControllerRef.current = null;
+      apiResult = await postJSON(endpoint, payload);
 
       if (apiResult) {
         if (apiResult.id) newItemPayload.id = apiResult.id;
@@ -1219,42 +1424,71 @@ export function AdminContent() {
       }
     } catch (err: any) {
       console.warn('Backend API save notice:', err);
+      try {
+        await postJSON('/media/uploads/cleanup-operation', {
+          operation_key: publishOperationKey,
+        });
+      } catch (cleanupError) {
+        console.warn('Newly uploaded media cleanup will be retried by the backend:', cleanupError);
+      }
+      setUploadModalOpen(false);
+      setPublishing(false);
+      if (err instanceof Error && err.name === 'AbortError') {
+        toast.info('Publishing cancelled. Your content was not saved.');
+        publishingRef.current = false;
+        return;
+      }
+      toast.error('Could not publish content', {
+        description: err?.message || 'The server rejected the content. Please try again.',
+      });
+      publishingRef.current = false;
+      return;
+    } finally {
+      if (uploadAbortControllerRef.current === publishController) {
+        uploadAbortControllerRef.current = null;
+      }
     }
 
-    // Always persist to local cache fallback so UI updates instantly
+    setUploadProgress(95);
+    setUploadStatusText('Content saved. Updating the page...');
+
+    // Store only server URLs in the local cache; never put uploaded file data in localStorage.
+    let cacheWasTrimmed = false;
     try {
-      const storageKey = `discover-mansalay:custom_${activeTab}s`;
-      const existingStr = localStorage.getItem(storageKey);
-      const existing = existingStr ? JSON.parse(existingStr) : [];
-      if (editingId) {
-        const updated = existing.map((i: any) => i.id === editingId ? newItemPayload : i);
-        localStorage.setItem(storageKey, JSON.stringify(updated));
-      } else {
-        localStorage.setItem(storageKey, JSON.stringify([newItemPayload, ...existing]));
+      const cachedPayload = stripInlineMediaFromCache([newItemPayload])[0];
+      if (activeTab !== 'resort') {
+        const storageKey = `discover-mansalay:custom_${activeTab}s`;
+        const existingStr = localStorage.getItem(storageKey);
+        const storedItems = existingStr ? JSON.parse(existingStr) : [];
+        const existing = Array.isArray(storedItems) ? stripInlineMediaFromCache(storedItems) : [];
+        if (editingId) {
+          const updated = existing.map((i: any) => i.id === editingId ? cachedPayload : i);
+          cacheWasTrimmed = !saveArrayCache(storageKey, updated);
+        } else {
+          cacheWasTrimmed = !saveArrayCache(storageKey, [cachedPayload, ...existing]);
+        }
       }
 
       if (activeTab === 'itinerary') {
         const itinKey = 'discover-mansalay:published_itineraries';
         const curItinStr = localStorage.getItem(itinKey);
-        const curItin = curItinStr ? JSON.parse(curItinStr) : [];
+        const storedItineraries = curItinStr ? JSON.parse(curItinStr) : [];
+        const curItin = Array.isArray(storedItineraries)
+          ? stripInlineMediaFromCache(storedItineraries)
+          : [];
         const nextItin = editingId
-          ? curItin.map((i: any) => i.id === editingId ? newItemPayload : i)
-          : [newItemPayload, ...curItin.filter((i: any) => String(i.id) !== String(newItemPayload.id))];
-        localStorage.setItem(itinKey, JSON.stringify(nextItin));
-        localStorage.setItem('discover-mansalay:custom_itinerarys', JSON.stringify(nextItin));
+          ? curItin.map((i: any) => i.id === editingId ? cachedPayload : i)
+          : [cachedPayload, ...curItin.filter((i: any) => String(i.id) !== String(cachedPayload.id))];
+        cacheWasTrimmed = !saveArrayCache(itinKey, nextItin) || cacheWasTrimmed;
+        cacheWasTrimmed = !saveArrayCache('discover-mansalay:custom_itinerarys', nextItin) || cacheWasTrimmed;
         window.dispatchEvent(new Event('itineraryUpdated'));
       }
 
-      if (newItemPayload.category === 'Accommodation' || newItemPayload.category === 'Accommodations') {
-        const resortKey = 'discover-mansalay:custom_resorts';
-        const rStr = localStorage.getItem(resortKey);
-        const rExisting = rStr ? JSON.parse(rStr) : [];
-        if (!rExisting.some((i: any) => String(i.id) === String(newItemPayload.id))) {
-          localStorage.setItem(resortKey, JSON.stringify([newItemPayload, ...rExisting]));
-        }
-      }
     } catch (e) {
-      console.warn('LocalStorage error:', e);
+      if (!(e instanceof DOMException) || e.name !== 'QuotaExceededError') {
+        console.warn('LocalStorage error:', e);
+      }
+      cacheWasTrimmed = true;
     }
 
     // Reload posts and dispatch global events so all pages (Accommodations, Attractions, Itinerary, etc.) refresh
@@ -1273,9 +1507,11 @@ export function AdminContent() {
     const destinationRoute = PUBLISH_SUCCESS_ROUTES[activeTab];
 
     toast.success(editingId ? 'Updated successfully!' : 'Published successfully!', {
-      description: editingId
-        ? `Your ${activeTab} has been updated.`
-        : `Your ${activeTab} is now live! Redirecting to the ${activeTab} page...`,
+      description: cacheWasTrimmed
+        ? `Your ${activeTab} is saved on the server, but the browser cache is full.`
+        : editingId
+          ? `Your ${activeTab} has been updated.`
+          : `Your ${activeTab} is now live! Redirecting to the ${activeTab} page...`,
       action: {
         label: 'View Page',
         onClick: () => navigate(destinationRoute),
@@ -1284,6 +1520,7 @@ export function AdminContent() {
 
     resetForm();
     setPublishing(false);
+    publishingRef.current = false;
 
     // Auto-navigate to the corresponding public page so admin can verify the new entry
     if (!editingId) {
@@ -1335,7 +1572,7 @@ export function AdminContent() {
     setPublishedItems(filterOut);
 
     // 5. Clean up local storage caches
-    ['custom_resorts', 'custom_products', 'custom_attractions', 'custom_events', 'custom_itinerarys', 'custom_cultures', 'custom_histories'].forEach((key) => {
+    ['custom_products', 'custom_attractions', 'custom_events', 'custom_itinerarys', 'custom_cultures', 'custom_histories'].forEach((key) => {
       const existingStr = localStorage.getItem(`discover-mansalay:${key}`);
       if (existingStr) {
         const existing = JSON.parse(existingStr);
@@ -1354,7 +1591,7 @@ export function AdminContent() {
       let endpoint = `/accommodations/${id}`;
       if (type === 'product') endpoint = `/admin/products/${id}`;
       if (type === 'attraction' || type === 'itinerary') endpoint = `/attractions/${id}`;
-      if (type === 'event') endpoint = `/events/${id}`;
+      if (type === 'event') endpoint = `/admin/events/${id}`;
       if (type === 'culture') endpoint = `/admin/culture-arts/${id}`;
       if (type === 'history') endpoint = `/admin/histories/${id}`;
 
@@ -1418,6 +1655,15 @@ export function AdminContent() {
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
                 <span>Please wait...</span>
               </div>
+              {uploadAbortControllerRef.current && (
+                <button
+                  type="button"
+                  onClick={() => uploadAbortControllerRef.current?.abort()}
+                  className="text-xs font-semibold text-red-600 underline"
+                >
+                  Cancel upload
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1559,6 +1805,54 @@ export function AdminContent() {
                 <span>History</span>
               </button>
             </div>
+
+            {activeTab === 'resort' && legacyResortCount > 0 && (
+              <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+                <h3 className="font-extrabold">Recoverable legacy resort data found ({legacyResortCount})</h3>
+                <p className="mt-1 leading-relaxed">
+                  Download a versioned backup before migration. Migration keeps the original localStorage key unchanged and can resume safely; failed records remain available for retry.
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={exportLegacyResortBackup}
+                    disabled={legacyMigrationRunning}
+                    className="rounded-lg border border-amber-300 bg-white px-3 py-2 font-bold hover:bg-amber-100 disabled:opacity-50"
+                  >
+                    Download backup
+                  </button>
+                  <button
+                    type="button"
+                    onClick={migrateLegacyResorts}
+                    disabled={!legacyBackupExported || legacyMigrationRunning}
+                    className="rounded-lg bg-pink-500 px-3 py-2 font-bold text-white hover:bg-pink-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {legacyMigrationRunning ? 'Migrating...' : `Migrate ${legacyResortCount} legacy resort(s)`}
+                  </button>
+                  {!legacyBackupExported && <span>Backup download is required before migration.</span>}
+                </div>
+                {legacyMigrationReport && (
+                  <p className="mt-2 font-bold" role="status">
+                    Last run: {legacyMigrationReport.migrated.length} migrated, {legacyMigrationReport.skipped.length} skipped, {legacyMigrationReport.failed.length} failed.
+                  </p>
+                )}
+                {legacyMigrationReport && (
+                  <div className="mt-1 space-y-1 break-words">
+                    {(['migrated', 'skipped', 'failed'] as const).map(status => (
+                      legacyMigrationReport[status].length > 0 && (
+                        <p key={status}>
+                          <span className="font-bold capitalize">{status}:</span>{' '}
+                          {legacyMigrationReport[status].slice(0, 20).join(', ')}
+                          {legacyMigrationReport[status].length > 20
+                            ? `, and ${legacyMigrationReport[status].length - 20} more`
+                            : ''}
+                        </p>
+                      )
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* INFO CALLOUT BANNER */}
             <div className={`p-4 text-xs font-semibold rounded-2xl mb-6 flex items-center justify-between ${
@@ -1721,7 +2015,7 @@ export function AdminContent() {
                         <>
                           <Upload className="h-8 w-8 text-gray-400 group-hover:text-pink-500 mx-auto mb-2 transition-colors" />
                           <p className="text-xs font-bold text-gray-700">Click to upload cover image</p>
-                          <p className="text-[11px] text-gray-400 mt-1 font-medium">JPG, PNG, WEBP · Max 10MB per image</p>
+                          <p className="text-[11px] text-gray-400 mt-1 font-medium">JPEG, PNG, WebP, AVIF, HEIC, or HEIF · server upload limit applies</p>
                         </>
                       )}
                     </div>
@@ -2296,7 +2590,7 @@ export function AdminContent() {
                         <>
                           <Upload className="h-8 w-8 text-gray-400 group-hover:text-pink-500 mx-auto mb-2 transition-colors" />
                           <p className="text-xs font-bold text-gray-700">Click to upload multiple images</p>
-                          <p className="text-[11px] text-gray-400 mt-1 font-medium">JPG, PNG, WEBP · Max 10MB per image</p>
+                          <p className="text-[11px] text-gray-400 mt-1 font-medium">JPEG, PNG, WebP, AVIF, HEIC, or HEIF · server upload limit applies</p>
                         </>
                       )}
                     </div>
@@ -2356,7 +2650,7 @@ export function AdminContent() {
                       <input
                         ref={videoFileInputRef}
                         type="file"
-                        accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                        accept="video/mp4,video/webm,video/ogg,video/quicktime,video/mpeg,video/x-matroska,.mkv,.mpeg,.mpg"
                         onChange={handleVideoFileChange}
                         className="hidden"
                       />
@@ -2367,7 +2661,7 @@ export function AdminContent() {
                       >
                         <Film className="h-7 w-7 text-gray-400 group-hover:text-indigo-500 mx-auto mb-1.5 transition-colors" />
                         <p className="text-xs font-bold text-gray-700">Click to choose video tour file</p>
-                        <p className="text-[11px] text-gray-400 mt-0.5 font-medium">MP4, WebM, MOV (Up to 500MB)</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5 font-medium">MP4, WebM, MOV, MPEG, MKV (server size limit applies)</p>
                         {selectedVideoFile && (
                           <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-[11px] font-bold">
                             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
@@ -2593,7 +2887,7 @@ export function AdminContent() {
                   <input
                     ref={bgFileInputRef}
                     type="file"
-                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    accept="image/*"
                     onChange={handleSelectBgFile}
                     className="hidden"
                     id="home-bg-file-input"
@@ -2607,7 +2901,7 @@ export function AdminContent() {
                       {bgImageFile ? bgImageFile.name : 'Click to select or drop background image'}
                     </span>
                     <span className="text-[10px] text-gray-400 mt-0.5">
-                      Supports JPG, PNG, WEBP up to 15MB (High-Res 1920x1080 recommended)
+                      Supports high-resolution JPEG, PNG, WebP, AVIF, HEIC, and HEIF originals (server upload limit applies)
                     </span>
                   </label>
                 </div>
@@ -2695,7 +2989,7 @@ export function AdminContent() {
                 <h3 className="text-base font-extrabold text-gray-900">Secure Homepage Background Video Upload</h3>
               </div>
               <p className="text-xs text-gray-500 font-medium">
-                Upload local video files or paste video URLs safely with built-in MIME checking, size limits, and sanitization.
+                Local video files are transcoded in the browser before resumable upload; video URLs are saved as links.
               </p>
             </div>
 
@@ -2727,11 +3021,11 @@ export function AdminContent() {
 
               {/* SECURE VIDEO FILE DROPZONE */}
               <div>
-                <label className="block text-xs font-bold text-gray-800 mb-1.5">Upload Local Video File (.mp4, .webm, .mov max 500MB)</label>
+                <label className="block text-xs font-bold text-gray-800 mb-1.5">Upload Original Video File</label>
                 <input
                   ref={videoFileInputRef}
                   type="file"
-                  accept="video/mp4,video/webm,video/ogg,video/quicktime"
+                  accept="video/mp4,video/webm,video/ogg,video/quicktime,video/mpeg,video/x-matroska,.mkv,.mpeg,.mpg"
                   onChange={handleVideoFileChange}
                   className="hidden"
                 />
@@ -2742,7 +3036,7 @@ export function AdminContent() {
                 >
                   <Film className="h-8 w-8 text-gray-400 group-hover:text-pink-500 mx-auto mb-2 transition-colors" />
                   <p className="text-xs font-bold text-gray-700">Click to select video file safely</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5 font-medium">Supported: MP4, WebM, OGG, MOV (Up to 500MB)</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5 font-medium">Supported: MP4, WebM, OGG, MOV, MPEG, MKV. Local videos are transcoded to MP4 in your browser before upload; the original is not sent if processing fails.</p>
                   {selectedVideoFile && (
                     <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">
                       <CheckCircle2 className="h-3.5 w-3.5" />
@@ -2778,7 +3072,20 @@ export function AdminContent() {
                     controlsList="nodownload"
                     className="w-full max-h-64 object-cover rounded-xl border border-gray-800"
                     src={videoPreviewUrl || activeHeroVideo!}
+                    onLoadedMetadata={event => {
+                      const video = event.currentTarget;
+                      setVideoMetadata({
+                        duration: video.duration,
+                        width: video.videoWidth,
+                        height: video.videoHeight,
+                      });
+                    }}
                   />
+                  {videoMetadata && (
+                    <p className="text-[11px] text-gray-300">
+                      {videoMetadata.width} × {videoMetadata.height} · {Math.floor(videoMetadata.duration / 60)}:{String(Math.floor(videoMetadata.duration % 60)).padStart(2, '0')}
+                    </p>
+                  )}
                 </div>
               )}
 

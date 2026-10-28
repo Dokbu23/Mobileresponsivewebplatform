@@ -107,9 +107,9 @@ class ResortProfileController extends Controller
             'latitude'               => 'nullable|numeric',
             'longitude'              => 'nullable|numeric',
             'images'                 => 'nullable|array|max:10',
-            'images.*'               => 'nullable|file|mimes:jpg,jpeg,png,webp,avif|max:10240',
-            'logo'                   => 'nullable|file|mimes:jpg,jpeg,png,webp,avif|max:10240',
-            'banner'                 => 'nullable|file|mimes:jpg,jpeg,png,webp,avif|max:10240',
+            'images.*'               => 'nullable|file|mimes:jpg,jpeg,png,webp,avif,heic,heif|max:' . config('uploads.max_image_size_kb'),
+            'logo'                   => 'nullable|file|mimes:jpg,jpeg,png,webp,avif,heic,heif|max:' . config('uploads.max_image_size_kb'),
+            'banner'                 => 'nullable|file|mimes:jpg,jpeg,png,webp,avif,heic,heif|max:' . config('uploads.max_image_size_kb'),
             'virtual_tour_scenes'    => 'nullable|array',
         ]);
 
@@ -338,11 +338,7 @@ class ResortProfileController extends Controller
             }
 
             foreach ($images as $image) {
-                // Generate unique filename with timestamp
-                $timestamp = time();
-                $originalName = $image->getClientOriginalName();
-                $extension = $image->getClientOriginalExtension();
-                $filename = $timestamp . '_' . uniqid() . '_' . $originalName;
+                $filename = (string) \Illuminate\Support\Str::uuid() . '.' . ($image->extension() ?: 'jpg');
 
                 // Store image in public/storage/resort-profiles directory
                 $path = $image->storeAs('resort-profiles', $filename, 'public');

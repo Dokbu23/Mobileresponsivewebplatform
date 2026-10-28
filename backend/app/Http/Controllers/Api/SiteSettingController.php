@@ -36,10 +36,10 @@ class SiteSettingController extends Controller
 
         if ($request->hasFile('image')) {
             $request->validate([
-                'image' => 'required|image|mimes:jpeg,png,jpg,webp,gif|max:15360',
+                'image' => 'required|image|mimes:jpeg,png,jpg,webp,gif,avif,heic,heif|max:' . config('uploads.max_image_size_kb'),
             ], [
                 'image.image' => 'The uploaded file must be a valid image.',
-                'image.max'   => 'Image size cannot exceed 15MB.',
+                'image.max'   => 'Image exceeds the configured maximum image size.',
             ]);
 
             // Save in storage/app/public/site/hero

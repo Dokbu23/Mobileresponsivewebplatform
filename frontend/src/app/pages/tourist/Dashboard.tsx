@@ -10,6 +10,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { API_BASE, getPublicJSON, postJSON, formatImageUrl, getAuthToken, decodeHtml, cleanItineraryTitle } from '../../lib/api';
 import { DetailModal, DetailModalItem } from '../../components/DetailModal';
+import { AutoSwipeCarousel, uniqueImageUrls } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
 import { PLACEHOLDER_IMAGE } from '../../lib/constants';
 import { toast } from 'sonner';
@@ -28,6 +29,19 @@ export function Dashboard() {
   const [modalItem, setModalItem] = useState<DetailModalItem | null>(null);
   const [shareData, setShareData] = useState<{ title: string; description?: string; image?: string; category?: string } | null>(null);
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (isVideoModalOpen) {
+        setIsVideoModalOpen(false);
+      } else if (modalItem) {
+        setModalItem(null);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isVideoModalOpen, modalItem]);
 
   // Gallery active index state
   const [activeGalleryIdx, setActiveGalleryIdx] = useState(0);
@@ -86,16 +100,6 @@ export function Dashboard() {
         setStats(statsRes.stats);
       }
 
-      let deletedIds = new Set<string>();
-      let archivedIds = new Set<string>();
-
-      try {
-        const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
-        if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
-        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
-        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
-      } catch {}
-
       const rawAttr = Array.isArray(attractionsRes) ? attractionsRes : attractionsRes?.data ?? [];
       const rawProd = Array.isArray(productsRes) ? productsRes : productsRes?.data ?? [];
       const rawAcc = Array.isArray(accommodationsRes) ? accommodationsRes : accommodationsRes?.data ?? [];
@@ -103,12 +107,6 @@ export function Dashboard() {
 
       const sanitizeSection = (apiList: any[]) => {
         return (apiList || [])
-          .filter(i => {
-            const strId = String(i.id);
-            const postId = i.post_id ? String(i.post_id) : '';
-            return !deletedIds.has(strId) && !archivedIds.has(strId) &&
-                   (!postId || (!deletedIds.has(postId) && !archivedIds.has(postId)));
-          })
           .map(i => ({
             ...i,
             name: i.name ? cleanItineraryTitle(i.name) : i.name,
@@ -161,6 +159,15 @@ export function Dashboard() {
     return formatImageUrl(img) || fallback;
   };
 
+  const getCardImages = (item: any): string[] => {
+    const rawImages = [
+      item.image,
+      ...(Array.isArray(item.images) ? item.images : []),
+      ...(Array.isArray(item.resort_images) ? item.resort_images : []),
+    ].filter((image): image is string => typeof image === 'string' && image.trim().length > 0);
+    return uniqueImageUrls(rawImages.map((image) => getImageUrl(image)));
+  };
+
   // 1. Explore Mansalay (Top Picks) — show ALL items
   const topPicks = attractions.length > 0 || accommodations.length > 0
     ? [...attractions, ...accommodations]
@@ -210,6 +217,7 @@ export function Dashboard() {
 
   // 3. Featured Resorts (Where to Stay)
   const featuredResorts = accommodations.slice(0, 4);
+  const featuredProducts = products.slice(0, 4);
 
   // 4. Popular Attractions (Must See)
   const popularAttractions = attractions
@@ -353,6 +361,9 @@ export function Dashboard() {
       type: 'attraction',
       name: a.name,
       image: getImageUrl(a.image, '/assets/mansalay_hero_bg.jpg'),
+      images: Array.isArray(a.images) && a.images.length > 0
+        ? a.images.map((image: string) => getImageUrl(image)).filter(Boolean)
+        : [getImageUrl(a.image, '/assets/mansalay_hero_bg.jpg')],
       description: a.description,
       fullDescription: a.full_description ?? a.fullDescription,
       location: a.location,
@@ -368,9 +379,15 @@ export function Dashboard() {
       type: 'accommodation',
       name: acc.name || acc.resort_name || 'Accommodation',
       image: getImageUrl(acc.image || (Array.isArray(acc.resort_images) ? acc.resort_images[0] : null)),
+      images: getCardImages(acc),
       description: acc.description,
+      fullDescription: acc.full_description,
+      category: acc.category || acc.type || 'Beach Resort',
       pricePerNight: Number(acc.pricePerNight || acc.price_per_night || 0),
       location: acc.location,
+      capacity: acc.capacity != null ? String(acc.capacity) : undefined,
+      virtual_tour_url: acc.virtual_tour_url || acc.virtualTourUrl || null,
+      virtual_tour_scenes: acc.virtual_tour_scenes || acc.virtualTourScenes,
       user_id: acc.user_id,
       is_registered: acc.is_registered,
     });
@@ -382,6 +399,7 @@ export function Dashboard() {
       type: 'event',
       name: e.name,
       image: getImageUrl(e.image),
+      images: getCardImages(e),
       description: e.description,
       fullDescription: e.full_description ?? e.fullDescription,
       category: e.category,
@@ -389,6 +407,26 @@ export function Dashboard() {
       time: e.time,
       location: e.location,
       capacity: e.capacity,
+      virtual_tour_url: e.virtual_tour_url || null,
+    });
+  };
+
+  const openProductModal = (product: any) => {
+    setModalItem({
+      id: String(product.id),
+      type: 'product',
+      name: product.name || product.title || 'Local Product',
+      image: getImageUrl(product.image),
+      images: getCardImages(product),
+      description: product.description,
+      fullDescription: product.full_description ?? product.fullDescription,
+      category: product.category || 'Local Product',
+      price: Number(product.price) || 0,
+      stock: product.stock != null ? Number(product.stock) : undefined,
+      location: product.location || product.shopName || product.sellerName,
+      user_id: product.user_id,
+      is_registered: product.is_registered,
+      virtual_tour_url: product.virtual_tour_url || null,
     });
   };
 
@@ -463,7 +501,7 @@ export function Dashboard() {
 
       {/* ── 2. STATS BAR SECTION ── */}
       <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 -mt-6 sm:-mt-10 relative z-30">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 sm:gap-4">
           <div
             className="bg-white p-3 sm:p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-2.5 sm:gap-4 hover:shadow-lg hover:border-blue-200 transition-all cursor-default select-none group"
           >
@@ -517,6 +555,20 @@ export function Dashboard() {
                 {formatCount(stats?.resorts ?? accommodations.length)}
               </p>
               <p className="text-[10px] sm:text-xs text-gray-500 font-medium group-hover:text-pink-600 transition-colors">Resorts</p>
+            </div>
+          </div>
+
+          <div
+            className="bg-white p-3 sm:p-5 rounded-2xl border border-gray-100 shadow-md flex items-center gap-2.5 sm:gap-4 hover:shadow-lg hover:border-amber-200 transition-all cursor-default select-none group"
+          >
+            <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+              <Store className="h-4 w-4 sm:h-6 sm:w-6" />
+            </div>
+            <div>
+              <p className="text-base sm:text-2xl font-black text-gray-900 leading-tight">
+                {formatCount(stats?.products ?? products.length)}
+              </p>
+              <p className="text-[10px] sm:text-xs text-gray-500 font-medium group-hover:text-amber-600 transition-colors">Local Products</p>
             </div>
           </div>
         </div>
@@ -583,13 +635,22 @@ export function Dashboard() {
                       type: item.price_per_night || item.pricePerNight ? 'accommodation' : 'attraction',
                       name: item.name || item.resort_name,
                       image: getImageUrl(item.image || item.resort_images?.[0] || item.images?.[0]),
+                      images: getCardImages(item),
                       description: item.description,
+                      fullDescription: item.full_description ?? item.fullDescription,
                       location: item.location || 'Mansalay, Oriental Mindoro',
                       category: item.category || item.type || 'Top Pick'
                     })}
-                    className="group relative h-72 rounded-3xl overflow-hidden cursor-pointer shadow-md hover:shadow-xl transition-all"
+                    className="group relative h-80 rounded-3xl overflow-hidden cursor-pointer shadow-md hover:shadow-xl transition-all"
                   >
-                    <img src={getImageUrl(item.image || item.resort_images?.[0] || item.images?.[0])} alt={item.name || item.resort_name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <AutoSwipeCarousel
+                      images={getCardImages(item)}
+                      alt={item.name || item.resort_name || 'Mansalay listing'}
+                      className="w-full h-full"
+                      imageClassName="w-full h-full transition-transform duration-500"
+                      showDots
+                      showArrows
+                    />
                     <div className="absolute inset-0 bg-gradient-to-t from-gray-950/90 via-gray-950/30 to-transparent" />
                     <div className="absolute top-4 left-4">
                       <span className="px-3 py-1 bg-pink-500 text-white text-[11px] font-bold rounded-full uppercase">{item.category || item.type || 'Top Pick'}</span>
@@ -804,8 +865,15 @@ export function Dashboard() {
           {displayBeaches.length > 0 ? (
             displayBeaches.map((item) => (
               <div key={item.id} onClick={() => openAttractionModal(item)} className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-xs hover:shadow-lg transition-all group cursor-pointer">
-                <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
-                  <img src={getImageUrl(item.image || item.resort_images?.[0] || item.images?.[0])} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <div className="relative h-56 bg-gray-100 overflow-hidden rounded-t-xl">
+                  <AutoSwipeCarousel
+                    images={getCardImages(item)}
+                    alt={item.name}
+                    className="w-full h-full"
+                    imageClassName="w-full h-full transition-transform duration-500"
+                    showDots
+                    showArrows
+                  />
                   <span className="absolute top-3 left-3 px-3 py-1 bg-pink-500 text-white text-[10px] font-bold rounded-full">{item.category || 'Beach'}</span>
                   <div className="absolute top-3 right-3 flex items-center gap-1.5">
                     <button
@@ -858,8 +926,15 @@ export function Dashboard() {
           {featuredResorts.length > 0 ? (
             featuredResorts.map((item) => (
               <div key={item.id} onClick={() => openAccommodationModal(item)} className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-xs hover:shadow-lg transition-all group cursor-pointer">
-                <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
-                  <img src={getImageUrl(item.image || item.resort_images?.[0] || item.images?.[0])} alt={item.name || item.resort_name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <div className="relative h-56 bg-gray-100 overflow-hidden rounded-t-xl">
+                  <AutoSwipeCarousel
+                    images={getCardImages(item)}
+                    alt={item.name || item.resort_name || 'Featured resort'}
+                    className="w-full h-full"
+                    imageClassName="w-full h-full transition-transform duration-500"
+                    showDots
+                    showArrows
+                  />
                   <span className="absolute top-3 left-3 px-3 py-1 bg-pink-500 text-white text-[10px] font-bold rounded-full">{(item.type === 'resort_profile' || item.category === 'resort_profile') ? 'Beach Resort' : (item.category || item.type || 'Beach Resort')}</span>
                 </div>
                 <div className="p-4">
@@ -871,6 +946,11 @@ export function Dashboard() {
                       <MapPin className="h-3 w-3" />
                       <span className="line-clamp-1">{item.location || 'Mansalay'}</span>
                     </span>
+                    {Number(item.pricePerNight ?? item.price_per_night ?? item.price) > 0 && (
+                      <span className="text-gray-700 font-bold whitespace-nowrap">
+                        ₱{Number(item.pricePerNight ?? item.price_per_night ?? item.price).toLocaleString()} / night
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -878,6 +958,71 @@ export function Dashboard() {
           ) : (
             <div className="col-span-full py-8 text-center bg-white rounded-3xl border border-gray-100 p-4">
               <p className="text-xs font-semibold text-gray-500">No resorts currently available</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ── 7. FEATURED PRODUCTS (LOCAL SPECIALTIES) ── */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <div className="flex items-center gap-1.5 text-amber-600 text-xs font-bold uppercase tracking-wider mb-1">
+              <Store className="h-4 w-4" />
+              <span>🛍️ Local Specialties</span>
+            </div>
+            <h2 className="text-2xl font-extrabold text-gray-900">Featured Products</h2>
+          </div>
+          <Link to="/products" className="text-xs font-bold text-pink-500 hover:text-pink-600 flex items-center gap-1">
+            <span>View all</span> <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {featuredProducts.length > 0 ? (
+            featuredProducts.map((product) => (
+              <div
+                key={product.id}
+                onClick={() => openProductModal(product)}
+                className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-xs hover:shadow-lg transition-all group cursor-pointer"
+              >
+                <div className="relative h-56 bg-gray-100 overflow-hidden rounded-t-xl">
+                  <AutoSwipeCarousel
+                    images={getCardImages(product)}
+                    alt={product.name || product.title || 'Local product'}
+                    className="w-full h-full"
+                    imageClassName="w-full h-full transition-transform duration-500"
+                    showDots
+                    showArrows
+                  />
+                  <span className="absolute top-3 left-3 px-3 py-1 bg-amber-500 text-white text-[10px] font-bold rounded-full">
+                    {product.category || 'Local Product'}
+                  </span>
+                </div>
+                <div className="p-4">
+                  <p className="text-[10px] uppercase font-bold text-gray-400">{product.category || 'Local Product'}</p>
+                  <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-0.5">
+                    {product.name || product.title || 'Local Product'}
+                  </h3>
+                  <p className="text-xs text-gray-500 line-clamp-2 mt-1 min-h-[32px]">
+                    {product.description || 'Locally made specialty from Mansalay'}
+                  </p>
+                  <div className="flex items-center justify-between gap-2 mt-3">
+                    <span className="text-sm font-bold text-pink-500">
+                      {Number(product.price) > 0 ? `₱${Number(product.price).toLocaleString()}` : 'Price on request'}
+                    </span>
+                    {(product.shopName || product.sellerName || product.location) && (
+                      <span className="text-[10px] text-gray-400 truncate">
+                        {product.shopName || product.sellerName || product.location}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="col-span-full py-8 text-center bg-white rounded-3xl border border-gray-100 p-4">
+              <p className="text-xs font-semibold text-gray-500">No featured products currently available</p>
             </div>
           )}
         </div>
@@ -902,8 +1047,15 @@ export function Dashboard() {
           {popularAttractions.length > 0 ? (
             popularAttractions.map((item) => (
               <div key={item.id} onClick={() => openAttractionModal(item)} className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-xs hover:shadow-lg transition-all group cursor-pointer">
-                <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
-                  <img src={getImageUrl(item.image)} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <div className="relative h-56 bg-gray-100 overflow-hidden rounded-t-xl">
+                  <AutoSwipeCarousel
+                    images={getCardImages(item)}
+                    alt={item.name}
+                    className="w-full h-full"
+                    imageClassName="w-full h-full transition-transform duration-500"
+                    showDots
+                    showArrows
+                  />
                   <span className="absolute top-3 left-3 px-3 py-1 bg-pink-500 text-white text-[10px] font-bold rounded-full">{item.category || 'Attraction'}</span>
                 </div>
                 <div className="p-4">
@@ -958,21 +1110,28 @@ export function Dashboard() {
             </div>
             <div className="space-y-4">
               {pagedUpcoming.length > 0 ? pagedUpcoming.map((event, idx) => (
-                <div key={event.id} className="rounded-2xl overflow-hidden border border-gray-100 shadow-xs hover:shadow-md transition-all cursor-pointer" onClick={() => openEventModal(event)}>
-                  <div className="relative h-32 overflow-hidden bg-gray-100">
-                    {event.image && <img src={getImageUrl(event.image)} alt={event.name} className="w-full h-full object-cover" />}
+                <div key={event.id} className="h-full rounded-2xl overflow-hidden border border-gray-100 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col" onClick={() => openEventModal(event)}>
+                  <div className="relative aspect-[16/9] overflow-hidden bg-gray-100">
+                    <AutoSwipeCarousel
+                      images={getCardImages(event)}
+                      alt={event.name}
+                      className="w-full h-full"
+                      imageClassName="w-full h-full rounded-t-xl"
+                      showDots
+                      showArrows
+                    />
                     <div className="absolute top-3 left-3">
                       <span className="px-2.5 py-1 bg-emerald-500 text-white text-[10px] font-bold rounded-full">Upcoming</span>
                     </div>
                   </div>
-                  <div className="p-4 bg-white">
-                    <h4 className="font-bold text-gray-900 text-sm">{event.name}</h4>
+                  <div className="p-4 bg-white flex-1 flex flex-col">
+                    <h4 className="font-semibold text-gray-900 text-sm line-clamp-1 min-h-[20px]">{event.name}</h4>
                     <div className="flex items-center gap-1.5 text-[11px] text-pink-500 font-semibold mt-1">
                       <Calendar className="h-3 w-3" />
                       <span>{event.date ? new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBA'}</span>
                     </div>
-                    <p className="text-xs text-gray-500 line-clamp-2 mt-2">{event.description || 'Join us in Mansalay for this exciting event!'}</p>
-                    <div className="flex items-center justify-between mt-3">
+                    <p className="text-sm text-gray-500 line-clamp-2 mt-2 min-h-[40px]">{event.description || 'Join us in Mansalay for this exciting event!'}</p>
+                    <div className="flex items-center justify-between mt-auto pt-4">
                       <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
                         <Clock className="h-3 w-3" />
                         <span>{event.time || '8:00 AM – 6:00 PM'}</span>
@@ -1008,21 +1167,28 @@ export function Dashboard() {
             </div>
             <div className="space-y-4">
               {pagedPast.length > 0 ? pagedPast.map((event, idx) => (
-                <div key={event.id} className="rounded-2xl overflow-hidden border border-gray-100 shadow-xs hover:shadow-md transition-all cursor-pointer" onClick={() => openEventModal(event)}>
-                  <div className="relative h-32 overflow-hidden bg-gray-100">
-                    {event.image && <img src={getImageUrl(event.image)} alt={event.name} className="w-full h-full object-cover" />}
+                <div key={event.id} className="h-full rounded-2xl overflow-hidden border border-gray-100 shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col" onClick={() => openEventModal(event)}>
+                  <div className="relative aspect-[16/9] overflow-hidden bg-gray-100">
+                    <AutoSwipeCarousel
+                      images={getCardImages(event)}
+                      alt={event.name}
+                      className="w-full h-full"
+                      imageClassName="w-full h-full rounded-t-xl"
+                      showDots
+                      showArrows
+                    />
                     <div className="absolute top-3 left-3">
                       <span className="px-2.5 py-1 bg-gray-600 text-white text-[10px] font-bold rounded-full">Past</span>
                     </div>
                   </div>
-                  <div className="p-4 bg-white">
-                    <h4 className="font-bold text-gray-900 text-sm">{event.name}</h4>
+                  <div className="p-4 bg-white flex-1 flex flex-col">
+                    <h4 className="font-semibold text-gray-900 text-sm line-clamp-1 min-h-[20px]">{event.name}</h4>
                     <div className="flex items-center gap-1.5 text-[11px] text-pink-500 font-semibold mt-1">
                       <Calendar className="h-3 w-3" />
                       <span>{event.date ? new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Unknown date'}</span>
                     </div>
-                    <p className="text-xs text-gray-500 line-clamp-2 mt-2">{event.description || 'This event has already passed.'}</p>
-                    <div className="flex items-center justify-between mt-3">
+                    <p className="text-sm text-gray-500 line-clamp-2 mt-2 min-h-[40px]">{event.description || 'This event has already passed.'}</p>
+                    <div className="flex items-center justify-between mt-auto pt-4">
                       <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
                         <Clock className="h-3 w-3" />
                         <span>{event.time || '8:00 AM – 6:00 PM'}</span>
@@ -1254,7 +1420,7 @@ export function Dashboard() {
               </div>
               <button
                 onClick={() => setIsVideoModalOpen(false)}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
+                className="z-50 p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
                 title="Close"
               >
                 <X className="h-5 w-5" />

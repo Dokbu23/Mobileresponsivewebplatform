@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { Hotel, MapPin, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink, Footprints, Maximize2, FileText, ArrowRight } from 'lucide-react';
+import { Hotel, MapPin, Star, Share2, Search, X, ChevronLeft, ChevronRight, Phone, Facebook, Instagram, MessageSquare, Navigation, Clock, Filter, ChevronDown, Users, Bed, Building2, ExternalLink, Footprints, FileText, ArrowRight } from 'lucide-react';
 import { API_BASE, getPublicJSON, formatImageUrl, getAuthToken, decodeHtml, recordView } from '../../lib/api';
 import { ACCOMMODATION_CATEGORIES, PLACEHOLDER_IMAGE } from '../../lib/constants';
 import { useApp } from '../../context/AppContext';
-import { AutoSwipeCarousel } from '../../components/AutoSwipeCarousel';
+import { AutoSwipeCarousel, uniqueImageUrls } from '../../components/AutoSwipeCarousel';
 import { ShareModal } from '../../components/ShareModal';
 import { VirtualTourModal } from '../../components/VirtualTourModal';
 import { toast } from 'sonner';
@@ -74,6 +74,29 @@ export interface AccommodationItem {
   virtual_tour_scenes?: any[];
 }
 
+function getUniqueGallery(item: { image?: string | null; images?: unknown }): string[] {
+  let galleryImages: unknown = item.images;
+
+  if (typeof galleryImages === 'string') {
+    try {
+      galleryImages = JSON.parse(galleryImages);
+    } catch {
+      galleryImages = [];
+    }
+  }
+
+  const gallery = Array.isArray(galleryImages) ? galleryImages : [];
+  const normalizedGallery = gallery
+    .filter((image): image is string => typeof image === 'string' && Boolean(image.trim()))
+    .map((image) => formatImageUrl(image.trim()))
+    .filter(Boolean);
+  const slideSource = normalizedGallery.length > 0
+    ? normalizedGallery
+    : (item.image ? [formatImageUrl(item.image) || item.image] : []);
+
+  return uniqueImageUrls(slideSource);
+}
+
 /**
  * 🛡️ Resort-First Grouping & Normalization Logic
  * Rule: 1 RESORT = 1 CARD.
@@ -126,10 +149,6 @@ function groupAndNormalizeAccommodations(rawItems: any[]): AccommodationItem[] {
       } catch { }
     }
     const mainImg = formatImageUrl(d.image);
-    if (mainImg && !parsedImages.includes(mainImg)) {
-      parsedImages.unshift(mainImg);
-    }
-
     // Initialize group if new
     if (!resortGroups[groupKey]) {
       resortGroups[groupKey] = {
@@ -207,7 +226,7 @@ function groupAndNormalizeAccommodations(rawItems: any[]): AccommodationItem[] {
 
       if (existingIdx >= 0) {
         const existing = currentResort.rooms[existingIdx];
-        const mergedImgs = Array.from(new Set([...(existing.images || []), ...parsedImages]));
+        const mergedImgs = uniqueImageUrls([...(existing.images || []), ...parsedImages]);
         existing.images = mergedImgs;
         if (!existing.image && mergedImgs.length > 0) existing.image = mergedImgs[0];
         if (d.description && !existing.description) existing.description = decodeHtml(d.description);
@@ -246,7 +265,7 @@ function groupAndNormalizeAccommodations(rawItems: any[]): AccommodationItem[] {
 
         if (existingIdx >= 0) {
           const existing = currentResort.rooms[existingIdx];
-          const mergedImgs = Array.from(new Set([...(existing.images || []), ...parsedImages]));
+          const mergedImgs = uniqueImageUrls([...(existing.images || []), ...parsedImages]);
           existing.images = mergedImgs;
           if (!existing.image && mergedImgs.length > 0) existing.image = mergedImgs[0];
         } else {
@@ -280,9 +299,11 @@ function groupAndNormalizeAccommodations(rawItems: any[]): AccommodationItem[] {
         const existingIdx = currentResort.rooms.findIndex(
           r => r.id === rmId || (r.name && r.name.toLowerCase() === rmName.toLowerCase())
         );
-        const rmImages = Array.isArray(rm.images) ? rm.images.map(formatImageUrl).filter(Boolean) : [];
+        const rmImages = uniqueImageUrls(
+          Array.isArray(rm.images) ? rm.images.map(formatImageUrl).filter(Boolean) : []
+        );
         const rmMainImg = formatImageUrl(rm.image) || rmImages[0] || '';
-        if (rmMainImg && !rmImages.includes(rmMainImg)) rmImages.unshift(rmMainImg);
+        const rmSlides = rmImages.length > 0 ? rmImages : (rmMainImg ? [rmMainImg] : []);
 
         if (existingIdx < 0) {
           currentResort.rooms.push({
@@ -296,7 +317,7 @@ function groupAndNormalizeAccommodations(rawItems: any[]): AccommodationItem[] {
             price: Number(rm.price_per_night ?? rm.price ?? 0),
             capacity: rm.capacity ? Number(rm.capacity) : 2,
             image: rmMainImg,
-            images: rmImages,
+            images: rmSlides,
             amenities: Array.isArray(rm.amenities) ? rm.amenities : (currentResort.resort_amenities || []),
           });
         }
@@ -322,6 +343,10 @@ function groupAndNormalizeAccommodations(rawItems: any[]): AccommodationItem[] {
       });
     }
 
+    resort.rooms = resort.rooms.map((room) => ({
+      ...room,
+      images: getUniqueGallery(room),
+    }));
     resort.rooms_count = resort.rooms.length;
     if (!resort.image && resort.rooms[0]?.image) {
       resort.image = resort.rooms[0].image;
@@ -359,11 +384,7 @@ function AccommodationCardItem({
   userType,
   onResortClick,
 }: AccommodationCardProps) {
-  const { isInWishlist, getWishlistCount } = useApp();
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [isHovered, setIsHovered] = useState(false);
-  const touchStartX = useRef<number | null>(null);
-  const touchEndX = useRef<number | null>(null);
+  const { isInWishlist, getWishlistCount, canPin } = useApp();
 
   // Filter or list all rooms for this resort
   const rooms = useMemo(() => {
@@ -388,21 +409,10 @@ function AccommodationCardItem({
     return allRooms;
   }, [acc, typeFilter]);
 
-  const hasMultipleRooms = rooms.length > 1;
-
-  // 🔄 Smooth Auto-Slide Effect (Switches every 4 seconds, pauses on hover)
-  useEffect(() => {
-    if (!hasMultipleRooms || isHovered) return;
-
-    const timer = setInterval(() => {
-      setCurrentIdx((prev) => (prev >= rooms.length - 1 ? 0 : prev + 1));
-    }, 4000);
-
-    return () => clearInterval(timer);
-  }, [hasMultipleRooms, isHovered, rooms.length]);
-
-  const currentRoomIdx = currentIdx < rooms.length ? currentIdx : 0;
-  const currentRoom = rooms[currentRoomIdx] || rooms[0];
+  const currentRoom = rooms[0];
+  const currentRoomPrice = Number(currentRoom.price_per_night) > 0
+    ? Number(currentRoom.price_per_night)
+    : Number(currentRoom.price);
 
   const isRoomSaved = isInWishlist(currentRoom.id, 'accommodation') ||
     (currentRoom.room_id && isInWishlist(`room-${currentRoom.room_id}`, 'accommodation')) ||
@@ -414,158 +424,24 @@ function AccommodationCardItem({
     getWishlistCount(acc.id, 'accommodation', acc.likes || 0)
   );
 
-  // Each carousel slide represents ONE room with that room's photo
-  const currentRoomImage = formatImageUrl(
-    currentRoom.image || (currentRoom.images && currentRoom.images[0]) || acc.image
-  ) || PLACEHOLDER_IMAGE;
-
-  const handlePrev = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!hasMultipleRooms) return;
-    setCurrentIdx((prev) => (prev === 0 ? rooms.length - 1 : prev - 1));
-  };
-
-  const handleNext = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!hasMultipleRooms) return;
-    setCurrentIdx((prev) => (prev === rooms.length - 1 ? 0 : prev + 1));
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setIsHovered(true);
-    touchStartX.current = e.targetTouches[0].clientX;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    touchEndX.current = e.targetTouches[0].clientX;
-  };
-
-  const handleTouchEnd = () => {
-    setIsHovered(false);
-    if (touchStartX.current === null || touchEndX.current === null) return;
-    const distance = touchStartX.current - touchEndX.current;
-    if (distance > 35 && hasMultipleRooms) {
-      setCurrentIdx((prev) => (prev === rooms.length - 1 ? 0 : prev + 1));
-    } else if (distance < -35 && hasMultipleRooms) {
-      setCurrentIdx((prev) => (prev === 0 ? rooms.length - 1 : prev - 1));
-    }
-    touchStartX.current = null;
-    touchEndX.current = null;
-  };
-
-  const handleImageClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const roomPhotos = rooms.map(r => formatImageUrl(r.image || r.images?.[0] || acc.image)).filter(Boolean);
-    onOpenLightbox(
-      roomPhotos.length > 0 ? roomPhotos : [currentRoomImage],
-      currentRoomIdx,
-      `${acc.resort_name || acc.name} — ${currentRoom.name}`
-    );
-  };
+  const cardImages = getUniqueGallery(currentRoom);
 
   return (
     <div
       onClick={() => onCardClick(currentRoom)}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col group cursor-pointer hover:border-pink-200 justify-between"
+      className="bg-white rounded-3xl overflow-hidden border border-gray-100 shadow-xs hover:shadow-xl transition-all cursor-pointer group flex flex-col justify-between"
     >
-      {/* ── ROOM CAROUSEL IMAGE CONTAINER (SMOOTH HORIZONTAL SLIDER) ── */}
-      <div
-        className="relative aspect-4/3 overflow-hidden bg-gray-900 select-none"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        {/* Continuous Smooth Horizontal Sliding Track */}
-        <div
-          className="flex w-full h-full transition-transform duration-700 ease-in-out"
-          style={{ transform: `translateX(-${currentRoomIdx * 100}%)` }}
-        >
-          {rooms.map((room, idx) => {
-            const roomImg = formatImageUrl(
-              room.image || (room.images && room.images[0]) || acc.image
-            ) || PLACEHOLDER_IMAGE;
-            return (
-              <div
-                key={room.id || idx}
-                className="w-full h-full shrink-0 relative overflow-hidden"
-              >
-                <img
-                  src={roomImg}
-                  alt={`${room.name} - ${acc.resort_name || acc.name}`}
-                  onClick={handleImageClick}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out cursor-zoom-in"
-                  onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }}
-                  loading="lazy"
-                />
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Top-Left Resort Name Badge */}
-        <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 bg-pink-500 text-white text-[10px] font-bold rounded-full shadow-xs z-10 pointer-events-none max-w-[150px] truncate">
-          {acc.resort_name || acc.name}
-        </span>
-
-        {/* Slide Carousel Counter Pill (Shows "Slide X of Y") */}
-        {hasMultipleRooms && (
-          <button
-            type="button"
-            onClick={handleImageClick}
-            className="absolute top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 bg-black/65 hover:bg-black/85 backdrop-blur-md text-white text-[10px] font-extrabold rounded-full shadow-xs z-10 border border-white/20 transition-all flex items-center gap-1 cursor-pointer"
-            title="Click to view full screen gallery"
-          >
-            <Maximize2 className="h-2.5 w-2.5 opacity-80" />
-            <span>Slide {currentRoomIdx + 1} of {rooms.length}</span>
-          </button>
-        )}
-
-        {/* Carousel Arrow Controls (Switch Between Slides) */}
-        {hasMultipleRooms && (
-          <>
-            <button
-              type="button"
-              onClick={handlePrev}
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/55 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-xs opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-all z-20 cursor-pointer shadow-md border border-white/20"
-              aria-label="Previous slide"
-              title="Previous slide"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={handleNext}
-              className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-black/55 hover:bg-pink-600 active:scale-95 text-white flex items-center justify-center backdrop-blur-xs opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-all z-20 cursor-pointer shadow-md border border-white/20"
-              aria-label="Next slide"
-              title="Next slide"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-
-            {/* Slide Indicator Dots ● ○ ○ ○ */}
-            <div className="absolute bottom-2.5 right-3 flex items-center gap-1 z-10 bg-black/40 backdrop-blur-xs px-2 py-1 rounded-full border border-white/10">
-              {rooms.map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setCurrentIdx(i);
-                  }}
-                  className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                    i === currentRoomIdx ? 'w-4 bg-pink-500 shadow-xs' : 'w-1.5 bg-white/70 hover:bg-white'
-                  }`}
-                  aria-label={`Go to slide ${i + 1}`}
-                />
-              ))}
-            </div>
-          </>
-        )}
+      <div className="relative h-64 bg-gray-900 overflow-hidden rounded-t-3xl">
+        <AutoSwipeCarousel
+          images={cardImages}
+          alt={currentRoom.name}
+          className="w-full h-full"
+          imageClassName="w-full h-full transition-transform duration-500"
+          showDots={false}
+        />
 
         {/* Top-Right Action Controls (Share + Pin / Save) */}
-        <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
+        <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20">
           <button
             type="button"
             onClick={(e) => onShare(e, currentRoom)}
@@ -592,23 +468,28 @@ function AccommodationCardItem({
           </button>
         </div>
 
-        {/* Dark Overlay Saves Counter & Interactive Pin Button */}
-        <button
-          type="button"
-          onClick={(e) => onSave(e, currentRoom)}
-          className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 z-10 whitespace-nowrap"
-          title={isRoomSaved ? 'Saved in pins' : 'Click to pin stay'}
-        >
-          <PushPinIcon isPinned={isRoomSaved} size={14} idPrefix={`acc-bl-${currentRoom.id || acc.id}`} />
-          <span className={isRoomSaved ? 'text-red-400 font-extrabold whitespace-nowrap' : 'text-gray-200 whitespace-nowrap'}>
-            Save: {roomWishlistCount}
+        {/* Dark Overlay Category & Saves Counter */}
+        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white text-[11px] font-bold z-10">
+          <span className="px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-full text-[10px]">
+            {currentRoom.type || acc.type || 'Stay'}
           </span>
-        </button>
+          <button
+            type="button"
+            onClick={(e) => onSave(e, currentRoom)}
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-black/60 hover:bg-black/80 backdrop-blur-md rounded-full text-white text-[11px] font-bold transition-all cursor-pointer hover:scale-105 active:scale-95 whitespace-nowrap"
+            title={isRoomSaved ? 'Saved in pins' : 'Click to pin stay'}
+          >
+            <PushPinIcon isPinned={isRoomSaved} size={14} idPrefix={`acc-bl-${currentRoom.id || acc.id}`} />
+            <span className={isRoomSaved ? 'text-red-400 font-extrabold whitespace-nowrap' : 'text-gray-200 whitespace-nowrap'}>
+              Save: {roomWishlistCount}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* ── DYNAMIC SLIDE INFORMATION (UPDATES PER SWIPE/SLIDE) ── */}
       <div className="p-4 flex-1 flex flex-col justify-between">
-        <div key={currentRoom.id || currentRoomIdx} className="transition-all duration-300 animate-in fade-in">
+        <div key={currentRoom.id} className="transition-all duration-300 animate-in fade-in">
           {/* Post/Room Type & Capacity / Date */}
           <div className="flex items-center justify-between gap-1">
             <span className="text-[10px] uppercase font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-md border border-pink-100">
@@ -627,26 +508,14 @@ function AccommodationCardItem({
           </div>
 
           {/* Post/Room Name */}
-          <h3 className="font-bold text-gray-900 text-sm line-clamp-1 mt-1.5">
+          <h3 className="font-extrabold text-gray-900 text-sm mb-1 group-hover:text-pink-600 transition-colors line-clamp-1 mt-1.5">
             {currentRoom.name}
           </h3>
 
           {/* Post/Room Description */}
-          <p className="text-xs text-gray-500 line-clamp-2 mt-1.5 min-h-[32px] text-justify" style={{ textAlign: 'justify' }}>
+          <p className="text-xs text-gray-500 line-clamp-2 mb-3 leading-relaxed text-justify" style={{ textAlign: 'justify' }}>
             {currentRoom.description || currentRoom.full_description || `${currentRoom.name} at ${acc.resort_name || acc.name}. Experience a comfortable and scenic stay.`}
           </p>
-
-          {/* Room Price or Post Rate */}
-          {currentRoom.price_per_night && Number(currentRoom.price_per_night) > 0 ? (
-            <div className="mt-2 text-pink-600 font-extrabold text-sm flex items-baseline gap-0.5">
-              <span>₱{Number(currentRoom.price_per_night).toLocaleString()}</span>
-              <span className="text-[10px] font-normal text-gray-400"> / night</span>
-            </div>
-          ) : currentRoom.price && typeof currentRoom.price === 'string' && currentRoom.price.toLowerCase().includes('free') ? (
-            <div className="mt-2 text-emerald-600 font-bold text-xs flex items-center gap-1">
-              <span className="bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">Free for guests</span>
-            </div>
-          ) : null}
 
           {/* Slide Amenities / Tags */}
           {(() => {
@@ -681,17 +550,25 @@ function AccommodationCardItem({
 
         {/* Action Button & Clickable Resort Host Link */}
         <div>
-          <div className="mt-3.5 pt-3 border-t border-gray-100 flex items-center gap-2">
+          <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+            {currentRoomPrice > 0 ? (
+              <div>
+                <span className="text-xs text-gray-400 font-medium">Price</span>
+                <p className="text-sm font-black text-gray-900">
+                  ₱{currentRoomPrice.toLocaleString()}
+                  <span className="text-[10px] font-normal text-gray-400"> / night</span>
+                </p>
+              </div>
+            ) : null}
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onCardClick(currentRoom);
               }}
-              className="w-full py-2 px-3 bg-pink-50 hover:bg-pink-100 active:scale-98 text-pink-700 border border-pink-200 rounded-xl text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs hover:border-pink-300"
+              className="px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm bg-gray-900 hover:bg-pink-500 text-white"
             >
               <span>View Details</span>
-              <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
 
@@ -872,7 +749,7 @@ function FullscreenGalleryModal({
 
 export function Accommodations() {
   const navigate = useNavigate();
-  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist, getWishlistCount } = useApp();
+  const { userType, currentUser, addToWishlist, removeFromWishlist, isInWishlist, getWishlistCount, canPin } = useApp();
   const isLoggedIn = Boolean(userType && currentUser);
 
   const [items, setItems] = useState<AccommodationItem[]>([]);
@@ -901,6 +778,24 @@ export function Accommodations() {
     initialIndex: 0,
     title: '',
   });
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (lightboxData.isOpen) {
+        setLightboxData((current) => ({ ...current, isOpen: false }));
+      } else if (isVirtualTourOpen) {
+        setIsVirtualTourOpen(false);
+      } else if (showLoginModal) {
+        setShowLoginModal(false);
+      } else if (selectedAcc) {
+        setSelectedAcc(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isVirtualTourOpen, lightboxData.isOpen, selectedAcc, showLoginModal]);
 
   const loadAccommodations = async () => {
     setLoading(true);
@@ -974,21 +869,8 @@ export function Accommodations() {
         };
       });
 
-      let deletedIds = new Set<string>();
-      let archivedIds = new Set<string>();
-      try {
-        const delStr = localStorage.getItem('discover-mansalay:deleted_posts');
-        if (delStr) deletedIds = new Set(JSON.parse(delStr).map((id: any) => String(id)));
-        const archStr = localStorage.getItem('discover-mansalay:archived_posts');
-        if (archStr) archivedIds = new Set(JSON.parse(archStr).map((id: any) => String(id)));
-      } catch { }
-
-      const allRaw = [...rawAcc, ...accAttractions, ...resortPosts].filter(i => {
-        const sId = String(i.id);
-        const pId = i.post_id ? String(i.post_id) : '';
-        return !deletedIds.has(sId) && !archivedIds.has(sId) &&
-               (!pId || (!deletedIds.has(pId) && !archivedIds.has(pId)));
-      });
+      // The API is authoritative for publication and archive status.
+      const allRaw = [...rawAcc, ...accAttractions, ...resortPosts];
 
       // Apply grouping and normalization: 1 Room = 1 Card
       const normalizedList = groupAndNormalizeAccommodations(allRaw);
@@ -1258,11 +1140,13 @@ export function Accommodations() {
             }];
         const currentModalRoomIdx = modalRoomIdx < modalRooms.length ? modalRoomIdx : 0;
         const currentRoom = modalRooms[currentModalRoomIdx] || modalRooms[0];
+        const currentModalRoomPrice = Number(currentRoom.price_per_night) > 0
+          ? Number(currentRoom.price_per_night)
+          : Number(currentRoom.price);
         const hasMultipleModalRooms = modalRooms.length > 1;
 
-        const currentRoomImg = formatImageUrl(
-          currentRoom.image || (currentRoom.images && currentRoom.images[0]) || selectedAcc.image
-        ) || PLACEHOLDER_IMAGE;
+        const modalImages = getUniqueGallery(currentRoom);
+        const currentRoomImg = modalImages[0] || formatImageUrl(selectedAcc.image) || PLACEHOLDER_IMAGE;
 
         const handleModalPrevRoom = (e: React.MouseEvent) => {
           e.stopPropagation();
@@ -1315,32 +1199,38 @@ export function Accommodations() {
             >
               {/* Image Header with Room Switching Arrows */}
               <div
-                className="relative h-64 bg-gray-950 flex-shrink-0 select-none overflow-hidden"
+                className="relative aspect-[16/9] max-h-[60vh] bg-gray-950 flex-shrink-0 select-none overflow-hidden rounded-t-xl"
                 onTouchStart={handleModalTouchStart}
                 onTouchMove={handleModalTouchMove}
                 onTouchEnd={handleModalTouchEnd}
               >
-                <img
-                  src={currentRoomImg}
+                <AutoSwipeCarousel
+                  key={String(currentRoom.id)}
+                  images={modalImages.length > 0 ? modalImages : [currentRoomImg]}
                   alt={`${currentRoom.name} - ${selectedAcc.resort_name || selectedAcc.name}`}
-                  className="w-full h-full object-cover transition-all duration-300 cursor-zoom-in"
+                  presentation="modal"
+                  className="w-full h-full"
+                  imageClassName="w-full h-full"
+                  intervalMs={3500}
+                  showDots
+                  showArrows
+                  enableSwipe
                   onClick={() => {
-                    const roomPhotos = modalRooms.map(r => formatImageUrl(r.image || r.images?.[0] || selectedAcc.image)).filter(Boolean);
                     setLightboxData({
                       isOpen: true,
-                      images: roomPhotos.length > 0 ? roomPhotos : [selectedAcc.image],
-                      initialIndex: currentModalRoomIdx,
+                      images: modalImages.length > 0 ? modalImages : [currentRoomImg],
+                      initialIndex: 0,
                       title: `${selectedAcc.resort_name || selectedAcc.name} — ${currentRoom.name}`,
                     });
                   }}
-                  onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }}
                 />
 
                 {/* Close Button Top-Right */}
                 <button
                   type="button"
                   onClick={() => setSelectedAcc(null)}
-                  className="absolute top-4 right-4 w-8 h-8 bg-black/60 hover:bg-black/80 active:scale-95 text-white rounded-full flex items-center justify-center backdrop-blur-md transition-all z-30 cursor-pointer shadow-md border border-white/20"
+                  className="absolute top-3 right-3 z-50 p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors cursor-pointer pointer-events-auto"
+                  aria-label="Close accommodation details"
                   title="Close modal"
                 >
                   <X className="h-4 w-4" />
@@ -1427,14 +1317,10 @@ export function Accommodations() {
                     <h2 className="text-xl font-extrabold text-gray-900 mt-2">{currentRoom.name}</h2>
 
                     {/* Room Price */}
-                    {currentRoom.price_per_night && Number(currentRoom.price_per_night) > 0 ? (
+                    {currentModalRoomPrice > 0 ? (
                       <div className="text-pink-600 font-extrabold text-base mt-1 flex items-baseline gap-1">
-                        <span>₱{Number(currentRoom.price_per_night).toLocaleString()}</span>
+                        <span>₱{currentModalRoomPrice.toLocaleString()}</span>
                         <span className="text-xs font-normal text-gray-400">/ night</span>
-                      </div>
-                    ) : currentRoom.price && typeof currentRoom.price === 'string' && currentRoom.price.toLowerCase().includes('free') ? (
-                      <div className="text-emerald-600 font-bold text-xs mt-1 flex items-center gap-1">
-                        <span className="bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-md">Free for guests</span>
                       </div>
                     ) : null}
                   </div>
@@ -1457,6 +1343,7 @@ export function Accommodations() {
                     </button>
                     <button
                       type="button"
+                      disabled={!canPin}
                       onClick={() => toggleSaveAcc(currentRoom || selectedAcc)}
                       className={`w-9 h-9 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:scale-105 active:scale-95 ${
                         isInWishlist(currentRoom?.id || selectedAcc.id, 'accommodation')

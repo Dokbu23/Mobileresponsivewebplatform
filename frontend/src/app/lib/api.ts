@@ -1,14 +1,22 @@
+import { toast } from 'sonner';
+import {
+  MAX_IMAGE_INPUT_BYTES,
+  MediaProcessingProgress,
+  prepareMediaFiles,
+  prepareMediaFormData,
+} from './mediaCompression';
+
 function resolveApiBase(): string {
   // 1. If running in browser, check current hostname:
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     // Local development (localhost, 127.0.0.1, or local WiFi/LAN IP)
     if (
-      host === 'localhost' || 
-      host === '127.0.0.1' || 
-      host === '::1' || 
-      host.startsWith('192.168.') || 
-      host.startsWith('10.') || 
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '::1' ||
+      host.startsWith('192.168.') ||
+      host.startsWith('10.') ||
       host.endsWith('.local')
     ) {
       return 'http://localhost:8000';
@@ -20,7 +28,7 @@ function resolveApiBase(): string {
 
   // 2. If deployed (e.g. EC2, Render, production domain)
   const envApiBase = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined)
-    || ((import.meta as any).env?.VITE_API_BASE as string | undefined) 
+    || ((import.meta as any).env?.VITE_API_BASE as string | undefined)
     || ((import.meta as any).env?.VITE_API_URL as string | undefined);
 
   if (envApiBase && !envApiBase.includes('localhost') && !envApiBase.includes('127.0.0.1')) {
@@ -32,6 +40,13 @@ function resolveApiBase(): string {
 
 const rawApiBase = resolveApiBase();
 export const API_BASE = rawApiBase.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+
+class MediaUploadHttpError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+    this.name = 'MediaUploadHttpError';
+  }
+}
 
 export function getStorageUrl(path: string | null | undefined): string {
   if (!path) return '';
@@ -95,6 +110,100 @@ export function getStorageUrl(path: string | null | undefined): string {
 
 export const formatImageUrl = getStorageUrl;
 
+export function normalizeImageUrl(url: string): string {
+  if (!url) return '';
+  const trimmedUrl = url.trim();
+  const storageIndex = trimmedUrl.indexOf('storage/');
+  if (storageIndex !== -1) {
+    return trimmedUrl.substring(storageIndex);
+  }
+  return trimmedUrl.replace(/^\/+/, '');
+}
+
+function imageFilename(url: string): string {
+  const normalizedUrl = normalizeImageUrl(url).split(/[?#]/, 1)[0];
+  return normalizedUrl.substring(normalizedUrl.lastIndexOf('/') + 1);
+}
+
+function imageIdentity(url: string): string {
+  const normalized = normalizeImageUrl(url).split(/[?#]/, 1)[0].toLowerCase();
+  const filename = imageFilename(url).toLowerCase();
+  return normalized || filename;
+}
+
+export function parseImageGallery(rawGallery: unknown, coverImage: unknown): string[] {
+  let parsedImages: string[] = [];
+
+  if (Array.isArray(rawGallery)) {
+    parsedImages = rawGallery.filter((image): image is string => typeof image === 'string');
+  } else if (typeof rawGallery === 'string' && rawGallery.trim()) {
+    try {
+      const parsed = JSON.parse(rawGallery);
+      if (Array.isArray(parsed)) {
+        parsedImages = parsed.filter((image): image is string => typeof image === 'string');
+      } else if (rawGallery.includes(',')) {
+        parsedImages = rawGallery.split(',').map(image => image.trim());
+      } else {
+        parsedImages = [rawGallery];
+      }
+    } catch {
+      parsedImages = rawGallery.includes(',')
+        ? rawGallery.split(',').map(image => image.trim())
+        : [rawGallery];
+    }
+  }
+
+  const formattedCover = typeof coverImage === 'string' && coverImage.trim()
+    ? formatImageUrl(coverImage)
+    : '';
+
+  if (parsedImages.length === 0 && formattedCover) {
+    if (coverImage.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(coverImage);
+        parsedImages = Array.isArray(parsed) ? parsed.filter((image): image is string => typeof image === 'string') : [coverImage];
+      } catch {
+        parsedImages = [coverImage];
+      }
+    } else {
+      parsedImages = [coverImage];
+    }
+  }
+
+  const uniqueImages: string[] = [];
+  const seenPaths = new Set<string>();
+  const seenFilenames = new Set<string>();
+
+  const addUniqueImage = (image: string): void => {
+    const formattedImage = formatImageUrl(image);
+    if (!formattedImage) return;
+
+    const normalizedPath = imageIdentity(formattedImage);
+    const filename = imageFilename(formattedImage).toLowerCase();
+    if (
+      !normalizedPath ||
+      seenPaths.has(normalizedPath) ||
+      (filename && seenFilenames.has(filename))
+    ) {
+      return;
+    }
+
+    seenPaths.add(normalizedPath);
+    if (filename) seenFilenames.add(filename);
+    uniqueImages.push(formattedImage);
+  };
+
+  if (formattedCover) {
+    addUniqueImage(formattedCover);
+  }
+
+  parsedImages.forEach(image => {
+    addUniqueImage(image);
+  });
+
+  return uniqueImages;
+}
+
 /**
  * Clean & decode HTML entities (e.g., &amp; -> &, &#039; -> ', &quot; -> ")
  */
@@ -134,7 +243,6 @@ export function sanitizeStoredItineraryTitles() {
     'discover-mansalay:custom_attractions',
     'discover-mansalay:custom_itinerarys',
     'discover-mansalay:published_itineraries',
-    'discover-mansalay:custom_resorts',
     'discover-mansalay:custom_events',
     'discover-mansalay:custom_products',
     'discover-mansalay:wishlist'
@@ -192,7 +300,6 @@ export function purgeLegacyMockAndDeletedCaches() {
     'discover-mansalay:published_itineraries',
     'discover-mansalay:custom_itinerarys',
     'discover-mansalay:custom_attractions',
-    'discover-mansalay:custom_resorts',
     'discover-mansalay:custom_products',
     'discover-mansalay:custom_events',
     'discover-mansalay:custom_cultures',
@@ -408,7 +515,9 @@ function createHeaders(includeAuth: boolean = true, isFormData: boolean = false)
 
 // Public API calls (no authentication)
 export async function getPublicJSON(path: string) {
-  const res = await fetch(`${API_BASE}/api/public${path}`);
+  const res = await fetch(`${API_BASE}/api/public${path}`, {
+    cache: 'no-store',
+  });
   if (!res.ok) throw new Error('API error');
   return res.json();
 }
@@ -418,7 +527,7 @@ export async function getJSON(path: string) {
   const res = await fetch(`${API_BASE}/api${path}`, {
     headers: createHeaders(),
   });
-  
+
   if (res.status === 401) {
     console.warn(`401 Unauthorized on ${path}`);
     const isBackground = path.includes('/notifications') || path.includes('/messages/unread');
@@ -427,35 +536,100 @@ export async function getJSON(path: string) {
     }
     throw new Error('Authentication required');
   }
-  
+
   // For other errors (404, 405, etc.), just throw without redirecting
   if (!res.ok) {
     console.error(`API error: ${res.status} ${res.statusText}`);
     throw new Error(`API error: ${res.status}`);
   }
-  
+
   return res.json();
 }
 
-export async function postJSON(path: string, body: unknown, requireAuth: boolean = true) {
+const activeMediaUploads = new Set<string>();
+
+function lockMediaUpload(key: string): () => void {
+  if (activeMediaUploads.has(key)) {
+    throw new Error('An upload to this destination is already processing. Please wait for it to finish.');
+  }
+  activeMediaUploads.add(key);
+  return () => activeMediaUploads.delete(key);
+}
+
+interface MediaUploadProgressHandlers {
+  onProcessingProgress?: MediaProcessingProgress;
+  onUploadProgress?: (loaded: number, total: number) => void;
+}
+
+export async function postJSON(
+  path: string,
+  body: unknown,
+  requireAuth: boolean = true,
+  progressHandlers: MediaUploadProgressHandlers = {}
+) {
   const isFormData = body instanceof FormData;
-  
-  const res = await fetch(`${API_BASE}/api${path}`, {
-    method: 'POST',
-    headers: createHeaders(requireAuth, isFormData),
-    body: isFormData ? (body as FormData) : JSON.stringify(body),
-  });
+  const progressToastId = `media-upload:${Date.now()}`;
+  const releaseUpload = isFormData ? lockMediaUpload(`POST:${path}`) : () => undefined;
+  let res: Response;
+
+  try {
+    if (isFormData) {
+      const prepared = await prepareMediaFormData(body as FormData, (file, phase, percent) => {
+        progressHandlers.onProcessingProgress?.(file, phase, percent);
+        toast.loading(
+          `${phase === 'checking' ? 'Preparing' : 'Compressing'} ${file.name} (${percent}%)`,
+          { id: progressToastId }
+        );
+      });
+      const imageSummary = prepared.media.filter(media => media.kind === 'image');
+      const originalBytes = prepared.media.reduce((sum, media) => sum + media.originalSize, 0);
+      const compressedBytes = prepared.media.reduce((sum, media) => sum + media.compressedSize, 0);
+      const fileSummary = describePreparedMedia(prepared.media);
+      const message = imageSummary.length > 0
+        ? `Prepared ${imageSummary.length} image${imageSummary.length === 1 ? '' : 's'} (${fileSummary}): ${formatMediaBytes(originalBytes)} → ${formatMediaBytes(compressedBytes)}. Uploading…`
+        : prepared.media.length > 0
+          ? `Video compressed (${fileSummary}): ${formatMediaBytes(originalBytes)} → ${formatMediaBytes(compressedBytes)}. Uploading…`
+          : '';
+      if (message) toast.loading(message, { id: progressToastId });
+
+      res = await sendFormDataWithProgress(
+        `${API_BASE}/api${path}`,
+        prepared.formData,
+        createHeaders(requireAuth, true),
+        (loaded, total) => {
+          if (total > 0) {
+            progressHandlers.onUploadProgress?.(loaded, total);
+            toast.loading(`Uploading media (${Math.floor((loaded / total) * 100)}%)`, { id: progressToastId });
+          }
+        }
+      );
+    } else {
+      res = await fetch(`${API_BASE}/api${path}`, {
+        method: 'POST',
+        headers: createHeaders(requireAuth),
+        body: JSON.stringify(body),
+      });
+    }
+  } catch (error) {
+    toast.dismiss(progressToastId);
+    releaseUpload();
+    throw error;
+  }
 
   const data = await res.json().catch(() => null);
 
   if (res.status === 401 && requireAuth) {
     console.error('401 Unauthorized - Token expired or invalid');
     handleUnauthorized();
+    toast.dismiss(progressToastId);
+    releaseUpload();
     throw new Error('Authentication required');
   }
 
   if (!res.ok) {
-    const errorMessage = data?.message || data?.error || `HTTP ${res.status}: ${res.statusText}`;
+    const errorMessage = data?.message || data?.error || (res.status === 413
+      ? 'The upload exceeds the server or proxy request-size limit. The browser prepared the files, but the hosting request limit may need to be raised.'
+      : `HTTP ${res.status}: ${res.statusText}`);
     if (data?.errors) {
       console.error('Validation errors:', data.errors);
     }
@@ -474,6 +648,7 @@ export async function postJSON(path: string, body: unknown, requireAuth: boolean
 
     // Pass through additional error data (like requires_verification)
     const error: any = new Error(errorMessage + errorDetail);
+    error.status = res.status;
     if (data?.requires_verification) {
       error.requires_verification = true;
       error.email = data.email;
@@ -481,10 +656,412 @@ export async function postJSON(path: string, body: unknown, requireAuth: boolean
     if (data?.errors) {
       error.validation = data.errors;
     }
+    toast.dismiss(progressToastId);
+    releaseUpload();
     throw error;
   }
 
+  toast.dismiss(progressToastId);
+  releaseUpload();
   return data;
+}
+
+function formatMediaBytes(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function describePreparedMedia(media: Array<{ file: File; originalSize: number; compressedSize: number }>): string {
+  const summaries = media.slice(0, 3).map(item =>
+    `${item.file.name} ${formatMediaBytes(item.originalSize)} → ${formatMediaBytes(item.compressedSize)}`
+  );
+  return summaries.length < media.length
+    ? `${summaries.join('; ')}; +${media.length - summaries.length} more`
+    : summaries.join('; ');
+}
+
+function sendFormDataWithProgress(
+  url: string,
+  body: FormData,
+  headers: HeadersInit,
+  onProgress: (loaded: number, total: number) => void,
+  method: string = 'POST'
+): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+    const setHeader = (name: string, value: string) => {
+      if (name.toLowerCase() !== 'content-type') xhr.setRequestHeader(name, value);
+    };
+    if (headers instanceof Headers) {
+      headers.forEach((value, name) => setHeader(name, value));
+    } else {
+      Object.entries(headers as Record<string, string>).forEach(([name, value]) => setHeader(name, value));
+    }
+    xhr.upload.onprogress = event => {
+      if (event.lengthComputable) onProgress(event.loaded, event.total);
+    };
+    xhr.onload = () => {
+      resolve(new Response(xhr.responseText, {
+        status: xhr.status,
+        statusText: xhr.statusText,
+        headers: { 'Content-Type': xhr.getResponseHeader('Content-Type') || 'application/json' },
+      }));
+    };
+    xhr.onerror = () => reject(new Error('Network error while uploading media.'));
+    xhr.onabort = () => reject(new DOMException('Upload cancelled.', 'AbortError'));
+    xhr.send(body);
+  });
+}
+
+export async function sendMediaFormData(
+  url: string,
+  body: FormData,
+  options: { method?: string; headers?: HeadersInit }
+): Promise<Response> {
+  const progressToastId = `media-upload:${Date.now()}`;
+  const releaseUpload = lockMediaUpload(`${options.method || 'POST'}:${url}`);
+  try {
+    const prepared = await prepareMediaFormData(body, (file, phase, percent) => {
+      toast.loading(
+        `${phase === 'checking' ? 'Preparing' : 'Compressing'} ${file.name} (${percent}%)`,
+        { id: progressToastId }
+      );
+    });
+    const imageCount = prepared.media.filter(media => media.kind === 'image').length;
+    const originalBytes = prepared.media.reduce((sum, media) => sum + media.originalSize, 0);
+    const compressedBytes = prepared.media.reduce((sum, media) => sum + media.compressedSize, 0);
+    if (prepared.media.length > 0) {
+      const label = imageCount > 0
+        ? `Prepared ${imageCount} image${imageCount === 1 ? '' : 's'} (${describePreparedMedia(prepared.media)})`
+        : `Video compressed (${describePreparedMedia(prepared.media)})`;
+      toast.loading(`${label}: ${formatMediaBytes(originalBytes)} → ${formatMediaBytes(compressedBytes)}. Uploading…`, {
+        id: progressToastId,
+      });
+    }
+
+    return await sendFormDataWithProgress(
+      url,
+      prepared.formData,
+      options.headers || {},
+      (loaded, total) => {
+        if (total > 0) {
+          toast.loading(`Uploading media (${Math.floor((loaded / total) * 100)}%)`, { id: progressToastId });
+        }
+      },
+      options.method || 'POST'
+    );
+  } finally {
+    toast.dismiss(progressToastId);
+    releaseUpload();
+  }
+}
+
+export interface MediaUploadResult {
+  url: string;
+  mime_type: string;
+  sha256: string;
+}
+
+export const IMAGE_UPLOAD_LIMIT_BYTES = MAX_IMAGE_INPUT_BYTES;
+export const VIDEO_UPLOAD_LIMIT_BYTES = 2048 * 1024 * 1024;
+
+export function getMediaUploadLimitBytes(file: File): number {
+  const videoExtensions = ['.mp4', '.mov', '.webm', '.ogv', '.ogg', '.mpeg', '.mpg', '.mkv'];
+  const lowerName = file.name.toLowerCase();
+  const isVideo = file.type.startsWith('video/') || videoExtensions.some(extension => lowerName.endsWith(extension));
+  return isVideo ? VIDEO_UPLOAD_LIMIT_BYTES : IMAGE_UPLOAD_LIMIT_BYTES;
+}
+
+interface MediaUploadSessionResponse {
+  upload_id: string;
+  chunk_size: number;
+  received_chunks: number[];
+  status: 'uploading' | 'complete';
+  url: string | null;
+  mime_type: string | null;
+  sha256: string | null;
+}
+
+export interface MediaUploadOptions {
+  prepared?: boolean;
+  onProcessingProgress?: MediaProcessingProgress;
+  operationKey?: string;
+  uploadId?: string;
+}
+
+export async function uploadMediaInChunks(
+  file: File,
+  onProgress?: (uploadedBytes: number, totalBytes: number) => void,
+  signal?: AbortSignal,
+  options: MediaUploadOptions = {}
+): Promise<MediaUploadResult> {
+  const releaseUpload = lockMediaUpload(`chunk:${file.name}:${file.size}:${file.lastModified}`);
+  try {
+    return await uploadMediaInChunksInternal(file, onProgress, signal, options);
+  } finally {
+    releaseUpload();
+  }
+}
+
+async function uploadMediaInChunksInternal(
+  file: File,
+  onProgress?: (uploadedBytes: number, totalBytes: number) => void,
+  signal?: AbortSignal,
+  options: MediaUploadOptions = {}
+): Promise<MediaUploadResult> {
+  const maxBytes = getMediaUploadLimitBytes(file);
+  if (file.size > maxBytes) {
+    const limitLabel = maxBytes === VIDEO_UPLOAD_LIMIT_BYTES ? '2 GB' : '100 MB';
+    throw new Error(`${file.name} exceeds the ${limitLabel} upload limit.`);
+  }
+
+  let uploadFile = file;
+  if (!options.prepared) {
+    const [prepared] = await prepareMediaFiles(
+      [file],
+      options.onProcessingProgress,
+      signal
+    );
+    uploadFile = prepared.file;
+  }
+
+  const processedLimit = getMediaUploadLimitBytes(uploadFile);
+  if (uploadFile.size > processedLimit) {
+    throw new Error(`${uploadFile.name} exceeds the configured upload limit after compression.`);
+  }
+
+  const token = getAuthToken();
+  if (!token) throw new Error('Sign in before uploading media.');
+  if (!globalThis.crypto?.subtle) {
+    throw new Error('Resumable uploads require a secure browser context (HTTPS).');
+  }
+
+  const fingerprint = await mediaFingerprint(uploadFile);
+  const resumeKey = `discover-mansalay:media-upload:${fingerprint}:${uploadFile.name}:${uploadFile.size}:${uploadFile.lastModified}`;
+  const savedUploadId = localStorage.getItem(resumeKey);
+  const headers = {
+    Accept: 'application/json',
+    Authorization: `Bearer ${token}`,
+    'X-Auth-Token': token,
+    'Content-Type': 'application/json',
+  };
+  const initializeResponse = await fetch(`${API_BASE}/api/media/uploads`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      filename: uploadFile.name,
+      file_size: uploadFile.size,
+      fingerprint,
+      ...(options.operationKey ? { operation_key: options.operationKey } : {}),
+      ...((options.uploadId || savedUploadId) ? { upload_id: options.uploadId || savedUploadId } : {}),
+    }),
+    signal,
+  });
+  const upload = await readUploadResponse(initializeResponse);
+  try {
+    localStorage.setItem(resumeKey, upload.upload_id);
+  } catch (error) {
+    if (!(error instanceof DOMException) || error.name !== 'QuotaExceededError') throw error;
+    toast.warning('Browser storage is full. This upload can continue, but it cannot resume automatically if interrupted.');
+  }
+
+  if (upload.status === 'complete') {
+    if (!upload.url || !upload.mime_type || !upload.sha256) {
+      throw new Error('The server returned an incomplete completed-upload response.');
+    }
+    localStorage.removeItem(resumeKey);
+    return {
+      url: upload.url,
+      mime_type: upload.mime_type,
+      sha256: upload.sha256,
+    };
+  }
+
+  const chunkSize = upload.chunk_size;
+  const chunkCount = Math.ceil(uploadFile.size / chunkSize);
+  const received = new Set<number>(upload.received_chunks);
+  let completedBytes = [...received].reduce((total, index) => {
+    return total + Math.min(chunkSize, uploadFile.size - index * chunkSize);
+  }, 0);
+  onProgress?.(completedBytes, uploadFile.size);
+
+  for (let index = 0; index < chunkCount; index++) {
+    if (received.has(index)) continue;
+    if (signal?.aborted) throw new DOMException('Upload cancelled.', 'AbortError');
+
+    const start = index * chunkSize;
+    const chunk = uploadFile.slice(start, Math.min(uploadFile.size, start + chunkSize));
+    let uploaded = false;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < 3 && !uploaded; attempt++) {
+      try {
+        await sendMediaChunk(upload.upload_id, index, chunk, token, signal, loaded => {
+          onProgress?.(completedBytes + Math.min(loaded, chunk.size), uploadFile.size);
+        });
+        uploaded = true;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Upload chunk failed.');
+        if (
+          signal?.aborted ||
+          (error instanceof DOMException && error.name === 'AbortError') ||
+          lastError.message === 'Authentication required.' ||
+          (error instanceof MediaUploadHttpError && error.status === 413)
+        ) {
+          throw error;
+        }
+        if (attempt < 2) {
+          await new Promise(resolve => window.setTimeout(resolve, 400 * (attempt + 1)));
+        }
+      }
+    }
+
+    if (!uploaded) throw lastError || new Error('Upload chunk failed after retries.');
+    completedBytes += chunk.size;
+    onProgress?.(completedBytes, uploadFile.size);
+  }
+
+  const completeResponse = await fetch(`${API_BASE}/api/media/uploads/${upload.upload_id}/complete`, {
+    method: 'POST',
+    headers,
+    signal,
+  });
+  const completed = await readUploadResponse(completeResponse);
+  if (!completed.url || !completed.mime_type || !completed.sha256) {
+    throw new Error('The server did not return a completed media upload.');
+  }
+
+  localStorage.removeItem(resumeKey);
+  return {
+    url: completed.url,
+    mime_type: completed.mime_type,
+    sha256: completed.sha256,
+  };
+}
+
+async function mediaFingerprint(file: File): Promise<string> {
+  const sampleSize = 64 * 1024;
+  const first = await file.slice(0, sampleSize).arrayBuffer();
+  const last = await file.slice(Math.max(sampleSize, file.size - sampleSize)).arrayBuffer();
+  const [firstHash, lastHash] = await Promise.all([
+    crypto.subtle.digest('SHA-256', first),
+    crypto.subtle.digest('SHA-256', last),
+  ]);
+  const toHex = (buffer: ArrayBuffer) => Array.from(new Uint8Array(buffer))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('');
+  return `${toHex(firstHash)}${toHex(lastHash)}`;
+}
+
+function sendMediaChunk(
+  uploadId: string,
+  index: number,
+  chunk: Blob,
+  token: string,
+  signal: AbortSignal | undefined,
+  onProgress: (loaded: number) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const abortRequest = () => xhr.abort();
+    const removeAbortListener = () => signal?.removeEventListener('abort', abortRequest);
+    xhr.open('POST', `${API_BASE}/api/media/uploads/${uploadId}/chunks/${index}`);
+    xhr.setRequestHeader('Accept', 'application/json');
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('X-Auth-Token', token);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+    xhr.upload.onprogress = event => onProgress(event.loaded);
+    xhr.onload = () => {
+      removeAbortListener();
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+        return;
+      }
+
+      let message = `Upload failed with HTTP ${xhr.status}.`;
+      if (xhr.status === 413) {
+        message = 'The server or reverse proxy rejected this 4 MiB upload chunk (HTTP 413). Its request-body limit must be at least 5 MiB.';
+      }
+      try {
+        const response = JSON.parse(xhr.responseText);
+        message = response.message || response.error || message;
+      } catch {
+        // Keep the status-based error when the server response is not JSON.
+      }
+      if (xhr.status === 401) handleUnauthorized();
+      reject(new MediaUploadHttpError(xhr.status, message));
+    };
+    xhr.onerror = () => {
+      removeAbortListener();
+      reject(new Error('Network error while uploading a media chunk.'));
+    };
+    xhr.onabort = () => {
+      removeAbortListener();
+      reject(new DOMException('Upload cancelled.', 'AbortError'));
+    };
+    signal?.addEventListener('abort', abortRequest, { once: true });
+    if (signal?.aborted) {
+      xhr.abort();
+      return;
+    }
+    xhr.send(chunk);
+  });
+}
+
+async function readUploadResponse(response: Response): Promise<MediaUploadSessionResponse> {
+  const data: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    if (response.status === 401) {
+      handleUnauthorized();
+      throw new Error('Authentication required.');
+    }
+    const errorData = data && typeof data === 'object' ? data as Record<string, unknown> : {};
+    const message = typeof errorData.message === 'string'
+      ? errorData.message
+      : typeof errorData.error === 'string'
+        ? errorData.error
+        : response.status === 413
+          ? 'The server or reverse proxy rejected this upload request (HTTP 413). Check the configured request-body limit.'
+          : `Upload failed with HTTP ${response.status}.`;
+    throw new MediaUploadHttpError(response.status, message);
+  }
+  if (!data || typeof data !== 'object') {
+    throw new Error('The server returned an invalid upload response.');
+  }
+  const upload = data as Record<string, unknown>;
+  const invalidResponse = (): never => {
+    throw new Error('The server returned an invalid upload response.');
+  };
+  const uploadId = typeof upload.upload_id === 'string' ? upload.upload_id : invalidResponse();
+  const chunkSize = Number.isSafeInteger(upload.chunk_size) && Number(upload.chunk_size) > 0
+    ? Number(upload.chunk_size)
+    : invalidResponse();
+  const rawChunks = Array.isArray(upload.received_chunks) ? upload.received_chunks : invalidResponse();
+  const receivedChunks = rawChunks.map(index => Number.isSafeInteger(index) && Number(index) >= 0
+    ? Number(index)
+    : invalidResponse());
+  const status = upload.status === 'complete'
+    ? 'complete'
+    : upload.status === 'uploading' ? 'uploading' : invalidResponse();
+  const url = upload.url === null
+    ? null
+    : typeof upload.url === 'string' ? upload.url : invalidResponse();
+  const mimeType = upload.mime_type === null
+    ? null
+    : typeof upload.mime_type === 'string' ? upload.mime_type : invalidResponse();
+  const checksum = upload.sha256 === null
+    ? null
+    : typeof upload.sha256 === 'string' ? upload.sha256 : invalidResponse();
+
+  return {
+    upload_id: uploadId,
+    chunk_size: chunkSize,
+    received_chunks: receivedChunks,
+    status,
+    url,
+    mime_type: mimeType,
+    sha256: checksum,
+  };
 }
 
 export async function patchJSON(path: string, body: unknown) {
@@ -555,12 +1132,8 @@ export async function deleteJSON(path: string) {
 // Payment-related API functions
 export async function uploadPaymentReceipt(formData: FormData) {
   const token = getAuthToken();
-  const res = await fetch(`${API_BASE}/api/payment-receipts`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-    },
-    body: formData,
+  const res = await sendMediaFormData(`${API_BASE}/api/payment-receipts`, formData, {
+    headers: { 'Authorization': `Bearer ${token}` },
   });
 
   if (res.status === 401) {
@@ -809,10 +1382,8 @@ export async function createLandmark(data: {
       data.images.forEach((file) => form.append('images[]', file));
 
       const token = getAuthToken();
-      const res = await fetch(`${API_BASE}/landmarks`, {
-        method: 'POST',
+      const res = await sendMediaFormData(`${API_BASE}/landmarks`, form, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: form,
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || 'Upload failed');

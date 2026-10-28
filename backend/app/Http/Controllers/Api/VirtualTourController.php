@@ -32,7 +32,7 @@ class VirtualTourController extends Controller
         }
 
         $request->validate([
-            'image' => 'required|image|mimes:jpeg,png,jpg,webp,avif|max:20480', // Allow up to 20MB for high-res panoramas
+            'image' => 'required|image|mimes:jpeg,png,jpg,webp,avif,heic,heif|max:' . config('uploads.max_image_size_kb'),
             'slot_id' => 'nullable|string|max:100',
         ]);
 
@@ -45,11 +45,7 @@ class VirtualTourController extends Controller
 
         try {
             $image = $request->file('image');
-            $timestamp = time();
-            $originalName = pathinfo($image->getClientOriginalName(), PATHINFO_FILENAME);
-            $cleanName = preg_replace('/[^A-Za-z0-9_\-]/', '_', $originalName);
-            $extension = $image->getClientOriginalExtension() ?: 'jpg';
-            $filename = 'tour360_' . $user->id . '_' . $timestamp . '_' . uniqid() . '.' . $extension;
+            $filename = 'tour360_' . $user->id . '_' . \Illuminate\Support\Str::uuid() . '.' . ($image->extension() ?: 'jpg');
 
             // Store in storage/app/public/360-tours
             $path = $image->storeAs('360-tours', $filename, 'public');

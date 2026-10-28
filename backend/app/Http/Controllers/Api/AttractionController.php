@@ -59,7 +59,10 @@ class AttractionController extends Controller
                 $query->where('location', $request->input('barangay'));
             }
 
-            return response()->json($query->orderBy('id', 'desc')->get());
+            $attractions = $query->orderBy('id', 'desc')->get();
+            $attractions->each(fn ($attraction) => $this->ensureImageGallery($attraction));
+
+            return response()->json($attractions);
         } catch (\Throwable $e) {
             \Log::error('Attraction index error: ' . $e->getMessage());
             return response()->json([], 200);
@@ -84,13 +87,16 @@ class AttractionController extends Controller
             });
         }
 
-        return response()->json($query->get());
+        $attractions = $query->get();
+        $attractions->each(fn ($attraction) => $this->ensureImageGallery($attraction));
+
+        return response()->json($attractions);
     }
 
     /**
      * Store a newly created resource in storage.
      * Saves user_id automatically from the authenticated user.
-     * Handles image upload (max 5MB, validate image types).
+     * Handles media uploads validated by the API upload middleware.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
@@ -102,6 +108,7 @@ class AttractionController extends Controller
             'location' => 'nullable|string|max:255',
             'category' => 'nullable|string|max:255',
             'image' => 'nullable', // file upload or image URL string
+            'images' => 'nullable',
             'video' => 'nullable', // file or string URL
             'video_url' => 'nullable|string',
             'description' => 'nullable|string',
@@ -114,16 +121,51 @@ class AttractionController extends Controller
             $data['video'] = $request->input('video_url');
         }
 
-        // Handle image upload
-        if ($request->hasFile('image')) {
+        $storedImages = [];
+
+        // Handle multiple gallery image uploads.
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $file) {
+                if ($file) {
+                    $path = $file->store('attractions', 'public');
+                    $storedImages[] = '/storage/' . $path;
+                }
+            }
+        }
+
+        // Handle the primary image upload or URL when no gallery files were sent.
+        if (!$request->hasFile('images') && $request->hasFile('image')) {
             try {
                 $file = $request->file('image');
                 $path = $file->store('attractions', 'public');
                 $data['image'] = '/storage/' . $path;
+                $storedImages[] = $data['image'];
             } catch (\Exception $e) {
                 return response()->json(['error' => 'Failed to store image file: ' . $e->getMessage()], 400);
             }
+        } elseif (!$request->hasFile('images') && $request->filled('image') && is_string($request->input('image'))) {
+            $data['image'] = preg_replace('#^https?://[^/]+#', '', $request->input('image'));
+            $storedImages[] = $data['image'];
         }
+
+        if (!$request->hasFile('images') && is_array($request->input('images'))) {
+            $storedImages = array_values(array_filter(
+                $request->input('images'),
+                fn ($image) => is_string($image) && trim($image) !== ''
+            ));
+            if (!empty($storedImages)) {
+                $data['image'] = $storedImages[0];
+            }
+        }
+
+        if (!empty($storedImages)) {
+            $data['images'] = array_values(array_unique($storedImages));
+            $data['image'] = $data['images'][0];
+        }
+        \App\Services\MediaUploadService::assertOwnedImageReferences(
+            array_merge([$data['image'] ?? null], $data['images'] ?? []),
+            $request->user() ? (int) $request->user()->id : null
+        );
 
         // Handle video upload
         if ($request->hasFile('video')) {
@@ -135,6 +177,10 @@ class AttractionController extends Controller
                 return response()->json(['error' => 'Failed to store video file: ' . $e->getMessage()], 400);
             }
         }
+        \App\Services\MediaUploadService::assertOwnedVideoReferences(
+            [$data['video'] ?? null],
+            $request->user() ? (int) $request->user()->id : null
+        );
 
         $item = \App\Models\Attraction::create(array_merge($data, [
             'user_id' => $request->user() ? $request->user()->id : null,
@@ -163,7 +209,10 @@ class AttractionController extends Controller
 
         // Increment view count atomically
         $item->increment('view_count');
-        return response()->json($item->fresh());
+        $item = $item->fresh();
+        $this->ensureImageGallery($item);
+
+        return response()->json($item);
     }
 
     /**
@@ -179,11 +228,31 @@ class AttractionController extends Controller
         return response()->json(['success' => true]);
     }
 
+    private function ensureImageGallery(\App\Models\Attraction $attraction): void
+    {
+        $images = $attraction->images;
+
+        if (is_string($images)) {
+            $images = json_decode($images, true);
+        }
+
+        if (!is_array($images)) {
+            $images = [];
+        }
+
+        $images = array_values(array_filter($images, fn ($image) => is_string($image) && trim($image) !== ''));
+        if (empty($images) && is_string($attraction->image) && trim($attraction->image) !== '') {
+            $images[] = $attraction->image;
+        }
+
+        $attraction->setAttribute('images', array_values(array_unique($images)));
+    }
+
     /**
      * Update the specified resource in storage.
      * - Admin can update any attraction.
      * - Resort can only update their own attractions.
-     * Handles image upload (max 5MB, validate image types).
+     * Handles media uploads validated by the API upload middleware.
      *
      * @param  \Illuminate\Http\Request  $request
      * @param  int  $id
@@ -206,6 +275,7 @@ class AttractionController extends Controller
             'location' => 'sometimes|nullable|string|max:255',
             'category' => 'sometimes|nullable|string|max:255',
             'image' => 'sometimes|nullable', // file upload or URL string
+            'images' => 'sometimes|nullable',
             'video' => 'sometimes|nullable', // file or string URL
             'video_url' => 'sometimes|nullable|string',
             'description' => 'sometimes|nullable|string',
@@ -218,18 +288,72 @@ class AttractionController extends Controller
             $data['video'] = $request->input('video_url');
         }
 
-        // Handle image upload
-        if ($request->hasFile('image')) {
+        $storedImages = [];
+        $hasNewImageUpload = false;
+
+        // Handle new gallery image uploads.
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $file) {
+                if ($file) {
+                    $path = $file->store('attractions', 'public');
+                    $storedImages[] = '/storage/' . $path;
+                }
+            }
+            $hasNewImageUpload = !empty($storedImages);
+        }
+
+        // Handle the primary image upload or URL when no gallery files were sent.
+        if (!$request->hasFile('images') && $request->hasFile('image')) {
             try {
                 $file = $request->file('image');
                 $path = $file->store('attractions', 'public');
                 $data['image'] = '/storage/' . $path;
+                $storedImages[] = $data['image'];
+                $hasNewImageUpload = true;
             } catch (\Exception $e) {
                 return response()->json(['error' => 'Failed to store image file: ' . $e->getMessage()], 400);
             }
-        } elseif ($request->filled('image') && is_string($request->input('image'))) {
+        } elseif (!$request->hasFile('images') && $request->filled('image') && is_string($request->input('image'))) {
             $data['image'] = preg_replace('#^https?://[^/]+#', '', $request->input('image'));
+            $storedImages[] = $data['image'];
         }
+
+        if (!$request->hasFile('images') && is_array($request->input('images'))) {
+            $storedImages = array_values(array_filter(
+                $request->input('images'),
+                fn ($image) => is_string($image) && trim($image) !== ''
+            ));
+            $hasNewImageUpload = !empty($storedImages);
+            if (!empty($storedImages)) {
+                $data['image'] = $storedImages[0];
+            }
+        }
+
+        $existingImages = $request->input('existing_images', []);
+        if (is_string($existingImages)) {
+            $existingImages = json_decode($existingImages, true) ?: [];
+        }
+        if (!is_array($existingImages)) {
+            $existingImages = [];
+        }
+
+        if ($hasNewImageUpload) {
+            $data['images'] = array_values(array_unique(array_merge($storedImages, $existingImages)));
+            $data['image'] = $data['images'][0];
+        } elseif ($request->has('existing_images')) {
+            $data['images'] = array_values(array_unique($existingImages));
+            if (!empty($data['images']) && empty($data['image'])) {
+                $data['image'] = $data['images'][0];
+            }
+        }
+        \App\Services\MediaUploadService::assertOwnedImageReferences(
+            array_merge([$data['image'] ?? null], $data['images'] ?? []),
+            $user ? (int) $user->id : null,
+            array_merge(
+                [$item->image],
+                is_array($item->images) ? $item->images : []
+            )
+        );
 
         // Handle video upload
         if ($request->hasFile('video')) {
@@ -241,6 +365,11 @@ class AttractionController extends Controller
                 return response()->json(['error' => 'Failed to store video file: ' . $e->getMessage()], 400);
             }
         }
+        \App\Services\MediaUploadService::assertOwnedVideoReferences(
+            [$data['video'] ?? null],
+            $user ? (int) $user->id : null,
+            [$item->video]
+        );
 
         $item->update($data);
 

@@ -18,7 +18,7 @@ import {
 import { toast } from 'sonner';
 import Swal from 'sweetalert2';
 import { VirtualTourModal, Tour360Scene } from './VirtualTourModal';
-import { API_BASE, postJSON, getAuthToken } from '../lib/api';
+import { API_BASE, postJSON, getAuthToken, sendMediaFormData } from '../lib/api';
 
 export interface EditableSlot {
   id: string;
@@ -256,13 +256,11 @@ export function ResortVirtualTourManager({
       formData.append('image', file);
       formData.append('slot_id', slotId);
 
-      const res = await fetch(`${API_BASE}/api/360-tour/upload-image`, {
-        method: 'POST',
+      const res = await sendMediaFormData(`${API_BASE}/api/360-tour/upload-image`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
         },
-        body: formData,
       });
 
       const data = await res.json();
@@ -536,7 +534,7 @@ export function ResortVirtualTourManager({
                     />
                   </label>
                   <span className="text-[10px] text-gray-400 font-medium leading-tight text-right">
-                    JPG/PNG/WEBP · Max 10MB
+                    JPEG/PNG/WebP/AVIF/HEIC/HEIF (configured server limit)
                   </span>
                 </div>
 
