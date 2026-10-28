@@ -9,6 +9,12 @@ vi.mock('react-router', () => ({
   useNavigate: () => vi.fn(),
 }));
 
+vi.mock('../context/AppContext', () => ({
+  useApp: () => ({
+    currentUser: { id: 1, role: 'tourist' },
+  }),
+}));
+
 // Mock the NotificationContext
 const mockMarkAsRead = vi.fn();
 const mockMarkAllAsRead = vi.fn();

@@ -73,13 +73,14 @@ class ProductController extends Controller
             $products = $query->get();
             $products->each(function ($product) {
                 $this->normalizeImages($product);
+                $owner = $product->owner;
+                $ownerShop = $owner ? ($owner->store_name ?: ($owner->resort_name ?: $owner->name)) : null;
                 $product->setAttribute(
                     'shop_name',
                     $product->shop_name
                         ?: ($product->enterprise_store
                             ?: ($product->store_name
-                                ?: ($product->owner?->store_name
-                                    ?: ($product->owner?->resort_name ?: $product->owner?->name))))
+                                ?: $ownerShop))
                 );
             });
 
@@ -195,7 +196,8 @@ class ProductController extends Controller
         $data['user_id']       = ($user && $user->role === 'enterprise') ? $user->id : ($data['user_id'] ?? null);
         $data['is_registered'] = ($user && $user->role === 'enterprise');
         if (Schema::hasColumn('products', 'shop_name')) {
-            $data['shop_name'] = trim((string) ($request->input('shop_name') ?: $request->input('enterprise_store') ?: ($user?->store_name ?: '')));
+            $userStore = ($user && isset($user->store_name)) ? $user->store_name : '';
+            $data['shop_name'] = trim((string) ($request->input('shop_name') ?: $request->input('enterprise_store') ?: $userStore));
         }
 
         $product = \App\Models\Product::create($data);

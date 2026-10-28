@@ -26,6 +26,7 @@ class AdminManagePostController extends Controller
     private const ALLOWED_SOURCES = [
         'resort'        => Accommodation::class,
         'accommodation' => Accommodation::class,
+        'room'          => ResortRoom::class,
         'product'       => Product::class,
         'attraction'    => Attraction::class,
         'event'         => Event::class,
@@ -79,11 +80,12 @@ class AdminManagePostController extends Controller
 
                 $posts = $postQuery->get()->map(function ($p) {
                     $ownerRole = $p->user ? $p->user->role : 'enterprise';
-                    $cType = ($ownerRole === 'resort') ? 'Resort' : 'Enterprise';
-                    if ($p->type === 'product' || !empty($p->product_name)) {
-                        $cType = 'Product';
-                    } elseif (in_array($p->type, ['room', 'rooms', 'accommodation', 'stay'])) {
+                    if (in_array($p->type, ['room', 'rooms', 'accommodation', 'stay']) || $ownerRole === 'resort') {
                         $cType = 'Accommodation';
+                    } elseif ($p->type === 'product' || !empty($p->product_name)) {
+                        $cType = 'Product';
+                    } else {
+                        $cType = 'Enterprise';
                     }
 
                     $images = [];
@@ -194,6 +196,71 @@ class AdminManagePostController extends Controller
                 $items = $items->concat($accs);
             } catch (\Throwable $e) {
                 Log::warning('AdminManagePostController accommodations fetch error: ' . $e->getMessage());
+            }
+        }
+
+        // 2b. Resort Rooms (from resort_rooms table)
+        if (($contentTypeFilter === 'all' || in_array($contentTypeFilter, ['resort', 'accommodation'])) && Schema::hasTable('resort_rooms')) {
+            try {
+                $roomsQuery = ResortRoom::with('owner:id,name,email,role,store_name,resort_name,resort_images');
+                $rooms = $roomsQuery->get()->map(function ($r) {
+                    $owner = $r->owner;
+                    $ownerRole = $owner ? $owner->role : 'resort';
+                    $images = is_array($r->images) ? $r->images : ($r->image ? [$r->image] : []);
+
+                    $ownerData = [
+                        'id'          => $r->user_id,
+                        'name'        => $owner ? ($owner->resort_name ?: $owner->name) : 'Resort Partner',
+                        'role'        => $ownerRole,
+                        'email'       => $owner ? $owner->email : null,
+                        'resort_name' => $owner ? ($owner->resort_name ?: $owner->name) : null,
+                        'store_name'  => null,
+                        'logo'        => null,
+                    ];
+
+                    $status = $r->is_available ? 'approved' : 'archived';
+
+                    return [
+                        'id'                => (int) $r->id,
+                        'source'            => 'room',
+                        'content_type'      => 'Accommodation',
+                        'account_type'      => $ownerRole,
+                        'title'             => $r->name ?: 'Room #' . $r->id,
+                        'name'              => $r->name ?: 'Room #' . $r->id,
+                        'content'           => $r->description,
+                        'description'       => $r->description,
+                        'full_description'  => $r->description,
+                        'category'          => $r->type ?: 'Resort Room',
+                        'price'             => $r->price_per_night,
+                        'location'          => $owner ? ($owner->barangay ? "{$owner->barangay}, Mansalay" : ($owner->address ?: 'Mansalay')) : 'Mansalay',
+                        'status'            => $status,
+                        'previous_status'   => 'approved',
+                        'archived_at'       => $r->is_available ? null : ($r->updated_at ? $r->updated_at->toIso8601String() : null),
+                        'created_at'        => $r->created_at ? ($r->created_at instanceof \Carbon\Carbon ? $r->created_at->toIso8601String() : (string) $r->created_at) : null,
+                        'updated_at'        => $r->updated_at ? ($r->updated_at instanceof \Carbon\Carbon ? $r->updated_at->toIso8601String() : (string) $r->updated_at) : null,
+                        'image'             => $r->image ?: ($images[0] ?? null),
+                        'images'            => $images,
+                        'video'             => null,
+                        'rejection_remarks' => null,
+                        'moderation_history'=> [],
+                        'owner'             => $ownerData,
+                        'author'            => $ownerData,
+                    ];
+                });
+
+                // Deduplicate rooms that are already represented by an approved post
+                $existingPostKeys = $items->filter(fn($it) => $it['source'] === 'post')
+                    ->map(fn($it) => ($it['owner']['id'] ?? 0) . '_' . strtolower(trim($it['title'] ?? '')))
+                    ->toArray();
+
+                $filteredRooms = $rooms->reject(function($r) use ($existingPostKeys) {
+                    $key = ($r['owner']['id'] ?? 0) . '_' . strtolower(trim($r['title'] ?? ''));
+                    return in_array($key, $existingPostKeys);
+                });
+
+                $items = $items->concat($filteredRooms);
+            } catch (\Throwable $e) {
+                Log::warning('AdminManagePostController resort_rooms fetch error: ' . $e->getMessage());
             }
         }
 
@@ -598,11 +665,29 @@ class AdminManagePostController extends Controller
 
         $record->save();
 
-        // Cascade archive to synced product if this is an enterprise post
+        // Cascade archive to synced product and resort room if this is an enterprise post
         if ($source === 'post') {
             try {
                 Product::where('post_id', $id)->update(['status' => 'archived']);
             } catch (\Throwable $e) {}
+            try {
+                if (!empty($record->user_id)) {
+                    ResortRoom::where('user_id', $record->user_id)
+                        ->where(function($q) use ($record) {
+                            $targetName = $record->product_name ?: $record->title;
+                            if (!empty($targetName)) {
+                                $q->where('name', $targetName);
+                            }
+                            if (!empty($record->image)) {
+                                $q->orWhere('image', $record->image);
+                            }
+                        })
+                        ->update(['is_available' => false]);
+                }
+            } catch (\Throwable $e) {}
+        } elseif ($source === 'room') {
+            $record->is_available = false;
+            $record->save();
         }
 
         // Send owner notification if owned by business user
@@ -672,11 +757,29 @@ class AdminManagePostController extends Controller
 
         $record->save();
 
-        // Cascade restore to synced product if enterprise post
+        // Cascade restore to synced product and resort room if enterprise post
         if ($source === 'post') {
             try {
                 Product::where('post_id', $id)->update(['status' => $restoredStatus]);
             } catch (\Throwable $e) {}
+            try {
+                if (!empty($record->user_id) && $restoredStatus === 'approved') {
+                    ResortRoom::where('user_id', $record->user_id)
+                        ->where(function($q) use ($record) {
+                            $targetName = $record->product_name ?: $record->title;
+                            if (!empty($targetName)) {
+                                $q->where('name', $targetName);
+                            }
+                            if (!empty($record->image)) {
+                                $q->orWhere('image', $record->image);
+                            }
+                        })
+                        ->update(['is_available' => true]);
+                }
+            } catch (\Throwable $e) {}
+        } elseif ($source === 'room') {
+            $record->is_available = true;
+            $record->save();
         }
 
         // Send owner notification
@@ -719,7 +822,7 @@ class AdminManagePostController extends Controller
         $record = $modelClass::findOrFail($id);
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($source, $id, $record) {
-            // If enterprise post, cascade delete any linked products & variations and resort rooms
+// If enterprise post, cascade delete any linked products & variations & resort rooms
             if ($source === 'post') {
                 $linkedProducts = Product::where('post_id', $id)->get();
                 foreach ($linkedProducts as $lp) {
@@ -727,17 +830,41 @@ class AdminManagePostController extends Controller
                     \App\Models\Review::where('product_id', $lp->id)->delete();
                     $lp->delete();
                 }
-                if ($record->user_id) {
-                    $roomName = $record->product_name ?: ($record->title ?: null);
-                    if ($roomName) {
-                        \App\Models\ResortRoom::where('user_id', $record->user_id)
-                            ->where('name', $roomName)
-                            ->delete();
-                    }
+                // Cascade delete matching resort rooms
+                if (!empty($record->user_id)) {
+                    ResortRoom::where('user_id', $record->user_id)
+                        ->where(function($q) use ($record) {
+                            $targetName = $record->product_name ?: $record->title;
+                            if (!empty($targetName)) {
+                                $q->where('name', $targetName);
+                            }
+                            if (!empty($record->image)) {
+                                $q->orWhere('image', $record->image);
+                            }
+                        })
+                        ->delete();
                 }
             } elseif ($source === 'product') {
                 \App\Models\ProductVariation::where('product_id', $id)->delete();
                 \App\Models\Review::where('product_id', $id)->delete();
+            } elseif ($source === 'room') {
+                // If deleting a room directly, cascade delete any linked post
+                if (!empty($record->user_id)) {
+                    EnterprisePost::where('user_id', $record->user_id)
+                        ->where(function($q) use ($record) {
+                            $q->where('product_name', $record->name);
+                            if (!empty($record->image)) {
+                                $q->orWhere('image', $record->image);
+                            }
+                        })
+                        ->delete();
+                }
+            } elseif ($source === 'accommodation') {
+                if (!empty($record->user_id)) {
+                    ResortRoom::where('user_id', $record->user_id)
+                        ->where('name', $record->name)
+                        ->delete();
+                }
             }
 
             // Permanently delete the resolved database record
@@ -785,11 +912,19 @@ class AdminManagePostController extends Controller
 
         $record->save();
 
-        // Cascade approve to linked product if enterprise post
+        // Cascade approve to linked product or resort room if enterprise post
         if ($source === 'post') {
             try {
                 Product::where('post_id', $id)->update(['status' => 'approved']);
             } catch (\Throwable $e) {}
+            try {
+                if (in_array($record->type, ['rooms', 'room']) || ($record->user && $record->user->role === 'resort')) {
+                    \App\Http\Controllers\Api\EnterprisePostController::syncRoomFromPost($record);
+                }
+            } catch (\Throwable $e) {}
+        } elseif ($source === 'room') {
+            $record->is_available = true;
+            $record->save();
         }
 
         if (!empty($record->user_id)) {
@@ -852,11 +987,29 @@ class AdminManagePostController extends Controller
 
         $record->save();
 
-        // Cascade reject to linked product if enterprise post
+        // Cascade reject to linked product and resort room if enterprise post
         if ($source === 'post') {
             try {
                 Product::where('post_id', $id)->update(['status' => 'rejected']);
             } catch (\Throwable $e) {}
+            try {
+                if (!empty($record->user_id)) {
+                    ResortRoom::where('user_id', $record->user_id)
+                        ->where(function($q) use ($record) {
+                            $targetName = $record->product_name ?: $record->title;
+                            if (!empty($targetName)) {
+                                $q->where('name', $targetName);
+                            }
+                            if (!empty($record->image)) {
+                                $q->orWhere('image', $record->image);
+                            }
+                        })
+                        ->update(['is_available' => false]);
+                }
+            } catch (\Throwable $e) {}
+        } elseif ($source === 'room') {
+            $record->is_available = false;
+            $record->save();
         }
 
         if (!empty($record->user_id)) {

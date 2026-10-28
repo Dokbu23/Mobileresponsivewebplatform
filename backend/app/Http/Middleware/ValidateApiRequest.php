@@ -31,7 +31,13 @@ class ValidateApiRequest
                 return;
             }
 
-            $mimeType = $file->getMimeType();
+            $realPath = $file->getRealPath() ?: $file->getPathname();
+            $detectedMime = null;
+            if (!empty($realPath) && file_exists($realPath) && is_readable($realPath)) {
+                $finfo = new \finfo(FILEINFO_MIME_TYPE);
+                $detectedMime = $finfo->file($realPath) ?: null;
+            }
+            $mimeType = $detectedMime ?: $file->getMimeType();
             if (!MediaUploadService::supportsMimeType($mimeType)) {
                 $invalidUpload = 'The uploaded file signature is not a supported image or video format.';
                 return;

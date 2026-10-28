@@ -608,10 +608,10 @@ class EnterprisePostController extends Controller
         // If updated by admin directly to approved, re-sync
         if ($post->status === 'approved') {
             try {
-                if ($post->type === 'product' || !empty($post->product_name)) {
-                    self::syncProductFromPost($post, $post->user);
-                } elseif ($post->type === 'rooms' || $post->type === 'room') {
+                if (in_array($post->type, ['rooms', 'room']) || ($post->user && $post->user->role === 'resort')) {
                     self::syncRoomFromPost($post, $post->user);
+                } elseif ($post->type === 'product' || !empty($post->product_name)) {
+                    self::syncProductFromPost($post, $post->user);
                 }
             } catch (\Throwable $e) {}
         }
@@ -631,13 +631,28 @@ class EnterprisePostController extends Controller
             return response()->json(['message' => 'Unauthorized to delete this post.'], 403);
         }
 
-        // Clean up any synced product or resort room
+        // Clean up any synced product and resort room
         try {
             \App\Models\Product::where('post_id', $post->id)->delete();
             $roomName = $post->product_name ?: ($post->title ?: null);
             if ($post->user_id && $roomName) {
                 \App\Models\ResortRoom::where('user_id', $post->user_id)
                     ->where('name', $roomName)
+                    ->delete();
+            }
+        } catch (\Throwable $e) {}
+        try {
+            if (!empty($post->user_id)) {
+                \App\Models\ResortRoom::where('user_id', $post->user_id)
+                    ->where(function($q) use ($post) {
+                        $targetName = $post->product_name ?: $post->title;
+                        if (!empty($targetName)) {
+                            $q->where('name', $targetName);
+                        }
+                        if (!empty($post->image)) {
+                            $q->orWhere('image', $post->image);
+                        }
+                    })
                     ->delete();
             }
         } catch (\Throwable $e) {}
@@ -746,10 +761,10 @@ class EnterprisePostController extends Controller
 
         // Sync to Product or ResortRoom record
         try {
-            if ($post->type === 'product' || !empty($post->product_name)) {
-                self::syncProductFromPost($post, $post->user);
-            } elseif ($post->type === 'rooms' || $post->type === 'room') {
+            if (in_array($post->type, ['rooms', 'room']) || ($post->user && $post->user->role === 'resort')) {
                 self::syncRoomFromPost($post, $post->user);
+            } elseif ($post->type === 'product' || !empty($post->product_name)) {
+                self::syncProductFromPost($post, $post->user);
             }
         } catch (\Throwable $e) {
             \Log::warning('Failed syncing approved post: ' . $e->getMessage());
@@ -819,6 +834,22 @@ class EnterprisePostController extends Controller
         // If product was previously synced, remove it
         try {
             \App\Models\Product::where('post_id', $post->id)->delete();
+        } catch (\Throwable $e) {}
+        // If room was previously synced, mark unavailable
+        try {
+            if (!empty($post->user_id)) {
+                \App\Models\ResortRoom::where('user_id', $post->user_id)
+                    ->where(function($q) use ($post) {
+                        $targetName = $post->product_name ?: $post->title;
+                        if (!empty($targetName)) {
+                            $q->where('name', $targetName);
+                        }
+                        if (!empty($post->image)) {
+                            $q->orWhere('image', $post->image);
+                        }
+                    })
+                    ->update(['is_available' => false]);
+            }
         } catch (\Throwable $e) {}
 
         // Notify post owner with remarks

@@ -92,6 +92,36 @@ class AccommodationController extends Controller
             }
 
             $allRooms = $roomsQuery->orderBy('created_at', 'desc')->get();
+
+            // Filter out any rooms whose synced enterprise post is archived, rejected, pending, or deleted
+            if (Schema::hasTable('enterprise_posts')) {
+                $allRooms = $allRooms->filter(function ($room) {
+                    $isPostRoom = (!empty($room->image) && str_contains($room->image, '/storage/resort/posts/')) ||
+                                  (!empty($room->images) && is_array($room->images) && collect($room->images)->contains(fn($img) => str_contains((string)$img, '/storage/resort/posts/')));
+
+                    if ($isPostRoom) {
+                        $matchingPost = \App\Models\EnterprisePost::where('user_id', $room->user_id)
+                            ->where(function($q) use ($room) {
+                                $q->where('product_name', $room->name);
+                                if (!empty($room->image)) {
+                                    $q->orWhere('image', $room->image);
+                                }
+                            })
+                            ->first();
+
+                        if (!$matchingPost || $matchingPost->status !== 'approved' || !empty($matchingPost->archived_at)) {
+                            try {
+                                $room->update(['is_available' => false]);
+                            } catch (\Throwable $t) {}
+                            return false;
+                        }
+
+                        $room->matching_post_id = $matchingPost->id;
+                    }
+                    return true;
+                });
+            }
+
             $handledResortIds = [];
             $roomGroups = [];
 
@@ -162,6 +192,7 @@ class AccommodationController extends Controller
                 $roomItem = [
                     'id'               => 'room-' . $room->id,
                     'room_id'          => $room->id,
+                    'post_id'          => $room->matching_post_id ?? null,
                     'name'             => $room->name,
                     'resort_name'      => $owner ? ($owner->resort_name ?? $owner->name) : 'Resort Stay',
                     'description'      => $room->description ?: ($owner ? ($owner->resort_description ?? '') : ''),

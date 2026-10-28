@@ -75,7 +75,8 @@ class ValidateApiRequestTest extends TestCase
     public function test_it_rejects_an_image_whose_filename_extension_does_not_match_its_signature(): void
     {
         $request = Request::create('/api/events', 'POST');
-        $request->files->set('image', UploadedFile::fake()->image('spoofed.png'));
+        $jpegContent = UploadedFile::fake()->image('real.jpg')->get();
+        $request->files->set('image', UploadedFile::fake()->createWithContent('spoofed.png', $jpegContent));
 
         $response = app(ValidateApiRequest::class)->handle($request, function () {
             return response()->json(['accepted' => true]);

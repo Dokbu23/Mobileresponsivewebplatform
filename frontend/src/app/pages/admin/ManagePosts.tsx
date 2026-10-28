@@ -48,11 +48,15 @@ import { getJSON, postJSON, putJSON, deleteJSON, formatImageUrl, API_BASE, purge
 
 export type UnifiedSource =
   | 'enterprise_post'
+  | 'post'
   | 'accommodation'
+  | 'room'
   | 'product'
   | 'attraction'
+  | 'itinerary'
   | 'event'
   | 'culture_art'
+  | 'culture'
   | 'history';
 
 export type ContentType =

@@ -323,7 +323,7 @@ export function purgeClientRecord(
 ) {
   if (typeof window === 'undefined') return;
   const strId = String(id);
-  const possibleIds = new Set<string>([strId, `ep_${strId}`, `post-${strId}`]);
+  const possibleIds = new Set<string>([strId, `ep_${strId}`, `post-${strId}`, `room-${strId}`]);
 
   try {
     let deletedList: string[] = [];

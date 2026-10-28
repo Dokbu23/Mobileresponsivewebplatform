@@ -177,6 +177,27 @@ function isMediaFile(file: File): boolean {
     || Object.values(VIDEO_MIME_EXTENSIONS).some(extensions => extensions.includes(extensionOf(file.name)));
 }
 
+export async function isAnimatedGif(file: File): Promise<boolean> {
+  if (file.type !== 'image/gif' && extensionOf(file.name) !== 'gif') {
+    return false;
+  }
+  try {
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let frames = 0;
+    // Scan for Graphic Control Extension: 0x21, 0xF9, 0x04
+    for (let i = 0; i < bytes.length - 3; i++) {
+      if (bytes[i] === 0x21 && bytes[i + 1] === 0xf9 && bytes[i + 2] === 0x04) {
+        frames++;
+        if (frames > 1) return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function checkAbort(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw new DOMException('Media processing cancelled.', 'AbortError');
@@ -216,6 +237,13 @@ async function compressImage(
   }
 
   const sourceExtension = extensionOf(file.name);
+  if (mimeType === 'image/svg+xml' || sourceExtension === 'svg') {
+    return file;
+  }
+  if ((mimeType === 'image/gif' || sourceExtension === 'gif') && await isAnimatedGif(file)) {
+    return file;
+  }
+
   const formatIsServerSupported = SERVER_SUPPORTED_IMAGE_MIME_TYPES.has(mimeType)
     && (IMAGE_MIME_EXTENSIONS[mimeType]?.includes(sourceExtension) ?? false);
   onProgress?.(file, 'checking', 0);
@@ -398,7 +426,7 @@ async function compressVideo(
         '-i', inputPath,
         '-map', '0:v:0',
         '-map', '0:a?',
-        '-vf', "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease",
+        '-vf', "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
         '-c:v', 'libx264',
         '-preset', 'veryfast',
         '-crf', '27',

@@ -42,6 +42,14 @@ export function Wishlist() {
       const sanitizeSection = (apiList: any) => {
         const raw = Array.isArray(apiList) ? apiList : (apiList && typeof apiList === 'object' && 'data' in apiList ? (apiList as any).data : []);
         return (Array.isArray(raw) ? raw : [])
+          .filter((i: any) => {
+            const strId = String(i.id);
+            const roomId = i.room_id ? String(i.room_id) : '';
+            const postId = i.post_id ? String(i.post_id) : '';
+            return !deletedIds.has(strId) && !archivedIds.has(strId) &&
+                   (!roomId || (!deletedIds.has(roomId) && !archivedIds.has(roomId) && !deletedIds.has(`room-${roomId}`) && !archivedIds.has(`room-${roomId}`))) &&
+                   (!postId || (!deletedIds.has(postId) && !archivedIds.has(postId) && !deletedIds.has(`post-${postId}`) && !archivedIds.has(`post-${postId}`)));
+          })
           .map((i: any) => ({
             ...i,
             name: i.name ? cleanItineraryTitle(i.name) : i.name,

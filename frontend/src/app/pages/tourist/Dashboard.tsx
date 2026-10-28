@@ -107,6 +107,14 @@ export function Dashboard() {
 
       const sanitizeSection = (apiList: any[]) => {
         return (apiList || [])
+          .filter(i => {
+            const strId = String(i.id);
+            const roomId = i.room_id ? String(i.room_id) : '';
+            const postId = i.post_id ? String(i.post_id) : '';
+            return !deletedIds.has(strId) && !archivedIds.has(strId) &&
+                   (!roomId || (!deletedIds.has(roomId) && !archivedIds.has(roomId) && !deletedIds.has(`room-${roomId}`) && !archivedIds.has(`room-${roomId}`))) &&
+                   (!postId || (!deletedIds.has(postId) && !archivedIds.has(postId) && !deletedIds.has(`post-${postId}`) && !archivedIds.has(`post-${postId}`)));
+          })
           .map(i => ({
             ...i,
             name: i.name ? cleanItineraryTitle(i.name) : i.name,
