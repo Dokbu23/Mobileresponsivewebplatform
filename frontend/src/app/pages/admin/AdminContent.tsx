@@ -52,7 +52,11 @@ import {
   sendMediaFormData,
   VIDEO_UPLOAD_LIMIT_BYTES,
 } from '../../lib/api';
-import { MAX_VIDEO_INPUT_BYTES } from '../../lib/mediaCompression';
+import {
+  MAX_VIDEO_INPUT_BYTES,
+  mediaDataUrlToFile,
+  prepareMediaFiles,
+} from '../../lib/mediaCompression';
 import { migrateLegacyResortRecord } from '../../lib/legacyResortMigration';
 import {
   MANSALAY_BARANGAYS,
