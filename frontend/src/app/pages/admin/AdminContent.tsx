@@ -707,7 +707,7 @@ export function AdminContent() {
     const reportMessage =
       `Legacy migration ${cancelled ? 'cancelled' : 'finished'}: ${report.migrated.length} migrated, ${report.skipped.length} skipped, ${report.failed.length} failed.`;
     if (cancelled) toast.info(reportMessage);
-    else toast[report.failed > 0 ? 'warning' : 'success'](reportMessage);
+    else toast[report.failed.length > 0 ? 'warning' : 'success'](reportMessage);
   };
 
   const loadManagePosts = async () => {

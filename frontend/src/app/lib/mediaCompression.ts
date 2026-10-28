@@ -445,7 +445,11 @@ async function compressVideo(
         throw new Error('Video compression produced an empty file.');
       }
       const outputName = `${file.name.replace(/\.[^.]+$/, '')}.mp4`;
-      return new File([output], outputName, { type: 'video/mp4', lastModified: file.lastModified });
+      // Copy into an owned ArrayBuffer: FFmpeg may return a Uint8Array backed by a
+      // SharedArrayBuffer, which is not assignable to BlobPart / ArrayBufferView<ArrayBuffer>.
+      const outputBuffer = new ArrayBuffer(output.byteLength);
+      new Uint8Array(outputBuffer).set(output);
+      return new File([outputBuffer], outputName, { type: 'video/mp4', lastModified: file.lastModified });
     } catch (error) {
       if (signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
         ffmpeg.terminate();
