@@ -57,6 +57,7 @@ import {
   mediaDataUrlToFile,
   prepareMediaFiles,
 } from '../../lib/mediaCompression';
+import { estimateCompressionTime, formatDuration } from '../../lib/compressionMetrics';
 import { migrateLegacyResortRecord } from '../../lib/legacyResortMigration';
 import {
   MANSALAY_BARANGAYS,
@@ -260,6 +261,7 @@ export function AdminContent() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatusText, setUploadStatusText] = useState('');
   const [uploadFileName, setUploadFileName] = useState('');
+  const [estimatedCompressionTime, setEstimatedCompressionTime] = useState<string>('');
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
 
   // Form states
@@ -1029,6 +1031,11 @@ export function AdminContent() {
           return;
         }
 
+        // Calculate estimated compression time
+        const estimatedMs = estimateCompressionTime(selectedVideoFile.size);
+        const estimatedTimeStr = formatDuration(estimatedMs);
+        setEstimatedCompressionTime(estimatedTimeStr);
+
         setUploadStatusText('Compressing video on this device…');
         const uploaded = await uploadMediaInChunks(
           selectedVideoFile,
@@ -1042,7 +1049,10 @@ export function AdminContent() {
             onProcessingProgress: (file, phase, percent) => {
               if (phase === 'compressing') {
                 setUploadProgress(Math.floor(percent * 0.15));
-                setUploadStatusText(`Compressing ${file.name} on this device (${percent}%)`);
+                const elapsed = estimatedMs * (percent / 100);
+                const remaining = Math.max(0, estimatedMs - elapsed);
+                const remainingStr = formatDuration(remaining);
+                setUploadStatusText(`Compressing ${file.name} on this device (${percent}%) — ${remainingStr} remaining (est. ${estimatedTimeStr} total)`);
               }
             },
           }
@@ -1324,8 +1334,16 @@ export function AdminContent() {
       const selectedMedia = [...selectedImages, ...selectedVideos];
 
       if (selectedMedia.length > 0) {
+        // Calculate total estimated compression time for all media
+        const totalEstimatedMs = selectedMedia.reduce((sum, file) => {
+          if (file.type.startsWith('video/')) return sum + estimateCompressionTime(file.size);
+          return sum; // Images compress faster, skip calculation
+        }, 0);
+        const totalEstimatedStr = formatDuration(totalEstimatedMs);
+        setEstimatedCompressionTime(totalEstimatedStr);
+
         const preparedMedia = await prepareMediaFiles(selectedMedia, (file, phase, percent) => {
-          setUploadStatusText(`${phase === 'checking' ? 'Preparing' : 'Compressing'} ${file.name} (${percent}%)`);
+          setUploadStatusText(`${phase === 'checking' ? 'Preparing' : 'Compressing'} ${file.name} (${percent}%) — Est. ${totalEstimatedStr} total compression time`);
           setUploadProgress(current => Math.max(current, Math.min(30, 5 + Math.round(percent * 0.25))));
         }, publishController.signal, {}, selectedMedia.map(file =>
           file.type.startsWith('image/') ? 'cover' : 'resort-gallery'
