@@ -763,7 +763,7 @@ export interface MediaUploadResult {
 }
 
 export const IMAGE_UPLOAD_LIMIT_BYTES = MAX_IMAGE_INPUT_BYTES;
-export const VIDEO_UPLOAD_LIMIT_BYTES = 2048 * 1024 * 1024;
+export const VIDEO_UPLOAD_LIMIT_BYTES = 4096 * 1024 * 1024; // 4 GB server limit
 
 export function getMediaUploadLimitBytes(file: File): number {
   const videoExtensions = ['.mp4', '.mov', '.webm', '.ogv', '.ogg', '.mpeg', '.mpg', '.mkv'];
@@ -811,7 +811,7 @@ async function uploadMediaInChunksInternal(
 ): Promise<MediaUploadResult> {
   const maxBytes = getMediaUploadLimitBytes(file);
   if (file.size > maxBytes) {
-    const limitLabel = maxBytes === VIDEO_UPLOAD_LIMIT_BYTES ? '2 GB' : '100 MB';
+    const limitLabel = maxBytes === VIDEO_UPLOAD_LIMIT_BYTES ? '4 GB' : '100 MB';
     throw new Error(`${file.name} exceeds the ${limitLabel} upload limit.`);
   }
 

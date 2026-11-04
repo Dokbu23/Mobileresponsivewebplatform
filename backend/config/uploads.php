@@ -1,8 +1,8 @@
 <?php
 
 $maxImageSizeMb = max(1, min(50, (int) env('UPLOAD_MAX_IMAGE_SIZE_MB', 50)));
-$maxVideoSizeMb = max(1, min(4096, (int) env('UPLOAD_MAX_VIDEO_SIZE_MB', 2048)));
-$userQuotaGb = max(1, min(1024, (int) env('UPLOAD_USER_QUOTA_GB', 10)));
+$maxVideoSizeMb = max(1, min(4096, (int) env('UPLOAD_MAX_VIDEO_SIZE_MB', 4096)));
+$userQuotaGb = max(1, min(2048, (int) env('UPLOAD_USER_QUOTA_GB', 50)));
 
 return [
     'max_image_size_mb' => $maxImageSizeMb,

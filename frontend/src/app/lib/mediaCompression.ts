@@ -5,14 +5,46 @@ export const IMAGE_UPLOAD_HEADROOM_BYTES = 1 * 1024 * 1024;
 export const CLIENT_IMAGE_UPLOAD_LIMIT_BYTES = COMBINED_IMAGE_LIMIT_BYTES - IMAGE_UPLOAD_HEADROOM_BYTES;
 export const MAX_IMAGE_COUNT = 20;
 export const MAX_IMAGE_INPUT_BYTES = 50 * 1024 * 1024;
+// Browser video processing limit with resource-aware scaling
+// Default: 500 MB, but can be adjusted via environment variable
+// This is NOT a hard rejection limit - instead, it triggers adaptive compression
 export const MAX_VIDEO_INPUT_BYTES = Math.max(
   1,
-  Number(import.meta.env.VITE_VIDEO_PROCESS_MAX_INPUT_MB) || 200
+  Number(import.meta.env.VITE_VIDEO_PROCESS_MAX_INPUT_MB) || 500
 ) * 1024 * 1024;
+
+// Absolute safety limit - prevents browser OOM
+// Device with 4GB RAM can safely handle 1-1.5GB video processing
+export const ABSOLUTE_MAX_VIDEO_BYTES = 1536 * 1024 * 1024; // 1.5 GB
+
 export const MAX_VIDEO_DURATION_SECONDS = Math.max(
   1,
   Number(import.meta.env.VITE_VIDEO_PROCESS_MAX_DURATION_SECONDS) || 600
 );
+
+// Video compression profiles with adaptive settings
+export const VIDEO_COMPRESSION_PROFILES = {
+  small: {       // < 50 MB - preserve quality
+    bitrate: '4000k',
+    resolution: '1080p',
+    description: 'High quality (1080p, 4 Mbps)'
+  },
+  medium: {      // 50-200 MB - balanced compression
+    bitrate: '2500k',
+    resolution: '720p',
+    description: 'Balanced quality (720p, 2.5 Mbps)'
+  },
+  large: {       // 200-500 MB - aggressive compression
+    bitrate: '1500k',
+    resolution: '720p',
+    description: 'Standard quality (720p, 1.5 Mbps)'
+  },
+  xlarge: {      // 500MB+ - very aggressive compression
+    bitrate: '1000k',
+    resolution: '480p',
+    description: 'Compressed quality (480p, 1 Mbps)'
+  }
+};
 
 const IMAGE_MIME_EXTENSIONS: Record<string, string[]> = {
   'image/jpeg': ['jpg', 'jpeg'],
@@ -398,65 +430,112 @@ async function compressVideo(
   onProgress?: MediaProcessingProgress,
   signal?: AbortSignal
 ): Promise<File> {
-  if (file.size > MAX_VIDEO_INPUT_BYTES) {
-    const maxMb = Math.floor(MAX_VIDEO_INPUT_BYTES / (1024 * 1024));
-    throw new Error(`${file.name} exceeds the ${maxMb} MB browser video-processing limit. Choose a smaller video.`);
+  // Check against absolute safety limit
+  if (file.size > ABSOLUTE_MAX_VIDEO_BYTES) {
+    const maxGb = (ABSOLUTE_MAX_VIDEO_BYTES / (1024 * 1024 * 1024)).toFixed(1);
+    throw new Error(
+      `${file.name} exceeds the ${maxGb} GB browser video-processing limit. ` +
+      `Your device cannot safely process files larger than ${maxGb} GB. ` +
+      `Try a smaller video or reduce the resolution/duration.`
+    );
   }
 
   const duration = await videoDuration(file, signal);
   if (duration > MAX_VIDEO_DURATION_SECONDS) {
     const maxMinutes = Math.floor(MAX_VIDEO_DURATION_SECONDS / 60);
-    throw new Error(`${file.name} is longer than the ${maxMinutes}-minute browser video-processing limit.`);
+    throw new Error(
+      `${file.name} is longer than the ${maxMinutes}-minute browser video-processing limit. ` +
+      `Trim the video or increase VITE_VIDEO_PROCESS_MAX_DURATION_SECONDS.`
+    );
   }
+
+  // Select compression profile based on file size
+  const profile = selectCompressionProfile(file.size);
+  onProgress?.(file, 'compressing', 0);
 
   const process = async (): Promise<File> => {
     checkAbort(signal);
-    onProgress?.(file, 'compressing', 0);
+    onProgress?.(file, 'compressing', 5);
+    
     const ffmpeg = await getFFmpeg(signal);
     const inputPath = `input-${crypto.randomUUID()}.${extensionOf(file.name)}`;
     const outputPath = `output-${crypto.randomUUID()}.mp4`;
+    
     const onFFmpegProgress = ({ progress }: { progress: number }) => {
-      onProgress?.(file, 'compressing', Math.max(0, Math.min(100, Math.round(progress * 100))));
+      onProgress?.(file, 'compressing', Math.max(5, Math.min(95, Math.round(5 + progress * 90))));
     };
+    
     ffmpeg.on('progress', onFFmpegProgress);
+    
     try {
       checkAbort(signal);
-      await ffmpeg.writeFile(inputPath, new Uint8Array(await file.arrayBuffer()), { signal });
-      const exitCode = await ffmpeg.exec([
+      
+      // Write input file with progress
+      onProgress?.(file, 'compressing', 5);
+      const buffer = await file.arrayBuffer();
+      await ffmpeg.writeFile(inputPath, new Uint8Array(buffer), { signal });
+      
+      // Build FFmpeg command with adaptive settings
+      const scaleFilter = buildScaleFilter(profile.resolution);
+      const ffmpegArgs = [
         '-i', inputPath,
         '-map', '0:v:0',
         '-map', '0:a?',
-        '-vf', "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+        '-vf', scaleFilter,
         '-c:v', 'libx264',
         '-preset', 'veryfast',
-        '-crf', '27',
+        '-b:v', profile.bitrate,
+        '-maxrate', `${parseInt(profile.bitrate) * 1.5}k`,
+        '-bufsize', `${parseInt(profile.bitrate) * 2}k`,
         '-pix_fmt', 'yuv420p',
         '-c:a', 'aac',
-        '-b:a', '128k',
+        '-b:a', '96k',
+        '-ac', '2',
+        '-ar', '44100',
         '-movflags', '+faststart',
         outputPath,
-      ], 0, { signal });
+      ];
+
       checkAbort(signal);
+      onProgress?.(file, 'compressing', 10);
+      
+      const exitCode = await ffmpeg.exec(ffmpegArgs, 0, { signal });
+      
+      checkAbort(signal);
+      
       if (exitCode !== 0) {
-        throw new Error('FFmpeg could not transcode this video.');
+        throw new Error(`FFmpeg transcoding failed (exit code: ${exitCode}).`);
       }
+      
       const output = await ffmpeg.readFile(outputPath);
       if (typeof output === 'string' || output.byteLength === 0) {
         throw new Error('Video compression produced an empty file.');
       }
+      
       const outputName = `${file.name.replace(/\.[^.]+$/, '')}.mp4`;
-      // Copy into an owned ArrayBuffer: FFmpeg may return a Uint8Array backed by a
-      // SharedArrayBuffer, which is not assignable to BlobPart / ArrayBufferView<ArrayBuffer>.
       const outputBuffer = new ArrayBuffer(output.byteLength);
       new Uint8Array(outputBuffer).set(output);
-      return new File([outputBuffer], outputName, { type: 'video/mp4', lastModified: file.lastModified });
+      
+      onProgress?.(file, 'compressing', 95);
+      
+      return new File([outputBuffer], outputName, {
+        type: 'video/mp4',
+        lastModified: file.lastModified
+      });
     } catch (error) {
       if (signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
         ffmpeg.terminate();
         ffmpegPromise = null;
         throw new DOMException('Media processing cancelled.', 'AbortError');
       }
-      throw new Error(`${file.name} could not be compressed. The original was not uploaded. ${error instanceof Error ? error.message : ''}`.trim());
+      
+      // Extract meaningful error message
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `${file.name} could not be compressed. ` +
+        `The original was not uploaded. ` +
+        `Error: ${errorMessage}`
+      );
     } finally {
       ffmpeg.off('progress', onFFmpegProgress);
       await ffmpeg.deleteFile(inputPath).catch(() => undefined);
@@ -467,6 +546,41 @@ async function compressVideo(
   const queued = videoQueue.then(process, process);
   videoQueue = queued.then(() => undefined, () => undefined);
   return queued;
+}
+
+/**
+ * Select compression profile based on file size
+ * Larger files get more aggressive compression to reduce processing time and memory usage
+ */
+function selectCompressionProfile(fileSizeBytes: number): typeof VIDEO_COMPRESSION_PROFILES[keyof typeof VIDEO_COMPRESSION_PROFILES] {
+  const fileSizeMb = fileSizeBytes / (1024 * 1024);
+  
+  if (fileSizeMb < 50) {
+    return VIDEO_COMPRESSION_PROFILES.small;
+  } else if (fileSizeMb < 200) {
+    return VIDEO_COMPRESSION_PROFILES.medium;
+  } else if (fileSizeMb < 500) {
+    return VIDEO_COMPRESSION_PROFILES.large;
+  } else {
+    return VIDEO_COMPRESSION_PROFILES.xlarge;
+  }
+}
+
+/**
+ * Build FFmpeg scale filter based on resolution string
+ * Handles adaptive scaling while maintaining aspect ratio and even pixel dimensions
+ */
+function buildScaleFilter(resolution: string): string {
+  const heightMap: Record<string, number> = {
+    '480p': 480,
+    '720p': 720,
+    '1080p': 1080,
+  };
+  
+  const height = heightMap[resolution] || 720;
+  
+  // Scale to height, maintaining aspect ratio, ensuring even dimensions (required for yuv420p)
+  return `scale=w='min(iw,1920)':h='min(ih,${height})':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2`;
 }
 
 export function validateCombinedImageSize(files: File[]): void {

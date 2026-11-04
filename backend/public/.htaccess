@@ -23,3 +23,31 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+<IfModule mod_php.c>
+    # Media upload limits - allow large file uploads
+    # These values must align with Laravel config/uploads.php settings
+    
+    # Maximum POST size (must be >= upload_max_filesize)
+    # Set to 4.5 GB to accommodate 4 GB video + overhead
+    php_value post_max_size 4608M
+    
+    # Maximum upload file size
+    # Set to 4 GB for video uploads
+    php_value upload_max_filesize 4096M
+    
+    # Maximum execution time for script (seconds)
+    # Increased to 3600 (1 hour) for large file uploads
+    php_value max_execution_time 3600
+    
+    # Maximum time to read input (seconds)
+    # Increased to 3600 (1 hour) for large file uploads
+    php_value max_input_time 3600
+    
+    # Memory limit per request
+    # Set to 512 MB to handle chunked uploads
+    php_value memory_limit 512M
+    
+    # Disable timeout for large uploads
+    php_flag ignore_user_abort On
+</IfModule>
