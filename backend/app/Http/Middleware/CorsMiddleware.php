@@ -27,19 +27,35 @@ class CorsMiddleware
             'http://localhost:3000',
             'http://localhost:5173',
             'http://localhost:5174',
+            'http://localhost:8000',
             'http://127.0.0.1:3000',
             'http://127.0.0.1:5173',
             'http://127.0.0.1:5174',
+            'http://127.0.0.1:8000',
 
-            // Production URLs (.com)
-            'https://discovermansalay.com',
-            'https://www.discovermansalay.com',
-
-            // Production URLs (.cyou — actual live domain)
+            // Production URLs (.cyou - current domain)
             'https://discovermansalay.cyou',
             'https://www.discovermansalay.cyou',
             'http://discovermansalay.cyou',
             'http://www.discovermansalay.cyou',
+
+            // Production URLs (.com)
+            'https://discovermansalay.com',
+            'https://www.discovermansalay.com',
+            'http://discovermansalay.com',
+            'http://www.discovermansalay.com',
+
+            // Production URLs (.co)
+            'https://discovermansalay.co',
+            'https://www.discovermansalay.co',
+            'http://discovermansalay.co',
+            'http://www.discovermansalay.co',
+
+            // Production URLs (.ph)
+            'https://discovermansalay.ph',
+            'https://www.discovermansalay.ph',
+            'http://discovermansalay.ph',
+            'http://www.discovermansalay.ph',
 
             // Render URLs
             'https://discmansalay.onrender.com',
@@ -47,8 +63,15 @@ class CorsMiddleware
             'https://disc-mansalay.onrender.com',
             'https://disc-mansalay-frontend.onrender.com',
 
+            // Vercel URLs
+            'https://disc-mansalay-frontend.vercel.app',
+            'https://discmansalay-frontend.vercel.app',
+
+            // GitHub Pages
+            'https://dokbu23.github.io',
+
             // Environment variable override (supports comma-separated list)
-            ...array_filter(array_map('trim', explode(',', env('FRONTEND_URL', 'http://localhost:3000')))),
+            ...array_filter(array_map('trim', explode(',', env('FRONTEND_URL', 'https://discovermansalay.cyou')))),
         ];
     }
 
@@ -64,8 +87,8 @@ class CorsMiddleware
             return false;
         }
 
-        // Allow any discovermansalay domain (.cyou, .com, etc.)
-        if (preg_match('/^https?:\/\/(?:[a-z0-9-]+\.)?discovermansalay\.(?:cyou|com)(?::\d+)?$/i', $origin)) {
+        // Allow any discovermansalay domain (.cyou, .com, .co, etc.)
+        if (preg_match('/^https?:\/\/(?:[a-z0-9-]+\.)?discovermansalay\.(?:cyou|com|co|ph)(?::\d+)?$/i', $origin)) {
             return true;
         }
 
@@ -76,6 +99,11 @@ class CorsMiddleware
 
         // Allow any *.vercel.app origin (frontend deployed on Vercel)
         if (preg_match('/^https:\/\/[a-z0-9-]+\.vercel\.app$/i', $origin)) {
+            return true;
+        }
+
+        // Allow any *.github.io origin
+        if (preg_match('/^https:\/\/[a-z0-9-]+\.github\.io$/i', $origin)) {
             return true;
         }
 
