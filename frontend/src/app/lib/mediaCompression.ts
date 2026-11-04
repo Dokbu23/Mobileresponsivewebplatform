@@ -24,26 +24,31 @@ export const MAX_VIDEO_DURATION_SECONDS = Math.max(
 
 // Video compression profiles with adaptive settings
 // Now using WebCodecs API + Mediabunny streaming for high-quality output up to 2GB
+// Optimized for speed: ultrafast presets prioritize encoding speed over file size
 export const VIDEO_COMPRESSION_PROFILES = {
-  small: {       // < 50 MB - preserve quality (1080p/4K)
+  small: {       // < 50 MB - SKIP compression, upload directly (fastest)
     bitrate: '8000k',
     resolution: '1080p',
-    description: 'High quality (1080p, 8 Mbps)'
+    description: 'Direct upload (< 50 MB)',
+    skipCompression: true  // Upload as-is, no re-encoding needed
   },
-  medium: {      // 50-200 MB - balanced compression (720p)
-    bitrate: '5000k',
-    resolution: '720p',
-    description: 'Balanced quality (720p, 5 Mbps)'
-  },
-  large: {       // 200-500 MB - quality preservation (720p)
+  medium: {      // 50-200 MB - light compression (1-2 min)
     bitrate: '3500k',
     resolution: '720p',
-    description: 'Standard quality (720p, 3.5 Mbps)'
+    description: 'Fast compression (720p, 3.5 Mbps)',
+    preset: 'ultrafast'
   },
-  xlarge: {      // 500MB-2GB - streaming compression (720p with H.264 codec)
+  large: {       // 200-500 MB - balanced compression (2-5 min)
     bitrate: '2500k',
     resolution: '720p',
-    description: 'Streaming quality (720p, 2.5 Mbps, streaming compression)'
+    description: 'Balanced (720p, 2.5 Mbps)',
+    preset: 'veryfast'
+  },
+  xlarge: {      // 500MB-2GB - aggressive compression (5-15 min)
+    bitrate: '1500k',
+    resolution: '480p',
+    description: 'Aggressive (480p, 1.5 Mbps, very fast)',
+    preset: 'ultrafast'
   }
 };
 
@@ -454,6 +459,12 @@ async function compressVideo(
   const profile = selectCompressionProfile(file.size);
   onProgress?.(file, 'compressing', 0);
 
+  // SKIP COMPRESSION for small files < 50MB (instant upload)
+  if ((profile as any).skipCompression) {
+    onProgress?.(file, 'compressing', 100);
+    return file; // Return original file, no compression needed
+  }
+
   const process = async (): Promise<File> => {
     checkAbort(signal);
     onProgress?.(file, 'compressing', 5);
@@ -478,19 +489,21 @@ async function compressVideo(
       
       // Build FFmpeg command with adaptive settings
       const scaleFilter = buildScaleFilter(profile.resolution);
+      // Use preset from profile, default to ultrafast for large files
+      const preset = (profile as any).preset || 'ultrafast';
       const ffmpegArgs = [
         '-i', inputPath,
         '-map', '0:v:0',
         '-map', '0:a?',
         '-vf', scaleFilter,
         '-c:v', 'libx264',
-        '-preset', 'veryfast',
+        '-preset', preset,  // ultrafast > veryfast > fast > medium
         '-b:v', profile.bitrate,
         '-maxrate', `${parseInt(profile.bitrate) * 1.5}k`,
         '-bufsize', `${parseInt(profile.bitrate) * 2}k`,
         '-pix_fmt', 'yuv420p',
         '-c:a', 'aac',
-        '-b:a', '96k',
+        '-b:a', '64k',  // Reduce audio bitrate from 96k to 64k
         '-ac', '2',
         '-ar', '44100',
         '-movflags', '+faststart',
