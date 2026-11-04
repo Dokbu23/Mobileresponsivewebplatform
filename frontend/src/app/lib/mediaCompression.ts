@@ -5,50 +5,61 @@ export const IMAGE_UPLOAD_HEADROOM_BYTES = 1 * 1024 * 1024;
 export const CLIENT_IMAGE_UPLOAD_LIMIT_BYTES = COMBINED_IMAGE_LIMIT_BYTES - IMAGE_UPLOAD_HEADROOM_BYTES;
 export const MAX_IMAGE_COUNT = 20;
 export const MAX_IMAGE_INPUT_BYTES = 50 * 1024 * 1024;
+
 // Browser video processing limit with resource-aware scaling
 // Default: 2048 MB (2GB), can be adjusted via environment variable
-// This is NOT a hard rejection limit - instead, it triggers adaptive compression via WebCodecs + Mediabunny streaming
+// Max original video input size (before compression)
 export const MAX_VIDEO_INPUT_BYTES = Math.max(
   1,
   Number(import.meta.env.VITE_VIDEO_PROCESS_MAX_INPUT_MB) || 2048
 ) * 1024 * 1024;
 
 // Absolute safety limit - prevents browser OOM
-// Streaming compression with WebCodecs supports up to 2GB+ videos efficiently
-export const ABSOLUTE_MAX_VIDEO_BYTES = 2048 * 1024 * 1024; // 2 GB
+// FFmpeg.wasm loads entire file into memory: plan for 2GB + overhead
+export const ABSOLUTE_MAX_VIDEO_BYTES = 2147483648; // Exactly 2GB (2^31 bytes)
 
+// Duration restriction (video must complete encoding before timeout)
+// Default: 10 minutes. Set VITE_VIDEO_PROCESS_MAX_DURATION_SECONDS to override.
+// Note: Very long videos may fail on low-spec devices; this is a safety limit, not a quality limit.
 export const MAX_VIDEO_DURATION_SECONDS = Math.max(
   1,
   Number(import.meta.env.VITE_VIDEO_PROCESS_MAX_DURATION_SECONDS) || 600
 );
 
-// Video compression profiles with adaptive settings
-// Optimized FFmpeg.wasm: using superfast preset for all profiles
-// Expected: 30-50% faster than previous presets while maintaining visual quality
-export const VIDEO_COMPRESSION_PROFILES = {
-  small: {       // < 50 MB - SKIP compression, upload directly (instant)
+// Video compression profiles with adaptive settings based on file size
+// HIGH_QUALITY: Preserve original resolution/bitrate (< 50 MB bypass)
+// BALANCED: Default for general use (50-500 MB)
+// FAST: For large videos (500MB-2GB) - still maintains acceptable quality at 720p
+export type VideoCompressionProfile = 'high_quality' | 'balanced' | 'fast';
+
+export interface VideoCompressionSettings {
+  bitrate: string;               // FFmpeg bitrate spec (e.g., '3500k')
+  resolution: string;            // Target resolution (e.g., '1080p', '720p')
+  description: string;           // User-facing description
+  skipCompression?: boolean;     // If true, upload original without re-encoding
+  preset?: 'superfast' | 'veryfast' | 'faster' | 'fast';  // FFmpeg preset
+  crf?: number;                  // Quality (0-51, lower=better), alternative to bitrate
+}
+
+export const VIDEO_COMPRESSION_PROFILES: Readonly<Record<VideoCompressionProfile, VideoCompressionSettings>> = {
+  high_quality: {
     bitrate: '8000k',
     resolution: '1080p',
-    description: 'Direct upload (< 50 MB)',
-    skipCompression: true  // Upload as-is, no re-encoding needed
+    description: 'High quality (1080p, 8 Mbps) - for files < 50 MB',
+    skipCompression: true  // Don't re-encode small files
   },
-  medium: {      // 50-200 MB - light compression (30-60 seconds)
-    bitrate: '3500k',
-    resolution: '720p',
-    description: 'Fast compression (720p, 3.5 Mbps)',
-    preset: 'superfast'
+  balanced: {
+    bitrate: '4500k',
+    resolution: '1080p',
+    description: 'Balanced (1080p, 4.5 Mbps) - recommended for most videos',
+    preset: 'superfast',
+    crf: 23  // Quality mode: visually lossless around CRF 23
   },
-  large: {       // 200-500 MB - balanced compression (1-2 minutes)
+  fast: {
     bitrate: '2500k',
     resolution: '720p',
-    description: 'Optimized (720p, 2.5 Mbps)',
+    description: 'Fast compression (720p, 2.5 Mbps) - for videos > 500 MB',
     preset: 'superfast'
-  },
-  xlarge: {      // 500MB-2GB - quality-preserved compression (2-5 minutes)
-    bitrate: '2000k',
-    resolution: '720p',  // Changed from 480p to preserve quality
-    description: 'Quality-preserved (720p, 2 Mbps, fast)',
-    preset: 'superfast'  // Changed from ultrafast for better compression
   }
 };
 
@@ -121,8 +132,16 @@ export async function stableMediaUploadId(file: File, scope: string): Promise<st
 
 export type MediaProcessingProgress = (
   file: File,
-  phase: 'checking' | 'compressing',
-  percent: number
+  phase: 'analyzing' | 'compressing' | 'encoding' | 'preparing',
+  percent: number,
+  metadata?: {
+    originalSize?: number;
+    estimatedOutputSize?: number;
+    elapsedSeconds?: number;
+    estimatedRemainingSeconds?: number;
+    fps?: number;
+    currentBitrate?: string;
+  }
 ) => void;
 
 export interface PreparedMediaFile {
@@ -236,6 +255,32 @@ export async function isAnimatedGif(file: File): Promise<boolean> {
   }
 }
 
+/**
+ * Safely convert a Uint8Array to an ArrayBuffer, handling SharedArrayBuffer from workers
+ * @param view - Uint8Array backed by either ArrayBuffer or SharedArrayBuffer
+ * @returns A regular ArrayBuffer with the same data
+ * 
+ * Why: FFmpeg.wasm workers may return Uint8Array backed by SharedArrayBuffer,
+ * which Blob constructor cannot accept. This safely converts to regular ArrayBuffer.
+ */
+function toArrayBuffer(view: Uint8Array): ArrayBuffer {
+  const buffer = view.buffer;
+  const byteOffset = view.byteOffset;
+  const byteLength = view.byteLength;
+  
+  // If SharedArrayBuffer, copy data to new regular ArrayBuffer
+  if (buffer instanceof SharedArrayBuffer) {
+    const copy = new ArrayBuffer(byteLength);
+    const source = new Uint8Array(buffer, byteOffset, byteLength);
+    new Uint8Array(copy).set(source);
+    return copy;
+  }
+  
+  // If regular ArrayBuffer, create a copy of the specific range
+  const regularBuffer = buffer as ArrayBuffer;
+  return regularBuffer.slice(byteOffset, byteOffset + byteLength);
+}
+
 function checkAbort(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw new DOMException('Media processing cancelled.', 'AbortError');
@@ -284,11 +329,11 @@ async function compressImage(
 
   const formatIsServerSupported = SERVER_SUPPORTED_IMAGE_MIME_TYPES.has(mimeType)
     && (IMAGE_MIME_EXTENSIONS[mimeType]?.includes(sourceExtension) ?? false);
-  onProgress?.(file, 'checking', 0);
+  onProgress?.(file, 'analyzing', 0, { originalSize: file.size });
   const dimensions = await imageDimensions(file).catch(() => {
     throw new Error(`${file.name} could not be decoded as a valid image.`);
   });
-  onProgress?.(file, 'checking', 100);
+  onProgress?.(file, 'analyzing', 100, { originalSize: file.size });
   checkAbort(signal);
 
   const maximumDimension = Math.max(dimensions.width, dimensions.height);
@@ -301,7 +346,7 @@ async function compressImage(
 
   const outputMimeType = 'image/webp';
   const imageCompression = (await import('browser-image-compression')).default;
-  onProgress?.(file, 'compressing', 0);
+  onProgress?.(file, 'compressing', 0, { originalSize: file.size });
   let smallestOutput: File | null = null;
   let progressStep = 0;
   const outputExtension = 'webp';
@@ -326,7 +371,7 @@ async function compressImage(
         preserveExif: false,
         signal,
         libURL: imageCompressionWorkerURL,
-        onProgress: value => onProgress?.(file, 'compressing', Math.round(percent * 0.1 + value * 0.9)),
+        onProgress: value => onProgress?.(file, 'compressing', Math.round(percent * 0.1 + value * 0.9), { originalSize: file.size }),
       }).catch(error => {
         if (signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
           throw new DOMException('Media processing cancelled.', 'AbortError');
@@ -356,7 +401,10 @@ async function compressImage(
       if (!smallestOutput || candidate.size < smallestOutput.size) smallestOutput = candidate;
 
       if (candidate.size <= targetMaximumBytes) {
-        onProgress?.(file, 'compressing', 100);
+        onProgress?.(file, 'compressing', 100, { 
+          originalSize: file.size, 
+          estimatedOutputSize: candidate.size 
+        });
         if (formatIsServerSupported
           && maximumDimension <= settings.maxWidthOrHeight
           && file.size <= candidate.size) {
@@ -375,7 +423,10 @@ async function compressImage(
     && file.size <= smallestOutput.size) {
     return file;
   }
-  onProgress?.(file, 'compressing', 100);
+  onProgress?.(file, 'compressing', 100, { 
+    originalSize: file.size, 
+    estimatedOutputSize: smallestOutput.size 
+  });
   return smallestOutput;
 }
 
@@ -446,6 +497,9 @@ async function compressVideo(
     );
   }
 
+  const startTimeMs = performance.now();
+  onProgress?.(file, 'analyzing', 0, { originalSize: file.size });
+  
   const duration = await videoDuration(file, signal);
   if (duration > MAX_VIDEO_DURATION_SECONDS) {
     const maxMinutes = Math.floor(MAX_VIDEO_DURATION_SECONDS / 60);
@@ -455,47 +509,70 @@ async function compressVideo(
     );
   }
 
+  onProgress?.(file, 'analyzing', 100, { originalSize: file.size });
+
   // Select compression profile based on file size
   const profile = selectCompressionProfile(file.size);
-  onProgress?.(file, 'compressing', 0);
 
   // SKIP COMPRESSION for small files < 50MB (instant upload)
-  if ((profile as any).skipCompression) {
-    onProgress?.(file, 'compressing', 100);
+  if (profile.skipCompression) {
+    onProgress?.(file, 'encoding', 100, { 
+      originalSize: file.size,
+      estimatedOutputSize: file.size,
+      elapsedSeconds: (performance.now() - startTimeMs) / 1000
+    });
     return file; // Return original file, no compression needed
   }
 
   const process = async (): Promise<File> => {
     checkAbort(signal);
-    onProgress?.(file, 'compressing', 5);
+    onProgress?.(file, 'encoding', 5, { 
+      originalSize: file.size,
+      elapsedSeconds: (performance.now() - startTimeMs) / 1000
+    });
     
     const ffmpeg = await getFFmpeg(signal);
     const inputPath = `input-${crypto.randomUUID()}.${extensionOf(file.name)}`;
     const outputPath = `output-${crypto.randomUUID()}.mp4`;
     
-    const startTimeMs = performance.now();
-    let lastProgressUpdate = 0;
-    let actualFramesProcessed = 0;
+    const encodingStartMs = performance.now();
+    let lastProgressPercent = 5;
     
     const onFFmpegProgress = ({ progress }: { progress: number }) => {
       try {
-        // Calculate actual encoding speed
-        const elapsedMs = performance.now() - startTimeMs;
-        const estimatedTotalMs = elapsedMs / Math.max(progress, 0.001);
+        // FFmpeg progress is 0.0 to 1.0
+        const elapsedMs = performance.now() - encodingStartMs;
+        const estimatedTotalMs = Math.max(1, elapsedMs / Math.max(progress, 0.001));
         const remainingMs = Math.max(0, estimatedTotalMs - elapsedMs);
         
-        // ALWAYS update progress, don't throttle - throttle at UI level instead
-        const percentComplete = Math.min(95, Math.max(5, Math.round(5 + progress * 90)));
-        onProgress?.(file, 'compressing', percentComplete);
+        // Map progress: 5% (started) → 90% (nearly done) → 95% (post-processing)
+        const percentComplete = Math.min(90, Math.max(5, Math.round(5 + progress * 85)));
         
-        // Log actual speed for debugging
-        actualFramesProcessed++;
-        if (actualFramesProcessed % 3 === 0) {
-          const fps = duration > 0 ? (duration / (Math.max(elapsedMs, 100) / 1000)) : 0;
-          console.debug(`[Video Compression] ${percentComplete}% - ${fps.toFixed(1)} FPS (est. ${(remainingMs / 1000).toFixed(1)}s remaining)`);
+        // Only update UI if progress changed meaningfully
+        if (percentComplete !== lastProgressPercent) {
+          lastProgressPercent = percentComplete;
+          const fps = elapsedMs > 0 ? (duration / (elapsedMs / 1000)) : 0;
+          const totalElapsedSeconds = (performance.now() - startTimeMs) / 1000;
+          
+          onProgress?.(file, 'encoding', percentComplete, {
+            originalSize: file.size,
+            estimatedOutputSize: Math.round(file.size * progress * 0.3), // Rough estimate
+            elapsedSeconds: totalElapsedSeconds,
+            estimatedRemainingSeconds: remainingMs / 1000,
+            fps: fps > 0 ? fps : undefined,
+            currentBitrate: profile.bitrate
+          });
+          
+          if (percentComplete % 20 === 0 || percentComplete > 85) {
+            console.debug(
+              `[Video Encoding] ${file.name}: ${percentComplete}% ` +
+              `(${fps.toFixed(1)} FPS, ${(totalElapsedSeconds).toFixed(1)}s elapsed, ` +
+              `${(remainingMs / 1000).toFixed(1)}s remaining)`
+            );
+          }
         }
       } catch (err) {
-        console.warn('[Video Compression] Progress update error:', err);
+        console.warn('[Video Encoding] Progress update error:', err);
         // Continue encoding even if progress callback fails
       }
     };
@@ -505,81 +582,93 @@ async function compressVideo(
     try {
       checkAbort(signal);
       
-      // OPTIMIZATION: Stream file reading instead of full buffer load
-      // Keep progress at 5% during file I/O (estimated 2-3 seconds)
-      onProgress?.(file, 'compressing', 5);
+      // Load input file into FFmpeg virtual filesystem
+      onProgress?.(file, 'preparing', 10, { 
+        originalSize: file.size,
+        elapsedSeconds: (performance.now() - startTimeMs) / 1000
+      });
       const buffer = await file.arrayBuffer();
       await ffmpeg.writeFile(inputPath, new Uint8Array(buffer), { signal });
       
-      // Build FFmpeg command with OPTIMIZED settings
-      // SUPERFAST PRESET: prioritize speed over compression ratio
-      // Remove unnecessary filters to reduce CPU load
+      // Build FFmpeg command with quality-preserving settings
       const scaleFilter = buildScaleFilter(profile.resolution);
-      const preset = 'superfast'; // Faster than 'ultrafast' in some cases, better quality
+      const preset = profile.preset || 'superfast';
       
-      // OPTIMIZED FFmpeg Arguments:
-      // - No -preset fallback (always use superfast)
-      // - Reduced passes (single-pass encoding)
-      // - Optimized buffer settings for streaming
-      // - CRF disabled (use bitrate control only)
+      // FFmpeg encoding arguments
       const ffmpegArgs = [
         '-i', inputPath,
-        '-map', '0:v:0',         // Single video stream
-        '-map', '0:a?',          // Optional audio
-        '-vf', scaleFilter,      // Only essential scaling filter
-        '-c:v', 'libx264',       // H.264 codec
-        '-preset', preset,       // superfast for CPU efficiency
-        '-b:v', profile.bitrate, // Fixed bitrate
-        '-maxrate', `${parseInt(profile.bitrate) * 1.5}k`,
-        '-bufsize', `${parseInt(profile.bitrate) * 2}k`,
-        '-pix_fmt', 'yuv420p',   // Required for MP4
-        '-c:a', 'aac',           // AAC audio
-        '-b:a', '64k',           // Lower audio bitrate = faster encoding
-        '-ac', '2',              // Stereo
-        '-ar', '44100',          // 44.1kHz
-        '-movflags', '+faststart', // MP4 optimization for streaming
+        '-map', '0:v:0',                    // Single video stream
+        '-map', '0:a?',                     // Optional audio (? = optional)
+        '-vf', scaleFilter,                 // Scale filter with aspect ratio preservation
+        '-c:v', 'libx264',                  // H.264 video codec
+        '-preset', preset,                  // Speed/quality tradeoff
+        ...(profile.crf !== undefined 
+          ? ['-crf', profile.crf.toString()]  // Quality mode (0-51, lower=better)
+          : ['-b:v', profile.bitrate]         // Bitrate mode fallback
+        ),
+        '-maxrate', `${parseInt(profile.bitrate) * 1.5}k`,  // Max allowed bitrate
+        '-bufsize', `${parseInt(profile.bitrate) * 2}k`,    // Buffer size
+        '-pix_fmt', 'yuv420p',              // Pixel format (required for MP4)
+        '-c:a', 'aac',                      // AAC audio codec
+        '-b:a', '160k',                     // Audio bitrate (160 kbps, good quality)
+        '-ac', '2',                         // Stereo
+        '-ar', '48000',                     // 48 kHz sample rate (professional standard)
+        '-movflags', '+faststart',          // Optimize for streaming (moov atom first)
         outputPath,
       ];
 
       checkAbort(signal);
-      onProgress?.(file, 'compressing', 10);
+      onProgress?.(file, 'encoding', 10, { 
+        originalSize: file.size,
+        elapsedSeconds: (performance.now() - startTimeMs) / 1000
+      });
       
-      // Execute with timing
-      const encodingStartMs = performance.now();
+      // Execute FFmpeg transcoding
       const exitCode = await ffmpeg.exec(ffmpegArgs, 0, { signal });
       const encodingTimeMs = performance.now() - encodingStartMs;
       
       checkAbort(signal);
       
       if (exitCode !== 0) {
-        throw new Error(`FFmpeg transcoding failed (exit code: ${exitCode}).`);
+        throw new Error(`FFmpeg transcoding failed with exit code ${exitCode}.`);
       }
       
-      // OPTIMIZATION: Avoid multiple buffer copies
-      // Read once and convert directly to File
+      // Read compressed output
+      onProgress?.(file, 'preparing', 90, {
+        originalSize: file.size,
+        elapsedSeconds: (performance.now() - startTimeMs) / 1000
+      });
+      
       const output = await ffmpeg.readFile(outputPath);
       if (typeof output === 'string' || output.byteLength === 0) {
         throw new Error('Video compression produced an empty file.');
       }
       
-      // Log performance metrics
+      // Safely convert Uint8Array to ArrayBuffer, handling SharedArrayBuffer
+      const outputBuffer = toArrayBuffer(output);
+      const outputBlob = new Blob([outputBuffer], { type: 'video/mp4' });
+      
+      // Log encoding performance metrics
       const outputSizeMb = output.byteLength / (1024 * 1024);
+      const inputSizeMb = file.size / (1024 * 1024);
       const compressionRatio = (file.size / output.byteLength * 100).toFixed(1);
-      const avgFps = (duration / (encodingTimeMs / 1000)).toFixed(1);
+      const avgFps = duration > 0 ? (duration / (encodingTimeMs / 1000)) : 0;
+      const totalElapsedSeconds = (performance.now() - startTimeMs) / 1000;
       
       console.info(
         `[Video Encoding Complete] ${file.name}: ` +
-        `${(file.size / (1024 * 1024)).toFixed(1)}MB → ${outputSizeMb.toFixed(1)}MB ` +
-        `(${compressionRatio}% size, ${avgFps} FPS avg, ${(encodingTimeMs / 1000).toFixed(1)}s total)`
+        `${inputSizeMb.toFixed(1)} MB → ${outputSizeMb.toFixed(1)} MB ` +
+        `(${compressionRatio}% compression, ${avgFps.toFixed(1)} FPS avg, ${totalElapsedSeconds.toFixed(1)}s total)`
       );
       
-      onProgress?.(file, 'compressing', 95);
+      onProgress?.(file, 'encoding', 100, { 
+        originalSize: file.size,
+        estimatedOutputSize: output.byteLength,
+        elapsedSeconds: totalElapsedSeconds,
+        fps: avgFps
+      });
       
       const outputName = `${file.name.replace(/\.[^.]+$/, '')}.mp4`;
-      
-      // OPTIMIZATION: Create File directly from Uint8Array
-      // Convert Uint8Array to Blob to handle SharedArrayBuffer from FFmpeg workers
-      const outputBlob = new Blob([output], { type: 'video/mp4' });
       return new File([outputBlob], outputName, {
         type: 'video/mp4',
         lastModified: file.lastModified
@@ -600,11 +689,20 @@ async function compressVideo(
       );
     } finally {
       ffmpeg.off('progress', onFFmpegProgress);
-      await ffmpeg.deleteFile(inputPath).catch(() => undefined);
-      await ffmpeg.deleteFile(outputPath).catch(() => undefined);
+      try {
+        await ffmpeg.deleteFile(inputPath);
+      } catch {
+        // Ignore cleanup errors
+      }
+      try {
+        await ffmpeg.deleteFile(outputPath);
+      } catch {
+        // Ignore cleanup errors
+      }
     }
   };
 
+  // Queue video processing to prevent simultaneous encoding
   const queued = videoQueue.then(process, process);
   videoQueue = queued.then(() => undefined, () => undefined);
   return queued;
@@ -612,31 +710,35 @@ async function compressVideo(
 
 /**
  * Select compression profile based on file size
- * Larger files get more aggressive compression to reduce processing time and memory usage
+ * Larger files get faster encoding to reduce memory pressure and processing time
  */
-function selectCompressionProfile(fileSizeBytes: number): typeof VIDEO_COMPRESSION_PROFILES[keyof typeof VIDEO_COMPRESSION_PROFILES] {
+function selectCompressionProfile(fileSizeBytes: number): VideoCompressionSettings {
   const fileSizeMb = fileSizeBytes / (1024 * 1024);
   
   if (fileSizeMb < 50) {
-    return VIDEO_COMPRESSION_PROFILES.small;
-  } else if (fileSizeMb < 200) {
-    return VIDEO_COMPRESSION_PROFILES.medium;
+    // Very small files: skip compression entirely
+    return VIDEO_COMPRESSION_PROFILES.high_quality;
   } else if (fileSizeMb < 500) {
-    return VIDEO_COMPRESSION_PROFILES.large;
+    // Medium files: balanced quality and speed
+    return VIDEO_COMPRESSION_PROFILES.balanced;
   } else {
-    return VIDEO_COMPRESSION_PROFILES.xlarge;
+    // Large files: prioritize speed, maintain acceptable quality
+    return VIDEO_COMPRESSION_PROFILES.fast;
   }
 }
 
 /**
  * Build FFmpeg scale filter based on resolution string
  * Handles adaptive scaling while maintaining aspect ratio and even pixel dimensions
+ * Even dimensions are required for yuv420p pixel format
  */
 function buildScaleFilter(resolution: string): string {
   const heightMap: Record<string, number> = {
     '480p': 480,
     '720p': 720,
     '1080p': 1080,
+    '4k': 2160,
+    '2160p': 2160,
   };
   
   const height = heightMap[resolution] || 720;

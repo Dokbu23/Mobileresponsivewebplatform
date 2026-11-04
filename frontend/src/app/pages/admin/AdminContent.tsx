@@ -1343,7 +1343,13 @@ export function AdminContent() {
         setEstimatedCompressionTime(totalEstimatedStr);
 
         const preparedMedia = await prepareMediaFiles(selectedMedia, (file, phase, percent) => {
-          setUploadStatusText(`${phase === 'checking' ? 'Preparing' : 'Compressing'} ${file.name} (${percent}%) — Est. ${totalEstimatedStr} total compression time`);
+          // Map new phase names to user-friendly descriptions
+          const phaseLabel = phase === 'analyzing' || phase === 'preparing' 
+            ? 'Preparing' 
+            : phase === 'encoding' || phase === 'compressing'
+            ? 'Compressing'
+            : 'Processing';
+          setUploadStatusText(`${phaseLabel} ${file.name} (${percent}%) — Est. ${totalEstimatedStr} total compression time`);
           // Show actual compression progress, don't cap at 30%
           setUploadProgress(5 + Math.round(percent * 0.20)); // Allow up to 25% for compression phase
         }, publishController.signal, {}, selectedMedia.map(file =>

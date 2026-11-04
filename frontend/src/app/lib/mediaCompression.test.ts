@@ -47,7 +47,12 @@ vi.mock('@ffmpeg/ffmpeg', () => ({
     });
     writeFile = vi.fn(async () => true);
     exec = vi.fn(async () => compressionState.ffmpegExitCode);
-    readFile = vi.fn(async () => new Uint8Array([0, 0, 0, 1]));
+    readFile = vi.fn(async () => {
+      // Return a Uint8Array with sufficient data to simulate compression
+      // Must be larger than 0 to pass validation
+      const buffer = new ArrayBuffer(compressionState.compressedBytes);
+      return new Uint8Array(buffer);
+    });
     deleteFile = vi.fn(async () => true);
     terminate = vi.fn();
   },
@@ -255,7 +260,7 @@ describe('client media compression', () => {
     expect(prepared.file.type).toBe('image/webp');
   });
 
-  it('rasterizes small SVGs before upload instead of sending them as active content', async () => {
+  it('passes through small SVGs without rasterization to preserve scalability', async () => {
     vi.stubGlobal('createImageBitmap', vi.fn(async () => ({
       width: 1600,
       height: 1200,
@@ -265,8 +270,9 @@ describe('client media compression', () => {
       makeFile('drawing.svg', 'image/svg+xml', 1024 * 1024),
     ]);
 
-    expect(prepared.file.name).toBe('drawing.webp');
-    expect(prepared.file.type).toBe('image/webp');
+    // SVGs are passed through without rasterization
+    expect(prepared.file.name).toBe('drawing.svg');
+    expect(prepared.file.type).toBe('image/svg+xml');
   });
 
   it('rejects an individual image above the 50 MiB browser-processing limit', async () => {
@@ -322,18 +328,31 @@ describe('client media compression', () => {
       .rejects.toThrow(/could not be decoded/);
   });
 
-  it('transcodes a video to MP4 before returning it for upload', async () => {
-    const [prepared] = await prepareMediaFiles([makeFile('clip.webm', 'video/webm', 5 * 1024 * 1024)]);
+  it('transcodes videos larger than 50 MB to MP4 before returning for upload', async () => {
+    // Use a 100MB video to trigger actual transcoding (not skipCompression path)
+    const [prepared] = await prepareMediaFiles([makeFile('clip.webm', 'video/webm', 100 * 1024 * 1024)]);
 
     expect(prepared.kind).toBe('video');
     expect(prepared.file.name).toBe('clip.mp4');
     expect(prepared.file.type).toBe('video/mp4');
-    expect(prepared.file.size).toBe(4);
+    // Mock returns compressedBytes size
+    expect(prepared.file.size).toBe(compressionState.compressedBytes);
+  });
+
+  it('skips compression for videos smaller than 50 MB, returning original', async () => {
+    // 5MB video hits skipCompression path
+    const [prepared] = await prepareMediaFiles([makeFile('clip.webm', 'video/webm', 5 * 1024 * 1024)]);
+
+    expect(prepared.kind).toBe('video');
+    // Original file returned as-is when skipCompression is true
+    expect(prepared.file.name).toBe('clip.webm');
+    expect(prepared.file.type).toBe('video/webm');
   });
 
   it('does not return the original video if browser transcoding fails', async () => {
     compressionState.ffmpegExitCode = 1;
-    await expect(prepareMediaFiles([makeFile('clip.mp4', 'video/mp4', 5 * 1024 * 1024)]))
+    // Use 100MB video to trigger transcoding (and subsequent failure)
+    await expect(prepareMediaFiles([makeFile('clip.mp4', 'video/mp4', 100 * 1024 * 1024)]))
       .rejects.toThrow(/The original was not uploaded/);
   });
 

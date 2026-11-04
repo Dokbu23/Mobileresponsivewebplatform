@@ -168,7 +168,8 @@ export function ManageEvents() {
       const preparedImages = await prepareMediaFiles(
         imageFiles,
         (file, phase, percent) => {
-          if (phase === 'compressing' && imageFiles.length > 0) {
+          // Only report during actual compression/encoding phases
+          if ((phase === 'compressing' || phase === 'encoding') && imageFiles.length > 0) {
             const fileIndex = imageFiles.findIndex(candidate => candidate === file);
             setUploadingFileName(`Compressing ${file.name} (${percent}%)`);
             setUploadProgress(Math.floor(((Math.max(0, fileIndex) + percent / 100) / imageFiles.length) * 30));

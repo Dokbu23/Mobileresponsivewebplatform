@@ -1048,22 +1048,56 @@ class AdminManagePostController extends Controller
         $record = $modelClass::findOrFail($id);
 
         $validated = $request->validate([
+            // Basic fields (common)
             'title'            => 'nullable|string|max:255',
             'name'             => 'nullable|string|max:255',
             'description'      => 'nullable|string',
             'full_description' => 'nullable|string',
             'content'          => 'nullable|string',
-            'price'            => 'nullable',
-            'price_per_night'  => 'nullable',
             'category'         => 'nullable|string|max:255',
             'location'         => 'nullable|string|max:255',
-            'operating_hours'  => 'nullable|string|max:255',
+            
+            // Media fields
+            'image'            => 'nullable|string|max:2048',
+            'images'           => 'nullable|array',
+            'video'            => 'nullable|string|max:2048',
+            'virtual_tour_url' => 'nullable|string|max:2048',
+            'images_to_remove' => 'nullable|array',
+            
+            // Pricing & Stock
+            'price'            => 'nullable|numeric',
+            'price_per_night'  => 'nullable|numeric',
+            'stock'            => 'nullable|integer',
+            
+            // Contact Information
             'contact_number'   => 'nullable|string|max:100',
             'phone'            => 'nullable|string|max:100',
             'email'            => 'nullable|email|max:255',
             'facebook'         => 'nullable|string|max:255',
             'instagram'        => 'nullable|string|max:255',
             'website'          => 'nullable|string|max:255',
+            
+            // Accommodation-specific
+            'operating_hours'  => 'nullable|string|max:255',
+            'type'             => 'nullable|string|max:255',
+            'availability'     => 'nullable|array',
+            'virtual_tour_scenes' => 'nullable|array',
+            
+            // Event-specific
+            'date'             => 'nullable|string',
+            'time'             => 'nullable|string|max:255',
+            'start_time'       => 'nullable|string|max:255',
+            'end_time'         => 'nullable|string|max:255',
+            'capacity'         => 'nullable|string|max:255',
+            
+            // Culture & Arts specific
+            'artist_name'      => 'nullable|string|max:255',
+            'period_era'       => 'nullable|string|max:255',
+            
+            // History specific
+            'period'           => 'nullable|string|max:255',
+            'source'           => 'nullable|string|max:255',
+            'shop_name'        => 'nullable|string|max:255',
         ]);
 
         // Map inputs safely to the model's actual fields
@@ -1075,10 +1109,58 @@ class AdminManagePostController extends Controller
         if (isset($validated['content']) && SchemaHas($record, 'content')) $record->content = strip_tags($validated['content']);
         if (isset($validated['category']) && SchemaHas($record, 'category')) $record->category = strip_tags($validated['category']);
         if (isset($validated['location']) && SchemaHas($record, 'location')) $record->location = strip_tags($validated['location']);
+        
+        // Price & Stock
         if (isset($validated['price']) && SchemaHas($record, 'price')) $record->price = $validated['price'];
         if (isset($validated['price_per_night']) && SchemaHas($record, 'price_per_night')) $record->price_per_night = $validated['price_per_night'];
+        if (isset($validated['stock']) && SchemaHas($record, 'stock')) $record->stock = $validated['stock'];
+        
+        // Contact Information
+        if (isset($validated['contact_number']) && SchemaHas($record, 'contact_number')) $record->contact_number = $validated['contact_number'];
+        if (isset($validated['phone']) && SchemaHas($record, 'phone')) $record->phone = $validated['phone'];
+        if (isset($validated['email']) && SchemaHas($record, 'email')) $record->email = $validated['email'];
+        if (isset($validated['facebook']) && SchemaHas($record, 'facebook')) $record->facebook = $validated['facebook'];
+        if (isset($validated['instagram']) && SchemaHas($record, 'instagram')) $record->instagram = $validated['instagram'];
+        if (isset($validated['website']) && SchemaHas($record, 'website')) $record->website = $validated['website'];
+        
+        // Media
+        if (isset($validated['image']) && SchemaHas($record, 'image')) $record->image = $validated['image'];
+        if (isset($validated['images']) && SchemaHas($record, 'images')) $record->images = $validated['images'];
+        if (isset($validated['video']) && SchemaHas($record, 'video')) $record->video = $validated['video'];
+        if (isset($validated['virtual_tour_url']) && SchemaHas($record, 'virtual_tour_url')) $record->virtual_tour_url = $validated['virtual_tour_url'];
+        
+        // Accommodation-specific
+        if (isset($validated['operating_hours']) && SchemaHas($record, 'operating_hours')) $record->operating_hours = $validated['operating_hours'];
+        if (isset($validated['type']) && SchemaHas($record, 'type')) $record->type = $validated['type'];
+        if (isset($validated['availability']) && SchemaHas($record, 'availability')) $record->availability = $validated['availability'];
+        if (isset($validated['virtual_tour_scenes']) && SchemaHas($record, 'virtual_tour_scenes')) $record->virtual_tour_scenes = $validated['virtual_tour_scenes'];
+        
+        // Event-specific
+        if (isset($validated['date']) && SchemaHas($record, 'date')) $record->date = $validated['date'];
+        if (isset($validated['time']) && SchemaHas($record, 'time')) $record->time = $validated['time'];
+        if (isset($validated['start_time']) && SchemaHas($record, 'start_time')) $record->start_time = $validated['start_time'];
+        if (isset($validated['end_time']) && SchemaHas($record, 'end_time')) $record->end_time = $validated['end_time'];
+        if (isset($validated['capacity']) && SchemaHas($record, 'capacity')) $record->capacity = $validated['capacity'];
+        
+        // Culture & Arts specific
+        if (isset($validated['artist_name']) && SchemaHas($record, 'artist_name')) $record->artist_name = $validated['artist_name'];
+        if (isset($validated['period_era']) && SchemaHas($record, 'period_era')) $record->period_era = $validated['period_era'];
+        
+        // History specific
+        if (isset($validated['period']) && SchemaHas($record, 'period')) $record->period = $validated['period'];
+        if (isset($validated['source']) && SchemaHas($record, 'source')) $record->source = $validated['source'];
+        
+        // Product-specific
+        if (isset($validated['shop_name']) && SchemaHas($record, 'shop_name')) $record->shop_name = $validated['shop_name'];
 
         $record->save();
+
+        // TODO: Handle image removal cleanup - delete removed images from storage
+        // if (!empty($validated['images_to_remove'])) {
+        //     foreach ($validated['images_to_remove'] as $imageUrl) {
+        //         // Delete file from storage
+        //     }
+        // }
 
         return response()->json([
             'success' => true,

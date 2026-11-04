@@ -45,6 +45,7 @@ import {
 import { toast } from 'sonner';
 import { Link } from 'react-router';
 import { getJSON, postJSON, putJSON, deleteJSON, formatImageUrl, API_BASE, purgeClientRecord } from '../../lib/api';
+import { EditContentModal } from '../../components/admin/EditContentModal';
 
 export type UnifiedSource =
   | 'enterprise_post'
@@ -161,15 +162,6 @@ export function ManagePosts() {
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectionRemarks, setRejectionRemarks] = useState('');
   const [actionLoadingKey, setActionLoadingKey] = useState<string | null>(null);
-
-  // Edit form state
-  const [editFormData, setEditFormData] = useState({
-    title: '',
-    content: '',
-    price: '',
-    location: '',
-    category: '',
-  });
 
   // Carousel in view modal
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
@@ -513,51 +505,17 @@ export function ManagePosts() {
   // ==========================================
   const openEditModal = (post: UnifiedPost) => {
     setSelectedPost(post);
-    setEditFormData({
-      title: post.title || post.name || '',
-      content: post.content || '',
-      price: post.price ? String(post.price) : '',
-      location: post.location || '',
-      category: post.category || '',
-    });
     setIsEditModalOpen(true);
   };
 
-  const handleSaveEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedPost) return;
+  const handleEditClose = () => {
+    setIsEditModalOpen(false);
+    setSelectedPost(null);
+  };
 
-    if (!editFormData.title.trim()) {
-      toast.error('Title or name is required.');
-      return;
-    }
-
-    try {
-      setActionLoadingKey(makeKey(selectedPost));
-      await putJSON(`/admin/manage-posts/${selectedPost.source}/${selectedPost.id}`, {
-        title: editFormData.title.trim(),
-        name: editFormData.title.trim(),
-        content: editFormData.content.trim(),
-        description: editFormData.content.trim(),
-        price: editFormData.price ? parseFloat(editFormData.price) : null,
-        location: editFormData.location.trim() || null,
-        category: editFormData.category.trim() || null,
-      });
-
-      toast.success('Post details updated successfully.');
-      setIsEditModalOpen(false);
-      setSelectedPost(null);
-      fetchPosts();
-    } catch (err: any) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Update Failed',
-        text: err.message || 'Could not update post details.',
-        confirmButtonColor: '#ef4444',
-      });
-    } finally {
-      setActionLoadingKey(null);
-    }
+  const handleEditSave = () => {
+    handleEditClose();
+    fetchPosts();
   };
 
   // Open view modal
@@ -1602,98 +1560,17 @@ export function ManagePosts() {
       {/* ========================================================= */}
       {/* MODAL 2: SAFE EDIT MODAL                                  */}
       {/* ========================================================= */}
-      {isEditModalOpen && selectedPost && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
-              <div className="flex items-center gap-2">
-                <Edit3 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <h3 className="font-bold text-slate-900 dark:text-white text-base">Edit Content Details</h3>
-              </div>
-              <button
-                onClick={() => setIsEditModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEdit} className="p-5 space-y-4 text-xs sm:text-sm">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Title / Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={editFormData.title}
-                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Content / Description</label>
-                <textarea
-                  rows={4}
-                  value={editFormData.content}
-                  onChange={(e) => setEditFormData({ ...editFormData, content: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Category</label>
-                  <input
-                    type="text"
-                    value={editFormData.category}
-                    onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Location</label>
-                  <input
-                    type="text"
-                    value={editFormData.location}
-                    onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                  />
-                </div>
-              </div>
-
-              {selectedPost.price !== undefined && selectedPost.price !== null && (
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Price (₱)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editFormData.price}
-                    onChange={(e) => setEditFormData({ ...editFormData, price: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                  />
-                </div>
-              )}
-
-              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-100 rounded-lg border border-slate-200 dark:border-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoadingKey !== null}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs disabled:opacity-50"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {/* ========================================================= */}
+      {/* MODAL 2: EDIT CONTENT MODAL (NEW COMPONENT)               */}
+      {/* ========================================================= */}
+      {selectedPost && (
+        <EditContentModal
+          isOpen={isEditModalOpen}
+          record={selectedPost}
+          source={selectedPost.source as any}
+          onClose={handleEditClose}
+          onSave={handleEditSave}
+        />
       )}
 
       {/* ========================================================= */}
