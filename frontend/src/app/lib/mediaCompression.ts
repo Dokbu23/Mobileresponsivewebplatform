@@ -578,8 +578,9 @@ async function compressVideo(
       const outputName = `${file.name.replace(/\.[^.]+$/, '')}.mp4`;
       
       // OPTIMIZATION: Create File directly from Uint8Array
-      // Avoid unnecessary ArrayBuffer copy
-      return new File([output], outputName, {
+      // Convert Uint8Array to Blob to handle SharedArrayBuffer from FFmpeg workers
+      const outputBlob = new Blob([output], { type: 'video/mp4' });
+      return new File([outputBlob], outputName, {
         type: 'video/mp4',
         lastModified: file.lastModified
       });
