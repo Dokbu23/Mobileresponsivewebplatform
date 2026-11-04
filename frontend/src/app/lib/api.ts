@@ -7,7 +7,7 @@ import {
 } from './mediaCompression';
 
 function resolveApiBase(): string {
-  // 1. If running in browser, check current hostname:
+  // 1. If running in browser, check current hostname FIRST (highest priority)
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     
@@ -23,8 +23,10 @@ function resolveApiBase(): string {
       return 'http://localhost:8000';
     }
     
-    // Production hosts: discoverymansalay.online or www.discoverymansalay.online
-    // Use same-origin API endpoint: {origin}/api
+    // PRODUCTION: discoverymansalay.online or www.discoverymansalay.online
+    // These production hostnames take absolute priority over environment variables.
+    // Always use same-origin API endpoint: {origin}/api
+    // This ensures the frontend and backend are always on the same domain.
     if (host === 'discoverymansalay.online' || host === 'www.discoverymansalay.online') {
       return `${window.location.origin}/api`;
     }
@@ -35,7 +37,7 @@ function resolveApiBase(): string {
     }
   }
 
-  // 2. If deployed (e.g. EC2, Render, production domain)
+  // 2. Environment variable fallback (only for non-localhost, non-production hostnames)
   const envApiBase = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined)
     || ((import.meta as any).env?.VITE_API_BASE as string | undefined)
     || ((import.meta as any).env?.VITE_API_URL as string | undefined);
@@ -44,7 +46,7 @@ function resolveApiBase(): string {
     return envApiBase;
   }
 
-  // Fallback: attempt same-origin API in production
+  // Final fallback: attempt same-origin API in production
   return `${typeof window !== 'undefined' ? window.location.origin : 'https://discoverymansalay.online'}/api`;
 }
 
