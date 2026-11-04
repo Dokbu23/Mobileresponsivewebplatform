@@ -15,8 +15,8 @@ return [
     'max_video_size_bytes' => $maxVideoSizeMb * 1024 * 1024,
     'max_file_size_bytes' => max($maxImageSizeMb, $maxVideoSizeMb) * 1024 * 1024,
     'user_quota_bytes' => $userQuotaGb * 1024 * 1024 * 1024,
-    'chunk_size_bytes' => 4 * 1024 * 1024,
+    'chunk_size_bytes' => 16 * 1024 * 1024,  // Increased from 4 MB to 16 MB for faster uploads
     'incomplete_expiry_hours' => max(1, (int) env('UPLOAD_INCOMPLETE_EXPIRY_HOURS', 24)),
     'orphan_cleanup_grace_hours' => max(24, (int) env('UPLOAD_ORPHAN_CLEANUP_GRACE_HOURS', 168)),
-    'finalize_timeout_seconds' => max(300, min(7200, (int) env('UPLOAD_FINALIZE_TIMEOUT_SECONDS', 3600))),
+    'finalize_timeout_seconds' => max(300, min(7200, (int) env('UPLOAD_FINALIZE_TIMEOUT_SECONDS', 900))),  // Increased to 900s (15 min) for 16 MB chunks
 ];
