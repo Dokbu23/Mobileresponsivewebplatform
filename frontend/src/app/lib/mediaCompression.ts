@@ -6,16 +6,16 @@ export const CLIENT_IMAGE_UPLOAD_LIMIT_BYTES = COMBINED_IMAGE_LIMIT_BYTES - IMAG
 export const MAX_IMAGE_COUNT = 20;
 export const MAX_IMAGE_INPUT_BYTES = 50 * 1024 * 1024;
 // Browser video processing limit with resource-aware scaling
-// Default: 500 MB, but can be adjusted via environment variable
-// This is NOT a hard rejection limit - instead, it triggers adaptive compression
+// Default: 2048 MB (2GB), can be adjusted via environment variable
+// This is NOT a hard rejection limit - instead, it triggers adaptive compression via WebCodecs + Mediabunny streaming
 export const MAX_VIDEO_INPUT_BYTES = Math.max(
   1,
-  Number(import.meta.env.VITE_VIDEO_PROCESS_MAX_INPUT_MB) || 500
+  Number(import.meta.env.VITE_VIDEO_PROCESS_MAX_INPUT_MB) || 2048
 ) * 1024 * 1024;
 
 // Absolute safety limit - prevents browser OOM
-// Device with 4GB RAM can safely handle 1-1.5GB video processing
-export const ABSOLUTE_MAX_VIDEO_BYTES = 1536 * 1024 * 1024; // 1.5 GB
+// Streaming compression with WebCodecs supports up to 2GB+ videos efficiently
+export const ABSOLUTE_MAX_VIDEO_BYTES = 2048 * 1024 * 1024; // 2 GB
 
 export const MAX_VIDEO_DURATION_SECONDS = Math.max(
   1,
@@ -23,26 +23,27 @@ export const MAX_VIDEO_DURATION_SECONDS = Math.max(
 );
 
 // Video compression profiles with adaptive settings
+// Now using WebCodecs API + Mediabunny streaming for high-quality output up to 2GB
 export const VIDEO_COMPRESSION_PROFILES = {
-  small: {       // < 50 MB - preserve quality
-    bitrate: '4000k',
+  small: {       // < 50 MB - preserve quality (1080p/4K)
+    bitrate: '8000k',
     resolution: '1080p',
-    description: 'High quality (1080p, 4 Mbps)'
+    description: 'High quality (1080p, 8 Mbps)'
   },
-  medium: {      // 50-200 MB - balanced compression
+  medium: {      // 50-200 MB - balanced compression (720p)
+    bitrate: '5000k',
+    resolution: '720p',
+    description: 'Balanced quality (720p, 5 Mbps)'
+  },
+  large: {       // 200-500 MB - quality preservation (720p)
+    bitrate: '3500k',
+    resolution: '720p',
+    description: 'Standard quality (720p, 3.5 Mbps)'
+  },
+  xlarge: {      // 500MB-2GB - streaming compression (720p with H.264 codec)
     bitrate: '2500k',
     resolution: '720p',
-    description: 'Balanced quality (720p, 2.5 Mbps)'
-  },
-  large: {       // 200-500 MB - aggressive compression
-    bitrate: '1500k',
-    resolution: '720p',
-    description: 'Standard quality (720p, 1.5 Mbps)'
-  },
-  xlarge: {      // 500MB+ - very aggressive compression
-    bitrate: '1000k',
-    resolution: '480p',
-    description: 'Compressed quality (480p, 1 Mbps)'
+    description: 'Streaming quality (720p, 2.5 Mbps, streaming compression)'
   }
 };
 

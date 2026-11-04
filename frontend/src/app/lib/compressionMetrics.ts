@@ -116,13 +116,13 @@ export function getCompressionProfileDescription(fileSizeBytes: number): string 
   const fileSizeMb = fileSizeBytes / (1024 * 1024);
   
   if (fileSizeMb < 50) {
-    return '🎬 High quality (1080p, 4 Mbps) - Small video';
+    return '🎬 High quality (1080p, 8 Mbps) - Small video';
   } else if (fileSizeMb < 200) {
-    return '🎬 Balanced quality (720p, 2.5 Mbps) - Medium video';
+    return '🎬 Balanced quality (720p, 5 Mbps) - Medium video';
   } else if (fileSizeMb < 500) {
-    return '🎬 Standard quality (720p, 1.5 Mbps) - Large video';
+    return '🎬 Standard quality (720p, 3.5 Mbps) - Large video';
   } else {
-    return '🎬 Compressed quality (480p, 1 Mbps) - Extra large video';
+    return '🎬 Streaming quality (720p, 2.5 Mbps) - Extra large video (WebCodecs streaming)';
   }
 }
 
@@ -180,42 +180,46 @@ export function isCompressionRecommended(fileSizeBytes: number): boolean {
 
 /**
  * Estimate compression time based on file size (in milliseconds)
+ * Now using WebCodecs streaming for large files (500MB+), much faster than FFmpeg
  */
 export function estimateCompressionTime(fileSizeBytes: number): number {
   const fileSizeMb = fileSizeBytes / (1024 * 1024);
   
-  // Rough estimate: ~100ms per MB
-  // Small videos compress faster, large videos slower
-  if (fileSizeMb < 50) return fileSizeMb * 80;      // 4-4000ms
-  if (fileSizeMb < 200) return fileSizeMb * 120;    // 6000-24000ms
-  if (fileSizeMb < 500) return fileSizeMb * 150;    // 30000-75000ms
-  return fileSizeMb * 200;                          // 100000+ms for very large
+  // WebCodecs streaming compression is significantly faster than FFmpeg
+  // Estimates for real-time or near-real-time encoding with adaptive bitrate
+  if (fileSizeMb < 50) return fileSizeMb * 50;       // 2.5-2500ms
+  if (fileSizeMb < 200) return fileSizeMb * 80;      // 4-16000ms
+  if (fileSizeMb < 500) return fileSizeMb * 120;     // 30000-60000ms
+  // Large files (500MB+) with WebCodecs streaming: ~150ms per MB
+  return fileSizeMb * 150;                           // 75000+ms for very large, but parallelizable
 }
 
 /**
  * Check if device has enough estimated memory for compression
+ * Now supports up to 2GB with WebCodecs streaming compression
  */
 export function canDeviceHandleCompression(fileSizeBytes: number): { canHandle: boolean; reason?: string } {
-  // Estimate memory needed: file size + ~3x for FFmpeg processing + overhead
-  const estimatedMemoryNeeded = fileSizeBytes * 4;
-  const ABSOLUTE_MAX = 1536 * 1024 * 1024; // 1.5 GB
+  // WebCodecs streaming allows processing large files with lower peak memory usage
+  // Instead of loading entire file in RAM, we process in chunks
+  const ABSOLUTE_MAX = 2048 * 1024 * 1024; // 2 GB
   
   if (fileSizeBytes > ABSOLUTE_MAX) {
     return {
       canHandle: false,
-      reason: `File (${formatBytes(fileSizeBytes)}) exceeds 1.5 GB browser processing limit. Try a smaller video.`,
+      reason: `File (${formatBytes(fileSizeBytes)}) exceeds 2 GB browser processing limit. Try a smaller video.`,
     };
   }
   
+  // For WebCodecs streaming, peak memory is much lower (only 1-2 chunks in memory at a time)
+  // Estimate: ~200MB peak memory for streaming compression regardless of file size
   // Check if we have navigator.deviceMemory (Chrome/Edge)
   if ('deviceMemory' in navigator) {
     const deviceMemoryGb = (navigator as any).deviceMemory || 4;
-    const deviceMemoryBytes = deviceMemoryGb * 1024 * 1024 * 1024;
-    
-    if (estimatedMemoryNeeded > deviceMemoryBytes * 0.8) {
+    // Streaming compression is efficient, only requires 512MB minimum device memory
+    if (deviceMemoryGb < 0.5) {
       return {
         canHandle: false,
-        reason: `Device memory (${deviceMemoryGb} GB) may be insufficient for this video. Close other apps and try again.`,
+        reason: `Device memory (${deviceMemoryGb} GB) may be insufficient. This requires at least 512MB available memory.`,
       };
     }
   }

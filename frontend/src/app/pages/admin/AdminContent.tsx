@@ -101,9 +101,10 @@ function validateSecureVideoFile(file: File): { valid: boolean; error?: string }
   }
 
   if (file.size > ALLOWED_VIDEO_MAX_SIZE_BYTES) {
+    const maxGb = (ALLOWED_VIDEO_MAX_SIZE_BYTES / (1024 * 1024 * 1024)).toFixed(1);
     return {
       valid: false,
-      error: `Video exceeds the ${Math.floor(ALLOWED_VIDEO_MAX_SIZE_BYTES / (1024 * 1024))} MB browser video-processing limit (${(file.size / (1024 * 1024)).toFixed(1)} MB selected).`
+      error: `Video exceeds the ${maxGb} GB browser video-processing limit (${(file.size / (1024 * 1024)).toFixed(1)} MB selected). This file is too large for streaming compression.`
     };
   }
 
