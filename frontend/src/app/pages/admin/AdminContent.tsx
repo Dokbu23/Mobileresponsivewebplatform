@@ -1344,7 +1344,8 @@ export function AdminContent() {
 
         const preparedMedia = await prepareMediaFiles(selectedMedia, (file, phase, percent) => {
           setUploadStatusText(`${phase === 'checking' ? 'Preparing' : 'Compressing'} ${file.name} (${percent}%) — Est. ${totalEstimatedStr} total compression time`);
-          setUploadProgress(current => Math.max(current, Math.min(30, 5 + Math.round(percent * 0.25))));
+          // Show actual compression progress, don't cap at 30%
+          setUploadProgress(5 + Math.round(percent * 0.20)); // Allow up to 25% for compression phase
         }, publishController.signal, {}, selectedMedia.map(file =>
           file.type.startsWith('image/') ? 'cover' : 'resort-gallery'
         ));

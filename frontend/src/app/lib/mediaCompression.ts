@@ -478,25 +478,25 @@ async function compressVideo(
     let actualFramesProcessed = 0;
     
     const onFFmpegProgress = ({ progress }: { progress: number }) => {
-      // Calculate actual encoding speed
-      const elapsedMs = performance.now() - startTimeMs;
-      const estimatedTotalMs = elapsedMs / (progress || 0.001);
-      const remainingMs = Math.max(0, estimatedTotalMs - elapsedMs);
-      
-      // Update at most every 200ms to avoid excessive renders
-      if (performance.now() - lastProgressUpdate > 200) {
-        lastProgressUpdate = performance.now();
+      try {
+        // Calculate actual encoding speed
+        const elapsedMs = performance.now() - startTimeMs;
+        const estimatedTotalMs = elapsedMs / Math.max(progress, 0.001);
+        const remainingMs = Math.max(0, estimatedTotalMs - elapsedMs);
         
-        // Map progress (0-1) to percentage more accurately
+        // ALWAYS update progress, don't throttle - throttle at UI level instead
         const percentComplete = Math.min(95, Math.max(5, Math.round(5 + progress * 90)));
         onProgress?.(file, 'compressing', percentComplete);
         
         // Log actual speed for debugging
         actualFramesProcessed++;
-        if (actualFramesProcessed % 5 === 0) {
-          const fps = (duration / (elapsedMs / 1000)) || 0;
+        if (actualFramesProcessed % 3 === 0) {
+          const fps = duration > 0 ? (duration / (Math.max(elapsedMs, 100) / 1000)) : 0;
           console.debug(`[Video Compression] ${percentComplete}% - ${fps.toFixed(1)} FPS (est. ${(remainingMs / 1000).toFixed(1)}s remaining)`);
         }
+      } catch (err) {
+        console.warn('[Video Compression] Progress update error:', err);
+        // Continue encoding even if progress callback fails
       }
     };
     

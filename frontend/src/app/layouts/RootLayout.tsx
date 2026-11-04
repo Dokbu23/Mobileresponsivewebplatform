@@ -7,10 +7,23 @@ import { ProfileSetupModal } from "../components/ProfileSetupModal";
 import ChatWidgetEnhanced from "../components/ChatWidgetEnhanced";
 
 export function RootLayout() {
-  const { currentUser, userType } = useApp();
-  const isProfileSetupRequired = Boolean(
-    currentUser && (currentUser.role === 'pending' || userType === 'pending')
-  );
+  // Safely handle context usage with try-catch for HMR scenarios
+  let currentUser = null;
+  let userType = null;
+  let isProfileSetupRequired = false;
+  
+  try {
+    const appContext = useApp();
+    currentUser = appContext.currentUser;
+    userType = appContext.userType;
+    isProfileSetupRequired = Boolean(
+      currentUser && (currentUser.role === 'pending' || userType === 'pending')
+    );
+  } catch (error) {
+    // Context not available during HMR or provider initialization
+    console.warn('AppContext not available in RootLayout:', error instanceof Error ? error.message : error);
+    isProfileSetupRequired = false;
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -20,7 +33,7 @@ export function RootLayout() {
       </main>
       <Footer />
       <Toaster position="top-right" richColors />
-      <ProfileSetupModal isOpen={isProfileSetupRequired} />
+      {isProfileSetupRequired && <ProfileSetupModal isOpen={isProfileSetupRequired} />}
       <ChatWidgetEnhanced />
     </div>
   );
