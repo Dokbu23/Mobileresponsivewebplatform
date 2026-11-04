@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Options as ImageCompressionOptions } from 'browser-image-compression';
 import {
   COMBINED_IMAGE_LIMIT_BYTES,
   CLIENT_IMAGE_UPLOAD_LIMIT_BYTES,
@@ -22,14 +23,16 @@ const compressionState = vi.hoisted(() => ({
 }));
 
 vi.mock('browser-image-compression', () => ({
-  default: vi.fn(async (file: File, options: { maxWidthOrHeight?: number; initialQuality?: number; fileType?: string }) => {
+  default: vi.fn(async (file: File, options?: { maxWidthOrHeight?: number; initialQuality?: number; fileType?: string }) => {
     if (compressionState.failImageCompression) throw new Error('decode failed');
-    compressionState.lastMaximumDimension = options.maxWidthOrHeight || 0;
-    compressionState.compressionOptions.push(options);
+    if (options?.maxWidthOrHeight) {
+      compressionState.lastMaximumDimension = options.maxWidthOrHeight;
+    }
+    compressionState.compressionOptions.push(options || {});
     const compressed = new File(
       [new Uint8Array(1)],
       `${file.name.replace(/\.[^.]+$/, '')}.webp`,
-      { type: options.fileType }
+      { type: options?.fileType }
     );
     Object.defineProperty(compressed, 'size', { configurable: true, value: compressionState.compressedBytes });
     return compressed;

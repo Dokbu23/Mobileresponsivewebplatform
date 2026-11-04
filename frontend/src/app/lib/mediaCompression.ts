@@ -362,7 +362,7 @@ async function compressImage(
       checkAbort(signal);
       progressStep++;
       const percent = Math.min(95, Math.round((progressStep / (DIMENSION_STEPS.length * qualities.length)) * 100));
-      const compressed = await imageCompression(file, {
+      const compressedBlob = await imageCompression(file, {
         maxSizeMB: settings.maxSizeMB,
         maxWidthOrHeight,
         useWebWorker: true,
@@ -380,17 +380,15 @@ async function compressImage(
       });
 
       checkAbort(signal);
-      if (compressed.type !== outputMimeType) {
+      if (compressedBlob.type !== outputMimeType) {
         throw new Error(`${file.name} could not be encoded as WebP in this browser. The original was not uploaded.`);
       }
 
       const outputName = `${file.name.replace(/\.[^.]+$/, '')}.${outputExtension}`;
-      const candidate = compressed.name === outputName && compressed.type === outputMimeType
-        ? compressed
-        : new File([compressed], outputName, {
-          type: outputMimeType,
-          lastModified: file.lastModified,
-        });
+      const candidate = new File([compressedBlob], outputName, {
+        type: outputMimeType,
+        lastModified: file.lastModified,
+      });
       const candidateDimensions = await imageDimensions(candidate).catch(() => null);
       if (!candidateDimensions) {
         throw new Error(`${file.name} produced an unreadable compressed image. The original was not uploaded.`);

@@ -10,6 +10,7 @@ function resolveApiBase(): string {
   // 1. If running in browser, check current hostname:
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
+    
     // Local development (localhost, 127.0.0.1, or local WiFi/LAN IP)
     if (
       host === 'localhost' ||
@@ -21,6 +22,14 @@ function resolveApiBase(): string {
     ) {
       return 'http://localhost:8000';
     }
+    
+    // Production hosts: discoverymansalay.online or www.discoverymansalay.online
+    // Use same-origin API endpoint: {origin}/api
+    if (host === 'discoverymansalay.online' || host === 'www.discoverymansalay.online') {
+      return `${window.location.origin}/api`;
+    }
+    
+    // Legacy domain (if still needed during migration)
     if (host.includes('discovermansalay.cyou')) {
       return 'https://api.discovermansalay.cyou';
     }
@@ -35,7 +44,8 @@ function resolveApiBase(): string {
     return envApiBase;
   }
 
-  return 'https://api.discovermansalay.cyou';
+  // Fallback: attempt same-origin API in production
+  return `${typeof window !== 'undefined' ? window.location.origin : 'https://discoverymansalay.online'}/api`;
 }
 
 const rawApiBase = resolveApiBase();

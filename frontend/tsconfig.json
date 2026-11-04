@@ -16,6 +16,6 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "index.html"],
+  "include": ["src", "index.html", "src/types/**/*"],
   "exclude": ["node_modules", "dist"]
 }

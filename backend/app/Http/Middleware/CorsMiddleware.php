@@ -33,7 +33,13 @@ class CorsMiddleware
             'http://127.0.0.1:5174',
             'http://127.0.0.1:8000',
 
-            // Production URLs (.cyou - current domain)
+            // Production URLs (.online - NEW primary domain on EC2)
+            'https://discoverymansalay.online',
+            'https://www.discoverymansalay.online',
+            'http://discoverymansalay.online',
+            'http://www.discoverymansalay.online',
+
+            // Production URLs (.cyou - legacy domain)
             'https://discovermansalay.cyou',
             'https://www.discovermansalay.cyou',
             'http://discovermansalay.cyou',
@@ -57,7 +63,7 @@ class CorsMiddleware
             'http://discovermansalay.ph',
             'http://www.discovermansalay.ph',
 
-            // Render URLs
+            // Render URLs (legacy, kept for historical reference)
             'https://discmansalay.onrender.com',
             'https://discmansalay-frontend.onrender.com',
             'https://disc-mansalay.onrender.com',
@@ -71,7 +77,7 @@ class CorsMiddleware
             'https://dokbu23.github.io',
 
             // Environment variable override (supports comma-separated list)
-            ...array_filter(array_map('trim', explode(',', env('FRONTEND_URL', 'https://discovermansalay.cyou')))),
+            ...array_filter(array_map('trim', explode(',', env('FRONTEND_URL', 'https://discoverymansalay.online')))),
         ];
     }
 
@@ -87,8 +93,8 @@ class CorsMiddleware
             return false;
         }
 
-        // Allow any discovermansalay domain (.cyou, .com, .co, etc.)
-        if (preg_match('/^https?:\/\/(?:[a-z0-9-]+\.)?discovermansalay\.(?:cyou|com|co|ph)(?::\d+)?$/i', $origin)) {
+        // Allow any discovermansalay domain (.online, .cyou, .com, .co, .ph, etc.)
+        if (preg_match('/^https?:\/\/(?:[a-z0-9-]+\.)?discovermansalay\.(?:online|cyou|com|co|ph)(?::\d+)?$/i', $origin)) {
             return true;
         }
 
@@ -133,7 +139,7 @@ class CorsMiddleware
         if ($request->isMethod('OPTIONS')) {
             $allowedOrigin = ($origin && $this->isOriginAllowed($origin))
                 ? $origin
-                : ($origin ?: 'https://discovermansalay.cyou');
+                : ($origin ?: 'https://discoverymansalay.online');
 
             return response('', 204)
                 ->header('Access-Control-Allow-Origin', $allowedOrigin)
